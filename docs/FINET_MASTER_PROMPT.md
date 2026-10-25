@@ -95,7 +95,7 @@ Faza 0 verifică aceste date pe sistem și le corectează în `docs/INFRA.md`. N
 
 - **Aplicație:** Next.js (ultima versiune majoră stabilă la data Fazei 0, minimum 15), App Router, TypeScript în mod `strict`. Monolit modular.
 - **UI:** Tailwind CSS + shadcn/ui, Recharts, lucide-react. Temă luminoasă și închisă.
-- **Baza de date:** PostgreSQL 16, instalat nativ. Drizzle ORM și migrații Drizzle Kit, versionate în repository.
+- **Baza de date:** PostgreSQL 18, ultima versiune majoră stabilă (la 25.10.2026: 18.6). Se instalează nativ din repository-ul oficial PostgreSQL pentru Debian (PGDG, `apt.postgresql.org`), nu din pachetele standard Debian, care pot avea o versiune mai veche. Aceeași versiune majoră în dezvoltare, în CI (imaginea `postgres:18`) și în producție. Actualizările minore (18.x) se aplică la scurt timp după apariție, pentru că aduc corecturi de securitate. Trecerea la PostgreSQL 19 (versiune stabilă planificată pentru 19.11.2026) se face doar după prima actualizare minoră (19.1), cu `pg_upgrade` testat întâi pe o copie a bazei, backup verificat înainte și plan de revenire, documentate într-un ADR. Drizzle ORM și migrații Drizzle Kit, versionate în repository.
 - **Autentificare:** Better Auth: email și parolă (Argon2id), magic link, sesiuni stocate în baza de date (expirabile și revocabile). Google OAuth vine în faza `saas`.
 - **Validare:** Zod, cu aceleași scheme pe client și pe server.
 - **Joburi:** pg-boss (coadă peste Postgres, fără Redis), într-un proces worker separat.
@@ -322,10 +322,10 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 
 ### Faza 0 — Fundație și infrastructură
 - **Înainte de cod**, verifică și raportează starea sistemului: spațiul pe disc, Node, pnpm, nginx, Ollama, LiteLLM. Propune un plan de eliberare a discului (minimum 8 GB liberi) și **așteaptă aprobarea** înainte de orice ștergere sau instalare.
-- După aprobare: PostgreSQL 16 nativ, cu baze separate pentru dezvoltare și teste și cu roluri separate (`app`, cu `NOBYPASSRLS`, și `migrator`).
+- După aprobare: PostgreSQL 18 nativ, din repository-ul PGDG, cu baze separate pentru dezvoltare și teste și cu roluri separate (`app`, cu `NOBYPASSRLS`, și `migrator`).
 - Proiect Next.js, TypeScript strict, Tailwind, shadcn/ui, ESLint, Prettier, Vitest, Playwright. `lib/config.ts` cu `APP_MODE`, modulul `entitlements` pentru `personal`, `lib/storage.ts`, `lib/money.ts` complet cu teste.
 - Unități systemd pentru `web` și `worker`, un vhost nginx pe un subdomeniu, cu HTTPS, și `/api/health`.
-- GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu), build, scanarea secretelor.
+- GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu, imaginea `postgres:18`), build, scanarea secretelor.
 - Documentație: `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md`, `docs/adr/0001-stack.md`.
 - **Sarcină umană, pornită în paralel:** colectarea a 50–100 de bonuri reale (inclusiv șterse, mototolite, lungi, cu reduceri și garanție SGR) și a câte 2–3 extrase pentru băncile folosite, anonimizate, în `fixtures/`, fiecare cu rezultatul așteptat completat manual.
 - **Acceptare:** aplicația goală răspunde prin nginx, pe HTTPS; `/api/health` e verde; CI e verde; testele pentru bani trec.
