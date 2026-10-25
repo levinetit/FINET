@@ -110,7 +110,7 @@ Login prin magic link pe mobil: doar după ce există deep links verificate (And
 Cerințe:
 - HTTPS obligatoriu în release; fără dezactivarea validării TLS; `network_security_config` care interzice traficul HTTP în release.
 - Tokenul doar în `flutter_secure_storage` (Android Keystore). Niciodată în loguri, URL-uri, rapoarte de erori sau analytics.
-- Fără parole, chei sau secrete în APK sau în repository. Valorile `--dart-define` nu sunt secrete.
+- Fără parole, chei sau secrete în APK sau în repository, inclusiv fără service tokenuri Cloudflare Access. Valorile `--dart-define` nu sunt secrete.
 - La 401: sesiune expirată → ecranul de login, cu datele locale șterse. La 403: mesaj clar, fără reîncercări.
 - Logout: cerere de revocare către server, ștergerea tokenului și a cache-ului local, revenire la login.
 - **`FLAG_SECURE`** pe ferestrele cu date financiare, ca sumele să nu apară în lista aplicațiilor recente sau în capturi de ecran.
@@ -219,7 +219,11 @@ Ce afișează serverul și cum stochează datele: secțiunea 6.5 din `docs/FINET
 
 - `API_BASE_URL` injectat la build (`--dart-define`), câte o valoare pentru test și pentru producție. URL-urile reale vin de la operator, nu se inventează.
 - Release: doar HTTPS, fără `localhost` și fără HTTP.
-- **Accesul telefonului la server în modul `personal`:** serverul LXC nu se expune pe internet. Telefonul ajunge la el printr-o rețea privată (recomandat Tailscale, sau WireGuard), cu HTTPS pe numele intern, de exemplu certificatul Tailscale sau unul emis pentru un subdomeniu. Alternativ, dacă FINET rulează pe Vercel, URL-ul public al aplicației.
+- **Accesul telefonului la server în modul `personal`: Cloudflare Zero Trust** (secțiunea 3.1 din promptul FINET). FINET e publicat printr-un Cloudflare Tunnel și protejat de Cloudflare Access. Telefoanele familiei au instalat **Cloudflare One Agent (WARP)**, înrolat în organizația Zero Trust cu emailul persoanei; aplicația folosește hostname-ul FINET normal (`API_BASE_URL=https://finet.<domeniu>`), iar WARP face ca cererile să treacă de Access.
+  - Aplicația nu conține service tokenuri Cloudflare și nu ocolește Access.
+  - Dacă o cerere primește pagina de login Access sau un răspuns de la Cloudflare în loc de JSON FINET (de exemplu redirect către `cloudflareaccess.com` sau 403 Cloudflare), aplicația afișează: „Nu te poți conecta la FINET. Pornește aplicația Cloudflare One și încearcă din nou.”, cu un buton care deschide aplicația Cloudflare One, dacă e instalată.
+  - `docs/FINET_ANDROID_BUILD.md` conține pașii pentru familie: instalarea Cloudflare One din Google Play, înrolarea cu numele organizației și emailul, verificarea conexiunii.
+  - În modul `saas`, hostname-ul public nu cere WARP.
 - Emulator: `10.0.2.2` pentru backendul de pe calculatorul de dezvoltare, doar în build-urile de debug.
 - Nicio modificare de configurare a serverului FINET fără aprobare.
 

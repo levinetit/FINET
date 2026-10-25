@@ -84,11 +84,18 @@ Rapoartele se contrazic pentru Starter: unul spune 1 document pe zi, altul 50 de
 
 - Container LXC (ID 1999), **fără Docker**: rulare nativă cu Node 24 și pnpm.
 - **Disc: 5,3 GB liberi din 20 GB.** Faza 0 nu începe până nu sunt cel puțin 8 GB liberi. Pozele bonurilor au nevoie de comprimare, retenție și cotă.
-- nginx rulează deja pe portul 80 ca reverse proxy.
+- nginx rulează deja pe portul 80 ca reverse proxy; pentru FINET va asculta doar pe `127.0.0.1`, în spatele tunelului Cloudflare.
 - Ollama local pe `127.0.0.1:11434` și o poartă LiteLLM existentă, utile pentru AI local.
 - PostgreSQL nu este instalat.
 - Monitorizarea existentă (agent-queue, cron-uri) se integrează printr-un endpoint de sănătate.
-- **Acces de rețea în modul `personal`:** aplicația nu se expune pe internet. Familia (browser și telefon) ajunge la ea printr-o rețea privată (recomandat Tailscale), cu HTTPS pe numele intern (certificat Tailscale sau certificat pentru un subdomeniu propriu). Expunerea publică (necesară doar pentru `saas`) se face numai cu aprobare, după Faza 9.
+- **Acces de rețea: Cloudflare Zero Trust** (decizia operatorului). Serverul nu deschide niciun port spre internet.
+  - **Cloudflare Tunnel:** pe LXC rulează `cloudflared` ca serviciu systemd (`cloudflared.service`), cu o conexiune doar de ieșire către Cloudflare. Tunelul trimite hostname-ul aplicației (de exemplu `finet.<domeniul-tău>`, cu domeniul gestionat în Cloudflare DNS) către nginx-ul local (`http://127.0.0.1:80`). HTTPS-ul public îl face Cloudflare; între Cloudflare și server traficul trece prin tunelul criptat. Configurația tunelului (`ops/cloudflare/config.yml`) e în repository fără secrete; fișierul de credențiale al tunelului stă doar pe server.
+  - **Cloudflare Access (modul `personal`):** o aplicație Access pe hostname-ul FINET, cu o politică care permite doar adresele de email ale familiei (login cu cod pe email sau cu Google). Cine nu e pe listă nu ajunge deloc la FINET. Access e un strat în plus: login-ul FINET (Better Auth) rămâne obligatoriu.
+  - **Telefoanele (aplicația Android):** aplicația nu poate trece prin ecranul de login Access și nu poate conține un service token (ar fi un secret în APK). De aceea, telefoanele familiei folosesc clientul **Cloudflare One Agent (WARP)**, înrolat în organizația Zero Trust cu emailul persoanei. Politica Access permite cererile care vin prin WARP de la un utilizator autorizat, iar aplicația folosește același hostname. Fără WARP pornit, aplicația afișează un mesaj clar („Pornește Cloudflare One pentru a te conecta la FINET”).
+  - **Antetul de identitate Access:** FINET verifică semnătura JWT-ului `Cf-Access-Jwt-Assertion` (cheile publice ale organizației, audiența aplicației) în middleware, ca cererile care ocolesc tunelul să fie respinse. nginx ascultă doar pe `127.0.0.1`.
+  - **Confidențialitate:** Cloudflare decriptează traficul la marginea rețelei, deci vede datele în tranzit. Acest lucru se notează în `docs/PRIVACY_NOTES.md`, cu Cloudflare ca împuternicit, iar în `saas` și în politica de confidențialitate.
+  - Planul gratuit Cloudflare Zero Trust acoperă până la 50 de utilizatori, suficient pentru modul `personal`.
+  - **Modul `saas`:** același tunel, dar hostname-ul public nu mai are politica Access; protecția vine din WAF și rate limiting Cloudflare, plus rate limiting-ul din FINET (Faza 11).
 - **Notificări operaționale** (backup eșuat, upgrade PostgreSQL, `/api/health` roșu, disc aproape plin): un singur canal configurabil, Telegram sau email, folosit de toate scripturile din `ops/` și de worker.
 
 Faza 0 verifică aceste date pe sistem și le corectează în `docs/INFRA.md`. Nu se fac modificări de sistem (instalări, ștergeri pentru eliberarea discului, configurare nginx) fără aprobare explicită.
@@ -382,12 +389,12 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - **Înainte de cod**, verifică și raportează starea sistemului: spațiul pe disc, Node, pnpm, nginx, Ollama, LiteLLM. Propune un plan de eliberare a discului (minimum 8 GB liberi) și **așteaptă aprobarea** înainte de orice ștergere sau instalare.
 - După aprobare: ultima versiune stabilă PostgreSQL (în prezent 18), nativ, din repository-ul PGDG, cu actualizările minore automate configurate (3.5, punctul 1), cu baze separate pentru dezvoltare și teste și cu roluri separate (`app`, cu `NOBYPASSRLS`, și `migrator`).
 - Proiect Next.js, TypeScript strict, Tailwind, shadcn/ui, ESLint, Prettier, Vitest, Playwright. `lib/config.ts` cu `APP_MODE`, modulul `entitlements` pentru `personal`, `lib/storage.ts`, `lib/money.ts` complet cu teste.
-- Unități systemd pentru `web` și `worker`, un vhost nginx cu HTTPS accesibil prin rețeaua privată (3.1), și `/api/health`.
+- Unități systemd pentru `web` și `worker`, un vhost nginx local și accesul prin Cloudflare (3.1): `cloudflared` ca serviciu, hostname-ul în Cloudflare DNS, aplicația Access cu politica pentru emailurile familiei, verificarea JWT-ului Access în middleware și `/api/health`. Pașii din panoul Cloudflare (domeniu, tunel, Access, WARP) se fac de operator după instrucțiunile din `docs/INFRA.md`; agentul nu primește chei API Cloudflare decât dacă operatorul alege asta.
 - `ops/postgres/VERSION`, actualizările minore automate (3.5, punctul 1) și canalul de notificări operaționale (3.1), cu un mesaj de test trimis efectiv.
 - GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu, versiunea din `ops/postgres/VERSION`), build, scanarea secretelor.
 - Documentație: `CLAUDE.md` (scurt, cu trimitere la acest prompt), `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md` (cu o secțiune pentru fazele Android), `docs/adr/0001-stack.md`.
 - **Sarcină umană, pornită în paralel:** colectarea a 50–100 de bonuri reale (inclusiv șterse, mototolite, lungi, cu reduceri și garanție SGR) și a câte 2–3 extrase pentru băncile folosite, anonimizate, în `fixtures/`, fiecare cu rezultatul așteptat completat manual.
-- **Acceptare:** aplicația goală răspunde prin nginx, pe HTTPS, din rețeaua privată; `/api/health` e verde; CI e verde; testele pentru bani trec; `unattended-upgrades --dry-run` arată pachetele PostgreSQL din PGDG; notificarea de test a ajuns.
+- **Acceptare:** aplicația goală răspunde pe hostname-ul Cloudflare, pe HTTPS, doar după login Access cu un email permis (un email nepermis e refuzat); o cerere directă către server, ocolind tunelul, nu primește răspuns; un telefon cu WARP înrolat ajunge la `/api/health`; `/api/health` e verde; CI e verde; testele pentru bani trec; `unattended-upgrades --dry-run` arată pachetele PostgreSQL din PGDG; notificarea de test a ajuns.
 
 ### Faza 1 — Autentificare, profil, gospodărie
 - Login cu parolă și magic link, logout, resetare și schimbare parolă, listă de sesiuni active cu revocare.
@@ -497,7 +504,7 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Feedback și raportare de bug-uri din aplicație (fără date financiare), anunțuri de la administrator.
 - Panou de administrare: utilizatori, gospodării, joburi, feedback, statistici de utilizare agregate (6.5). Acțiunile administratorului sunt auditate. Administratorul **nu vede** datele financiare ale utilizatorilor.
 - Monitorizarea erorilor; analytics doar pe paginile publice; verificarea numelui FINET la OSIM și EUIPO înainte de lansare (secțiunea 9).
-- Expunerea publică a aplicației (până acum doar în rețeaua privată), cu protecție la nivel de rețea (de exemplu Cloudflare în fața serverului) și rate limiting revizuit.
+- Expunerea publică a aplicației: hostname-ul public fără politica Access (doar pentru `saas`), cu WAF, protecție anti-bot și rate limiting Cloudflare, plus rate limiting-ul revizuit din FINET. Verificarea JWT-ului Access rămâne activă doar pe rutele de administrare.
 - **Acceptare:** rutele de admin răspund 404 pentru non-administratori și în modul `personal`; testele E2E de bază trec în ambele moduri.
 
 ### Faza 12 — Planuri, plăți, recomandări (doar `saas`)
