@@ -28,7 +28,7 @@ Clientul nu poate depăși backendul. Fiecare fază Android are o fază FINET mi
 | Fază Android | Ce face | Are nevoie de FINET |
 |---|---|---|
 | A — Fundație | Proiect Flutter, temă, navigare, client API, ecrane pe date simulate | Doar contractul `docs/openapi.json`; până există, un contract provizoriu în `mobile/test/fixtures/`, marcat ca atare |
-| B — Autentificare | Login, sesiune, profil, gospodării | Faza 1 (Better Auth + plugin `bearer`) |
+| B — Autentificare | Login, sesiune, profil, gospodării, statistici de utilizare | Faza 1 (Better Auth + plugin `bearer`) și Faza 2 (endpointurile de cont și gospodării, `/api/v1/app/events`) |
 | C — Funcții de bază | Dashboard, conturi, tranzacții, bugete, obiective | Fazele 2 și 3 |
 | D — Recurențe și documente | Recurențe, foto bon, încărcare, verificare, extrase, potriviri | Fazele 5, 6 și 7 |
 | E — Stabilizare și livrare | Teste de integrare, securitate, conexiune slabă, APK semnat | Faza 9 (hardening) recomandată |
@@ -168,7 +168,7 @@ Se aplică integral secțiunea 5 din `docs/FINET_MASTER_PROMPT.md`. Pe mobil, co
 - Teste de integrare pentru fluxurile principale, verificare de securitate pe `docs/FINET_ANDROID_SECURITY.md`.
 - Accesibilitate (TalkBack, mărimi de font, contrast), ecrane mici și mari.
 - APK release semnat, verificat și instalat pe telefon.
-- Distribuția din secțiunea 12.1: workflow-ul de release, primul GitHub Release, verificarea actualizării din aplicație. Pagina de descărcare din FINET se face într-o fază FINET separată, iar până atunci aplicația folosește linkul de pe GitHub.
+- Distribuția din secțiunea 12.1: workflow-ul de release, primul GitHub Release, verificarea actualizării din aplicație. Pagina de descărcare din FINET vine din Faza 9 FINET; dacă nu e gata, aplicația folosește linkul de pe GitHub.
 - **Acceptare:** criteriile din secțiunea 15; în plus, un tag `FINET-v…` produce un release cu APK-ul semnat și suma SHA-256, iar un telefon cu versiunea anterioară vede notificarea de actualizare.
 
 După MVP, fiecare într-o fază separată: coadă offline pentru poze (stocare locală criptată, sincronizare documentată), notificări push (fără sume în conținut), widget pe ecranul principal, publicare în Google Play (doar `saas`).
@@ -256,7 +256,7 @@ Ordinea comenzilor:
 
 **Vizibilitate:** repository-ul este public, deci oricine poate descărca APK-ul. APK-ul nu conține date, parole sau chei, iar fără acces la server și fără cont nu poate face nimic. Dacă operatorul vrea să limiteze descărcarea, repository-ul devine privat, iar descărcarea se face doar din FINET (mai jos).
 
-**Descărcare din FINET** (backend, fază FINET separată, după Faza 9):
+**Descărcare din FINET** (backend, Faza 9 FINET):
 - Pagina **Setări → Aplicația Android**, vizibilă doar utilizatorilor autentificați: versiunea curentă, butonul de descărcare, un cod QR către același link și pașii de instalare (permisiunea „Instalează aplicații necunoscute”, verificarea sumei SHA-256).
 - Linkul indică releaseul de pe GitHub sau, dacă repository-ul e privat, un fișier servit de FINET doar după autentificare.
 - Endpoint `GET /api/v1/app/android/latest` → `{ versionName, versionCode, minSupportedVersionCode, url, sha256, notes }`. Datele vin din configurația serverului (sau din ultimul release), nu sunt scrise în cod.

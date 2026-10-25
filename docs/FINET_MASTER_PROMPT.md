@@ -1,7 +1,7 @@
 # FINET România — MASTER PROMPT pentru Claude Code (v3)
 
 > **Cum se folosește acest document**
-> - Secțiunile 1–6 sunt **reguli permanente**: se aplică în fiecare sesiune. Copiază-le în `CLAUDE.md` la rădăcina repository-ului, ca să fie încărcate automat.
+> - Secțiunile 1–6 sunt **reguli permanente**: se aplică în fiecare sesiune. Faza 0 creează un `CLAUDE.md` scurt la rădăcina repository-ului, care trimite la acest document și la `docs/ROADMAP.md` (fără să copieze regulile, ca să nu existe două versiuni).
 > - Secțiunea 7 descrie **fazele**. Rulează **o singură fază per sesiune**, pe un branch dedicat (`phase/NN-nume`), cu PR și revizuire umană înainte de faza următoare.
 > - Prompt de pornire per sesiune: *„Citește `docs/FINET_MASTER_PROMPT.md` și `docs/ROADMAP.md`. Execută Faza N. Oprește-te la criteriile ei de acceptare și raportează conform secțiunii 8.”*
 
@@ -88,6 +88,8 @@ Rapoartele se contrazic pentru Starter: unul spune 1 document pe zi, altul 50 de
 - Ollama local pe `127.0.0.1:11434` și o poartă LiteLLM existentă, utile pentru AI local.
 - PostgreSQL nu este instalat.
 - Monitorizarea existentă (agent-queue, cron-uri) se integrează printr-un endpoint de sănătate.
+- **Acces de rețea în modul `personal`:** aplicația nu se expune pe internet. Familia (browser și telefon) ajunge la ea printr-o rețea privată (recomandat Tailscale), cu HTTPS pe numele intern (certificat Tailscale sau certificat pentru un subdomeniu propriu). Expunerea publică (necesară doar pentru `saas`) se face numai cu aprobare, după Faza 9.
+- **Notificări operaționale** (backup eșuat, upgrade PostgreSQL, `/api/health` roșu, disc aproape plin): un singur canal configurabil, Telegram sau email, folosit de toate scripturile din `ops/` și de worker.
 
 Faza 0 verifică aceste date pe sistem și le corectează în `docs/INFRA.md`. Nu se fac modificări de sistem (instalări, ștergeri pentru eliberarea discului, configurare nginx) fără aprobare explicită.
 
@@ -280,6 +282,9 @@ Toate datele financiare aparțin unei **gospodării**, nu direct unui utilizator
 - `recurring_rules`: household_id, account_id, category_id, type, amount_minor, currency, frequency, interval, day_of_month, next_run_on, end_on, active.
 - `recurring_occurrences`: rule_id, occurrence_date, transaction_id. **Unic pe (rule_id, occurrence_date)**: garanția de idempotență.
 - `audit_events`: household_id, actor_user_id, action, target_type, target_id, created_at, metadata minimă (fără sume, descrieri sau date personale).
+- `consents`: user_id, kind (`external_ai`, `usage_stats`), granted_at, revoked_at.
+
+**Platformă (Faza 2):** `idempotency_keys` (6.4), `client_installations`, `app_events` și `app_downloads` (6.5).
 
 **Ingestie (Fazele 6–7):**
 - `documents`: household_id, uploaded_by, kind (`receipt`, `statement`), storage_key, mime, size_bytes, sha256, perceptual_hash nullable, status (`queued`, `processing`, `needs_review`, `done`, `failed`), error_code, batch_id, created_at. Unic pe (household_id, sha256).
@@ -290,7 +295,6 @@ Toate datele financiare aparțin unei **gospodării**, nu direct unui utilizator
 - `statements`: document_id, household_id, account_id, bank_code, period_start, period_end, parser_version.
 - `statement_lines`: statement_id, row_no, occurred_on, amount_minor, direction, description_raw, merchant_guess, external_ref, transaction_id nullable.
 - `matches`: household_id, receipt_id, transaction_id, score, reasons_json, status (`suggested`, `confirmed`, `rejected`), decided_by. Unic pe receipt_id pentru cele confirmate.
-- `consents`: user_id, kind (de exemplu `external_ai`), granted_at, revoked_at.
 
 **Etichete (Faza 3):** `tags` (household_id nullable pentru cele de sistem, name, color, hidden), `transaction_tags` (transaction_id, tag_id), `receipt_line_tags` (receipt_line_id, tag_id). Ambele tabele de legătură au cheie unică pe pereche.
 
@@ -366,33 +370,38 @@ Statisticile se calculează pe server, din date proprii, fără servicii externe
 
 **Consimțământ:** evenimentele de utilizare respectă comutatorul din setările utilizatorului (`consents`, tip `usage_stats`); în `saas` sunt oprite până la acord. Politica de confidențialitate descrie exact lista de evenimente.
 
-**Faze:** tabelele și endpointul `/api/v1/app/events` în aceeași fază FINET cu login-ul mobil (Faza 1 sau imediat după); pagina „Statistici” în Faza 9 pentru `personal` și în Faza 11 pentru panoul `saas`.
+**Faze:** tabelele, antetul `X-FINET-Client` și endpointul `/api/v1/app/events` în Faza 2, odată cu primele endpointuri `/api/v1/`; pagina „Statistici” în Faza 9 pentru `personal` și în Faza 11 pentru panoul `saas`.
 
 ## 7. Faze de implementare
 
 Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROADMAP.md` actualizat (complet, parțial, neimplementat); raportul din secțiunea 8.
 
+Începând cu Faza 2, **fiecare fază care adaugă o funcție expune și endpointurile `/api/v1/` corespunzătoare** (6.4), cu OpenAPI actualizat și teste de integrare, ca aplicația Android (`docs/FINET_ANDROID_MASTER_PROMPT.md`, secțiunea 2) să poată urma fazele web. Fazele Android și dependențele lor se urmăresc în `docs/ROADMAP.md`.
+
 ### Faza 0 — Fundație și infrastructură
 - **Înainte de cod**, verifică și raportează starea sistemului: spațiul pe disc, Node, pnpm, nginx, Ollama, LiteLLM. Propune un plan de eliberare a discului (minimum 8 GB liberi) și **așteaptă aprobarea** înainte de orice ștergere sau instalare.
 - După aprobare: ultima versiune stabilă PostgreSQL (în prezent 18), nativ, din repository-ul PGDG, cu actualizările minore automate configurate (3.5, punctul 1), cu baze separate pentru dezvoltare și teste și cu roluri separate (`app`, cu `NOBYPASSRLS`, și `migrator`).
 - Proiect Next.js, TypeScript strict, Tailwind, shadcn/ui, ESLint, Prettier, Vitest, Playwright. `lib/config.ts` cu `APP_MODE`, modulul `entitlements` pentru `personal`, `lib/storage.ts`, `lib/money.ts` complet cu teste.
-- Unități systemd pentru `web` și `worker`, un vhost nginx pe un subdomeniu, cu HTTPS, și `/api/health`.
+- Unități systemd pentru `web` și `worker`, un vhost nginx cu HTTPS accesibil prin rețeaua privată (3.1), și `/api/health`.
+- `ops/postgres/VERSION`, actualizările minore automate (3.5, punctul 1) și canalul de notificări operaționale (3.1), cu un mesaj de test trimis efectiv.
 - GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu, versiunea din `ops/postgres/VERSION`), build, scanarea secretelor.
-- Documentație: `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md`, `docs/adr/0001-stack.md`.
+- Documentație: `CLAUDE.md` (scurt, cu trimitere la acest prompt), `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md` (cu o secțiune pentru fazele Android), `docs/adr/0001-stack.md`.
 - **Sarcină umană, pornită în paralel:** colectarea a 50–100 de bonuri reale (inclusiv șterse, mototolite, lungi, cu reduceri și garanție SGR) și a câte 2–3 extrase pentru băncile folosite, anonimizate, în `fixtures/`, fiecare cu rezultatul așteptat completat manual.
-- **Acceptare:** aplicația goală răspunde prin nginx, pe HTTPS; `/api/health` e verde; CI e verde; testele pentru bani trec.
+- **Acceptare:** aplicația goală răspunde prin nginx, pe HTTPS, din rețeaua privată; `/api/health` e verde; CI e verde; testele pentru bani trec; `unattended-upgrades --dry-run` arată pachetele PostgreSQL din PGDG; notificarea de test a ajuns.
 
 ### Faza 1 — Autentificare, profil, gospodărie
 - Login cu parolă și magic link, logout, resetare și schimbare parolă, listă de sesiuni active cu revocare.
 - Pentru clienții mobili: pluginul `bearer` din Better Auth (sesiunea transmisă în antetul `Authorization`, nu prin cookie), cu aceeași expirare și revocare ca sesiunile web. Login-ul mobil are rate limiting propriu, iar sesiunea mobilă apare în lista de sesiuni ca „Telefon Android”.
-- `personal`: `pnpm admin:create-user` și `pnpm admin:reset-password`; înregistrarea publică e dezactivată. `saas`: înregistrare publică cu verificare email.
+- `personal`: `pnpm admin:create-user`, `pnpm admin:reset-password` și `pnpm admin:add-member --household <id> --email <email>` (ca familia să poată folosi aceeași gospodărie înainte de invitațiile din Faza 8); înregistrarea publică e dezactivată. `saas`: înregistrare publică cu verificare email.
 - Gospodărie personală creată automat, `user_preferences`, pagina de profil. `lib/authz.ts`, context RLS, middleware pentru rutele protejate, rate limiting, antete de securitate.
-- **Acceptare:** E2E pentru login și logout în ambele moduri; în `personal`, `/register` răspunde 404; teste pentru rate limiting, expirarea sesiunilor și RLS. Revizuire de securitate.
+- `docs/SECURITY_CHECKLIST.md`, creat acum și completat la fiecare revizuire de securitate (autentificare, autorizare, antete, secrete, încărcări, date).
+- **Acceptare:** E2E pentru login și logout în ambele moduri; login prin `bearer` testat prin API; în `personal`, `/register` răspunde 404; teste pentru rate limiting, expirarea sesiunilor și RLS. Revizuire de securitate.
 
 ### Faza 2 — Conturi, categorii, tranzacții, transferuri
 - CRUD pentru conturi (cu arhivare), categorii de sistem și personalizate, tranzacții cu căutare, filtre, sortare și paginare cu cursor. Transferuri atomice; sold calculat.
-- Primele endpointuri `/api/v1/` (cont, gospodării, conturi, categorii, tranzacții, transferuri), cu `Idempotency-Key`, OpenAPI generat și teste de integrare care verifică izolarea între gospodării prin API.
-- **Acceptare:** teste pentru solduri, transferuri (inclusiv rollback) și izolarea între gospodării pentru fiecare endpoint; E2E pentru adăugarea unei cheltuieli și verificarea soldului.
+- Primele endpointuri `/api/v1/` (cont, gospodării, conturi, categorii, tranzacții, transferuri), cu `Idempotency-Key` (plus jobul care șterge cheile mai vechi de 24 de ore), OpenAPI generat în `docs/openapi.json` și teste de integrare care verifică izolarea între gospodării prin API.
+- Colectarea statisticilor de utilizare (6.5): tabelele, antetul `X-FINET-Client`, `/api/v1/app/events` cu lista fixă de evenimente și consimțământul `usage_stats`.
+- **Acceptare:** teste pentru solduri, transferuri (inclusiv rollback) și izolarea între gospodării pentru fiecare endpoint; aceeași cerere `POST` trimisă de două ori cu aceeași cheie creează o singură tranzacție; un eveniment cu un câmp nepermis (de exemplu o sumă) e respins; E2E pentru adăugarea unei cheltuieli și verificarea soldului.
 
 ### Faza 3 — Dashboard, bugete, obiective, rapoarte, export, backup
 - Dashboard: venituri, cheltuieli, sold net și număr de tranzacții; cheltuieli pe categorii (din toate sursele); evoluția lunară și trendul zilnic; comparație cu luna anterioară; totaluri separate pe monedă; selector de lună. Onboarding în 3 pași.
@@ -400,20 +409,23 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Bugete generale și pe categorie, cu semafor (verde sub pragul de avertizare, galben între prag și 100%, roșu peste 100%) și avertizare în aplicație.
 - Obiective: țintă, termen, progres, stare.
 - Raport lunar și export CSV.
-- **Backup zilnic** (`pg_dump` plus fișierele din `storage`), criptat, copiat în afara containerului, cu retenție. Restaurarea este **testată efectiv**. Fără backup testat nu se introduc date reale.
+- Endpointurile `/api/v1/` pentru dashboard, bugete, obiective, etichete și raportul lunar.
+- **Backup zilnic** (`pg_dump` plus fișierele din `storage`) cu restic: criptat, copiat în afara containerului (destinația aleasă de operator: alt server, un storage box sau un bucket compatibil S3), cu retenție 7 zilnice, 4 săptămânale, 12 lunare. Parola restic și credențialele destinației stau doar pe server, nu în repository. Un backup eșuat trimite notificare (3.1). Restaurarea este **testată efectiv**. Fără backup testat nu se introduc date reale.
 - **Acceptare:** teste pentru semafor și limitele de lună în `Europe/Bucharest`, pentru conținutul CSV și izolarea exportului; restaurarea din backup executată și documentată.
 
 > **Reper v0.1 personal:** după Faza 3, aplicația poate fi folosită zilnic cu introducere manuală.
 
 ### Faza 4 — Rezervată pentru stabilizare
 - Corectarea problemelor găsite în prima săptămână de folosire reală, accesibilitate de bază și performanță. Fără funcții noi. Se poate sări dacă nu e nevoie.
+- **Acceptare:** lista problemelor găsite în folosirea reală, fiecare rezolvată sau trecută în `docs/ROADMAP.md` cu motivul amânării; niciun test existent nu pică.
 
 ### Faza 5 — Recurențe
 - CRUD pentru reguli, cu stările `active`, `paused` și `completed` (după `end_on` sau după numărul de rate), filtre pe stare și contorul „active · de generat · total”. Worker pg-boss care rulează orar, plus butonul „Generează scadentele” pentru rulare la cerere, cu aceeași garanție de idempotență. La reluarea de pe pauză, lunile sărite nu se generează retroactiv. Idempotență prin `recurring_occurrences`, recuperare limitată a ocurențelor ratate, cazurile ziua 31 și 29 februarie, dezactivare, `end_on`.
+- Endpointurile `/api/v1/` pentru reguli, scadențe și generarea la cerere.
 - **Acceptare:** jobul rulat de două ori sau în paralel nu creează duplicate; testele pentru cazurile de calendar trec.
 
 ### Faza 6 — Ingestia bonurilor (miezul produsului)
-- O singură pagină „Import” pentru poze, PDF, CSV, Excel și ZIP; tipul documentului (bon sau extras) se detectează automat. Contorul de consum al zilei e afișat lângă zona de încărcare. Modul „bon lung” e un comutator explicit: când e activ, utilizatorul alege 2–4 poze în ordine de sus în jos, vede miniaturile numerotate și le poate reordona înainte de procesare. Aplicația unește și singură pozele care au același CUI și același număr de bon.
+- O singură pagină „Import” pentru toate documentele. În această fază acceptă bonurile (poze și PDF); extrasele (CSV, Excel, PDF de extras, ZIP) se activează în Faza 7, iar până atunci pagina le refuză cu un mesaj clar. Tipul documentului (bon sau extras) se detectează automat. Contorul de consum al zilei e afișat lângă zona de încărcare. Modul „bon lung” e un comutator explicit: când e activ, utilizatorul alege 2–4 poze în ordine de sus în jos, vede miniaturile numerotate și le poate reordona înainte de procesare. Aplicația unește și singură pozele care au același CUI și același număr de bon.
 - Încărcare foto sau PDF, una sau mai multe fișiere; `documents` și `processing_batches`; coadă pg-boss; stări vizibile în interfață.
 - Preprocesare cu sharp: rotire după EXIF, decupare, contrast, redimensionare; eliminarea EXIF.
 - Pipeline de extracție prin `lib/ai`, cu furnizor local întâi; rezervă externă doar cu consimțământ. Ieșire JSON validată cu Zod, conform 5.5.
@@ -424,6 +436,8 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Ecran de verificare înainte de salvare: liniile, categoriile propuse și nepotrivirile evidențiate. Corecturile actualizează `product_aliases`.
 - Deduplicare: fișier identic (sha256), poză aproape identică (hash perceptual), același bon fotografiat din nou (CUI + număr + dată + total).
 - Căutare în textul OCR. Limite prin `entitlements`, cotă de stocare. Deduplicarea și verificările nu sunt limitate de plan.
+- Consimțământul pentru AI extern (6.3) și `docs/PRIVACY_NOTES.md` (ce date pleacă, către cine, retenția pozelor prin `RECEIPT_IMAGE_RETENTION_DAYS`).
+- Endpointurile `/api/v1/` pentru încărcare, starea procesării, rezultatul extras, corectarea liniilor și confirmarea bonului.
 - Pagina „Bonuri”: istoric cu data, comerciantul, categoriile (toate, nu doar una per bon), totalul, starea (`queued`, `needs_review`, `done`, `failed`) și acțiunile (vezi bonul, reprocesează, șterge). Căutare după magazin, produs sau sumă (acceptă „45,90” și „45.90”), filtru după categorie, etichetă și stare. Butonul „Scanează” e accesibil de oriunde, iar bonurile „De verificat” apar primele.
 - **Evaluare:** comandă `pnpm eval:receipts`, care rulează pipeline-ul pe `fixtures/receipts` și raportează, per furnizor: acuratețea pe total, dată, CUI, linii, timpul mediu și costul estimat.
 - **Acceptare:** rezultatul evaluării e inclus în raport, cu cifrele exacte; furnizorul implicit e ales pe baza lor și documentat într-un ADR; teste pentru validările din 5.5, deduplicare și securitatea încărcării. Revizuire de securitate.
@@ -436,12 +450,15 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Tabel „Acoperire extrase”: conturi × luni, cu starea complet, parțial (până la ce dată) sau lipsă, și avertizare pentru lunile fără extras pe un cont.
 - **Potrivire bon ↔ tranzacție:** sumă exactă, fereastră de ±3 zile, asemănarea comerciantului (CUI sau nume normalizat). Fiecare sugestie are scor și motive vizibile; utilizatorul o confirmă sau o respinge. Nu se creează niciodată două tranzacții pentru aceeași cheltuială.
 - Detectarea plăților recurente din istoric (comerciant, sumă similară, periodicitate), propuse ca reguli în Faza 5.
+- Endpointurile `/api/v1/` pentru extrase, acoperire, sugestii de potrivire și decizia asupra lor.
 - **Acceptare:** teste pe fișierele de test ale fiecărei bănci; teste pentru importul dublu, potrivire (cazuri pozitive, negative și ambigue) și ZIP-uri malițioase. Revizuire de securitate.
 
 ### Faza 8 — Familie
 - Invitații prin link cu token (`/join/[token]`, expirabil, de unică folosință), roluri, părăsirea gospodăriei și eliminarea unui membru.
 - Conturi și bugete personale și comune; vizibilitatea per membru documentată.
 - Împărțirea cheltuielilor (egal, procente, sume fixe), solduri reciproce, decontări (inclusiv parțiale).
+- Comutator de gospodărie activă, pentru utilizatorii care aparțin mai multor gospodării (web și `/api/v1/`).
+- Endpointurile `/api/v1/` pentru membri, invitații, împărțiri și decontări.
 - **Acceptare:** suma părților este egală cu totalul; solduri corecte cu 2 și 3 membri; permisiunile pe roluri sunt testate. Revizuire de securitate.
 
 ### Faza 9 — Hardening, PWA și offline
@@ -449,8 +466,16 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Service worker care pune în cache doar asset-urile statice și pagina `/offline` (care trebuie să existe).
 - **Scanare offline:** pozele se păstrează temporar în IndexedDB, se încarcă automat la revenirea conexiunii și se șterg local după confirmarea serverului. Starea „în așteptare” este vizibilă.
 - Audit de accesibilitate (Lighthouse ≥ 90) și de securitate pe `docs/SECURITY_CHECKLIST.md`.
-- Upgrade-ul automat major al PostgreSQL (3.5, punctele 2 și 3): scriptul, timerul systemd, repetiția pe copie, revenirea automată și notificările. **Acceptare:** o repetiție completă rulată pe o copie, de pe versiunea curentă pe următoarea disponibilă (beta sau RC, dacă nu există încă una stabilă), plus un test de revenire forțată, ambele documentate cu rezultatul. Export și ștergere GDPR.
-- **Acceptare:** E2E pentru scanarea în modul offline și sincronizarea ulterioară; checklist-ul completat cu dovezi; E2E pentru export și ștergerea contului.
+- Export și ștergere GDPR pentru contul utilizatorului.
+- Upgrade-ul automat major al PostgreSQL (3.5, punctele 2 și 3): scriptul, timerul systemd, repetiția pe copie, revenirea automată și notificările.
+- Pagina „Statistici” pentru administrator (6.5).
+- Pagina „Setări → Aplicația Android” (descărcare, cod QR, pași de instalare) și `GET /api/v1/app/android/latest`, conform secțiunii 12.1 din promptul Android.
+- **Acceptare:**
+  - E2E pentru scanarea offline și sincronizarea ulterioară;
+  - E2E pentru exportul și ștergerea contului;
+  - `docs/SECURITY_CHECKLIST.md` completat cu dovezi;
+  - o repetiție completă a upgrade-ului PostgreSQL pe o copie, de pe versiunea curentă pe următoarea disponibilă (beta sau RC, dacă nu există încă una stabilă), plus un test de revenire forțată, ambele documentate cu rezultatul;
+  - pagina „Statistici” afișează datele reale din Faza 2, fără nicio informație financiară.
 
 > **Reper v1.0 personal:** după Faza 9, varianta `personal` este completă.
 
@@ -461,8 +486,9 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
   - Fiecare raport e o **definiție în date**, nu cod separat (`report_definitions`: nume, reguli de potrivire pe `normalized_name`, categorie, etichetă sau tip de linie, sfat). Utilizatorul își poate face propriul raport din aceleași reguli, ceea ce acoperă „generatorul pe articole”.
   - Fiecare raport afișează totalul pe perioadă, numărul de bucăți, prețul mediu pe unitate, proiecția anuală (calculată din perioada efectiv acoperită de bonuri și marcată ca estimare), istoricul liniilor potrivite (cu link la bon) și export CSV.
   - Sfaturile sunt texte fixe, verificabile; nu se afișează sume de economie inventate.
-- **Acceptare:** teste pentru regulile de potrivire pe linii de bon reale din `fixtures/receipts` (de exemplu, „PUNGA RAFIE” intră la pungi, iar „PUNGI MENAJ 35L” nu), pentru proiecția anuală pe perioade scurte și pentru exportul CSV.
 - Export Excel și PDF.
+- Endpointurile `/api/v1/` pentru liste, prețuri și rapoarte.
+- **Acceptare:** teste pentru regulile de potrivire pe linii de bon reale din `fixtures/receipts` (de exemplu, „PUNGA RAFIE” intră la pungi, iar „PUNGI MENAJ 35L” nu), pentru proiecția anuală pe perioade scurte și pentru exportul CSV și Excel.
 
 ### Faza 11 — Fundația SaaS (doar `APP_MODE=saas`)
 - Pagini publice randate pe server: prezentare, `/pricing`, `/help` (ghid, întrebări frecvente), `/terms`, `/privacy`, cu texte juridice revizuite de un om.
@@ -470,7 +496,8 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Turnstile, Google OAuth, traducerea în engleză.
 - Feedback și raportare de bug-uri din aplicație (fără date financiare), anunțuri de la administrator.
 - Panou de administrare: utilizatori, gospodării, joburi, feedback, statistici de utilizare agregate (6.5). Acțiunile administratorului sunt auditate. Administratorul **nu vede** datele financiare ale utilizatorilor.
-- Monitorizarea erorilor; analytics doar pe paginile publice; nume de produs definitiv.
+- Monitorizarea erorilor; analytics doar pe paginile publice; verificarea numelui FINET la OSIM și EUIPO înainte de lansare (secțiunea 9).
+- Expunerea publică a aplicației (până acum doar în rețeaua privată), cu protecție la nivel de rețea (de exemplu Cloudflare în fața serverului) și rate limiting revizuit.
 - **Acceptare:** rutele de admin răspund 404 pentru non-administratori și în modul `personal`; testele E2E de bază trec în ambele moduri.
 
 ### Faza 12 — Planuri, plăți, recomandări (doar `saas`)
@@ -498,7 +525,7 @@ Conversia valutară cu cursul BNR, notificări push, email și Telegram, alte li
 | Risc | Impact | Măsură |
 |---|---|---|
 | OCR slab pe bonuri reale | Produsul nu convinge | Set de validare înainte de cod; evaluare per furnizor (Faza 6); ecran de verificare obligatoriu |
-| Disc aproape plin (5,3 GB liberi) | Totul se oprește | Eliberare înainte de Faza 0; comprimarea imaginilor; cotă; spațiul ocupat afișat în `/api/health`; storage extern la nevoie |
+| Disc aproape plin (5,3 GB liberi) | Totul se oprește; upgrade-ul major PostgreSQL nu are loc | Eliberare înainte de Faza 0; comprimarea imaginilor; cotă; spațiul ocupat afișat în `/api/health` și notificare sub un prag; storage extern la nevoie |
 | Modele AI locale mari | Nu încap pe disc sau în RAM | Se măsoară în Faza 6; rezervă externă cu consimțământ |
 | Formatele extraselor se schimbă | Importul se strică | Un parser per bancă, fișiere de test și alertă la eșecul de parsare |
 | Erori în logica banilor | Grav, mai ales în familie | `bigint` în unități minore, restul cel mai mare, teste dedicate |
