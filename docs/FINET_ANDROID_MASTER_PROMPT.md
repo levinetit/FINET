@@ -146,6 +146,7 @@ Se aplică integral secțiunea 5 din `docs/FINET_MASTER_PROMPT.md`. Pe mobil, co
 ### Faza B — Autentificare și profil
 - Login cu parolă, sesiune bearer, logout cu revocare, gestionarea 401 și 403.
 - Profil, lista gospodăriilor și alegerea celei active.
+- `installationId`, antetul `X-FINET-Client`, ecranul de informare de la prima pornire și comutatorul din Setări (secțiunea 10.1); evenimentele `app_open`, `login`, `logout`, `session_expired`.
 - Blocare cu amprentă (opțională), `FLAG_SECURE`.
 - **Acceptare:** login și logout pe backendul real de test; tokenul nu apare în loguri; după logout nu mai rămân date locale; test de integrare pentru sesiune expirată.
 
@@ -189,6 +190,30 @@ Procesarea rămâne pe serverul FINET. Telefonul doar fotografiază, pregăteșt
 - Fără OCR local în paralel cu cel de pe server.
 - Telefonul nu trimite imagini către furnizori AI. Consimțământul pentru AI extern e gestionat de FINET și afișat din setările contului.
 - Pozele temporare se șterg din telefon după confirmarea serverului.
+
+## 10.1 Statistici de utilizare
+
+Scop: administratorul vede cine folosește aplicația, de pe ce versiune, cât de des și ce funcții, ca să știe cine trebuie să actualizeze, ce funcții contează și unde apar probleme. Statisticile se colectează **de serverul FINET**, nu printr-un SDK extern (fără Google Analytics, Firebase Analytics sau alte trackere în APK).
+
+**Ce se colectează (și nimic altceva):**
+- **Instalarea:** la prima pornire, aplicația generează un `installationId` aleator (UUID), păstrat în stocarea securizată. Nu se folosesc identificatori ai telefonului (IMEI, Android ID, ID de publicitate).
+- **Informații despre client**, trimise în antetul `X-FINET-Client` la fiecare cerere: `installationId`, versiunea aplicației (`versionName`/`versionCode`), versiunea Android, producătorul și modelul (de exemplu „Samsung SM-A546B”), limba.
+- **Evenimente de utilizare**, trimise în loturi la `POST /api/v1/app/events` (cel mult o dată la câteva minute și la trecerea în fundal), fiecare cu numele evenimentului, momentul și versiunea:
+  - `app_open`, `login`, `logout`, `session_expired`;
+  - `screen_view` (doar numele ecranului: `dashboard`, `transactions`, `scan`…);
+  - `receipt_scan_started`, `receipt_uploaded`, `receipt_confirmed`, `statement_imported`, `transaction_created`, `share_import`;
+  - `update_prompt_shown`, `update_started`;
+  - `error_shown` (doar codul erorii, de exemplu `NETWORK_TIMEOUT`).
+- **Niciodată:** sume, descrieri, comercianți, categorii, conținutul bonurilor, căutări, coordonate GPS, lista de contacte sau alte aplicații.
+
+**Consimțământ și transparență:**
+- La prima pornire, un ecran scurt explică ce se colectează, cu link spre politica de confidențialitate.
+- În **Setări → Confidențialitate**, comutatorul „Trimite statistici de utilizare” oprește evenimentele de utilizare. Antetul cu versiunea rămâne, pentru că e necesar pentru compatibilitate și pentru notificarea de actualizare; acest lucru e explicat în ecran.
+- În modul `saas`, evenimentele de utilizare sunt **oprite implicit** până la acordul utilizatorului. În modul `personal`, sunt pornite implicit, cu explicația afișată la prima pornire.
+
+**Pe client:** evenimentele stau într-o coadă locală mică (maximum câteva sute), se trimit în loturi, se pierd fără erori vizibile dacă serverul nu răspunde și nu blochează niciodată interfața. Teste: niciun eveniment nu conține câmpuri financiare (test automat pe schema evenimentelor).
+
+Ce afișează serverul și cum stochează datele: secțiunea 6.5 din `docs/FINET_MASTER_PROMPT.md`.
 
 ## 11. Configurare, medii și rețea
 
@@ -276,7 +301,8 @@ Contractul API rămâne în `docs/API.md` și `docs/openapi.json` (comune web ș
 9. `flutter analyze` fără erori; testele clientului și testele de regresie ale backendului raportate.
 10. APK-ul release e semnat, verificat și publicat în GitHub Releases cu suma SHA-256 (sau blocajul e documentat).
 11. Instalarea pe un telefon real e testată, sau blocajul e documentat.
-12. Documentația și `docs/ROADMAP.md` sunt actualizate.
+12. Statisticile de utilizare funcționează conform secțiunii 10.1: apar în pagina de administrare FINET, iar un test automat confirmă că niciun eveniment nu conține date financiare.
+13. Documentația și `docs/ROADMAP.md` sunt actualizate.
 
 ## 16. Raport la finalul fiecărei faze
 
