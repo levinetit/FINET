@@ -32,9 +32,9 @@ Surse, toate publice și fără autentificare: verificările proprii din 2026-10
 | Bugete | General sau pe categorie, comune și individuale, semafor verde/galben/roșu, alerte la apropierea limitei | Faza 3 (comune: Faza 8) |
 | Obiective | Nume, sumă țintă, termen, progres, stare; ștergere cu confirmare | Faza 3 |
 | Bonuri | Foto (inclusiv bonuri șterse sau mototolite), PDF, mai multe fișiere deodată; coadă cu prioritate după plan (`/api/upload-queue`, `processing_batches`); extrage comerciant, dată, total, TVA și **fiecare produs** cu cantitate și preț unitar; categorisire la nivel de produs; arhivă cu căutare în textul OCR; recunoaște garanția SGR (0,50 lei per ambalaj) și reducerile de pe cardurile de fidelitate. **(C)** Pagina `/receipts` este doar istoricul: încărcarea se face din `/import`, iar butonul „Scanează” e mereu vizibil. Tabelul are coloanele Data bonului, Comerciant, Categorie (una per bon), Total, Vizualizează, Status, Acțiuni. Caută după magazin, produs sau sumă și filtrează după categorie. „Validare AI & Duplicate” e marcată ca funcție Pro | Faza 6 |
-| Extrase | PDF, CSV, Excel, ZIP; „bănci RO și Revolut” (listă exactă necunoscută); deduplicare; avertizare pentru lunile fără extras | Faza 7 |
+| Extrase | PDF, CSV, Excel, ZIP; „bănci RO și Revolut” (listă exactă necunoscută); deduplicare; avertizare pentru lunile fără extras. **(C)** Pagina „Import unificat”: o singură zonă de încărcare pentru poze, PDF, CSV, Excel și ZIP; contor de consum („0 din 1 documente permise azi, maximum 5 MB”, confirmă limita planului gratuit); comutator manual „Mod bon lung (2–4+ poze)”; o filă separată, „Evidență extrase & acoperire”. Lista de bănci nu apare înainte de încărcare | Faza 7 |
 | Potrivire | Bonul se leagă automat de tranzacția cu cardul din extras („potrivire confirmată cu extrasul ING”) | Faza 7 |
-| Recurențe | Detectarea abonamentelor (Netflix, Spotify, sală, chirie), generarea tranzacțiilor la scadență | Faza 5 (reguli) și Faza 7 (detectare din extrase) |
+| Recurențe | Detectarea abonamentelor (Netflix, Spotify, sală, chirie), generarea tranzacțiilor la scadență. **(C)** Pagina arată „X active · Y de generat · Z total”; generarea e **manuală**, din butonul „Generează tranzacțiile scadente”; stări: active, puse pe pauză, completate, cu filtre pe fiecare | Faza 5 (reguli) și Faza 7 (detectare din extrase) |
 | Familie | Până la 6 membri, bugete comune și individuale, împărțire 50/50, solduri reciproce, decontări (`/api/family/info`) | Faza 8 |
 | Liste de cumpărături | Bifare la raft, comparație AI listă ↔ bon, detectarea achizițiilor neplanificate | Faza 10 |
 | Rapoarte | Rapoarte personalizate pe orice produs din bonuri, prețuri pe magazin, variația prețurilor în timp, „verdict financiar AI”. **(C)** Pagina „Rapoarte inteligente și micro-cheltuieli”, doar pentru planurile plătite, are trei secțiuni: rapoarte predefinite (Pro), generator pe articole (Ultra), comparator și evoluția prețurilor (Ultra). Perioade: toată arhiva, luna curentă, luna trecută, ultimele 3 luni, anul acesta. Rapoartele predefinite: pungi și sacoșe, garanția SGR, cumpărături din impuls de la casă, produse nealimentare la supermarket (igienă, menaj), cafea și băuturi la bucată, economii din cupoane și carduri de fidelitate. Fiecare arată totalul, numărul de bucăți, prețul mediu, proiecția anuală, un sfat, istoricul achizițiilor și export CSV | Faza 3 (de bază), Faza 10 (micro-cheltuieli și prețuri) |
@@ -323,10 +323,11 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Corectarea problemelor găsite în prima săptămână de folosire reală, accesibilitate de bază și performanță. Fără funcții noi. Se poate sări dacă nu e nevoie.
 
 ### Faza 5 — Recurențe
-- CRUD pentru reguli; worker pg-boss care rulează orar. Idempotență prin `recurring_occurrences`, recuperare limitată a ocurențelor ratate, cazurile ziua 31 și 29 februarie, dezactivare, `end_on`.
+- CRUD pentru reguli, cu stările `active`, `paused` și `completed` (după `end_on` sau după numărul de rate), filtre pe stare și contorul „active · de generat · total”. Worker pg-boss care rulează orar, plus butonul „Generează scadentele” pentru rulare la cerere, cu aceeași garanție de idempotență. La reluarea de pe pauză, lunile sărite nu se generează retroactiv. Idempotență prin `recurring_occurrences`, recuperare limitată a ocurențelor ratate, cazurile ziua 31 și 29 februarie, dezactivare, `end_on`.
 - **Acceptare:** jobul rulat de două ori sau în paralel nu creează duplicate; testele pentru cazurile de calendar trec.
 
 ### Faza 6 — Ingestia bonurilor (miezul produsului)
+- O singură pagină „Import” pentru poze, PDF, CSV, Excel și ZIP; tipul documentului (bon sau extras) se detectează automat. Contorul de consum al zilei e afișat lângă zona de încărcare. Modul „bon lung” e un comutator explicit, dar aplicația unește și singură pozele care au același CUI și același număr de bon.
 - Încărcare foto sau PDF, una sau mai multe fișiere; `documents` și `processing_batches`; coadă pg-boss; stări vizibile în interfață.
 - Preprocesare cu sharp: rotire după EXIF, decupare, contrast, redimensionare; eliminarea EXIF.
 - Pipeline de extracție prin `lib/ai`, cu furnizor local întâi; rezervă externă doar cu consimțământ. Ieșire JSON validată cu Zod, conform 5.5.
@@ -341,7 +342,7 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 ### Faza 7 — Extrase bancare, potrivire, detectarea abonamentelor
 - Import CSV, Excel, PDF și ZIP; detectarea băncii; **un parser per bancă**, începând cu banca folosită de tine; fiecare parser are fișier de test în `fixtures/statements`.
 - Previzualizare, mapare de coloane pentru CSV necunoscute, deduplicare după (cont, dată, sumă, descriere normalizată, referință), anularea unui import întreg.
-- Avertizare pentru lunile fără extras pe un cont.
+- Tabel „Acoperire extrase”: conturi × luni, cu starea complet, parțial (până la ce dată) sau lipsă, și avertizare pentru lunile fără extras pe un cont.
 - **Potrivire bon ↔ tranzacție:** sumă exactă, fereastră de ±3 zile, asemănarea comerciantului (CUI sau nume normalizat). Fiecare sugestie are scor și motive vizibile; utilizatorul o confirmă sau o respinge. Nu se creează niciodată două tranzacții pentru aceeași cheltuială.
 - Detectarea plăților recurente din istoric (comerciant, sumă similară, periodicitate), propuse ca reguli în Faza 5.
 - **Acceptare:** teste pe fișierele de test ale fiecărei bănci; teste pentru importul dublu, potrivire (cazuri pozitive, negative și ambigue) și ZIP-uri malițioase. Revizuire de securitate.
