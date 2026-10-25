@@ -332,6 +332,9 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Preprocesare cu sharp: rotire după EXIF, decupare, contrast, redimensionare; eliminarea EXIF.
 - Pipeline de extracție prin `lib/ai`, cu furnizor local întâi; rezervă externă doar cu consimțământ. Ieșire JSON validată cu Zod, conform 5.5.
 - **Bon lung din 2–4 poze:** liniile se combină în ordine, iar cele duplicate din zona de suprapunere se elimină.
+  - Se elimină doar suprapunerea de la granița dintre două poze consecutive (cel mai lung șir de linii identice între sfârșitul unei poze și începutul următoarei). Produsele identice care apar în alte locuri pe bon rămân.
+  - Ordinea se verifică: antetul (magazin, CUI) trebuie să fie pe prima poză, iar totalul pe ultima. Altfel utilizatorul primește un mesaj clar și opțiunea „Ordonează automat”.
+  - Rezultatul unirii se arată înainte de salvare, cu liniile eliminate tăiate și cu motivul afișat, iar suma liniilor păstrate se compară cu totalul bonului.
 - Ecran de verificare înainte de salvare: liniile, categoriile propuse și nepotrivirile evidențiate. Corecturile actualizează `product_aliases`.
 - Deduplicare: fișier identic (sha256), poză aproape identică (hash perceptual), același bon fotografiat din nou (CUI + număr + dată + total).
 - Căutare în textul OCR. Limite prin `entitlements`, cotă de stocare. Deduplicarea și verificările nu sunt limitate de plan.
