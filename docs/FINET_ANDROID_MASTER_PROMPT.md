@@ -28,7 +28,7 @@ Clientul nu poate depăși backendul. Fiecare fază Android are o fază FINET mi
 | Fază Android | Ce face | Are nevoie de FINET |
 |---|---|---|
 | A — Fundație | Proiect Flutter, temă, navigare, client API, ecrane pe date simulate | Doar contractul `docs/openapi.json`; până există, un contract provizoriu în `mobile/test/fixtures/`, marcat ca atare |
-| B — Autentificare | Login, sesiune, profil, gospodării | Faza 1 (Better Auth + plugin `bearer`) |
+| B — Autentificare | Login, sesiune, profil, gospodării, statistici de utilizare | Faza 1 (Better Auth + plugin `bearer`) și Faza 2 (endpointurile de cont și gospodării, `/api/v1/app/events`) |
 | C — Funcții de bază | Dashboard, conturi, tranzacții, bugete, obiective | Fazele 2 și 3 |
 | D — Recurențe și documente | Recurențe, foto bon, încărcare, verificare, extrase, potriviri | Fazele 5, 6 și 7 |
 | E — Stabilizare și livrare | Teste de integrare, securitate, conexiune slabă, APK semnat | Faza 9 (hardening) recomandată |
@@ -146,6 +146,7 @@ Se aplică integral secțiunea 5 din `docs/FINET_MASTER_PROMPT.md`. Pe mobil, co
 ### Faza B — Autentificare și profil
 - Login cu parolă, sesiune bearer, logout cu revocare, gestionarea 401 și 403.
 - Profil, lista gospodăriilor și alegerea celei active.
+- `installationId`, antetul `X-FINET-Client`, ecranul de informare de la prima pornire și comutatorul din Setări (secțiunea 10.1); evenimentele `app_open`, `login`, `logout`, `session_expired`.
 - Blocare cu amprentă (opțională), `FLAG_SECURE`.
 - **Acceptare:** login și logout pe backendul real de test; tokenul nu apare în loguri; după logout nu mai rămân date locale; test de integrare pentru sesiune expirată.
 
@@ -167,7 +168,8 @@ Se aplică integral secțiunea 5 din `docs/FINET_MASTER_PROMPT.md`. Pe mobil, co
 - Teste de integrare pentru fluxurile principale, verificare de securitate pe `docs/FINET_ANDROID_SECURITY.md`.
 - Accesibilitate (TalkBack, mărimi de font, contrast), ecrane mici și mari.
 - APK release semnat, verificat și instalat pe telefon.
-- **Acceptare:** criteriile din secțiunea 15.
+- Distribuția din secțiunea 12.1: workflow-ul de release, primul GitHub Release, verificarea actualizării din aplicație. Pagina de descărcare din FINET vine din Faza 9 FINET; dacă nu e gata, aplicația folosește linkul de pe GitHub.
+- **Acceptare:** criteriile din secțiunea 15; în plus, un tag `FINET-v…` produce un release cu APK-ul semnat și suma SHA-256, iar un telefon cu versiunea anterioară vede notificarea de actualizare.
 
 După MVP, fiecare într-o fază separată: coadă offline pentru poze (stocare locală criptată, sincronizare documentată), notificări push (fără sume în conținut), widget pe ecranul principal, publicare în Google Play (doar `saas`).
 
@@ -188,6 +190,30 @@ Procesarea rămâne pe serverul FINET. Telefonul doar fotografiază, pregăteșt
 - Fără OCR local în paralel cu cel de pe server.
 - Telefonul nu trimite imagini către furnizori AI. Consimțământul pentru AI extern e gestionat de FINET și afișat din setările contului.
 - Pozele temporare se șterg din telefon după confirmarea serverului.
+
+## 10.1 Statistici de utilizare
+
+Scop: administratorul vede cine folosește aplicația, de pe ce versiune, cât de des și ce funcții, ca să știe cine trebuie să actualizeze, ce funcții contează și unde apar probleme. Statisticile se colectează **de serverul FINET**, nu printr-un SDK extern (fără Google Analytics, Firebase Analytics sau alte trackere în APK).
+
+**Ce se colectează (și nimic altceva):**
+- **Instalarea:** la prima pornire, aplicația generează un `installationId` aleator (UUID), păstrat în stocarea securizată. Nu se folosesc identificatori ai telefonului (IMEI, Android ID, ID de publicitate).
+- **Informații despre client**, trimise în antetul `X-FINET-Client` la fiecare cerere: `installationId`, versiunea aplicației (`versionName`/`versionCode`), versiunea Android, producătorul și modelul (de exemplu „Samsung SM-A546B”), limba.
+- **Evenimente de utilizare**, trimise în loturi la `POST /api/v1/app/events` (cel mult o dată la câteva minute și la trecerea în fundal), fiecare cu numele evenimentului, momentul și versiunea:
+  - `app_open`, `login`, `logout`, `session_expired`;
+  - `screen_view` (doar numele ecranului: `dashboard`, `transactions`, `scan`…);
+  - `receipt_scan_started`, `receipt_uploaded`, `receipt_confirmed`, `statement_imported`, `transaction_created`, `share_import`;
+  - `update_prompt_shown`, `update_started`;
+  - `error_shown` (doar codul erorii, de exemplu `NETWORK_TIMEOUT`).
+- **Niciodată:** sume, descrieri, comercianți, categorii, conținutul bonurilor, căutări, coordonate GPS, lista de contacte sau alte aplicații.
+
+**Consimțământ și transparență:**
+- La prima pornire, un ecran scurt explică ce se colectează, cu link spre politica de confidențialitate.
+- În **Setări → Confidențialitate**, comutatorul „Trimite statistici de utilizare” oprește evenimentele de utilizare. Antetul cu versiunea rămâne, pentru că e necesar pentru compatibilitate și pentru notificarea de actualizare; acest lucru e explicat în ecran.
+- În modul `saas`, evenimentele de utilizare sunt **oprite implicit** până la acordul utilizatorului. În modul `personal`, sunt pornite implicit, cu explicația afișată la prima pornire.
+
+**Pe client:** evenimentele stau într-o coadă locală mică (maximum câteva sute), se trimit în loturi, se pierd fără erori vizibile dacă serverul nu răspunde și nu blochează niciodată interfața. Teste: niciun eveniment nu conține câmpuri financiare (test automat pe schema evenimentelor).
+
+Ce afișează serverul și cum stochează datele: secțiunea 6.5 din `docs/FINET_MASTER_PROMPT.md`.
 
 ## 11. Configurare, medii și rețea
 
@@ -216,7 +242,32 @@ Ordinea comenzilor:
 
 **Verificarea artefactului:** există, are o mărime plauzibilă, `apksigner verify --print-certs` arată certificatul așteptat, iar `aapt dump badging` arată `applicationId` și versiunea.
 
-**Instalare:** `adb devices`, apoi `adb install -r build/app/outputs/flutter-apk/app-release.apk`. Pentru familie, APK-ul semnat se distribuie direct (sideload), cu instrucțiuni de instalare din surse necunoscute.
+**Instalare pentru testare:** `adb devices`, apoi `adb install -r build/app/outputs/flutter-apk/app-release.apk`.
+
+### 12.1 Distribuție: GitHub Releases + descărcare din FINET
+
+**Build și publicare automată** (`.github/workflows/android-release.yml`):
+- Pornește la un tag `FINET-vX.Y.Z` (de exemplu `FINET-v1.0.0`), urmând versionarea semantică (X = schimbări incompatibile, Y = funcții noi, Z = corecturi). Workflow-ul acceptă doar tagurile care se potrivesc exact cu `FINET-v[0-9]+.[0-9]+.[0-9]+` și ignoră restul. Versiunea din tag (`1.0.0`) devine `versionName`, iar `versionCode` crește monoton (de exemplu numărul rulării).
+- Rulează `flutter analyze` și `flutter test`; dacă pică, nu se publică nimic.
+- Construiește APK-ul release semnat. Cheia vine din GitHub Secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`), iar `API_BASE_URL` din variabilele mediului `production` din GitHub. Nimic din acestea nu ajunge în loguri.
+- Verifică APK-ul cu `apksigner verify --print-certs` și compară amprenta certificatului cu cea așteptată (variabilă în GitHub).
+- Creează un GitHub Release cu `finet-X.Y.Z.apk`, fișierul `finet-X.Y.Z.apk.sha256` și notele versiunii (ce e nou, în română).
+- Build-urile de debug din PR-uri rămân artefacte de CI, nu se publică în Releases.
+
+**Vizibilitate:** repository-ul este public, deci oricine poate descărca APK-ul. APK-ul nu conține date, parole sau chei, iar fără acces la server și fără cont nu poate face nimic. Dacă operatorul vrea să limiteze descărcarea, repository-ul devine privat, iar descărcarea se face doar din FINET (mai jos).
+
+**Descărcare din FINET** (backend, Faza 9 FINET):
+- Pagina **Setări → Aplicația Android**, vizibilă doar utilizatorilor autentificați: versiunea curentă, butonul de descărcare, un cod QR către același link și pașii de instalare (permisiunea „Instalează aplicații necunoscute”, verificarea sumei SHA-256).
+- Linkul indică releaseul de pe GitHub sau, dacă repository-ul e privat, un fișier servit de FINET doar după autentificare.
+- Endpoint `GET /api/v1/app/android/latest` → `{ versionName, versionCode, minSupportedVersionCode, url, sha256, notes }`. Datele vin din configurația serverului (sau din ultimul release), nu sunt scrise în cod.
+
+**Actualizări în aplicație:**
+- La pornire (cel mult o dată pe zi), aplicația cheamă endpointul de mai sus. Dacă `versionCode` de pe server e mai mare, afișează „Versiune nouă disponibilă”, cu notele versiunii și un buton care deschide linkul de descărcare.
+- Dacă versiunea instalată e sub `minSupportedVersionCode` (de exemplu după o schimbare incompatibilă de API), aplicația afișează un ecran care cere actualizarea și nu mai trimite cereri financiare.
+- Aplicația nu instalează nimic singură. Instalarea o confirmă utilizatorul, prin instalatorul Android.
+- Alternativă pentru actualizări automate: aplicația **Obtainium** poate urmări pagina de Releases; pașii se descriu în `docs/FINET_ANDROID_BUILD.md`.
+
+**Mai târziu, doar `saas`:** Google Play (testare internă, apoi producție), cu App Bundle (`flutter build appbundle`), Play App Signing și pagina de confidențialitate.
 
 ## 13. Documentație
 
@@ -248,9 +299,10 @@ Contractul API rămâne în `docs/API.md` și `docs/openapi.json` (comune web ș
 7. Release-ul folosește doar HTTPS.
 8. Nu există secrete în APK sau în repository (verificat).
 9. `flutter analyze` fără erori; testele clientului și testele de regresie ale backendului raportate.
-10. APK-ul release e semnat și verificat.
+10. APK-ul release e semnat, verificat și publicat în GitHub Releases cu suma SHA-256 (sau blocajul e documentat).
 11. Instalarea pe un telefon real e testată, sau blocajul e documentat.
-12. Documentația și `docs/ROADMAP.md` sunt actualizate.
+12. Statisticile de utilizare funcționează conform secțiunii 10.1: apar în pagina de administrare FINET, iar un test automat confirmă că niciun eveniment nu conține date financiare.
+13. Documentația și `docs/ROADMAP.md` sunt actualizate.
 
 ## 16. Raport la finalul fiecărei faze
 
@@ -260,7 +312,7 @@ Contractul API rămâne în `docs/API.md` și `docs/openapi.json` (comune web ș
 4. Fișierele create sau modificate.
 5. Comenzile rulate și rezultatele exacte, cu testele reușite, eșuate, blocate și neexecutate raportate separat.
 6. Rezultatul verificărilor de securitate.
-7. Calea exactă a APK-ului, mărimea și certificatul.
+7. Calea exactă a APK-ului, mărimea, certificatul și, dacă a fost publicat, linkul releaseului de pe GitHub.
 8. Instrucțiunile de instalare.
 9. Problemele rămase și ce depinde de operator (URL-uri, rețea, cheia de semnare).
 
