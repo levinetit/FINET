@@ -110,7 +110,7 @@ Faza 0 verifică aceste date pe sistem și le corectează în `docs/INFRA.md`. N
 - **Validare:** Zod, cu aceleași scheme pe client și pe server.
 - **Joburi:** pg-boss (coadă peste Postgres, fără Redis), într-un proces worker separat.
 - **Fișiere:** interfața `storage` compatibilă S3, cu două implementări: **Supabase Storage prin protocolul S3** (bucket privat, implicit, ca pozele să nu ocupe discul LXC) și sistemul de fișiere local (pentru dezvoltare sau dacă operatorul preferă). Fișierele se servesc doar prin rute FINET autorizate, niciodată prin URL-uri publice Supabase. Imagini procesate cu sharp.
-- **AI și OCR:** interfață `ai/provider`, apelată doar prin LiteLLM, cu un furnizor local (model vision prin Ollama și/sau Tesseract `ron`) și un furnizor extern opțional ca rezervă. Alegerea implicită se face pe baza rezultatelor pe setul de validare (Faza 6), nu din presupuneri.
+- **AI și OCR:** hibrid local + extern, prin `lib/ai` și LiteLLM; regulile complete în secțiunea 3.6. Alegerea modelelor se face pe baza rezultatelor pe setul de validare (Faza 6), nu din presupuneri.
 - **Email:** SMTP prin Nodemailer. Opțional în modul `personal`.
 - **Teste:** Vitest pentru unit și integrare (pe un Postgres real, bază separată de test), Playwright pentru E2E.
 - **Calitate:** ESLint, Prettier, `tsc --noEmit`, GitHub Actions (lint, type-check, teste, build, scanarea secretelor din fișierele de client) pe fiecare PR.
@@ -227,6 +227,58 @@ Referința vizuală completă este demo-ul din `docs/demo/finet-demo.html` (date
 - Testele rulează pe imaginea `postgres:<versiunea majoră din ops/postgres/VERSION>`, adică versiunea proiectului Supabase.
 - Un workflow săptămânal rulează testele și pe versiunea majoră următoare, ca problemele de compatibilitate să apară înainte de upgrade.
 
+### 3.6 AI hibrid: unde se folosește LLM-ul și cum se alege modelul
+
+Principiu: **regulile și calculele exacte se fac în cod; LLM-ul doar citește și propune.** Sumele, totalurile, TVA-ul, duplicatele și împărțirile nu sunt niciodată decise de un LLM; ele sunt verificate de cod (5.1, 5.5), iar orice propunere a LLM-ului care nu trece verificările ajunge la utilizator ca „De verificat”.
+
+**Arhitectură:** toate apelurile trec prin `lib/ai` → LiteLLM, cu alias-uri de model configurate în LiteLLM, nu în cod:
+- `finet-vision-local`: model vision rulat local prin Ollama;
+- `finet-text-local`: model text mic, local, pentru categorisire, potriviri și rezumate;
+- `finet-vision-external` și `finet-text-external`: furnizor extern (de exemplu Gemini, OpenAI sau Claude), **opțional**, folosit doar cu consimțământ.
+
+Modelele concrete se aleg în Faza 6 după evaluarea pe bonurile tale (`pnpm eval:receipts`) și după resursele serverului (RAM, disc), apoi se notează într-un ADR. Schimbarea unui model înseamnă schimbarea configurației LiteLLM, nu a codului.
+
+**Ce intră (bonuri de pe telefon):**
+
+| Ce trimite telefonul | Cum ajunge | Ce face serverul |
+|---|---|---|
+| Poză din cameră (JPEG) | aplicația Android sau PWA | preprocesare (rotire, decupare, contrast), apoi vision |
+| Poză din galerie: JPEG, PNG, WebP, **HEIC/HEIF** | alegere de fișier sau „Partajează” | HEIC convertit în JPEG (pe telefon în aplicația Android; pe server pentru PWA, cu o bibliotecă cu suport HEIC), apoi ca mai sus |
+| Captură de ecran a unui bon digital | galerie sau „Partajează” | ca o poză |
+| **PDF** (bon electronic, factură, bon trimis pe email) | „Partajează” sau alegere de fișier | dacă PDF-ul are text: se extrage textul și se trimite la modelul **text** (mai ieftin și mai precis); dacă e scanat: fiecare pagină se transformă în imagine și merge la **vision** |
+| Bon lung din 2–4 poze | modul bon lung | fiecare poză citită separat, apoi unire algoritmică (Faza 6), fără LLM |
+
+Limite comune pe server (aceleași pentru web și Android, expuse prin API): tipurile de mai sus, verificate după conținut; dimensiune maximă per fișier și număr maxim de pagini per PDF, configurabile.
+
+**Traseul hibrid pentru un bon:**
+1. Preprocesare și, pentru PDF cu text, extragerea textului.
+2. **Local:** `finet-vision-local` (sau `finet-text-local` pentru PDF cu text) întoarce JSON-ul bonului, validat cu Zod (5.5). Opțional, dacă evaluarea arată că ajută, textul unui OCR clasic (Tesseract `ron`) se dă modelului ca indiciu suplimentar.
+3. **Verificări în cod:** suma liniilor = total, CUI valid, data plauzibilă, TVA plauzibil. Rezultatul primește un **scor de încredere**.
+4. Dacă verificările trec: bonul merge la „De verificat” cu liniile propuse (sau direct la „Salvat”, dacă utilizatorul a activat salvarea automată pentru bonurile fără probleme).
+5. Dacă verificările **nu** trec, dacă scorul e sub `AI_CONFIDENCE_THRESHOLD`, sau dacă modelul local nu răspunde: **și** utilizatorul a dat consimțământ `external_ai` **și** bugetul permite → o a doua încercare cu `finet-vision-external`, doar cu imaginea preprocesată, fără metadate.
+6. Dacă nici așa nu trece: „De verificat”, cu câmpurile problematice evidențiate. Utilizatorul corectează manual; nimic nu se salvează greșit în tăcere.
+
+Fiecare bon păstrează `provider_used` și motivul pentru care s-a trecut (sau nu) la extern, vizibile pe ecranul bonului.
+
+**Alte folosiri ale LLM-ului:**
+
+| Folosire | Model | Regulă |
+|---|---|---|
+| **Categorisirea liniilor de bon și a tranzacțiilor** | `finet-text-local` | Ordinea: 1) `product_aliases` (ce ai corectat tu înainte), 2) reguli fixe (de exemplu „GARANTIE SGR” → garanție), 3) LLM local, cu lista exactă de categorii ca răspuns permis (ieșire constrânsă, fără categorii inventate). Corecturile tale actualizează `product_aliases`, deci același produs nu mai trece prin LLM data viitoare. Numele produselor se normalizează tot aici („LAPTE ZUZU 1,5% 1L” → „lapte 1,5% 1L”). |
+| **Extrase PDF ale unei bănci fără parser** | `finet-text-local`; extern doar cu consimțământul separat `external_ai_statements` | Extrasele conțin IBAN și nume, deci implicit rămân local. Rândurile extrase se verifică în cod (soldul final = soldul inițial + mișcările) și trec **obligatoriu** prin previzualizare înainte de import. |
+| **Potrivirea listă de cumpărături ↔ bon** (Faza 10) | potrivire în cod (nume normalizate, similaritate); `finet-text-local` doar pentru perechile ambigue | LLM-ul doar propune; utilizatorul vede și poate corecta. |
+| **Rezumatul lunii** (opțional, Faza 10) | `finet-text-local` | Primește **doar cifre agregate** calculate de FINET (totaluri pe categorii, bugete depășite, comparații), nu tranzacții sau descrieri. Cifrele afișate în text sunt inserate din baza de date, nu scrise de model. Etichetat clar „Rezumat automat, nu sfat financiar”. Se poate dezactiva. |
+
+**Nu se folosește LLM pentru:** calculul sumelor, deduplicare, unirea bonurilor lungi, împărțiri și decontări, potrivirea bon ↔ tranzacție (algoritm cu scor, Faza 7), decizii de buget.
+
+**Cost, limite, observabilitate:**
+- Tabel `ai_calls`: household_id, task (`receipt_extract`, `categorize`, `statement_extract`, `list_match`, `monthly_summary`), model_alias, local sau extern, tokeni sau pagini, cost estimat, durată, rezultat (`ok`, `failed_validation`, `timeout`, `fallback`). **Fără conținut**: nici imagini, nici text.
+- Limite: `AI_DAILY_DOCUMENT_LIMIT` per gospodărie, `AI_MONTHLY_BUDGET` global pentru furnizorii externi; la depășire, doar procesare locală, cu notificare către administrator.
+- Pagina „Statistici” (6.5) arată: bonuri procesate local și extern, rata de trecere la extern, rata de bonuri corectate manual, timpul mediu, costul lunar.
+- Timeout și reîncercări în worker; un model local căzut nu blochează coada (bonul așteaptă sau trece la extern, după regulile de mai sus).
+
+**Confidențialitate:** consimțămintele `external_ai` (bonuri) și `external_ai_statements` (extrase) sunt separate și se pot retrage oricând din Setări. Furnizorii externi folosiți se trec în `docs/PRIVACY_NOTES.md`. Fără consimțământ, totul rulează local.
+
 ## 4. Reguli de execuție
 
 1. La începutul fiecărei sesiuni, inspectează starea Git, structura repository-ului, `docs/ROADMAP.md` și testele existente. Repository-ul este sursa de adevăr.
@@ -298,9 +350,11 @@ Toate datele financiare aparțin unei **gospodării**, nu direct unui utilizator
 - `recurring_rules`: household_id, account_id, category_id, type, amount_minor, currency, frequency, interval, day_of_month, next_run_on, end_on, active.
 - `recurring_occurrences`: rule_id, occurrence_date, transaction_id. **Unic pe (rule_id, occurrence_date)**: garanția de idempotență.
 - `audit_events`: household_id, actor_user_id, action, target_type, target_id, created_at, metadata minimă (fără sume, descrieri sau date personale).
-- `consents`: user_id, kind (`external_ai`, `usage_stats`), granted_at, revoked_at.
+- `consents`: user_id, kind (`external_ai`, `external_ai_statements`, `usage_stats`), granted_at, revoked_at.
 
 **Platformă (Faza 2):** `idempotency_keys` (6.4), `client_installations`, `app_events` și `app_downloads` (6.5).
+
+**AI (Faza 6):** `ai_calls` (3.6), fără conținut.
 
 **Ingestie (Fazele 6–7):**
 - `documents`: household_id, uploaded_by, kind (`receipt`, `statement`), storage_key, mime, size_bytes, sha256, perceptual_hash nullable, status (`queued`, `processing`, `needs_review`, `done`, `failed`), error_code, batch_id, created_at. Unic pe (household_id, sha256).
@@ -381,6 +435,7 @@ Statisticile se calculează pe server, din date proprii, fără servicii externe
 - **Conectări:** login-uri pe zi, sesiuni expirate, eșecuri de autentificare (agregat, pentru a observa atacuri).
 - **Utilizarea funcțiilor:** bonuri scanate și confirmate, extrase importate, tranzacții adăugate pe platformă, ecranele cele mai folosite.
 - **Erori:** cele mai frecvente coduri de eroare pe versiune.
+- **AI:** bonuri procesate local și extern, rata de trecere la extern, rata de corecturi manuale, timpul mediu și costul lunar (din `ai_calls`, 3.6).
 - **Pe utilizator:** în modul `personal`, administratorul vede lista membrilor cu ultima activitate, platforma și versiunea. În modul `saas`, administratorul vede implicit doar date agregate; detaliile pe un utilizator anume sunt disponibile numai pentru suport, cu motiv notat în `audit_events`.
 - Nicio statistică nu arată date financiare ale utilizatorilor.
 
@@ -442,9 +497,10 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 
 ### Faza 6 — Ingestia bonurilor (miezul produsului)
 - O singură pagină „Import” pentru toate documentele. În această fază acceptă bonurile (poze și PDF); extrasele (CSV, Excel, PDF de extras, ZIP) se activează în Faza 7, iar până atunci pagina le refuză cu un mesaj clar. Tipul documentului (bon sau extras) se detectează automat. Contorul de consum al zilei e afișat lângă zona de încărcare. Modul „bon lung” e un comutator explicit: când e activ, utilizatorul alege 2–4 poze în ordine de sus în jos, vede miniaturile numerotate și le poate reordona înainte de procesare. Aplicația unește și singură pozele care au același CUI și același număr de bon.
-- Încărcare foto sau PDF, una sau mai multe fișiere; `documents` și `processing_batches`; coadă pg-boss; stări vizibile în interfață.
+- Încărcare de pe telefon sau calculator: JPEG, PNG, WebP, HEIC/HEIF (convertit în JPEG), PDF (cu text sau scanat), una sau mai multe fișiere; `documents` și `processing_batches`; coadă pg-boss; stări vizibile în interfață.
 - Preprocesare cu sharp: rotire după EXIF, decupare, contrast, redimensionare; eliminarea EXIF.
-- Pipeline de extracție prin `lib/ai`, cu furnizor local întâi; rezervă externă doar cu consimțământ. Ieșire JSON validată cu Zod, conform 5.5.
+- Traseul hibrid din 3.6: PDF cu text → model text; poze și PDF scanate → model vision; verificări în cod și scor de încredere; trecere la furnizorul extern doar la eșec, cu consimțământ și în buget. Ieșire JSON validată cu Zod, conform 5.5. Tabelul `ai_calls`, limitele și costul.
+- Categorisirea liniilor în ordinea din 3.6 (corecturile tale, reguli fixe, LLM local cu listă închisă de categorii) și normalizarea numelor de produse.
 - **Bon lung din 2–4 poze:** liniile se combină în ordine, iar cele duplicate din zona de suprapunere se elimină.
   - Se elimină doar suprapunerea de la granița dintre două poze consecutive (cel mai lung șir de linii identice între sfârșitul unei poze și începutul următoarei). Produsele identice care apar în alte locuri pe bon rămân.
   - Ordinea se verifică: antetul (magazin, CUI) trebuie să fie pe prima poză, iar totalul pe ultima. Altfel utilizatorul primește un mesaj clar și opțiunea „Ordonează automat”.
@@ -455,7 +511,7 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Consimțământul pentru AI extern (6.3) și `docs/PRIVACY_NOTES.md` (ce date pleacă, către cine, retenția pozelor prin `RECEIPT_IMAGE_RETENTION_DAYS`).
 - Endpointurile `/api/v1/` pentru încărcare, starea procesării, rezultatul extras, corectarea liniilor și confirmarea bonului.
 - Pagina „Bonuri”: istoric cu data, comerciantul, categoriile (toate, nu doar una per bon), totalul, starea (`queued`, `needs_review`, `done`, `failed`) și acțiunile (vezi bonul, reprocesează, șterge). Căutare după magazin, produs sau sumă (acceptă „45,90” și „45.90”), filtru după categorie, etichetă și stare. Butonul „Scanează” e accesibil de oriunde, iar bonurile „De verificat” apar primele.
-- **Evaluare:** comandă `pnpm eval:receipts`, care rulează pipeline-ul pe `fixtures/receipts` și raportează, per furnizor: acuratețea pe total, dată, CUI, linii, timpul mediu și costul estimat.
+- **Evaluare:** comandă `pnpm eval:receipts`, care rulează pipeline-ul pe `fixtures/receipts` (poze din telefon, inclusiv HEIC, și PDF-uri cu text și scanate) și raportează, separat pentru fiecare model local, fiecare model extern și traseul hibrid complet: acuratețea pe total, dată, CUI, linii și categorii, rata de trecere la extern, timpul mediu, memoria folosită și costul estimat.
 - **Acceptare:** rezultatul evaluării e inclus în raport, cu cifrele exacte; furnizorul implicit e ales pe baza lor și documentat într-un ADR; teste pentru validările din 5.5, deduplicare și securitatea încărcării. Revizuire de securitate.
 
 ### Faza 7 — Extrase bancare, potrivire, detectarea abonamentelor
@@ -463,6 +519,7 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Băncile țintă, aceleași pe care le acoperă produsul de referință: **ING, BT, BCR, BRD, Raiffeisen, Revolut și Wise**. Ordinea de implementare: întâi băncile pentru care există extrase reale în `fixtures/statements`, apoi restul. O bancă e considerată suportată doar când parserul ei trece testele pe un extras real anonimizat; până atunci, extrasele ei trec prin maparea manuală de coloane.
 - Revolut și Wise au conturi în mai multe monede: fiecare monedă devine un cont separat în FINET, iar schimburile valutare din extras se importă ca transferuri între aceste conturi (cu ambele sume), nu ca venituri sau cheltuieli.
 - Previzualizare, mapare de coloane pentru CSV necunoscute, deduplicare după (cont, dată, sumă, descriere normalizată, referință), anularea unui import întreg.
+- PDF-uri de la bănci fără parser: extracție cu `finet-text-local` (extern doar cu `external_ai_statements`), verificarea soldurilor în cod și previzualizare obligatorie (3.6).
 - Tabel „Acoperire extrase”: conturi × luni, cu starea complet, parțial (până la ce dată) sau lipsă, și avertizare pentru lunile fără extras pe un cont.
 - **Potrivire bon ↔ tranzacție:** sumă exactă, fereastră de ±3 zile, asemănarea comerciantului (CUI sau nume normalizat). Fiecare sugestie are scor și motive vizibile; utilizatorul o confirmă sau o respinge. Nu se creează niciodată două tranzacții pentru aceeași cheltuială.
 - Detectarea plăților recurente din istoric (comerciant, sumă similară, periodicitate), propuse ca reguli în Faza 5.
@@ -496,7 +553,8 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 > **Reper v1.0 personal:** după Faza 9, varianta `personal` este completă.
 
 ### Faza 10 — Liste de cumpărături și prețuri (comună ambelor moduri)
-- Liste comune, bifare la raft, comparație listă ↔ bon (produse neplanificate, produse uitate).
+- Liste comune, bifare la raft, comparație listă ↔ bon (produse neplanificate, produse uitate), cu potrivire în cod și LLM local doar pentru perechile ambigue (3.6).
+- Opțional: rezumatul lunii generat local din cifre agregate, cu cifrele inserate din baza de date (3.6).
 - Prețuri per produs normalizat și per magazin, evoluție în timp, cel mai ieftin magazin pentru produsele tale. Rezultatele sunt afișate doar când există suficiente date (prag configurabil).
 - **Rapoarte de micro-cheltuieli** peste `receipt_lines`: pungi și sacoșe, garanții SGR (plătite față de recuperate), cumpărături de la casă (dulciuri, gumă), produse nealimentare la supermarket, cafea și băuturi la bucată, economii din reduceri și carduri de fidelitate.
   - Fiecare raport e o **definiție în date**, nu cod separat (`report_definitions`: nume, reguli de potrivire pe `normalized_name`, categorie, etichetă sau tip de linie, sfat). Utilizatorul își poate face propriul raport din aceleași reguli, ceea ce acoperă „generatorul pe articole”.
@@ -544,7 +602,8 @@ Conversia valutară cu cursul BNR, notificări push, email și Telegram, alte li
 | Disc aproape plin pe LXC (5,3 GB liberi) | Aplicația sau AI-ul local se opresc | Baza de date și fișierele stau pe Supabase; pe disc rămân aplicația, modelul AI și fișierele temporare; spațiul ocupat afișat în `/api/health` și notificare sub un prag |
 | Dependența de Supabase | Suspendarea proiectului (planul gratuit), întreruperi, schimbări de preț | Backup propriu zilnic cu restic; acces doar prin Postgres standard (fără funcții specifice Supabase), deci mutarea pe alt PostgreSQL înseamnă doar restaurarea backup-ului; planul plătit pentru date reale |
 | Expunerea accidentală prin Data API Supabase | Date financiare accesibile din internet | Schema `finet` neexpusă, Data API oprit, fără drepturi pentru `anon`, test automat în Faza 0 |
-| Modele AI locale mari | Nu încap pe disc sau în RAM | Se măsoară în Faza 6; rezervă externă cu consimțământ |
+| Modele AI locale mari | Nu încap pe disc sau în RAM | Se măsoară în Faza 6 (memorie și timp în `pnpm eval:receipts`); modele mici pentru text; rezervă externă cu consimțământ |
+| LLM-ul citește greșit un bon | Sume greșite în buget | Verificări în cod (total, CUI, TVA), scor de încredere, ecran „De verificat”, nicio sumă decisă de LLM |
 | Formatele extraselor se schimbă | Importul se strică | Un parser per bancă, fișiere de test și alertă la eșecul de parsare |
 | Erori în logica banilor | Grav, mai ales în familie | `bigint` în unități minore, restul cel mai mare, teste dedicate |
 | Funcțiile adăugate prea devreme | Nu se termină nimic | Fazele 10–12 doar după v1.0 personal |
