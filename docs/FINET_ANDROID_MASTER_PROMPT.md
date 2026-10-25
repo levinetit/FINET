@@ -168,7 +168,7 @@ Se aplică integral secțiunea 5 din `docs/FINET_MASTER_PROMPT.md`. Pe mobil, co
 - Accesibilitate (TalkBack, mărimi de font, contrast), ecrane mici și mari.
 - APK release semnat, verificat și instalat pe telefon.
 - Distribuția din secțiunea 12.1: workflow-ul de release, primul GitHub Release, verificarea actualizării din aplicație. Pagina de descărcare din FINET se face într-o fază FINET separată, iar până atunci aplicația folosește linkul de pe GitHub.
-- **Acceptare:** criteriile din secțiunea 15; în plus, un tag `android-v…` produce un release cu APK-ul semnat și suma SHA-256, iar un telefon cu versiunea anterioară vede notificarea de actualizare.
+- **Acceptare:** criteriile din secțiunea 15; în plus, un tag `FINET-v…` produce un release cu APK-ul semnat și suma SHA-256, iar un telefon cu versiunea anterioară vede notificarea de actualizare.
 
 După MVP, fiecare într-o fază separată: coadă offline pentru poze (stocare locală criptată, sincronizare documentată), notificări push (fără sume în conținut), widget pe ecranul principal, publicare în Google Play (doar `saas`).
 
@@ -222,7 +222,7 @@ Ordinea comenzilor:
 ### 12.1 Distribuție: GitHub Releases + descărcare din FINET
 
 **Build și publicare automată** (`.github/workflows/android-release.yml`):
-- Pornește la un tag `android-vX.Y.Z` (de exemplu `android-v1.0.0`). Versiunea din tag devine `versionName`, iar `versionCode` crește monoton (de exemplu numărul rulării).
+- Pornește la un tag `FINET-vX.Y.Z` (de exemplu `FINET-v1.0.0`), urmând versionarea semantică (X = schimbări incompatibile, Y = funcții noi, Z = corecturi). Workflow-ul acceptă doar tagurile care se potrivesc exact cu `FINET-v[0-9]+.[0-9]+.[0-9]+` și ignoră restul. Versiunea din tag (`1.0.0`) devine `versionName`, iar `versionCode` crește monoton (de exemplu numărul rulării).
 - Rulează `flutter analyze` și `flutter test`; dacă pică, nu se publică nimic.
 - Construiește APK-ul release semnat. Cheia vine din GitHub Secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`), iar `API_BASE_URL` din variabilele mediului `production` din GitHub. Nimic din acestea nu ajunge în loguri.
 - Verifică APK-ul cu `apksigner verify --print-certs` și compară amprenta certificatului cu cea așteptată (variabilă în GitHub).
