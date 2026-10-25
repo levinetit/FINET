@@ -31,7 +31,7 @@ Surse, toate publice și fără autentificare: verificările proprii din 2026-10
 | Clasificare **(C)** | Două dimensiuni: 17 categorii pe tranzacție (Cumpărături, Haine, Alimente, Mâncare, Restaurante, Transport, Utilități, Asociație / Întreținere, Chirie / Rată, Sănătate & Farmacie, Educație, Divertisment, Vacanțe, Casă & Reparații, Copii, Abonamente, Altele) plus 25 de etichete (de exemplu Igiena casei, Igienă personală, Băuturi & Cafea, Farmacie & Suplimente, Carburant, Familie, Copii, Personal, Animale) | Categorii plus etichete (5.4), cu categorii care nu se suprapun |
 | Bugete | General sau pe categorie, comune și individuale, semafor verde/galben/roșu, alerte la apropierea limitei | Faza 3 (comune: Faza 8) |
 | Obiective | Nume, sumă țintă, termen, progres, stare; ștergere cu confirmare | Faza 3 |
-| Bonuri | Foto (inclusiv bonuri șterse sau mototolite), PDF, mai multe fișiere deodată; coadă cu prioritate după plan (`/api/upload-queue`, `processing_batches`); extrage comerciant, dată, total, TVA și **fiecare produs** cu cantitate și preț unitar; categorisire la nivel de produs; arhivă cu căutare în textul OCR; recunoaște garanția SGR (0,50 lei per ambalaj) și reducerile de pe cardurile de fidelitate | Faza 6 |
+| Bonuri | Foto (inclusiv bonuri șterse sau mototolite), PDF, mai multe fișiere deodată; coadă cu prioritate după plan (`/api/upload-queue`, `processing_batches`); extrage comerciant, dată, total, TVA și **fiecare produs** cu cantitate și preț unitar; categorisire la nivel de produs; arhivă cu căutare în textul OCR; recunoaște garanția SGR (0,50 lei per ambalaj) și reducerile de pe cardurile de fidelitate. **(C)** Pagina `/receipts` este doar istoricul: încărcarea se face din `/import`, iar butonul „Scanează” e mereu vizibil. Tabelul are coloanele Data bonului, Comerciant, Categorie (una per bon), Total, Vizualizează, Status, Acțiuni. Caută după magazin, produs sau sumă și filtrează după categorie. „Validare AI & Duplicate” e marcată ca funcție Pro | Faza 6 |
 | Extrase | PDF, CSV, Excel, ZIP; „bănci RO și Revolut” (listă exactă necunoscută); deduplicare; avertizare pentru lunile fără extras | Faza 7 |
 | Potrivire | Bonul se leagă automat de tranzacția cu cardul din extras („potrivire confirmată cu extrasul ING”) | Faza 7 |
 | Recurențe | Detectarea abonamentelor (Netflix, Spotify, sală, chirie), generarea tranzacțiilor la scadență | Faza 5 (reguli) și Faza 7 (detectare din extrase) |
@@ -76,6 +76,7 @@ Rapoartele se contrazic pentru Starter: unul spune 1 document pe zi, altul 50 de
 10. **(C) „Cheltuieli pe categorii” pare să se bazeze doar pe bonuri** (starea goală spune „Niciun bon în perioada selectată”), deci tranzacțiile manuale probabil nu apar acolo. Este o deducție. → La noi, graficul include toate cheltuielile: liniile bonurilor acolo unde există bon, categoria tranzacției în rest.
 11. **(C) Google Analytics se încarcă și pe paginile cu date financiare, iar pagina are `lang="en"`** deși interfața e în română. → La noi, fără analytics pe paginile autentificate și `lang` setat după limba interfeței.
 12. **(C) Un dashboard foarte încărcat:** statistici, împărțire, obiective, bugete, trei grafice, filtre, tranzacții, recomandări și feedback pe aceeași pagină. → La noi, dashboard-ul arată rezumatul, iar tranzacțiile și filtrele au pagina lor.
+13. **(C) Detectarea duplicatelor e o funcție plătită.** În planul gratuit, același bon încărcat de două ori poate dubla cheltuiala. → La noi, deduplicarea și verificările de consistență sunt mereu active, în ambele moduri și pe orice plan; nu trec prin `entitlements`.
 
 ## 3. Infrastructură și stack
 
@@ -332,7 +333,8 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - **Bon lung din 2–4 poze:** liniile se combină în ordine, iar cele duplicate din zona de suprapunere se elimină.
 - Ecran de verificare înainte de salvare: liniile, categoriile propuse și nepotrivirile evidențiate. Corecturile actualizează `product_aliases`.
 - Deduplicare: fișier identic (sha256), poză aproape identică (hash perceptual), același bon fotografiat din nou (CUI + număr + dată + total).
-- Căutare în textul OCR. Limite prin `entitlements`, cotă de stocare.
+- Căutare în textul OCR. Limite prin `entitlements`, cotă de stocare. Deduplicarea și verificările nu sunt limitate de plan.
+- Pagina „Bonuri”: istoric cu data, comerciantul, categoriile (toate, nu doar una per bon), totalul, starea (`queued`, `needs_review`, `done`, `failed`) și acțiunile (vezi bonul, reprocesează, șterge). Căutare după magazin, produs sau sumă (acceptă „45,90” și „45.90”), filtru după categorie, etichetă și stare. Butonul „Scanează” e accesibil de oriunde, iar bonurile „De verificat” apar primele.
 - **Evaluare:** comandă `pnpm eval:receipts`, care rulează pipeline-ul pe `fixtures/receipts` și raportează, per furnizor: acuratețea pe total, dată, CUI, linii, timpul mediu și costul estimat.
 - **Acceptare:** rezultatul evaluării e inclus în raport, cu cifrele exacte; furnizorul implicit e ales pe baza lor și documentat într-un ADR; teste pentru validările din 5.5, deduplicare și securitatea încărcării. Revizuire de securitate.
 
