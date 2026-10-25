@@ -1,7 +1,8 @@
 # FINET România — MASTER PROMPT pentru Claude Code (v3)
 
 > **Cum se folosește acest document**
-> - Secțiunile 1–6 sunt **reguli permanente**: se aplică în fiecare sesiune. Faza 0 creează un `CLAUDE.md` scurt la rădăcina repository-ului, care trimite la acest document și la `docs/ROADMAP.md` (fără să copieze regulile, ca să nu existe două versiuni).
+> - Secțiunile 1–6 sunt **reguli permanente**: se aplică în fiecare sesiune. `CLAUDE.md` de la rădăcina repository-ului trimite la acest document și la `docs/ROADMAP.md` (fără să copieze regulile, ca să nu existe două versiuni).
+> - Fazele se pot porni și din GitHub, printr-un issue „Fază FINET” (agentul rulează în GitHub Actions; vezi `docs/GHID_CONSTRUIRE.md`, secțiunea 8.4). Faza 0 se rulează dintr-o sesiune Claude Code, pentru că modifică workflow-urile GitHub.
 > - Secțiunea 7 descrie **fazele**. Rulează **o singură fază per sesiune**, pe un branch dedicat (`phase/NN-nume`), cu PR și revizuire umană înainte de faza următoare.
 > - Prompt de pornire per sesiune: *„Citește `docs/FINET_MASTER_PROMPT.md` și `docs/ROADMAP.md`. Execută Faza N. Oprește-te la criteriile ei de acceptare și raportează conform secțiunii 8.”*
 
@@ -400,7 +401,7 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Unități systemd pentru `web` și `worker`, un vhost nginx local și accesul prin Cloudflare (3.1): `cloudflared` ca serviciu, hostname-ul în Cloudflare DNS, aplicația Access cu politica pentru emailurile familiei, verificarea JWT-ului Access în middleware și `/api/health`. Pașii din panoul Cloudflare (domeniu, tunel, Access, WARP) se fac de operator după instrucțiunile din `docs/INFRA.md`; agentul nu primește chei API Cloudflare decât dacă operatorul alege asta.
 - `ops/postgres/VERSION` (versiunea majoră a proiectului Supabase), jobul săptămânal care anunță o versiune majoră nouă (3.5) și canalul de notificări operaționale (3.1), cu un mesaj de test trimis efectiv.
 - GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu, versiunea din `ops/postgres/VERSION`), build, scanarea secretelor.
-- Documentație: `CLAUDE.md` (scurt, cu trimitere la acest prompt), `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md` (cu o secțiune pentru fazele Android), `docs/adr/0001-stack.md`.
+- Documentație: `CLAUDE.md` (există deja; se actualizează cu comenzile proiectului), `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md` (cu o secțiune pentru fazele Android), `docs/adr/0001-stack.md`.
 - **Sarcină umană, pornită în paralel:** colectarea a 50–100 de bonuri reale (inclusiv șterse, mototolite, lungi, cu reduceri și garanție SGR) și a câte 2–3 extrase pentru băncile folosite, anonimizate, în `fixtures/`, fiecare cu rezultatul așteptat completat manual.
 - **Acceptare:** aplicația goală răspunde pe hostname-ul Cloudflare, pe HTTPS, doar după login Access cu un email permis (un email nepermis e refuzat); o cerere directă către server, ocolind tunelul, nu primește răspuns; un telefon cu WARP înrolat ajunge la `/api/health`; `/api/health` e verde; CI e verde; testele pentru bani trec; aplicația se conectează la Supabase prin pooler cu `sslmode=verify-full`; un test confirmă că tabelele din schema `finet` **nu** sunt accesibile prin Data API-ul Supabase cu cheia `anon`; o conexiune la bază de pe alt IP decât al serverului e refuzată; notificarea de test a ajuns.
 

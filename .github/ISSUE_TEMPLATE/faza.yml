@@ -1,0 +1,58 @@
+name: Fază FINET
+description: Pornește agentul pe o fază din FINET_MASTER_PROMPT.md sau FINET_ANDROID_MASTER_PROMPT.md
+title: "Faza "
+labels: ["faza"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        La crearea issue-ului, eticheta `faza` pornește agentul (workflow-ul `claude-faza`).
+        Agentul lucrează pe un branch `phase/...` și deschide un PR. Tu verifici raportul și apeși „Merge”.
+        Pentru corecturi scrii un comentariu care începe cu `@claude`.
+  - type: dropdown
+    id: faza
+    attributes:
+      label: Faza
+      options:
+        - "Faza 0 — Fundație și infrastructură"
+        - "Faza 1 — Autentificare, profil, gospodărie"
+        - "Faza 2 — Conturi, categorii, tranzacții, transferuri"
+        - "Faza 3 — Dashboard, bugete, obiective, rapoarte, export, backup"
+        - "Faza 4 — Stabilizare"
+        - "Faza 5 — Recurențe"
+        - "Faza 6 — Ingestia bonurilor"
+        - "Faza 7 — Extrase bancare, potrivire"
+        - "Faza 8 — Familie"
+        - "Faza 9 — Hardening, PWA, offline"
+        - "Faza 10 — Liste de cumpărături și prețuri"
+        - "Faza 11 — Fundația SaaS"
+        - "Faza 12 — Planuri, plăți, recomandări"
+        - "Android A — Fundație"
+        - "Android B — Autentificare și profil"
+        - "Android C — Funcții de bază"
+        - "Android D — Recurențe și documente"
+        - "Android E — Stabilizare și livrare"
+    validations:
+      required: true
+  - type: textarea
+    id: instructiuni
+    attributes:
+      label: Instrucțiuni pentru agent
+      description: Textul de mai jos e promptul de pornire. Îl poți completa, dar nu șterge regulile.
+      value: |
+        @claude Execută faza aleasă mai sus.
+
+        1. Citește `CLAUDE.md`, `docs/FINET_MASTER_PROMPT.md` și `docs/ROADMAP.md` (dacă există). Pentru fazele Android citește și `docs/FINET_ANDROID_MASTER_PROMPT.md`.
+        2. Verifică faptul că fazele de care depinde aceasta sunt încheiate în `docs/ROADMAP.md`. Dacă nu sunt, oprește-te și explică în acest issue.
+        3. Lucrează pe un branch `phase/...`, cu commit-uri mici. Nu face push pe `main`.
+        4. Pașii care cer acces la server, la Supabase, la Cloudflare sau la secrete nu se fac de aici: scrie-i ca instrucțiuni pentru operator în `docs/INFRA.md` și în raport.
+        5. Rulează lint, type-check, testele și build-ul. Nu pretinde verificări pe care nu le-ai rulat.
+        6. Deschide un PR către `main` cu raportul din secțiunea 8 a promptului și leagă-l de acest issue.
+        7. Oprește-te la criteriile de acceptare ale fazei.
+    validations:
+      required: true
+  - type: textarea
+    id: materiale
+    attributes:
+      label: Materiale sau decizii pentru această fază (opțional)
+      description: De exemplu banca folosită, decizia despre AI extern, observații din folosirea reală. Nu scrie parole sau chei.

@@ -302,7 +302,7 @@ Pașii de pe server (instalări, Cloudflare, backup) nu se pot face dintr-o sesi
 
 | Fază | Ce face agentul (pe scurt) | Ce pregătești tu înainte |
 |---|---|---|
-| 0 | Proiectul, CI, dev container, deploy prin tragere, vhost nginx, `/api/health`, conexiunea la Supabase și testul că Data API nu expune datele | Pașii 1–5 din acest ghid; canalul de alerte (token bot Telegram sau date SMTP în `/etc/finet/finet.env`); **începi să aduni 50–100 de bonuri și 2–3 extrase pe bancă** |
+| 0 | (din sesiune Claude Code, nu din issue; vezi 8.4) Proiectul, CI, dev container, deploy prin tragere, vhost nginx, `/api/health`, conexiunea la Supabase și testul că Data API nu expune datele | Pașii 1–5 din acest ghid; canalul de alerte (token bot Telegram sau date SMTP în `/etc/finet/finet.env`); **începi să aduni 50–100 de bonuri și 2–3 extrase pe bancă** |
 | 1 | Login, sesiuni, gospodărie, RLS, login pentru telefon (`bearer`) | `pnpm admin:create-user` pe server, pentru tine; apoi `admin:add-member` pentru familie |
 | 2 | Conturi, tranzacții, transferuri, primele API `/api/v1`, statistici | Conturile tale reale (nume, sold inițial) |
 | 3 | Dashboard, bugete, obiective, export, **backup** | Destinația backup-ului (pasul 6); un test de restaurare. **De aici poți introduce date reale.** |
@@ -321,6 +321,35 @@ Pașii de pe server (instalări, Cloudflare, backup) nu se pot face dintr-o sesi
 - APK-urile se construiesc în GitHub Actions; serverul LXC nu are spațiu pentru Android SDK.
 
 ---
+
+### 8.4 Automatizat din GitHub: issue → agent → PR
+
+În loc să pornești fiecare fază dintr-o sesiune Claude Code, o poți porni dintr-un issue. Agentul rulează în GitHub Actions (workflow-ul `.github/workflows/claude-faza.yml`).
+
+**Configurare (o singură dată):**
+1. Instalează aplicația GitHub **Claude** pe repository: [github.com/apps/claude](https://github.com/apps/claude) → *Install* → doar `levinetit/FINET`. Alternativ, din Claude Code CLI: `/install-github-app`.
+2. Autentificarea, una dintre variante:
+   - **abonamentul Claude:** pe calculatorul tău sau într-un Codespace rulezi `claude setup-token` și pui tokenul afișat în secretul `CLAUDE_CODE_OAUTH_TOKEN`;
+   - **cheie API:** creezi o cheie în [console.anthropic.com](https://console.anthropic.com) și o pui în secretul `ANTHROPIC_API_KEY`. Plătești per utilizare, deci setează o limită lunară de cheltuieli în consolă.
+3. Variabile (Settings → Secrets and variables → Actions → *Variables*):
+   - `CLAUDE_MODEL`, opțional (implicit `claude-opus-5-5`; pentru cost mai mic, `claude-sonnet-5-5`);
+   - `CLAUDE_MAX_TURNS`, opțional (implicit `300`);
+   - `POSTGRES_MAJOR`, versiunea majoră a proiectului Supabase (de exemplu `17`), ca testele agentului să ruleze pe aceeași versiune.
+4. Eticheta `faza` trebuie să existe (Issues → Labels → New label `faza`).
+
+**Folosire, pentru fiecare fază:**
+1. **Issues → New issue → „Fază FINET”**, alegi faza din listă și completezi, dacă e cazul, materialele sau deciziile. Fără parole.
+2. La creare, eticheta `faza` pornește agentul. Progresul apare într-un comentariu în issue și în fila **Actions**.
+3. Agentul lucrează pe un branch `phase/...`, rulează testele și deschide un PR cu raportul.
+4. Pentru corecturi scrii în PR sau în issue un comentariu care începe cu `@claude` (de exemplu „@claude testul X pică, corectează”).
+5. Verifici raportul și testele, apoi apeși **Merge**. Serverul preia singur versiunea nouă (pasul 5).
+
+**Limite și siguranță:**
+- Agentul poate fi pornit doar de utilizatori cu drept de scriere în repository. Pe un repository public, doar comentariile tale ajung la agent (`include_comments_by_actor`).
+- Rulează o singură fază odată; o rulare nouă așteaptă terminarea celei curente. O rulare durează cel mult 3 ore.
+- Agentul are acces doar la repository și la o bază PostgreSQL de test, creată pentru fiecare rulare. **Nu** are acces la server, la Supabase, la Cloudflare sau la secretele aplicației. Pașii de acolo îi scrie ca instrucțiuni pentru tine în `docs/INFRA.md`.
+- **Faza 0** creează workflow-urile GitHub (CI, deploy, APK). Modificarea fișierelor din `.github/workflows/` cere o permisiune specială pe care tokenul agentului din Actions poate să nu o aibă. Rulează Faza 0 dintr-o sesiune Claude Code (claude.ai/code sau CLI), iar fazele următoare din issue-uri. Dacă o fază ulterioară trebuie să modifice un workflow și nu poate, agentul scrie modificarea în PR ca instrucțiune, iar tu o aplici.
+- Merge-ul rămâne la tine. Nu activa unirea automată a PR-urilor agentului.
 
 ## 9. Pasul 8 — Publicarea APK-ului
 
@@ -385,6 +414,9 @@ Workflow-ul construiește APK-ul semnat și îl pune pe `https://github.com/levi
 | `ANDROID_KEY_PASSWORD` | secret | semnarea APK |
 | `ANDROID_CERT_SHA256` | variabilă | verificarea certificatului după build |
 | `API_BASE_URL` | variabilă (mediul `production`) | `https://finet.<domeniu>` |
+| `CLAUDE_CODE_OAUTH_TOKEN` sau `ANTHROPIC_API_KEY` | secret | agentul din GitHub Actions (8.4) |
+| `CLAUDE_MODEL`, `CLAUDE_MAX_TURNS` | variabile, opționale | agentul din GitHub Actions (8.4) |
+| `POSTGRES_MAJOR` | variabilă | versiunea PostgreSQL a proiectului Supabase, pentru testele agentului |
 
 CI-ul aplicației web nu are nevoie de secrete: folosește o bază PostgreSQL temporară, creată pentru fiecare rulare.
 
