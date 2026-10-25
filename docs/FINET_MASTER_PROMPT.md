@@ -1,15 +1,15 @@
-# FINpulse România — MASTER PROMPT pentru Claude Code (v3)
+# FINET România — MASTER PROMPT pentru Claude Code (v3)
 
 > **Cum se folosește acest document**
 > - Secțiunile 1–6 sunt **reguli permanente**: se aplică în fiecare sesiune. Copiază-le în `CLAUDE.md` la rădăcina repository-ului, ca să fie încărcate automat.
 > - Secțiunea 7 descrie **fazele**. Rulează **o singură fază per sesiune**, pe un branch dedicat (`phase/NN-nume`), cu PR și revizuire umană înainte de faza următoare.
-> - Prompt de pornire per sesiune: *„Citește `docs/FINPULSE_MASTER_PROMPT.md` și `docs/ROADMAP.md`. Execută Faza N. Oprește-te la criteriile ei de acceptare și raportează conform secțiunii 8.”*
+> - Prompt de pornire per sesiune: *„Citește `docs/FINET_MASTER_PROMPT.md` și `docs/ROADMAP.md`. Execută Faza N. Oprește-te la criteriile ei de acceptare și raportează conform secțiunii 8.”*
 
 ---
 
 ## 1. Misiune
 
-Acționează ca arhitect software senior, dezvoltator full-stack, specialist în securitate și DevOps. Construiește **FINpulse România** (nume de lucru — vezi riscul de branding din secțiunea 9): o aplicație web PWA de finanțe **personale și de familie**, cu interfață în română, RON ca monedă implicită și **bonurile fiscale românești ca problemă centrală**, nu ca detaliu.
+Acționează ca arhitect software senior, dezvoltator full-stack, specialist în securitate și DevOps. Construiește **FINET România** (identitatea vizuală în secțiunea 3.4; verificarea numelui în secțiunea 9): o aplicație web PWA de finanțe **personale și de familie**, cu interfață în română, RON ca monedă implicită și **bonurile fiscale românești ca problemă centrală**, nu ca detaliu.
 
 Aceeași bază de cod livrează **două variante**, alese prin configurare (secțiunea 3.3):
 - **`personal`**: unealtă privată pentru o familie, găzduită pe infrastructura proprie. Fără plăți, fără înregistrare publică, fără pagină de prezentare.
@@ -154,6 +154,34 @@ Reguli:
 - Logica de business **nu verifică niciodată direct modul sau Stripe**. Întreabă modulul `entitlements`: `can(householdId, 'documents.process')`, `limit(householdId, 'budgets.max')`. În modul `personal` răspunsul e „permis”, cu excepția limitelor tehnice.
 - Modulele exclusive pentru `saas` se înregistrează doar când `APP_MODE=saas`; în modul `personal` rutele lor răspund 404.
 - CI rulează testele E2E de bază **în ambele moduri**.
+
+### 3.4 Identitate vizuală (FINET)
+
+Referința vizuală completă este demo-ul din `docs/demo/finet-demo.html` (date fictive): structura paginilor, fluxurile, culorile și logo-ul. Implementarea respectă tokenii de mai jos; componentele shadcn/ui se tematizează prin ei, nu prin culori scrise direct.
+
+**Logo (wordmark):** **FIN** + simbol + **t**, fără alte elemente.
+- „FIN”: Bricolage Grotesque, greutate 800, majuscule, spațiere −0,03em, culoarea textului principal.
+- Simbolul ține locul literei „e”: o linie frântă dintr-un singur trait, cu capete și colțuri rotunjite, care la final urcă, ca un grafic în creștere, și se termină cu o monedă. SVG (`viewBox="1 2 17 22"`): `<path d="M1.5 18.5 H5 L7 22.5 L10 5 L12.6 17 L14.2 13.5 L16.5 3.5" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>` în culoarea `accent`, plus `<circle cx="16.5" cy="3.5" r="1.9"/>` în culoarea `marker`.
+- „t”: Bricolage Grotesque, greutate 600, literă mică, culoarea `muted`.
+- Logo-ul este o componentă React (`<Logo />`) cu `aria-label` „FINET”. La hover, linia se redesenează (animație dezactivată când utilizatorul a cerut mișcare redusă). Simbolul singur, pe fundal `accent`, se folosește ca iconiță PWA și favicon.
+
+**Culori (tokeni, temă luminoasă / întunecată):**
+
+| Token | Luminos | Întunecat | Folosire |
+|---|---|---|---|
+| `bg` | `#f2f5f4` | `#0e1412` | fundalul paginii |
+| `surface` | `#ffffff` | `#151d1a` | carduri, panouri |
+| `fg` | `#14201c` | `#e5ece9` | text principal |
+| `muted` | `#586863` | `#93a39d` | text secundar |
+| `line` | `#d3dcd8` | `#29352f` | borduri |
+| `accent` | `#1f45b8` | `#87a3ff` | acțiuni, linkuri, simbolul din logo |
+| `marker` | `#f6dc6b` | `#e3c446` | evidențieri (rânduri de verificat, moneda din logo) |
+| `paper` | `#fbfaf4` | `#ecebe3` | bonul fiscal randat ca hârtie |
+| `ok` / `warn` / `bad` | `#1d7f47` / `#a8690f` / `#bf3326` | `#4fc483` / `#e2ab48` / `#ff7466` | semaforul bugetelor și stările |
+
+**Tipografie:** Bricolage Grotesque pentru titluri și logo, IBM Plex Sans pentru text, IBM Plex Mono pentru sume în coloane și pentru bonurile randate (cu `tabular-nums`). Fonturile se servesc local (`next/font`), nu de pe CDN.
+
+**Elemente proprii:** bonul fiscal afișat ca hârtie termică lângă datele extrase; rândurile cu încredere scăzută evidențiate cu `marker`; semaforul bugetelor; pe telefon, navigare jos cu 5 butoane (Acasă, Tranzacții, Scanează, Rapoarte, Mai mult), iar pe desktop meniu lateral cu toate paginile.
 
 ## 4. Reguli de execuție
 
@@ -415,7 +443,7 @@ Conversia valutară cu cursul BNR, notificări push, email și Telegram, alte li
 | Erori în logica banilor | Grav, mai ales în familie | `bigint` în unități minore, restul cel mai mare, teste dedicate |
 | Funcțiile adăugate prea devreme | Nu se termină nimic | Fazele 10–12 doar după v1.0 personal |
 | O funcție SaaS ajunsă în modul `personal`, sau invers | Comportament greșit | `entitlements` și testele E2E în ambele moduri |
-| Branding: „FINpulse” aproape identic cu „FINpulse/day” | Risc juridic în `saas` | Nume distinct înainte de lansarea publică, verificat la OSIM, EUIPO și pe domeniu; până atunci `NEXT_PUBLIC_APP_NAME` |
+| Numele „FINET”: există deja produse cu nume apropiat (de exemplu ERP-ul financiar „FINet”) | Risc juridic în `saas` | Verificare la OSIM și EUIPO (clasele 9, 36, 42) și a domeniilor înainte de lansarea publică; numele vine din `NEXT_PUBLIC_APP_NAME` (implicit `FINET`), ca o eventuală schimbare să nu ceară modificări de cod. Logo-ul nu imită simbolul produsului de referință (linia de puls verde) |
 | Obligații legale în `saas` | Lansare blocată | Termeni și politică de confidențialitate reale, acorduri de prelucrare cu furnizorii, facturare și TVA pentru abonamente |
 | Scurgere de date financiare | Notificare GDPR, încredere pierdută | Autorizare în două straturi, loguri fără date sensibile, teste de izolare |
 
