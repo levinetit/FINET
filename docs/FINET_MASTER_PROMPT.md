@@ -95,7 +95,7 @@ Faza 0 verifică aceste date pe sistem și le corectează în `docs/INFRA.md`. N
 
 - **Aplicație:** Next.js (ultima versiune majoră stabilă la data Fazei 0, minimum 15), App Router, TypeScript în mod `strict`. Monolit modular.
 - **UI:** Tailwind CSS + shadcn/ui, Recharts, lucide-react. Temă luminoasă și închisă.
-- **Baza de date:** PostgreSQL 18, ultima versiune majoră stabilă (la 25.10.2026: 18.6). Se instalează nativ din repository-ul oficial PostgreSQL pentru Debian (PGDG, `apt.postgresql.org`), nu din pachetele standard Debian, care pot avea o versiune mai veche. Aceeași versiune majoră în dezvoltare, în CI (imaginea `postgres:18`) și în producție. Actualizările minore (18.x) se aplică la scurt timp după apariție, pentru că aduc corecturi de securitate. Trecerea la PostgreSQL 19 (versiune stabilă planificată pentru 19.11.2026) se face doar după prima actualizare minoră (19.1), cu `pg_upgrade` testat întâi pe o copie a bazei, backup verificat înainte și plan de revenire, documentate într-un ADR. Drizzle ORM și migrații Drizzle Kit, versionate în repository.
+- **Baza de date:** PostgreSQL, **mereu ultima versiune majoră stabilă** (la 25.10.2026: PostgreSQL 18, actualizarea 18.6; PostgreSQL 19 e planificat ca stabil pe 19.11.2026). Se instalează nativ din repository-ul oficial PostgreSQL pentru Debian (PGDG, `apt.postgresql.org`), nu din pachetele standard Debian, care rămân în urmă. Aceeași versiune majoră în dezvoltare, în CI și în producție. Actualizarea se face automat, după regulile din secțiunea 3.5. Drizzle ORM și migrații Drizzle Kit, versionate în repository.
 - **Autentificare:** Better Auth: email și parolă (Argon2id), magic link, sesiuni stocate în baza de date (expirabile și revocabile). Google OAuth vine în faza `saas`.
 - **Validare:** Zod, cu aceleași scheme pe client și pe server.
 - **Joburi:** pg-boss (coadă peste Postgres, fără Redis), într-un proces worker separat.
@@ -182,6 +182,32 @@ Referința vizuală completă este demo-ul din `docs/demo/finet-demo.html` (date
 **Tipografie:** Bricolage Grotesque pentru titluri și logo, IBM Plex Sans pentru text, IBM Plex Mono pentru sume în coloane și pentru bonurile randate (cu `tabular-nums`). Fonturile se servesc local (`next/font`), nu de pe CDN.
 
 **Elemente proprii:** bonul fiscal afișat ca hârtie termică lângă datele extrase; rândurile cu încredere scăzută evidențiate cu `marker`; semaforul bugetelor; pe telefon, navigare jos cu 5 butoane (Acasă, Tranzacții, Scanează, Rapoarte, Mai mult), iar pe desktop meniu lateral cu toate paginile.
+
+### 3.5 Actualizarea automată a PostgreSQL
+
+Scop: serverul rulează mereu ultima versiune stabilă de PostgreSQL, fără intervenție manuală, dar fără să riște datele. Toată automatizarea stă în `ops/postgres/`, cu README, și se configurează din `ops/postgres/upgrade.env` (fără secrete în repository).
+
+**1. Actualizări minore (de exemplu 18.6 → 18.7): complet automate.**
+- `unattended-upgrades` configurat pentru originea PGDG, doar pentru pachetele `postgresql-<versiune curentă>*`.
+- Repornirea serverului PostgreSQL se face într-o fereastră de mentenanță (implicit 04:00–05:00, ora României), nu imediat după instalare.
+- După repornire: `/api/health` trebuie să fie verde în 5 minute; altfel, notificare către administrator.
+- Fiecare actualizare se scrie în jurnalul de mentenanță (`ops/postgres/upgrade.log`) și apare în pagina de administrare.
+
+**2. Actualizări majore (de exemplu 18 → 19): automate, dar cu porți de siguranță.** Un job săptămânal (`finet-pg-upgrade.timer`, systemd) rulează `ops/postgres/major-upgrade.sh`, care face, în ordine:
+1. **Detectare:** află ultima versiune majoră stabilă din PGDG. Continuă doar dacă există o versiune mai nouă decât cea instalată **și** aceasta a ajuns la prima actualizare minoră (X.1) **și** au trecut cel puțin `PG_MAJOR_MIN_AGE_DAYS` zile (implicit 30) de la lansare. Altfel se oprește fără să schimbe nimic.
+2. **Verificare de compatibilitate:** instalează noua versiune alături de cea veche (fără să o pornească pentru producție) și rulează `pg_upgrade --check`. Verifică extensiile folosite.
+3. **Repetiție pe o copie:** restaurează ultimul backup într-un cluster temporar pe noua versiune, rulează migrațiile Drizzle și suita de teste de integrare FINET pe el. Dacă ceva pică, se oprește și trimite raportul.
+4. **Spațiu pe disc:** verifică dacă există loc pentru backup plus upgrade (mod `--copy`, care păstrează vechiul cluster intact pentru revenire). Dacă nu, se oprește și cere eliberarea spațiului.
+5. **Upgrade-ul propriu-zis**, doar în fereastra de mentenanță: backup nou, verificat prin restaurare de probă; oprirea `finet-web` și `finet-worker`; `pg_upgrade --copy`; pornirea noului cluster; `ANALYZE` (`vacuumdb --all --analyze-in-stages`); pornirea aplicației.
+6. **Verificare după upgrade:** `/api/health`, câteva interogări de control (numărul de tranzacții și suma lor pe fiecare gospodărie, comparate cu valorile dinainte) și testele de fum. **Dacă orice verificare pică, revenire automată** la clusterul vechi (care a rămas neatins), apoi notificare.
+7. **Curățenie:** clusterul vechi se păstrează `PG_OLD_CLUSTER_KEEP_DAYS` zile (implicit 14), apoi se șterge automat. Versiunea nouă devine implicită în CI (vezi mai jos) printr-un PR automat.
+- `PG_AUTO_MAJOR_UPGRADE=true` pornește pașii 5–7. Cu `false`, jobul face doar pașii 1–4 și trimite raportul, iar upgrade-ul așteaptă confirmarea administratorului.
+- Fiecare rulare scrie un raport (ce versiune, ce verificări au trecut, durata, dacă a fost revenire) și trimite notificarea pe canalul configurat (email sau Telegram).
+
+**3. CI urmărește aceeași versiune.**
+- Workflow-ul de teste folosește imaginea `postgres:<versiunea majoră din producție>`, citită dintr-un singur fișier (`ops/postgres/VERSION`).
+- Un workflow programat (săptămânal) rulează testele și pe ultima versiune majoră publicată (inclusiv beta și RC, marcate ca „informativ”), ca problemele de compatibilitate să apară înainte de upgrade.
+- După un upgrade major reușit în producție, scriptul actualizează `ops/postgres/VERSION` printr-un PR.
 
 ## 4. Reguli de execuție
 
@@ -322,10 +348,10 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 
 ### Faza 0 — Fundație și infrastructură
 - **Înainte de cod**, verifică și raportează starea sistemului: spațiul pe disc, Node, pnpm, nginx, Ollama, LiteLLM. Propune un plan de eliberare a discului (minimum 8 GB liberi) și **așteaptă aprobarea** înainte de orice ștergere sau instalare.
-- După aprobare: PostgreSQL 18 nativ, din repository-ul PGDG, cu baze separate pentru dezvoltare și teste și cu roluri separate (`app`, cu `NOBYPASSRLS`, și `migrator`).
+- După aprobare: ultima versiune stabilă PostgreSQL (în prezent 18), nativ, din repository-ul PGDG, cu actualizările minore automate configurate (3.5, punctul 1), cu baze separate pentru dezvoltare și teste și cu roluri separate (`app`, cu `NOBYPASSRLS`, și `migrator`).
 - Proiect Next.js, TypeScript strict, Tailwind, shadcn/ui, ESLint, Prettier, Vitest, Playwright. `lib/config.ts` cu `APP_MODE`, modulul `entitlements` pentru `personal`, `lib/storage.ts`, `lib/money.ts` complet cu teste.
 - Unități systemd pentru `web` și `worker`, un vhost nginx pe un subdomeniu, cu HTTPS, și `/api/health`.
-- GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu, imaginea `postgres:18`), build, scanarea secretelor.
+- GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu, versiunea din `ops/postgres/VERSION`), build, scanarea secretelor.
 - Documentație: `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md`, `docs/adr/0001-stack.md`.
 - **Sarcină umană, pornită în paralel:** colectarea a 50–100 de bonuri reale (inclusiv șterse, mototolite, lungi, cu reduceri și garanție SGR) și a câte 2–3 extrase pentru băncile folosite, anonimizate, în `fixtures/`, fiecare cu rezultatul așteptat completat manual.
 - **Acceptare:** aplicația goală răspunde prin nginx, pe HTTPS; `/api/health` e verde; CI e verde; testele pentru bani trec.
@@ -396,7 +422,8 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Manifest PWA, iconițe, ghid de instalare pentru iOS și Android.
 - Service worker care pune în cache doar asset-urile statice și pagina `/offline` (care trebuie să existe).
 - **Scanare offline:** pozele se păstrează temporar în IndexedDB, se încarcă automat la revenirea conexiunii și se șterg local după confirmarea serverului. Starea „în așteptare” este vizibilă.
-- Audit de accesibilitate (Lighthouse ≥ 90) și de securitate pe `docs/SECURITY_CHECKLIST.md`. Export și ștergere GDPR.
+- Audit de accesibilitate (Lighthouse ≥ 90) și de securitate pe `docs/SECURITY_CHECKLIST.md`.
+- Upgrade-ul automat major al PostgreSQL (3.5, punctele 2 și 3): scriptul, timerul systemd, repetiția pe copie, revenirea automată și notificările. **Acceptare:** o repetiție completă rulată pe o copie, de pe versiunea curentă pe următoarea disponibilă (beta sau RC, dacă nu există încă una stabilă), plus un test de revenire forțată, ambele documentate cu rezultatul. Export și ștergere GDPR.
 - **Acceptare:** E2E pentru scanarea în modul offline și sincronizarea ulterioară; checklist-ul completat cu dovezi; E2E pentru export și ștergerea contului.
 
 > **Reper v1.0 personal:** după Faza 9, varianta `personal` este completă.
