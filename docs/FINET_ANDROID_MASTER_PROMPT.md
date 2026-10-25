@@ -187,6 +187,7 @@ Procesarea rămâne pe serverul FINET. Telefonul doar fotografiază, pregăteșt
 
 - Permisiuni cerute doar la folosire; refuzul are o explicație și o alternativă (alegerea unui fișier).
 - Validarea tipului și a mărimii înainte de încărcare, aceleași limite ca serverul (venite din API, nu scrise în aplicație).
+- Tipuri acceptate: poză din cameră (JPEG), poze din galerie (JPEG, PNG, WebP, HEIC/HEIF), capturi de ecran și PDF (bonuri electronice, facturi). Pozele HEIC se convertesc în JPEG pe telefon înainte de încărcare; PDF-urile se trimit neschimbate. Ce model citește documentul decide serverul (secțiunea 3.6 din promptul FINET); aplicația doar afișează rezultatul și, pe ecranul bonului, dacă a fost citit local sau cu furnizorul extern.
 - Fără OCR local în paralel cu cel de pe server.
 - Telefonul nu trimite imagini către furnizori AI. Consimțământul pentru AI extern e gestionat de FINET și afișat din setările contului.
 - Pozele temporare se șterg din telefon după confirmarea serverului.
