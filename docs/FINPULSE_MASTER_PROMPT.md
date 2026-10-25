@@ -1,7 +1,7 @@
-# FINpulse România — MASTER PROMPT pentru Claude Code (v2.1)
+# FINpulse România — MASTER PROMPT pentru Claude Code (v3)
 
 > **Cum se folosește acest document**
-> - Secțiunile 1–6 (inclusiv 3.1, modurile de rulare) sunt **reguli permanente**: se aplică în fiecare sesiune. Copiază-le în `CLAUDE.md` la rădăcina repository-ului, ca să fie încărcate automat.
+> - Secțiunile 1–6 sunt **reguli permanente**: se aplică în fiecare sesiune. Copiază-le în `CLAUDE.md` la rădăcina repository-ului, ca să fie încărcate automat.
 > - Secțiunea 7 descrie **fazele**. Rulează **o singură fază per sesiune**, pe un branch dedicat (`phase/NN-nume`), cu PR și revizuire umană înainte de faza următoare.
 > - Prompt de pornire per sesiune: *„Citește `docs/FINPULSE_MASTER_PROMPT.md` și `docs/ROADMAP.md`. Execută Faza N. Oprește-te la criteriile ei de acceptare și raportează conform secțiunii 8.”*
 
@@ -9,69 +9,95 @@
 
 ## 1. Misiune
 
-Acționează ca arhitect software senior, dezvoltator full-stack, specialist în securitate și DevOps. Construiește **FINpulse România** (nume de lucru — vezi riscul de branding din secțiunea 9): o aplicație web PWA de finanțe **personale și de familie**, cu interfață în română și RON ca monedă implicită, proiectată de la început pentru mai mulți membri pe aceeași gospodărie.
+Acționează ca arhitect software senior, dezvoltator full-stack, specialist în securitate și DevOps. Construiește **FINpulse România** (nume de lucru — vezi riscul de branding din secțiunea 9): o aplicație web PWA de finanțe **personale și de familie**, cu interfață în română, RON ca monedă implicită și **bonurile fiscale românești ca problemă centrală**, nu ca detaliu.
 
-Aceeași bază de cod livrează **două variante**, alese prin configurare (secțiunea 3.1):
-- **`personal`**: unealtă privată pentru o familie, găzduită pe propriul VPS. Fără plăți, fără înregistrare publică, fără pagină de prezentare.
+Aceeași bază de cod livrează **două variante**, alese prin configurare (secțiunea 3.3):
+- **`personal`**: unealtă privată pentru o familie, găzduită pe infrastructura proprie. Fără plăți, fără înregistrare publică, fără pagină de prezentare.
 - **`saas`**: produs public, cu înregistrare, planuri, plăți Stripe, recomandări și panou de administrare.
 
-Varianta `personal` se livrează prima (după Faza 7). Varianta `saas` se construiește peste ea, fără să o strice.
+Varianta `personal` se livrează prima. Varianta `saas` se construiește peste ea, fără rescriere și fără să o strice.
 
-Referința de categorie este finpulse.day. Inspiră-te din **funcționalități**, nu copia branding, logo, texte, culori distinctive sau cod.
+Principiu director: **nu construim o clonă.** Mai puține funcții la start, dar fiecare dusă până la capăt, iar ingestia de documente (bonuri, extrase, potrivire) tratată ca miezul produsului. Referința de categorie este finpulse.day. Inspiră-te din **funcționalități**, nu copia branding, logo, texte, culori distinctive sau cod.
 
 ## 2. Analiza produsului de referință (finpulse.day)
 
-Verificat la 2026-10-25 din fișierele publice (`manifest.json`, `robots.txt`, `sitemap.xml`, `sw.js`) și din textul indexat al paginii principale. Rândurile marcate cu **(B)** provin dintr-o analiză separată a antetelor HTTP și a fișierelor JavaScript publice și nu au fost verificate independent. Aplicația după autentificare nu a fost inspectată; ce urmează este o descriere, nu o specificație de copiat.
+Surse, toate publice și fără autentificare: verificările proprii din 2026-10-25 (`manifest.json`, `robots.txt`, `sitemap.xml`, `sw.js`, textul indexat al paginii) și rapoartele „Radar” din aceeași zi (antete HTTP, fișiere JavaScript publice). Afirmațiile din rapoartele Radar nu au fost verificate independent. Aplicația de după autentificare nu a fost inspectată. Ce urmează este o descriere, nu o specificație de copiat.
 
-| Aspect | Ce oferă finpulse.day | Decizia pentru FINpulse România |
+### 2.1 Ce oferă
+
+| Modul | Ce face la referință | Unde intră la noi |
 |---|---|---|
-| Poziționare | „Smart Personal & Family Financial Manager”, interfață în română | Identic ca segment; diferențiere prin specific RO (CUI, TVA, bănci RO) |
-| Bonuri | Poză cu camera, Vision AI extrage produsele, bonuri lungi din 2–4 poze cu eliminarea duplicatelor; procesare asincronă prin `/api/upload-queue` **(B)** | Faza 9, cu coadă pg-boss, limite de cost și consimțământ |
-| Extrase | Import PDF, Excel, CSV și ZIP cu mai multe fișiere | CSV/Excel în Faza 8, PDF/ZIP în Faza 10 |
-| Familie | Spațiu comun, bugete comune și individuale, decontare automată 50/50, solduri reciproce, până la 6 membri; `/api/family/info` **(B)** | **Modelul de date pe gospodărie din Faza 1**; funcțiile de familie în Faza 6 |
-| Module | Dashboard și bugete, bonuri și OCR, liste de cumpărături cu reconciliere, recurențe, obiective, rapoarte, import/export, setări, admin | MVP: dashboard, bugete, recurențe, rapoarte și export. Restul după MVP |
-| Rute publice | `/`, `/pricing`, `/help`, `/terms`, `/privacy`, `/login`, `/join` (invitație sau recomandare) | `saas`: același set. `personal`: doar `/login` și `/join/[token]` (invitații în gospodărie) |
-| Platformă | PWA (standalone, portrait, `start_url: /dashboard`), temă închisă, service worker network-first care nu interceptează `/api/` | PWA în Faza 5; service worker-ul **nu pune în cache răspunsurile API cu date financiare** |
-| Backend și hosting | Supabase (din `sw.js`), Next.js App Router, servit prin Cloudflare **(B)** | Postgres self-hosted pe VPS (vezi secțiunea 3); Cloudflare opțional în fața VPS-ului |
-| Antete de securitate | HSTS preload, CSP cu `frame-ancestors 'none'`, `X-Frame-Options: DENY`, Permissions-Policy care permite doar camera **(B)** | Același nivel, cerut în 6.3 |
-| Planuri | Starter gratuit (2 bugete, 2 obiective, scanare de bază); Pro 4,99 €/lună (50 bonuri pe zi, extrase, nelimitat, export PDF/Excel); Family 8,99 €/lună (6 membri, 250 bonuri pe zi, decontări); recomandare = 30 de zile Pro; Stripe prin `/api/checkout`, `/api/referrals/me` **(B)** | Doar în modul `saas`, Faza 13 |
-| Comunicare cu utilizatorii | `/api/feedback`, `/api/bug-reports`, `/api/broadcast` (anunțuri) **(B)** | Doar în modul `saas`, Faza 12 |
-| Lecție de evitat | Numele `STRIPE_SECRET_KEY` apare într-un fișier JavaScript livrat browserului **(B)**: un modul de server importat într-o componentă de client. Fără valoarea cheii nu este o scurgere, dar este o greșeală de împachetare | Regula din 6.3: `server-only` și scanarea fișierelor de client în CI |
+| Dashboard | Total lunar, pe categorii, trend, comparație cu luna anterioară; onboarding în 3 pași (importă, setează buget, creează obiectiv) | Faza 3 |
+| Bugete | General sau pe categorie, comune și individuale, semafor verde/galben/roșu, alerte la apropierea limitei | Faza 3 (comune: Faza 8) |
+| Obiective | Nume, sumă țintă, termen, progres, stare; ștergere cu confirmare | Faza 3 |
+| Bonuri | Foto (inclusiv bonuri șterse sau mototolite), PDF, mai multe fișiere deodată; coadă cu prioritate după plan (`/api/upload-queue`, `processing_batches`); extrage comerciant, dată, total, TVA și **fiecare produs** cu cantitate și preț unitar; categorisire la nivel de produs; arhivă cu căutare în textul OCR; recunoaște garanția SGR (0,50 lei per ambalaj) și reducerile de pe cardurile de fidelitate | Faza 6 |
+| Extrase | PDF, CSV, Excel, ZIP; „bănci RO și Revolut” (listă exactă necunoscută); deduplicare; avertizare pentru lunile fără extras | Faza 7 |
+| Potrivire | Bonul se leagă automat de tranzacția cu cardul din extras („potrivire confirmată cu extrasul ING”) | Faza 7 |
+| Recurențe | Detectarea abonamentelor (Netflix, Spotify, sală, chirie), generarea tranzacțiilor la scadență | Faza 5 (reguli) și Faza 7 (detectare din extrase) |
+| Familie | Până la 6 membri, bugete comune și individuale, împărțire 50/50, solduri reciproce, decontări (`/api/family/info`) | Faza 8 |
+| Liste de cumpărături | Bifare la raft, comparație AI listă ↔ bon, detectarea achizițiilor neplanificate | Faza 10 |
+| Rapoarte | Rapoarte personalizate pe orice produs din bonuri, prețuri pe magazin, variația prețurilor în timp, „verdict financiar AI” | Faza 3 (de bază), Faza 10 (prețuri) |
+| Export | CSV, Excel, PDF pentru tranzacții, bonuri, obiective, bugete | Faza 3 (CSV), Faza 10 (Excel/PDF) |
+| Autentificare | Email și parolă, magic link, Google, Facebook | Faza 1 (email, parolă, magic link); Google în faza `saas` |
+| Recomandări | Cod unic; distribuire prin WhatsApp, Telegram, email; invitatul primește 30 de zile Pro, iar cel care invită +1 lună per prieten, maximum 10 | Faza 12, doar `saas` |
+| Administrare | Utilizatori, abonamente, anunțuri (`/api/broadcast`), feedback, raportări de bug-uri | Faza 11, doar `saas` |
+| Limbi | ro, en, es, fr, de, it, pl, tr | ro de la start; en în faza `saas`; restul doar la cerere |
 
-## 3. Stack tehnic (decis — nu îl schimba fără un motiv tehnic documentat în `docs/adr/`)
+### 2.2 Planuri (doar referință pentru `saas`)
 
-- **Aplicație:** Next.js 15 (App Router) + TypeScript în mod `strict`. Monolit modular: un singur proiect, cu module separate pe domenii.
-- **UI:** Tailwind CSS + shadcn/ui, grafice cu Recharts, iconițe lucide-react. Temă luminoasă și închisă.
-- **Baza de date:** PostgreSQL 16, Drizzle ORM și migrații Drizzle Kit, versionate în repository.
-- **Autentificare:** Better Auth cu email și parolă (hash Argon2id), sesiuni stocate în baza de date (expirabile și revocabile), verificare email, resetare parolă. Google OAuth este opțional, după MVP.
+| Plan | Preț | Limite raportate |
+|---|---|---|
+| Starter | gratuit | tranzacții manuale nelimitate, 2 bugete, 2 obiective, 1 document AI pe zi (5 MB) |
+| Pro | 19,99 lei (4,99 €) pe lună | 50 de documente pe zi (10 MB), nelimitat, export PDF și Excel, extrase |
+| Family | 34,99 lei (8,99 €) pe lună | 250 de documente pe zi (15 MB), 6 membri, bugete comune, decontări |
+
+Rapoartele se contrazic pentru Starter: unul spune 1 document pe zi, altul 50 de bonuri pe zi și istoric de 3 luni. Există chei pentru facturare anuală, dar valorile nu sunt cunoscute. Perioada de probă este de 30 de zile Pro. Limitele noastre vor fi decise separat, pe baza costului măsurat (Faza 12).
+
+### 2.3 Tehnic
+
+- **Stack:** Next.js App Router (React 19), Tailwind, Supabase (Postgres, Auth, Realtime), Stripe, Cloudflare, Google Analytics 4. PWA cu `start_url: /dashboard`.
+- **Furnizori AI afișați în interfață:** Groq, Gemini 2.5 Flash și GPT-4o-mini, aleși după plan.
+- **Antete de securitate:** HSTS preload; CSP doar cu `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, **fără `default-src` și `script-src`**; `X-Frame-Options: DENY`; `Permissions-Policy: camera=(self), microphone=(), geolocation=()`.
+- **Cheia Stripe:** numele `STRIPE_SECRET_KEY` apare într-un fișier JavaScript livrat browserului, dar nu s-a găsit nicio valoare `sk_live_` sau `sk_test_`. Este o greșeală de împachetare (un modul de server importat într-o componentă de client), nu o scurgere de secret.
+
+### 2.4 Slăbiciuni observate, deci oportunități pentru noi
+
+1. **Offline inexistent:** service worker de 965 de octeți fără precache, iar `/offline` răspunde 404. → La noi, scanarea funcționează și fără semnal în magazin (Faza 9).
+2. **Pagina principală se randează în browser** (HTML-ul inițial conține doar „Loading…”), deci SEO slab. → La noi, paginile publice se randează pe server (Faza 11).
+3. **Acuratețe declarată (99,4%) fără date publicate.** → La noi, acuratețea se măsoară pe un set de validare propriu, iar rezultatul se raportează (Faza 6).
+4. **Potrivirea bon ↔ tranzacție nu își explică decizia.** → La noi, scor de încredere vizibil, motivul potrivirii și posibilitatea de corectare (Faza 7).
+5. **CSP incompletă.** → La noi, CSP completă cu nonce (6.3).
+6. **Dependență de furnizori AI externi pentru funcția centrală.** → La noi, procesare locală întâi, cu furnizor extern doar ca rezervă și cu consimțământ (Faza 6).
+7. **Fără demo public.** → La noi, date demo opționale la onboarding.
+
+## 3. Infrastructură și stack
+
+### 3.1 Infrastructura țintă (raportată, de verificat în Faza 0)
+
+- Container LXC (ID 1999), **fără Docker**: rulare nativă cu Node 24 și pnpm.
+- **Disc: 5,3 GB liberi din 20 GB.** Faza 0 nu începe până nu sunt cel puțin 8 GB liberi. Pozele bonurilor au nevoie de comprimare, retenție și cotă.
+- nginx rulează deja pe portul 80 ca reverse proxy.
+- Ollama local pe `127.0.0.1:11434` și o poartă LiteLLM existentă, utile pentru AI local.
+- PostgreSQL nu este instalat.
+- Monitorizarea existentă (agent-queue, cron-uri) se integrează printr-un endpoint de sănătate.
+
+Faza 0 verifică aceste date pe sistem și le corectează în `docs/INFRA.md`. Nu se fac modificări de sistem (instalări, ștergeri pentru eliberarea discului, configurare nginx) fără aprobare explicită.
+
+### 3.2 Stack (decis — nu îl schimba fără un motiv tehnic documentat în `docs/adr/`)
+
+- **Aplicație:** Next.js (ultima versiune majoră stabilă la data Fazei 0, minimum 15), App Router, TypeScript în mod `strict`. Monolit modular.
+- **UI:** Tailwind CSS + shadcn/ui, Recharts, lucide-react. Temă luminoasă și închisă.
+- **Baza de date:** PostgreSQL 16, instalat nativ. Drizzle ORM și migrații Drizzle Kit, versionate în repository.
+- **Autentificare:** Better Auth: email și parolă (Argon2id), magic link, sesiuni stocate în baza de date (expirabile și revocabile). Google OAuth vine în faza `saas`.
 - **Validare:** Zod, cu aceleași scheme pe client și pe server.
-- **Joburi programate:** pg-boss (coadă peste Postgres, fără Redis), rulat într-un proces worker separat din același cod.
-- **Email:** SMTP prin Nodemailer. În dezvoltare, Mailpit în docker compose.
-- **Teste:** Vitest pentru unit și integrare (pe un Postgres real în container), Playwright pentru E2E.
-- **Calitate:** ESLint, Prettier, `tsc --noEmit`, plus GitHub Actions (lint, type-check, teste, build) pe fiecare PR.
-- **Deploy:** Docker Compose pe VPS, cu Caddy ca reverse proxy (TLS automat).
-- **Manager de pachete:** pnpm, cu versiunea de Node fixată în `.nvmrc` și în `package.json#engines`.
-- **Doar în modul `saas`:** Stripe (Checkout, Customer Portal, webhooks), Cloudflare Turnstile împotriva înregistrărilor automate, monitorizarea erorilor cu GlitchTip sau Sentry (fără date financiare în evenimente).
-
-### 3.1 Moduri de rulare: `APP_MODE=personal | saas`
-
-O singură bază de cod, **o singură schemă de bază de date** pentru ambele moduri. Modul schimbă doar ce rute și funcții sunt active, nu structura datelor. Trecerea de la `personal` la `saas` este o schimbare de configurare plus o migrație de date documentată (gospodăriile existente primesc un plan „fondator” fără limite).
-
-| Aspect | `personal` | `saas` |
-|---|---|---|
-| Înregistrare | Închisă. Primul utilizator se creează din CLI (`pnpm admin:create-user`) și devine administrator; ceilalți intră doar prin invitație în gospodărie | Publică, cu verificare email și Turnstile |
-| Rută `/` | Redirecționează la `/login` sau `/dashboard` | Pagină de prezentare, plus `/pricing`, `/help`, `/terms`, `/privacy` |
-| Email (SMTP) | Opțional; fără SMTP, resetarea parolei se face din CLI | Obligatoriu |
-| Planuri și plăți | Nu există; rutele de billing răspund 404 | Stripe, planuri, perioadă de probă, recomandări |
-| Limite | Doar limitele tehnice din env (de exemplu `AI_DAILY_RECEIPT_LIMIT`, buget AI lunar) | Limitele planului, plus aceleași limite tehnice globale |
-| Administrare | Pagină minimă de setări pentru administrator (utilizatori, backup, stare joburi) | Panou de administrare complet, feedback, raportări de bug-uri, anunțuri |
-| `robots.txt` | `Disallow: /` (aplicație privată) | Indexare doar pentru paginile publice |
-
-Reguli de implementare:
-- Modul se citește o singură dată, din `lib/config.ts`, validat cu Zod la pornire. O valoare lipsă sau invalidă oprește pornirea aplicației.
-- Logica de business **nu verifică niciodată direct modul sau Stripe**. Întreabă modulul `entitlements`: `can(householdId, 'receipts.scan')` și `limit(householdId, 'budgets.max')`. În modul `personal`, `entitlements` răspunde „permis” pentru tot, cu excepția limitelor tehnice.
-- Modulele exclusive pentru `saas` (`billing/`, `referrals/`, `admin/`, `feedback/`, `broadcasts/`, `marketing/`) se înregistrează doar când `APP_MODE=saas`. Rutele lor răspund 404 în modul `personal`.
-- CI rulează testele E2E de bază **în ambele moduri**.
+- **Joburi:** pg-boss (coadă peste Postgres, fără Redis), într-un proces worker separat.
+- **Fișiere:** sistem de fișiere local, în spatele unei interfețe `storage` compatibile S3, ca mutarea pe S3 sau R2 să nu ceară modificări de cod. Imagini procesate cu sharp.
+- **AI și OCR:** interfață `ai/provider`, apelată doar prin LiteLLM, cu un furnizor local (model vision prin Ollama și/sau Tesseract `ron`) și un furnizor extern opțional ca rezervă. Alegerea implicită se face pe baza rezultatelor pe setul de validare (Faza 6), nu din presupuneri.
+- **Email:** SMTP prin Nodemailer. Opțional în modul `personal`.
+- **Teste:** Vitest pentru unit și integrare (pe un Postgres real, bază separată de test), Playwright pentru E2E.
+- **Calitate:** ESLint, Prettier, `tsc --noEmit`, GitHub Actions (lint, type-check, teste, build, scanarea secretelor din fișierele de client) pe fiecare PR.
+- **Deploy:** nativ, cu unități systemd pentru `web` și `worker`, în spatele nginx-ului existent, cu HTTPS. Docker Compose este o alternativă documentată, nu o cerință.
+- **Doar `saas`:** Stripe, Cloudflare Turnstile, monitorizarea erorilor (GlitchTip sau Sentry, fără date financiare), analytics doar pe paginile publice și doar dintr-o soluție care respectă confidențialitatea (Plausible sau Umami).
 
 Structura recomandată:
 
@@ -79,8 +105,9 @@ Structura recomandată:
 src/
   app/                 # rute Next.js (UI + route handlers subțiri)
   modules/
-    auth/ households/ accounts/ categories/ transactions/
-    budgets/ recurring/ reports/ audit/ entitlements/
+    auth/ households/ accounts/ categories/ transactions/ budgets/ goals/
+    recurring/ reports/ audit/ entitlements/ documents/ receipts/
+    statements/ matching/ settlements/
     billing/ referrals/ admin/ feedback/ broadcasts/ marketing/   # doar saas
       *.schema.ts      # Zod
       *.service.ts     # logică de business (fără Next.js)
@@ -89,11 +116,36 @@ src/
   lib/money.ts         # aritmetică monetară, formatare RON
   lib/authz.ts         # requireMember(householdId, role)
   lib/config.ts        # APP_MODE și restul variabilelor de mediu, validate cu Zod
+  lib/storage.ts       # interfață fișiere (local / S3)
+  lib/ai/              # interfața de furnizor AI, prin LiteLLM
   db/schema.ts, db/migrations/
   worker/              # joburi pg-boss
+fixtures/
+  receipts/            # setul de validare, anonimizat, plus rezultatul așteptat
+  statements/          # extrase de exemplu anonimizate, câte unul pe bancă
 ```
 
 Logica financiară stă în `modules/*/*.service.ts`, fără importuri din Next.js, ca să poată fi testată izolat.
+
+### 3.3 Moduri de rulare: `APP_MODE=personal | saas`
+
+O singură bază de cod, **o singură schemă de bază de date**. Modul schimbă doar ce rute și funcții sunt active. Trecerea de la `personal` la `saas` înseamnă o schimbare de configurare plus o migrație de date documentată (gospodăriile existente primesc un plan „fondator” fără limite).
+
+| Aspect | `personal` | `saas` |
+|---|---|---|
+| Înregistrare | Închisă. Primul utilizator se creează din CLI (`pnpm admin:create-user`) și devine administrator; ceilalți intră doar prin invitație în gospodărie | Publică, cu verificare email și Turnstile |
+| Rută `/` | Redirecționează la `/login` sau `/dashboard` | Pagină de prezentare randată pe server, plus `/pricing`, `/help`, `/terms`, `/privacy` |
+| Email (SMTP) | Opțional; fără SMTP, resetarea parolei se face din CLI, iar magic link e dezactivat | Obligatoriu |
+| Planuri și plăți | Nu există; rutele de billing răspund 404 | Stripe, planuri, perioadă de probă, recomandări |
+| Limite | Doar limitele tehnice din env (`AI_DAILY_DOCUMENT_LIMIT`, `AI_MONTHLY_BUDGET`, `STORAGE_QUOTA_MB`) | Limitele planului, plus limitele tehnice globale |
+| Administrare | Pagină minimă: utilizatori, stare joburi, spațiu ocupat, ultimul backup | Panou complet, feedback, raportări de bug-uri, anunțuri |
+| `robots.txt` | `Disallow: /` | Indexare doar pentru paginile publice |
+
+Reguli:
+- Modul se citește o singură dată, din `lib/config.ts`, validat cu Zod la pornire. O valoare lipsă sau invalidă oprește pornirea aplicației.
+- Logica de business **nu verifică niciodată direct modul sau Stripe**. Întreabă modulul `entitlements`: `can(householdId, 'documents.process')`, `limit(householdId, 'budgets.max')`. În modul `personal` răspunsul e „permis”, cu excepția limitelor tehnice.
+- Modulele exclusive pentru `saas` se înregistrează doar când `APP_MODE=saas`; în modul `personal` rutele lor răspund 404.
+- CI rulează testele E2E de bază **în ambele moduri**.
 
 ## 4. Reguli de execuție
 
@@ -101,174 +153,222 @@ Logica financiară stă în `modules/*/*.service.ts`, fără importuri din Next.
 2. Lucrează pe branch-ul fazei, cu commit-uri mici și mesaje clare. Nu face push direct pe `main`.
 3. Prezintă un plan scurt pentru faza curentă, apoi implementează. Oprește-te la sfârșitul fazei; nu începe faza următoare.
 4. Rulează lint, type-check, teste și build după fiecare pas semnificativ. **Nu pretinde că ai rulat verificări pe care nu le-ai executat.** Raportează ieșirea exactă a eșecurilor.
-5. Nu șterge date sau configurații și nu face operațiuni distructive (drop, reset, force push) fără aprobare explicită.
+5. Nu șterge date sau configurații și nu face operațiuni distructive (drop, reset, force push, curățarea discului, modificarea configurației nginx sau systemd) fără aprobare explicită.
 6. Nu introduce secrete în cod, loguri, commit-uri sau documentație. Folosește variabile de mediu și un `.env.example` cu valori fictive.
 7. Fixează versiunile dependențelor (lockfile commis). Nu adăuga o dependență nouă fără să notezi motivul.
 8. Notează ipotezele, riscurile, fișierele modificate și rezultatele în raportul fazei și în `docs/ROADMAP.md`.
-9. Dacă o cerință din acest document e ambiguă sau intră în conflict cu codul existent, alege varianta mai sigură, documenteaz-o într-un ADR (`docs/adr/NNNN-titlu.md`) și semnalează-o în raport.
+9. Dacă o cerință e ambiguă sau intră în conflict cu codul existent, alege varianta mai sigură, documenteaz-o într-un ADR (`docs/adr/NNNN-titlu.md`) și semnalează-o în raport.
+10. **Porți de revizuire:** fazele care ating autentificarea, autorizarea, încărcarea de fișiere, banii (împărțiri, decontări) sau plățile se încheie cu o revizuire de securitate separată (de exemplu agentul „Scut”), iar constatările ei sunt incluse în raport. Când lucrul e împărțit între agenți (arhitectură, cod, date, cercetare, securitate, infrastructură), fiecare agent respectă același document și același raport.
 
 ## 5. Reguli de domeniu (obligatorii)
 
 ### 5.1 Bani
-- Sumele se stochează ca **`bigint` în unități minore** (bani: 1 RON = 100 bani) în coloana `amount_minor`, împreună cu `currency` (ISO 4217). Niciodată float, niciodată `number` pentru calcule intermediare cu zecimale.
-- Toată aritmetica trece prin `lib/money.ts`. Împărțirile (de exemplu 50/50 sau procente) folosesc metoda **restului cel mai mare**, ca suma părților să fie exact totalul.
+- Sumele se stochează ca **`bigint` în unități minore** (bani: 1 RON = 100 bani) în coloane `*_minor`, împreună cu `currency` (ISO 4217). Niciodată float.
+- Cantitățile de pe bonuri (de exemplu 0,754 kg) se stochează ca `numeric(12,3)`. Totalul unei linii vine de pe bon; nu se recalculează din cantitate × preț. Diferențele se semnalează la verificare.
+- Toată aritmetica trece prin `lib/money.ts`. Împărțirile folosesc metoda **restului cel mai mare**, ca suma părților să fie exact totalul.
 - `amount_minor` este întotdeauna **pozitiv**; semnul rezultă din `type` (`income`, `expense`, `transfer`). Constrângere CHECK în baza de date.
-- **Monede multiple în MVP:** RON implicit, plus EUR și USD permise pe cont. Dashboard-ul afișează totalurile **separat pe monedă**; nu face conversii. Conversia cu cursul BNR vine după MVP.
-- **Transfer între conturi:** două rânduri `transfer` legate prin `transfer_group_id`, create atomic într-o singură tranzacție DB. Nu se contează ca venit sau cheltuială. Între monede diferite se cer explicit ambele sume.
+- **Monede:** RON implicit, plus EUR și USD permise pe cont. Totalurile se afișează **separat pe monedă**, fără conversie. Conversia cu cursul BNR vine mai târziu.
+- **Transfer între conturi:** două rânduri `transfer` legate prin `transfer_group_id`, create atomic. Nu se contează ca venit sau cheltuială. Între monede diferite se cer explicit ambele sume.
 
 ### 5.2 Date și timp
-- Fusul orar implicit este `Europe/Bucharest`. `occurred_on` este de tip `date` (zi calendaristică locală), iar `created_at` și `updated_at` sunt `timestamptz` în UTC.
-- Perioadele (luna, săptămâna) se calculează în fusul orar al gospodăriei. Săptămâna începe luni.
+- Fusul orar implicit este `Europe/Bucharest`. `occurred_on` este `date` (zi locală); `created_at` și `updated_at` sunt `timestamptz` în UTC.
+- Perioadele se calculează în fusul orar al gospodăriei. Săptămâna începe luni.
 
 ### 5.3 Formatare românească
 - Sume: `1.234,56 lei` (`Intl.NumberFormat('ro-RO', { style: 'currency', currency: 'RON' })`). Date: `25.10.2026`.
-- Inputurile de sumă acceptă atât virgula, cât și punctul ca separator zecimal și resping valorile ambigue.
-- Interfața are diacritice corecte (ș și ț cu virgulă, nu cu sedilă).
-- Exportul CSV este UTF-8 cu BOM, separator `;` și zecimale cu virgulă, ca să se deschidă corect în Excel cu setări românești. Valorile sunt protejate împotriva CSV injection (prefixează `=`, `+`, `-`, `@`).
+- Inputurile de sumă acceptă virgula și punctul ca separator zecimal și resping valorile ambigue.
+- Interfața are diacritice corecte (ș și ț cu virgulă, nu cu sedilă). Textele stau în fișiere de traducere (`ro` de la început), ca adăugarea limbii engleze să nu ceară modificări de cod.
+- Exportul CSV este UTF-8 cu BOM, separator `;` și zecimale cu virgulă. Valorile sunt protejate împotriva CSV injection (prefixează `=`, `+`, `-`, `@`).
 
-### 5.4 Categorii implicite (sistem, traductibile, nu se pot șterge, dar se pot ascunde)
-- **Cheltuieli:** Alimente, Restaurante și cafenele, Locuință (chirie/rată), Utilități (curent, gaz, apă), Internet și telefonie, Transport și combustibil, Sănătate și farmacie, Îmbrăcăminte și încălțăminte, Copii, Educație, Divertisment, Abonamente, Cadouri și donații, Taxe și impozite, Asigurări, Casă și întreținere, Animale de companie, Altele.
+### 5.4 Categorii implicite (sistem, nu se pot șterge, dar se pot ascunde)
+- **Cheltuieli:** Alimente, Restaurante și cafenele, Locuință (chirie/rată), Utilități (curent, gaz, apă), Internet și telefonie, Transport și combustibil, Sănătate și farmacie, Îmbrăcăminte și încălțăminte, Copii, Educație, Divertisment, Abonamente, Cadouri și donații, Taxe și impozite, Asigurări, Casă și întreținere, Igienă și cosmetice, Animale de companie, Altele.
 - **Venituri:** Salariu, Freelance/PFA, Chirii încasate, Dobânzi și dividende, Rambursări, Cadouri primite, Alte venituri.
+- Categoriile au o ierarhie opțională (`parent_id`) pe un singur nivel.
 
-### 5.5 Ștergere
+### 5.5 Bonuri fiscale românești
+- **Câmpuri de antet:** comerciant, CUI (cu validarea cifrei de control), adresa magazinului, data și ora, numărul bonului, metoda de plată, total.
+- **Tipuri de linie:** `item` (produs), `discount` (reducere, inclusiv de pe cardurile de fidelitate, de exemplu Lidl Plus), `deposit` (garanția SGR, 0,50 lei per ambalaj), `vat_summary` (totalurile de TVA pe cote).
+- **Garanția SGR** nu este o cheltuială de consum: se înregistrează separat (recuperabilă), iar returnarea ambalajelor poate genera un voucher.
+- **Cote TVA:** se citesc de pe bon, nu se presupun. Valorile curente (21% și 11%) sunt doar pentru validare și se configurează în date, nu în cod.
+- **Verificări:** suma liniilor (produse − reduceri + garanții) = total; suma TVA plauzibilă; data nu este în viitor. Orice nepotrivire marchează bonul „de verificat”.
+
+### 5.6 Ștergere
 - **Conturile** cu tranzacții se arhivează (`archived_at`); doar conturile goale se pot șterge.
-- **Tranzacțiile** se șterg definitiv, cu confirmare în interfață și un `audit_event` fără sume.
+- **Tranzacțiile** se șterg definitiv, cu confirmare și un `audit_event` fără sume.
 - **Categoriile personalizate** folosite se pot șterge numai cu reasignarea tranzacțiilor.
-- **Ștergerea contului de utilizator** cere reconfirmarea parolei. Dacă utilizatorul este singurul membru, gospodăria lui și toate datele ei se șterg.
+- **Documentele** (bonuri, extrase): ștergerea elimină și fișierul din `storage`. Tranzacțiile create din ele rămân, cu legătura eliminată.
+- **Ștergerea contului de utilizator** cere reconfirmarea parolei. Dacă utilizatorul este singurul membru, gospodăria și toate datele ei, inclusiv fișierele, se șterg.
 
 ## 6. Arhitectură, date și securitate
 
 ### 6.1 Proprietatea datelor: gospodăria (household)
-Toate datele financiare aparțin unei **gospodării**, nu direct unui utilizator. Fiecare utilizator primește automat o gospodărie personală la înregistrare. Astfel funcțiile de familie (Faza 6) nu cer o refactorizare a schemei.
+Toate datele financiare aparțin unei **gospodării**, nu direct unui utilizator. Fiecare utilizator primește automat o gospodărie personală la creare. Astfel funcțiile de familie nu cer refactorizarea schemei.
 
-Entități (în MVP):
-- `users`: id, email unic normalizat (lowercase, trim), name, email_verified_at, status, is_platform_admin, timestamps. Tabelele de sesiune și cont sunt cele cerute de Better Auth.
-- `user_preferences`: user_id, locale (`ro-RO`), timezone, default_currency (`RON`), theme.
+**Nucleu (Fazele 1–5):**
+- `users`: id, email unic normalizat, name, email_verified_at, status, is_platform_admin, timestamps. Plus tabelele de sesiune și cont cerute de Better Auth.
+- `user_preferences`: user_id, locale (`ro-RO`), timezone, default_currency (`RON`), theme, onboarding_completed_at.
 - `households`: id, name, default_currency, timezone, created_by, timestamps.
-- `household_members`: household_id, user_id, role (`owner`, `member`), joined_at. Cheie unică pe (household_id, user_id).
-- `accounts`: household_id, owner_user_id nullable (cont personal sau comun), name, type (`cash`, `bank`, `savings`, `credit_card`), currency, opening_balance_minor, archived_at.
-- `categories`: household_id nullable (NULL = categorie de sistem), name, kind (`income`, `expense`), icon, color, hidden.
-- `transactions`: household_id, account_id, category_id nullable, created_by_user_id, type, amount_minor, currency, occurred_on, description, merchant, notes, transfer_group_id nullable, recurring_rule_id nullable, timestamps.
-- `budgets`: household_id, category_id, period (`monthly`), amount_minor, currency, alert_threshold_pct (implicit 80), scope (`household`, `personal`), user_id nullable.
-- `recurring_rules`: household_id, account_id, category_id, type, amount_minor, currency, frequency (`daily`, `weekly`, `monthly`, `yearly`), interval, day_of_month, next_run_on, end_on nullable, active.
-- `recurring_occurrences`: rule_id, occurrence_date, transaction_id. **Cheie unică pe (rule_id, occurrence_date)**: aceasta este garanția de idempotență.
+- `household_members`: household_id, user_id, role (`owner`, `member`), joined_at. Unic pe (household_id, user_id).
+- `accounts`: household_id, owner_user_id nullable (personal sau comun), name, type (`cash`, `bank`, `savings`, `credit_card`), currency, opening_balance_minor, bank_code nullable, archived_at.
+- `categories`: household_id nullable (NULL = sistem), parent_id nullable, name, kind (`income`, `expense`), icon, color, hidden.
+- `transactions`: household_id, account_id, category_id nullable, created_by_user_id, type, amount_minor, currency, occurred_on, description, merchant, notes, source (`manual`, `receipt`, `statement`, `recurring`), transfer_group_id, recurring_rule_id, document_id, external_ref, timestamps.
+- `budgets`: household_id, category_id nullable (NULL = buget general), period (`monthly`), amount_minor, currency, warn_pct (implicit 80), scope (`household`, `personal`), user_id nullable.
+- `goals`: household_id, name, target_minor, currency, saved_minor, deadline nullable, status (`active`, `achieved`, `abandoned`), account_id nullable.
+- `recurring_rules`: household_id, account_id, category_id, type, amount_minor, currency, frequency, interval, day_of_month, next_run_on, end_on, active.
+- `recurring_occurrences`: rule_id, occurrence_date, transaction_id. **Unic pe (rule_id, occurrence_date)**: garanția de idempotență.
 - `audit_events`: household_id, actor_user_id, action, target_type, target_id, created_at, metadata minimă (fără sume, descrieri sau date personale).
 
-Entități adăugate în fazele SaaS (12–13), prezente în schemă în ambele moduri, dar folosite doar în `saas`: `plans`, `subscriptions` (household_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end), `stripe_events` (event_id unic, pentru procesare idempotentă a webhook-urilor), `referrals`, `feedback`, `bug_reports`, `broadcasts`.
+**Ingestie (Fazele 6–7):**
+- `documents`: household_id, uploaded_by, kind (`receipt`, `statement`), storage_key, mime, size_bytes, sha256, perceptual_hash nullable, status (`queued`, `processing`, `needs_review`, `done`, `failed`), error_code, batch_id, created_at. Unic pe (household_id, sha256).
+- `processing_batches`: household_id, created_by, counts pe stare, created_at.
+- `receipts`: document_id, household_id, merchant_name, merchant_cui, store_address, issued_at, receipt_number, payment_method, total_minor, currency, vat_json, confidence, ocr_text (pentru căutare, index full-text), provider_used.
+- `receipt_lines`: receipt_id, line_no, kind (`item`, `discount`, `deposit`, `vat_summary`), raw_name, normalized_name, quantity, unit, unit_price_minor, total_minor, vat_rate, category_id.
+- `product_aliases`: household_id, raw_name_normalized, merchant_cui nullable, category_id, normalized_name. Aici se învață din corecturile utilizatorului.
+- `statements`: document_id, household_id, account_id, bank_code, period_start, period_end, parser_version.
+- `statement_lines`: statement_id, row_no, occurred_on, amount_minor, direction, description_raw, merchant_guess, external_ref, transaction_id nullable.
+- `matches`: household_id, receipt_id, transaction_id, score, reasons_json, status (`suggested`, `confirmed`, `rejected`), decided_by. Unic pe receipt_id pentru cele confirmate.
+- `consents`: user_id, kind (de exemplu `external_ai`), granted_at, revoked_at.
+
+**Familie (Faza 8):** `household_invites` (token hash, expires_at, used_at), `transaction_splits` (transaction_id, user_id, share_minor), `settlements` (household_id, from_user_id, to_user_id, amount_minor, currency, settled_on, note).
+
+**Liste de cumpărături (Faza 10):** `shopping_lists`, `shopping_list_items` (name, quantity, checked, matched_receipt_line_id).
+
+**Doar `saas` (Fazele 11–12):** `plans`, `subscriptions`, `stripe_events` (event_id unic), `referrals`, `feedback`, `bug_reports`, `broadcasts`.
 
 Cerințe:
-- Chei străine cu reguli explicite `ON DELETE`, constrângeri CHECK (sume pozitive, enum-uri), indecși pe `(household_id, occurred_on DESC)`, `(account_id)` și `(category_id)`.
-- Soldul curent al unui cont se **calculează** (sold inițial + tranzacții). Nu se stochează denormalizat în MVP.
-- Paginarea folosește cursor pe `(occurred_on, id)`, nu offset.
+- Chei străine cu reguli explicite `ON DELETE`, constrângeri CHECK, indecși pe `(household_id, occurred_on DESC)`, `(account_id)`, `(category_id)`, `(household_id, status)` pe `documents`, plus index GIN pe `receipts.ocr_text`.
+- Soldul curent al unui cont se **calculează**, nu se stochează.
+- Paginarea folosește cursor pe `(occurred_on, id)`.
 
-### 6.2 Autorizare
-- Fiecare acces la date trece prin `requireMember(householdId, minRole)` pe server. `household_id` se ia din sesiune sau din ruta validată împotriva membership-ului, **niciodată din body fără verificare**.
-- Fiecare query din `*.repo.ts` filtrează explicit după `household_id`. Testele de integrare verifică izolarea (utilizatorul A primește 404 la resursele gospodăriei B, nu 403, ca să nu se dezvăluie existența lor).
+### 6.2 Autorizare (două straturi)
+- **Stratul 1, în aplicație (obligatoriu):** fiecare acces trece prin `requireMember(householdId, minRole)`. `household_id` vine din sesiune sau din ruta validată, **niciodată din body fără verificare**. Fiecare query din `*.repo.ts` filtrează după `household_id`.
+- **Stratul 2, în baza de date:** Row-Level Security activat pe toate tabelele cu `household_id`, încă de la crearea lor. Aplicația se conectează cu un rol fără drept de ocolire a RLS (`NOBYPASSRLS`) și setează `app.household_id` per tranzacție (`SET LOCAL`). Migrațiile rulează cu un rol separat. Workerul setează același context pentru fiecare job.
+- Testele de integrare verifică izolarea: utilizatorul A primește 404 la resursele gospodăriei B, iar un query fără context RLS nu întoarce niciun rând.
 
 ### 6.3 Securitate (OWASP ASVS nivel 2 ca referință)
-- Argon2id pentru parole, minimum 10 caractere, verificare opțională împotriva parolelor compromise (k-anonymity HIBP).
-- Cookie-uri `Secure`, `HttpOnly`, `SameSite=Lax`. Protecție CSRF pentru mutații (verificarea originii pentru route handlers și server actions).
-- Rate limiting (tabel în Postgres sau in-memory pe instanța unică) pentru login, înregistrare, resetare parolă și invitații.
-- Antete: CSP strictă (cu `frame-ancestors 'none'`), HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` care permite doar `camera=(self)`. CORS închis (aceeași origine).
-- **Secretele nu ajung în browser.** Orice modul care citește un secret (Stripe, SMTP, AI, baza de date) începe cu `import 'server-only'`. Doar variabilele `NEXT_PUBLIC_*` sunt publice, iar lista lor e documentată. CI scanează fișierele construite pentru client (`.next/static`) după tipare de secrete (`sk_live_`, `sk_test_`, `rk_live_`, `whsec_`, chei private) și după numele variabilelor secrete, și pică dacă găsește ceva.
-- Webhook-urile Stripe se acceptă doar cu semnătură verificată și se procesează o singură dată (`stripe_events.event_id` unic).
-- Mesaje de eroare uniforme, fără stack trace în producție. Loguri structurate (pino) **fără** sume, descrieri, emailuri complete sau tokenuri.
-- Nicio dată sensibilă în URL, analytics sau rapoartele de erori. Fără credențiale bancare și fără numere complete de card.
+- Argon2id, minimum 10 caractere, verificare opțională împotriva parolelor compromise (HIBP, k-anonymity).
+- Cookie-uri `Secure`, `HttpOnly`, `SameSite=Lax`. Protecție CSRF pentru mutații. Magic link de unică folosință, cu expirare scurtă.
+- Rate limiting pentru login, magic link, resetare, invitații și încărcarea de fișiere.
+- **Antete:** CSP completă cu nonce (`default-src 'self'`, `script-src 'self' 'nonce-…'`, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`), HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()`. CORS închis.
+- **Secretele nu ajung în browser.** Modulele care citesc secrete încep cu `import 'server-only'`; doar variabilele `NEXT_PUBLIC_*` sunt publice, iar lista lor e documentată. CI scanează `.next/static` după tipare de secrete (`sk_live_`, `sk_test_`, `rk_live_`, `whsec_`, chei private) și după numele variabilelor secrete, și pică dacă găsește ceva.
+- **Încărcare de fișiere:**
+  - tipul se verifică după conținut (magic bytes), nu după extensie;
+  - dimensiune maximă și cotă per gospodărie;
+  - EXIF eliminat (inclusiv locația);
+  - fișierele stau în afara directorului public și se servesc doar prin rute autorizate, cu nume generate;
+  - ZIP: limită de fișiere, de dimensiune totală și de raport de compresie; căile cu `..` sau absolute se resping.
+- **AI extern:** se folosește doar după consimțământ explicit (`consents`), cu furnizorul numit în politica de confidențialitate. Imaginile trimise extern nu conțin metadate. Fără consimțământ se folosește doar procesarea locală.
+- Webhook-urile Stripe se acceptă doar cu semnătură verificată și se procesează o singură dată.
+- Erori uniforme, fără stack trace în producție. Loguri structurate (pino) **fără** sume, descrieri, text OCR, emailuri complete sau tokenuri.
+- Nicio dată sensibilă în URL, analytics sau rapoartele de erori. Fără credențiale bancare și fără numere complete de card (din extrase se păstrează doar ultimele 4 cifre, dacă apar).
 - `pnpm audit` în CI, plus Dependabot sau Renovate.
-- GDPR: export complet al datelor utilizatorului (JSON + CSV), ștergerea contului, politica de retenție documentată în `docs/PRIVACY_NOTES.md`.
-- Aplicația nu se prezintă drept consultant financiar autorizat (mențiune în footer și în termeni).
+- **GDPR:** export complet (JSON, CSV și fișierele originale), ștergerea contului, retenția documentată în `docs/PRIVACY_NOTES.md` (de exemplu, imaginile originale se șterg după N luni, configurabil, iar datele extrase rămân).
+- Aplicația nu se prezintă drept consultant financiar autorizat. „Verdictul AI”, dacă există, e etichetat ca sugestie automată.
 
 ### 6.4 API și UX
-- Mutațiile trec prin server actions sau route handlers care apelează serviciile din module. Erorile au format uniform `{ error: { code, message, fields? } }` și coduri HTTP corecte.
-- Documentează în `docs/API.md` doar endpoint-urile care există.
-- Interfața: responsivă mobile-first (navigare jos pe mobil), accesibilitate WCAG 2.1 AA de bază (etichete, focus vizibil, contrast), stări de încărcare, eroare și gol, confirmări pentru operațiunile distructive.
-- Datele demo se creează doar printr-un script de seed explicit (`pnpm db:seed:demo`), într-o gospodărie marcată „Demo” și niciodată în producție.
+- Mutațiile trec prin server actions sau route handlers subțiri care apelează serviciile. Erori în formatul `{ error: { code, message, fields? } }`, cu coduri HTTP corecte. Documentează în `docs/API.md` doar ce există.
+- Endpoint `/api/health`, cu starea bazei de date, a storage-ului, a cozii și a furnizorului AI. Nu expune versiuni sau detalii interne fără autentificare.
+- Interfață mobile-first: navigare jos pe mobil, buton rapid „Scanează bon”, sidebar pe desktop. WCAG 2.1 AA de bază; stări de încărcare, eroare și gol; confirmări pentru operațiunile distructive.
+- **Onboarding în 3 pași** (adaugă un cont sau importă, setează un buget, creează un obiectiv), cu opțiunea de a încărca date demo într-o gospodărie marcată „Demo”, separată de datele reale.
+- Datele demo se creează doar prin `pnpm db:seed:demo` sau din onboarding, niciodată automat în producție.
 
 ## 7. Faze de implementare
 
 Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROADMAP.md` actualizat (complet, parțial, neimplementat); raportul din secțiunea 8.
 
-### Faza 0 — Fundație
-- Proiect Next.js + TypeScript strict, Tailwind, shadcn/ui, ESLint, Prettier, Vitest, Playwright.
-- `lib/config.ts` cu `APP_MODE` validat, plus modulul `entitlements` cu implementarea pentru modul `personal`.
-- Pasul din CI care scanează fișierele de client după secrete.
-- `docker-compose.dev.yml` cu Postgres 16 și Mailpit, `.env.example`, Drizzle configurat cu prima migrație goală.
-- GitHub Actions: install, lint, type-check, test (cu Postgres ca serviciu), build.
-- `lib/money.ts` complet, cu teste (parsare, formatare `ro-RO`, adunare, împărțire cu restul cel mai mare).
-- `README.md` (pornire locală), `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/adr/0001-stack.md`.
-- **Acceptare:** `pnpm install && pnpm dev` pornește aplicația cu instrucțiunile din README; CI e verde; testele pentru bani trec.
+### Faza 0 — Fundație și infrastructură
+- **Înainte de cod**, verifică și raportează starea sistemului: spațiul pe disc, Node, pnpm, nginx, Ollama, LiteLLM. Propune un plan de eliberare a discului (minimum 8 GB liberi) și **așteaptă aprobarea** înainte de orice ștergere sau instalare.
+- După aprobare: PostgreSQL 16 nativ, cu baze separate pentru dezvoltare și teste și cu roluri separate (`app`, cu `NOBYPASSRLS`, și `migrator`).
+- Proiect Next.js, TypeScript strict, Tailwind, shadcn/ui, ESLint, Prettier, Vitest, Playwright. `lib/config.ts` cu `APP_MODE`, modulul `entitlements` pentru `personal`, `lib/storage.ts`, `lib/money.ts` complet cu teste.
+- Unități systemd pentru `web` și `worker`, un vhost nginx pe un subdomeniu, cu HTTPS, și `/api/health`.
+- GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu), build, scanarea secretelor.
+- Documentație: `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md`, `docs/adr/0001-stack.md`.
+- **Sarcină umană, pornită în paralel:** colectarea a 50–100 de bonuri reale (inclusiv șterse, mototolite, lungi, cu reduceri și garanție SGR) și a câte 2–3 extrase pentru băncile folosite, anonimizate, în `fixtures/`, fiecare cu rezultatul așteptat completat manual.
+- **Acceptare:** aplicația goală răspunde prin nginx, pe HTTPS; `/api/health` e verde; CI e verde; testele pentru bani trec.
 
 ### Faza 1 — Autentificare, profil, gospodărie
-- Login, logout, resetare și schimbare parolă, listă de sesiuni active cu revocare.
-- Modul `personal`: `pnpm admin:create-user` și `pnpm admin:reset-password` din CLI; înregistrarea publică dezactivată.
-- Modul `saas`: înregistrare publică cu verificare email (Turnstile se adaugă în Faza 12).
-- Crearea automată a gospodăriei personale pentru fiecare utilizator nou, `user_preferences`, pagina de profil.
-- `lib/authz.ts`, middleware pentru rutele protejate, rate limiting, antete de securitate.
-- **Acceptare:** test E2E pentru login și logout în ambele moduri; în `saas`, înregistrare și verificare prin Mailpit; în `personal`, `/register` răspunde 404; teste pentru rate limiting și expirarea sesiunilor.
+- Login cu parolă și magic link, logout, resetare și schimbare parolă, listă de sesiuni active cu revocare.
+- `personal`: `pnpm admin:create-user` și `pnpm admin:reset-password`; înregistrarea publică e dezactivată. `saas`: înregistrare publică cu verificare email.
+- Gospodărie personală creată automat, `user_preferences`, pagina de profil. `lib/authz.ts`, context RLS, middleware pentru rutele protejate, rate limiting, antete de securitate.
+- **Acceptare:** E2E pentru login și logout în ambele moduri; în `personal`, `/register` răspunde 404; teste pentru rate limiting, expirarea sesiunilor și RLS. Revizuire de securitate.
 
 ### Faza 2 — Conturi, categorii, tranzacții, transferuri
-- CRUD pentru conturi (cu arhivare), categorii de sistem (seed) și personalizate, tranzacții cu căutare, filtre (perioadă, cont, categorie, tip), sortare și paginare cu cursor.
-- Transferuri atomice; soldul curent calculat.
-- **Acceptare:** teste pentru solduri, transferuri (inclusiv rollback la eroare) și **izolarea între gospodării** pentru fiecare endpoint; test E2E pentru adăugarea unei cheltuieli și verificarea soldului.
+- CRUD pentru conturi (cu arhivare), categorii de sistem și personalizate, tranzacții cu căutare, filtre, sortare și paginare cu cursor. Transferuri atomice; sold calculat.
+- **Acceptare:** teste pentru solduri, transferuri (inclusiv rollback) și izolarea între gospodării pentru fiecare endpoint; E2E pentru adăugarea unei cheltuieli și verificarea soldului.
 
-### Faza 3 — Dashboard, bugete, rapoarte, export
-- Dashboard pentru perioada selectată: venituri, cheltuieli, economii, solduri pe cont, distribuție pe categorii, comparație cu perioada anterioară. Totalurile sunt separate pe monedă.
-- Bugete lunare pe categorie: progres, sumă rămasă, avertizare **în aplicație** la pragul configurat.
-- Raport lunar și export CSV (regulile din 5.3), limitat strict la gospodăria curentă.
-- **Acceptare:** teste pentru calculele de buget și de perioadă (inclusiv limitele de lună în `Europe/Bucharest`), pentru conținutul CSV și pentru faptul că exportul nu conține date din altă gospodărie.
+### Faza 3 — Dashboard, bugete, obiective, rapoarte, export, backup
+- Dashboard: total lunar, pe categorii, trend, comparație cu luna anterioară, totaluri separate pe monedă. Onboarding în 3 pași.
+- Bugete generale și pe categorie, cu semafor (verde sub pragul de avertizare, galben între prag și 100%, roșu peste 100%) și avertizare în aplicație.
+- Obiective: țintă, termen, progres, stare.
+- Raport lunar și export CSV.
+- **Backup zilnic** (`pg_dump` plus fișierele din `storage`), criptat, copiat în afara containerului, cu retenție. Restaurarea este **testată efectiv**. Fără backup testat nu se introduc date reale.
+- **Acceptare:** teste pentru semafor și limitele de lună în `Europe/Bucharest`, pentru conținutul CSV și izolarea exportului; restaurarea din backup executată și documentată.
 
-### Faza 4 — Recurențe
-- CRUD pentru reguli recurente; worker pg-boss care rulează orar și generează ocurențele scadente.
-- Idempotență prin cheia unică `recurring_occurrences(rule_id, occurrence_date)` și o tranzacție DB per ocurență. Recuperarea ocurențelor ratate (catch-up) este limitată la un număr configurabil.
-- Cazuri limită: ziua 31 în lunile scurte (se folosește ultima zi a lunii), 29 februarie, dezactivarea, `end_on`.
-- **Acceptare:** teste care rulează jobul de două ori, sau în paralel, și verifică că nu apar duplicate; teste pentru cazurile limită de calendar.
+> **Reper v0.1 personal:** după Faza 3, aplicația poate fi folosită zilnic cu introducere manuală.
 
-### Faza 5 — Hardening, PWA, accesibilitate, performanță
-- Manifest PWA, iconițe, service worker care pune în cache **doar asset-uri statice** (nu `/api/` și nu pagini cu date), plus pagina offline.
-- Audit de accesibilitate și performanță (Lighthouse ≥ 90 la accesibilitate), revizuire de securitate pe checklist-ul `docs/SECURITY_CHECKLIST.md`.
-- Export și ștergere GDPR pentru contul utilizatorului.
-- **Acceptare:** checklist-ul de securitate completat cu dovezi; test E2E pentru exportul și ștergerea contului.
+### Faza 4 — Rezervată pentru stabilizare
+- Corectarea problemelor găsite în prima săptămână de folosire reală, accesibilitate de bază și performanță. Fără funcții noi. Se poate sări dacă nu e nevoie.
 
-### Faza 6 — Familie (diferențiatorul principal)
-- Invitații în gospodărie prin link cu token (`/join/[token]`, expirabil, de unică folosință), roluri, părăsirea gospodăriei și eliminarea unui membru.
-- Conturi personale și comune, bugete comune și personale.
-- Împărțirea cheltuielilor (`transaction_splits`: egal, procente, sume fixe), calculul soldurilor reciproce („cine cui datorează”), înregistrarea decontărilor (`settlements`).
-- **Acceptare:** teste pentru împărțirea exactă (suma părților = total), pentru solduri reciproce cu 2 și 3 membri și pentru permisiunile pe roluri.
+### Faza 5 — Recurențe
+- CRUD pentru reguli; worker pg-boss care rulează orar. Idempotență prin `recurring_occurrences`, recuperare limitată a ocurențelor ratate, cazurile ziua 31 și 29 februarie, dezactivare, `end_on`.
+- **Acceptare:** jobul rulat de două ori sau în paralel nu creează duplicate; testele pentru cazurile de calendar trec.
 
-### Faza 7 — Deploy VPS, backup și restaurare
-- Dockerfile multi-stage (utilizator non-root, imagine minimă), `docker-compose.prod.yml` cu versiuni fixate, healthcheck-uri, volume persistente, rețea internă (Postgres neexpus public), restart policy și rotație de loguri.
-- Caddy cu TLS; migrațiile rulate ca pas separat înainte de pornirea aplicației.
-- Backup zilnic cu `pg_dump`, criptat, copiat în afara VPS-ului, cu retenție. Script de restaurare **testat efectiv** într-un mediu separat.
-- `docs/DEPLOY.md`: instalare, upgrade, rollback, backup și restaurare.
-- **Acceptare:** restaurarea dintr-un backup real a fost executată și documentată, cu rezultatul.
+### Faza 6 — Ingestia bonurilor (miezul produsului)
+- Încărcare foto sau PDF, una sau mai multe fișiere; `documents` și `processing_batches`; coadă pg-boss; stări vizibile în interfață.
+- Preprocesare cu sharp: rotire după EXIF, decupare, contrast, redimensionare; eliminarea EXIF.
+- Pipeline de extracție prin `lib/ai`, cu furnizor local întâi; rezervă externă doar cu consimțământ. Ieșire JSON validată cu Zod, conform 5.5.
+- **Bon lung din 2–4 poze:** liniile se combină în ordine, iar cele duplicate din zona de suprapunere se elimină.
+- Ecran de verificare înainte de salvare: liniile, categoriile propuse și nepotrivirile evidențiate. Corecturile actualizează `product_aliases`.
+- Deduplicare: fișier identic (sha256), poză aproape identică (hash perceptual), același bon fotografiat din nou (CUI + număr + dată + total).
+- Căutare în textul OCR. Limite prin `entitlements`, cotă de stocare.
+- **Evaluare:** comandă `pnpm eval:receipts`, care rulează pipeline-ul pe `fixtures/receipts` și raportează, per furnizor: acuratețea pe total, dată, CUI, linii, timpul mediu și costul estimat.
+- **Acceptare:** rezultatul evaluării e inclus în raport, cu cifrele exacte; furnizorul implicit e ales pe baza lor și documentat într-un ADR; teste pentru validările din 5.5, deduplicare și securitatea încărcării. Revizuire de securitate.
 
-> **Reper: v1.0 personal.** După Faza 7, aplicația rulează în producție cu `APP_MODE=personal` pentru familia ta. Fazele 8–11 adaugă funcții comune ambelor moduri; fazele 12–13 construiesc varianta `saas`. Ordinea dintre ele se poate schimba, dar fazele 12–13 nu încep înainte ca v1.0 personal să fie stabil.
+### Faza 7 — Extrase bancare, potrivire, detectarea abonamentelor
+- Import CSV, Excel, PDF și ZIP; detectarea băncii; **un parser per bancă**, începând cu banca folosită de tine; fiecare parser are fișier de test în `fixtures/statements`.
+- Previzualizare, mapare de coloane pentru CSV necunoscute, deduplicare după (cont, dată, sumă, descriere normalizată, referință), anularea unui import întreg.
+- Avertizare pentru lunile fără extras pe un cont.
+- **Potrivire bon ↔ tranzacție:** sumă exactă, fereastră de ±3 zile, asemănarea comerciantului (CUI sau nume normalizat). Fiecare sugestie are scor și motive vizibile; utilizatorul o confirmă sau o respinge. Nu se creează niciodată două tranzacții pentru aceeași cheltuială.
+- Detectarea plăților recurente din istoric (comerciant, sumă similară, periodicitate), propuse ca reguli în Faza 5.
+- **Acceptare:** teste pe fișierele de test ale fiecărei bănci; teste pentru importul dublu, potrivire (cazuri pozitive, negative și ambigue) și ZIP-uri malițioase. Revizuire de securitate.
 
-### Funcții comune ambelor moduri (câte o fază per funcție, în această ordine)
-8. **Import CSV/Excel** cu previzualizare, mapare de coloane, profiluri per bancă (BT, BCR, ING, Raiffeisen, Revolut), deduplicare după (dată, sumă, descriere normalizată) și anularea unui import întreg.
-9. **Bonuri cu AI și OCR:** consimțământ explicit înainte de prima trimitere la un furnizor extern, plus mențiunea furnizorului în politica de confidențialitate. Modelul se configurează din env, nu se scrie în cod. Răspunsul este JSON validat cu Zod (magazin, CUI, dată, produse, TVA 21% și 11%, total), cu verificarea că suma produselor egalează totalul și ecran de revizuire înainte de salvare. Bonurile lungi se combină din 2–4 poze, cu eliminarea duplicatelor. Procesarea se face asincron, în coada pg-boss, cu stare vizibilă în interfață (în așteptare, procesat, eșuat). Limita zilnică per gospodărie trece prin `entitlements`, iar bugetul global de cost vine din env. Pozele se stochează criptat, cu retenție limitată.
-10. **Import extrase PDF și ZIP** (procesare în worker, limite de dimensiune, protecție zip-bomb și path traversal).
-11. Obiective de economisire, liste de cumpărături cu reconciliere din bonuri, notificări email sau Telegram, conversie de valută cu cursul BNR.
+### Faza 8 — Familie
+- Invitații prin link cu token (`/join/[token]`, expirabil, de unică folosință), roluri, părăsirea gospodăriei și eliminarea unui membru.
+- Conturi și bugete personale și comune; vizibilitatea per membru documentată.
+- Împărțirea cheltuielilor (egal, procente, sume fixe), solduri reciproce, decontări (inclusiv parțiale).
+- **Acceptare:** suma părților este egală cu totalul; solduri corecte cu 2 și 3 membri; permisiunile pe roluri sunt testate. Revizuire de securitate.
 
-### Varianta SaaS (doar `APP_MODE=saas`)
+### Faza 9 — Hardening, PWA și offline
+- Manifest PWA, iconițe, ghid de instalare pentru iOS și Android.
+- Service worker care pune în cache doar asset-urile statice și pagina `/offline` (care trebuie să existe).
+- **Scanare offline:** pozele se păstrează temporar în IndexedDB, se încarcă automat la revenirea conexiunii și se șterg local după confirmarea serverului. Starea „în așteptare” este vizibilă.
+- Audit de accesibilitate (Lighthouse ≥ 90) și de securitate pe `docs/SECURITY_CHECKLIST.md`. Export și ștergere GDPR.
+- **Acceptare:** E2E pentru scanarea în modul offline și sincronizarea ulterioară; checklist-ul completat cu dovezi; E2E pentru export și ștergerea contului.
 
-**Faza 12 — Fundația SaaS**
-- Pagini publice: prezentare, `/pricing` (afișează planurile din `plans`, fără plată încă), `/help`, `/terms`, `/privacy` cu textele juridice revizuite de un om, nu generate și publicate automat.
-- Turnstile pe înregistrare și pe resetarea parolei.
-- Feedback și raportare de bug-uri din aplicație (cu captură opțională a paginii, fără date financiare), anunțuri de la administrator către utilizatori (`broadcasts`).
-- Panou de administrare: utilizatori, gospodării, stare joburi, feedback. Acțiunile administratorului se înregistrează în `audit_events`. Administratorul **nu vede** tranzacțiile utilizatorilor.
-- Monitorizarea erorilor (GlitchTip sau Sentry), cu filtrarea datelor sensibile.
-- Nume de produs definitiv (vezi secțiunea 9) și `robots.txt` pentru paginile publice.
-- **Acceptare:** E2E pentru înregistrare publică cu Turnstile în mod test; teste care confirmă că rutele de admin răspund 404 pentru non-administratori și în modul `personal`; testele E2E de bază trec în continuare în modul `personal`.
+> **Reper v1.0 personal:** după Faza 9, varianta `personal` este completă.
 
-**Faza 13 — Planuri, plăți, recomandări**
-- Tabelele `plans` și `subscriptions`. Implementarea `saas` a `entitlements`, cu limitele planului (de exemplu Starter: 2 bugete, 2 obiective; Family: până la 6 membri). Limitele exacte și prețurile sunt decizia ta, configurate în date, nu în cod.
-- Stripe Checkout și Customer Portal, webhook-uri cu semnătură verificată și procesare idempotentă, perioadă de probă, comportament clar la expirare (datele rămân accesibile pentru citire și export, nu se șterg).
-- Recomandări: link per utilizator, recompensă aplicată o singură dată, protecție împotriva auto-recomandării.
-- Migrația documentată `personal` → `saas`: gospodăriile existente primesc planul „fondator”.
-- **Acceptare:** teste pentru fiecare limită de plan aplicată pe server; webhook-uri simulate cu Stripe CLI, inclusiv același eveniment primit de două ori; test că o gospodărie cu abonament expirat își poate exporta datele.
+### Faza 10 — Liste de cumpărături și prețuri (comună ambelor moduri)
+- Liste comune, bifare la raft, comparație listă ↔ bon (produse neplanificate, produse uitate).
+- Prețuri per produs normalizat și per magazin, evoluție în timp, cel mai ieftin magazin pentru produsele tale. Rezultatele sunt afișate doar când există suficiente date (prag configurabil).
+- Export Excel și PDF.
 
-Nu prezenta aceste funcții ca implementate până nu sunt construite și testate. Nu pretinde sincronizare bancară fără o integrare reală verificată (de exemplu un agregator PSD2 licențiat).
+### Faza 11 — Fundația SaaS (doar `APP_MODE=saas`)
+- Pagini publice randate pe server: prezentare, `/pricing`, `/help` (ghid, întrebări frecvente), `/terms`, `/privacy`, cu texte juridice revizuite de un om.
+- Turnstile, Google OAuth, traducerea în engleză.
+- Feedback și raportare de bug-uri din aplicație (fără date financiare), anunțuri de la administrator.
+- Panou de administrare: utilizatori, gospodării, joburi, feedback. Acțiunile administratorului sunt auditate. Administratorul **nu vede** datele financiare ale utilizatorilor.
+- Monitorizarea erorilor; analytics doar pe paginile publice; nume de produs definitiv.
+- **Acceptare:** rutele de admin răspund 404 pentru non-administratori și în modul `personal`; testele E2E de bază trec în ambele moduri.
+
+### Faza 12 — Planuri, plăți, recomandări (doar `saas`)
+- `plans` și `subscriptions`, implementarea `saas` a `entitlements`. **Limitele și prețurile sunt decizia ta**, stabilite după costul pe document măsurat în Faza 6, configurate în date.
+- Stripe Checkout și Customer Portal, lunar și anual, webhook-uri idempotente, perioadă de probă. La expirarea abonamentului, datele rămân accesibile pentru citire și export.
+- Recomandări: cod per utilizator, distribuire (Web Share API, link copiat), recompensă aplicată o singură dată, plafon, protecție împotriva auto-recomandării.
+- Migrația documentată `personal` → `saas`, cu planul „fondator”.
+- **Acceptare:** fiecare limită de plan e testată pe server; webhook-urile sunt simulate cu Stripe CLI, inclusiv evenimente duplicate; o gospodărie cu abonament expirat își poate exporta datele. Revizuire de securitate.
+
+### Opțional, după validare
+Conversia valutară cu cursul BNR, notificări push, email și Telegram, alte limbi, mai multe bănci, integrare PSD2 doar printr-un agregator licențiat și verificat. Nu prezenta aceste funcții ca implementate până nu sunt construite și testate.
 
 ## 8. Raport obligatoriu la finalul fiecărei faze
 
@@ -277,17 +377,23 @@ Nu prezenta aceste funcții ca implementate până nu sunt construite și testat
 3. Comenzile de verificare rulate și rezultatele exacte (inclusiv eșecurile).
 4. Instrucțiunile de pornire și, dacă e cazul, de deploy.
 5. Variabilele de mediu noi (doar numele și scopul, fără valori).
-6. Riscurile, limitările și ADR-urile noi.
+6. Riscurile, limitările, ADR-urile noi și constatările revizuirii de securitate.
 7. Următorii pași prioritizați.
 
 ## 9. Riscuri cunoscute
 
-- **Branding (doar pentru `saas`):** „FINpulse” este foarte apropiat de numele produsului de referință („FINpulse/day”). Înainte de lansarea publică alege un nume distinct și verifică disponibilitatea la OSIM și EUIPO și a domeniului. Până atunci, folosește un nume configurabil (`NEXT_PUBLIC_APP_NAME`).
-- **Datele financiare sunt sensibile:** o scurgere de date înseamnă obligații GDPR de notificare. De aceea izolarea și logurile au testele lor dedicate.
-- **Costul AI pe bon** trebuie măsurat înainte de stabilirea limitelor de plan.
-- **Formatele extraselor** se schimbă fără anunț. Profilurile de bancă trebuie să aibă teste pe fișiere de exemplu anonimizate.
-- **Două moduri, un singur cod:** riscul principal e ca o funcție SaaS să se scurgă în modul `personal` sau invers. De aceea logica trece prin `entitlements`, iar CI rulează testele E2E în ambele moduri.
-- **Obligații legale în `saas`:** termeni și politică de confidențialitate reale, acord de prelucrare a datelor cu furnizorii (hosting, email, AI, Stripe), facturare și TVA pentru abonamente. Nu se lansează public fără ele.
+| Risc | Impact | Măsură |
+|---|---|---|
+| OCR slab pe bonuri reale | Produsul nu convinge | Set de validare înainte de cod; evaluare per furnizor (Faza 6); ecran de verificare obligatoriu |
+| Disc aproape plin (5,3 GB liberi) | Totul se oprește | Eliberare înainte de Faza 0; comprimarea imaginilor; cotă; spațiul ocupat afișat în `/api/health`; storage extern la nevoie |
+| Modele AI locale mari | Nu încap pe disc sau în RAM | Se măsoară în Faza 6; rezervă externă cu consimțământ |
+| Formatele extraselor se schimbă | Importul se strică | Un parser per bancă, fișiere de test și alertă la eșecul de parsare |
+| Erori în logica banilor | Grav, mai ales în familie | `bigint` în unități minore, restul cel mai mare, teste dedicate |
+| Funcțiile adăugate prea devreme | Nu se termină nimic | Fazele 10–12 doar după v1.0 personal |
+| O funcție SaaS ajunsă în modul `personal`, sau invers | Comportament greșit | `entitlements` și testele E2E în ambele moduri |
+| Branding: „FINpulse” aproape identic cu „FINpulse/day” | Risc juridic în `saas` | Nume distinct înainte de lansarea publică, verificat la OSIM, EUIPO și pe domeniu; până atunci `NEXT_PUBLIC_APP_NAME` |
+| Obligații legale în `saas` | Lansare blocată | Termeni și politică de confidențialitate reale, acorduri de prelucrare cu furnizorii, facturare și TVA pentru abonamente |
+| Scurgere de date financiare | Notificare GDPR, încredere pierdută | Autorizare în două straturi, loguri fără date sensibile, teste de izolare |
 
 ---
 
