@@ -306,7 +306,11 @@ Cerințe:
 - Aplicația nu se prezintă drept consultant financiar autorizat. „Verdictul AI”, dacă există, e etichetat ca sugestie automată.
 
 ### 6.4 API și UX
-- Mutațiile trec prin server actions sau route handlers subțiri care apelează serviciile. Erori în formatul `{ error: { code, message, fields? } }`, cu coduri HTTP corecte. Documentează în `docs/API.md` doar ce există.
+- **API REST versionat `/api/v1/`** (route handlers subțiri care apelează serviciile din `modules/`), folosit de clientul Android (`docs/FINET_ANDROID_MASTER_PROMPT.md`) și de orice alt client. Interfața web poate folosi server actions, dar acestea apelează **aceleași servicii**, deci regulile de business există într-un singur loc.
+- Contractul API e descris în OpenAPI 3.1, generat din schemele Zod (`docs/openapi.json`, verificat în CI), și documentat în `docs/API.md`. Se documentează doar ce există.
+- Erori în formatul `{ error: { code, message, fields? } }`, cu coduri HTTP corecte. Paginare cu cursor (`?cursor=…&limit=…`, răspuns `{ data, nextCursor }`).
+- Sumele circulă în JSON ca **numere întregi în unități minore** (`amountMinor`, plus `currency`), niciodată ca zecimale. Valorile rămân sub 2^53, deci sunt sigure în JavaScript și Dart. Datele calendaristice circulă ca `YYYY-MM-DD`, momentele ca ISO 8601 în UTC.
+- Mutațiile `POST` acceptă antetul `Idempotency-Key`: aceeași cheie, trimisă din nou în 24 de ore, întoarce răspunsul inițial fără o a doua scriere (tabel `idempotency_keys`: household_id, key, request_hash, response, created_at).
 - Endpoint `/api/health`, cu starea bazei de date, a storage-ului, a cozii și a furnizorului AI. Nu expune versiuni sau detalii interne fără autentificare.
 - Interfață mobile-first: navigare jos pe mobil, buton rapid „Scanează bon”, sidebar pe desktop. WCAG 2.1 AA de bază; stări de încărcare, eroare și gol; confirmări pentru operațiunile distructive.
 - **Onboarding în 3 pași** (adaugă un cont sau importă, setează un buget, creează un obiectiv), cu opțiunea de a încărca date demo într-o gospodărie marcată „Demo”, separată de datele reale.
@@ -328,12 +332,14 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 
 ### Faza 1 — Autentificare, profil, gospodărie
 - Login cu parolă și magic link, logout, resetare și schimbare parolă, listă de sesiuni active cu revocare.
+- Pentru clienții mobili: pluginul `bearer` din Better Auth (sesiunea transmisă în antetul `Authorization`, nu prin cookie), cu aceeași expirare și revocare ca sesiunile web. Login-ul mobil are rate limiting propriu, iar sesiunea mobilă apare în lista de sesiuni ca „Telefon Android”.
 - `personal`: `pnpm admin:create-user` și `pnpm admin:reset-password`; înregistrarea publică e dezactivată. `saas`: înregistrare publică cu verificare email.
 - Gospodărie personală creată automat, `user_preferences`, pagina de profil. `lib/authz.ts`, context RLS, middleware pentru rutele protejate, rate limiting, antete de securitate.
 - **Acceptare:** E2E pentru login și logout în ambele moduri; în `personal`, `/register` răspunde 404; teste pentru rate limiting, expirarea sesiunilor și RLS. Revizuire de securitate.
 
 ### Faza 2 — Conturi, categorii, tranzacții, transferuri
 - CRUD pentru conturi (cu arhivare), categorii de sistem și personalizate, tranzacții cu căutare, filtre, sortare și paginare cu cursor. Transferuri atomice; sold calculat.
+- Primele endpointuri `/api/v1/` (cont, gospodării, conturi, categorii, tranzacții, transferuri), cu `Idempotency-Key`, OpenAPI generat și teste de integrare care verifică izolarea între gospodării prin API.
 - **Acceptare:** teste pentru solduri, transferuri (inclusiv rollback) și izolarea între gospodării pentru fiecare endpoint; E2E pentru adăugarea unei cheltuieli și verificarea soldului.
 
 ### Faza 3 — Dashboard, bugete, obiective, rapoarte, export, backup
