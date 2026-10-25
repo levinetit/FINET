@@ -122,7 +122,7 @@ services:
     volumes: ["..:/workspaces/FINET:cached"]
     command: sleep infinity
   db:
-    image: postgres:17          # versiunea majoră a proiectului Supabase, din ops/postgres/VERSION
+    image: postgres:<versiune>  # versiunea majoră a proiectului Supabase, din ops/postgres/VERSION
     environment: { POSTGRES_USER: finet, POSTGRES_PASSWORD: finet_dev, POSTGRES_DB: finet_dev }
   mailpit:
     image: axllent/mailpit
