@@ -1,7 +1,8 @@
 # FINET România — MASTER PROMPT pentru Claude Code (v3)
 
 > **Cum se folosește acest document**
-> - Secțiunile 1–6 sunt **reguli permanente**: se aplică în fiecare sesiune. Faza 0 creează un `CLAUDE.md` scurt la rădăcina repository-ului, care trimite la acest document și la `docs/ROADMAP.md` (fără să copieze regulile, ca să nu existe două versiuni).
+> - Secțiunile 1–6 sunt **reguli permanente**: se aplică în fiecare sesiune. `CLAUDE.md` de la rădăcina repository-ului trimite la acest document și la `docs/ROADMAP.md` (fără să copieze regulile, ca să nu existe două versiuni).
+> - Fazele se pot porni și din GitHub, printr-un issue „Fază FINET” (agentul rulează în GitHub Actions; vezi `docs/GHID_CONSTRUIRE.md`, secțiunea 8.4). Faza 0 se rulează dintr-o sesiune Claude Code, pentru că modifică workflow-urile GitHub.
 > - Secțiunea 7 descrie **fazele**. Rulează **o singură fază per sesiune**, pe un branch dedicat (`phase/NN-nume`), cu PR și revizuire umană înainte de faza următoare.
 > - Prompt de pornire per sesiune: *„Citește `docs/FINET_MASTER_PROMPT.md` și `docs/ROADMAP.md`. Execută Faza N. Oprește-te la criteriile ei de acceptare și raportează conform secțiunii 8.”*
 
@@ -86,7 +87,7 @@ Rapoartele se contrazic pentru Starter: unul spune 1 document pe zi, altul 50 de
 - **Disc: 5,3 GB liberi din 20 GB.** Faza 0 nu începe până nu sunt cel puțin 8 GB liberi. Pozele bonurilor au nevoie de comprimare, retenție și cotă.
 - nginx rulează deja pe portul 80 ca reverse proxy; pentru FINET va asculta doar pe `127.0.0.1`, în spatele tunelului Cloudflare.
 - Ollama local pe `127.0.0.1:11434` și o poartă LiteLLM existentă, utile pentru AI local.
-- PostgreSQL nu este instalat.
+- PostgreSQL nu se instalează pe server: baza de date e pe **Supabase** (3.2).
 - Monitorizarea existentă (agent-queue, cron-uri) se integrează printr-un endpoint de sănătate.
 - **Acces de rețea: Cloudflare Zero Trust** (decizia operatorului). Serverul nu deschide niciun port spre internet.
   - **Cloudflare Tunnel:** pe LXC rulează `cloudflared` ca serviciu systemd (`cloudflared.service`), cu o conexiune doar de ieșire către Cloudflare. Tunelul trimite hostname-ul aplicației (de exemplu `finet.<domeniul-tău>`, cu domeniul gestionat în Cloudflare DNS) către nginx-ul local (`http://127.0.0.1:80`). HTTPS-ul public îl face Cloudflare; între Cloudflare și server traficul trece prin tunelul criptat. Configurația tunelului (`ops/cloudflare/config.yml`) e în repository fără secrete; fișierul de credențiale al tunelului stă doar pe server.
@@ -104,11 +105,11 @@ Faza 0 verifică aceste date pe sistem și le corectează în `docs/INFRA.md`. N
 
 - **Aplicație:** Next.js (ultima versiune majoră stabilă la data Fazei 0, minimum 15), App Router, TypeScript în mod `strict`. Monolit modular.
 - **UI:** Tailwind CSS + shadcn/ui, Recharts, lucide-react. Temă luminoasă și închisă.
-- **Baza de date:** PostgreSQL, **mereu ultima versiune majoră stabilă** (la 25.10.2026: PostgreSQL 18, actualizarea 18.6; PostgreSQL 19 e planificat ca stabil pe 19.11.2026). Se instalează nativ din repository-ul oficial PostgreSQL pentru Debian (PGDG, `apt.postgresql.org`), nu din pachetele standard Debian, care rămân în urmă. Aceeași versiune majoră în dezvoltare, în CI și în producție. Actualizarea se face automat, după regulile din secțiunea 3.5. Drizzle ORM și migrații Drizzle Kit, versionate în repository.
+- **Baza de date:** PostgreSQL găzduit de **Supabase** (decizia operatorului), folosit **doar ca bază de date**: Drizzle ORM și migrații Drizzle Kit versionate în repository, rolurile și RLS-ul FINET (6.2), pg-boss pentru joburi. Nu se folosesc Supabase Auth, clientul `supabase-js`, cheile `anon`/`service_role` sau accesul direct la bază din browser ori din telefon: tot accesul trece prin serverul FINET. Detalii în secțiunea 3.5.
 - **Autentificare:** Better Auth: email și parolă (Argon2id), magic link, sesiuni stocate în baza de date (expirabile și revocabile). Google OAuth vine în faza `saas`.
 - **Validare:** Zod, cu aceleași scheme pe client și pe server.
 - **Joburi:** pg-boss (coadă peste Postgres, fără Redis), într-un proces worker separat.
-- **Fișiere:** sistem de fișiere local, în spatele unei interfețe `storage` compatibile S3, ca mutarea pe S3 sau R2 să nu ceară modificări de cod. Imagini procesate cu sharp.
+- **Fișiere:** interfața `storage` compatibilă S3, cu două implementări: **Supabase Storage prin protocolul S3** (bucket privat, implicit, ca pozele să nu ocupe discul LXC) și sistemul de fișiere local (pentru dezvoltare sau dacă operatorul preferă). Fișierele se servesc doar prin rute FINET autorizate, niciodată prin URL-uri publice Supabase. Imagini procesate cu sharp.
 - **AI și OCR:** interfață `ai/provider`, apelată doar prin LiteLLM, cu un furnizor local (model vision prin Ollama și/sau Tesseract `ron`) și un furnizor extern opțional ca rezervă. Alegerea implicită se face pe baza rezultatelor pe setul de validare (Faza 6), nu din presupuneri.
 - **Email:** SMTP prin Nodemailer. Opțional în modul `personal`.
 - **Teste:** Vitest pentru unit și integrare (pe un Postgres real, bază separată de test), Playwright pentru E2E.
@@ -192,31 +193,39 @@ Referința vizuală completă este demo-ul din `docs/demo/finet-demo.html` (date
 
 **Elemente proprii:** bonul fiscal afișat ca hârtie termică lângă datele extrase; rândurile cu încredere scăzută evidențiate cu `marker`; semaforul bugetelor; pe telefon, navigare jos cu 5 butoane (Acasă, Tranzacții, Scanează, Rapoarte, Mai mult), iar pe desktop meniu lateral cu toate paginile.
 
-### 3.5 Actualizarea automată a PostgreSQL
+### 3.5 Baza de date pe Supabase
 
-Scop: serverul rulează mereu ultima versiune stabilă de PostgreSQL, fără intervenție manuală, dar fără să riște datele. Toată automatizarea stă în `ops/postgres/`, cu README, și se configurează din `ops/postgres/upgrade.env` (fără secrete în repository).
+**Proiectul Supabase**
+- Regiune în UE (de exemplu Frankfurt, `eu-central-1`), cât mai aproape de server.
+- Un proiect pentru producție. Dezvoltarea și CI folosesc PostgreSQL local sau în container (aceeași versiune majoră), nu proiectul de producție.
+- Parola bazei de date generată de Supabase și păstrată doar în `/etc/finet/finet.env` și în managerul de parole al operatorului.
+- Supabase prelucrează datele (bază de date și fișiere), deci se notează ca împuternicit în `docs/PRIVACY_NOTES.md` (și în politica de confidențialitate, în `saas`), cu regiunea aleasă.
 
-**1. Actualizări minore (de exemplu 18.6 → 18.7): complet automate.**
-- `unattended-upgrades` configurat pentru originea PGDG, doar pentru pachetele `postgresql-<versiune curentă>*`.
-- Repornirea serverului PostgreSQL se face într-o fereastră de mentenanță (implicit 04:00–05:00, ora României), nu imediat după instalare.
-- După repornire: `/api/health` trebuie să fie verde în 5 minute; altfel, notificare către administrator.
-- Fiecare actualizare se scrie în jurnalul de mentenanță (`ops/postgres/upgrade.log`) și apare în pagina de administrare.
+**Securitatea proiectului (obligatorie, verificată în Faza 0)**
+- Tabelele FINET stau în schema **`finet`**, nu în `public`. Schema `finet` **nu** se adaugă la „Exposed schemas” din setările Data API, iar Data API-ul (PostgREST) se dezactivează dacă panoul permite. Rolurile `anon` și `authenticated` nu primesc niciun drept pe schema `finet`.
+- Cheile `anon` și `service_role` nu se folosesc în FINET și nu apar în cod, în APK sau în variabilele publice.
+- **SSL obligatoriu** (SSL enforcement pornit), cu conexiuni `sslmode=verify-full` pe certificatul CA Supabase.
+- **Network Restrictions:** acces la bază doar de la adresa IP de ieșire a serverului LXC (și, temporar, de la IP-ul operatorului pentru administrare).
+- Roluri proprii, create prin SQL: `finet_migrator` (proprietarul schemei, folosit doar pentru migrații) și `finet_app` (`NOBYPASSRLS`, doar drepturi pe date). Utilizatorul `postgres` al Supabase se folosește doar pentru crearea acestor roluri.
 
-**2. Actualizări majore (de exemplu 18 → 19): automate, dar cu porți de siguranță.** Un job săptămânal (`finet-pg-upgrade.timer`, systemd) rulează `ops/postgres/major-upgrade.sh`, care face, în ordine:
-1. **Detectare:** află ultima versiune majoră stabilă din PGDG. Continuă doar dacă există o versiune mai nouă decât cea instalată **și** aceasta a ajuns la prima actualizare minoră (X.1) **și** au trecut cel puțin `PG_MAJOR_MIN_AGE_DAYS` zile (implicit 30) de la lansare. Altfel se oprește fără să schimbe nimic.
-2. **Verificare de compatibilitate:** instalează noua versiune alături de cea veche (fără să o pornească pentru producție) și rulează `pg_upgrade --check`. Verifică extensiile folosite.
-3. **Repetiție pe o copie:** restaurează ultimul backup într-un cluster temporar pe noua versiune, rulează migrațiile Drizzle și suita de teste de integrare FINET pe el. Dacă ceva pică, se oprește și trimite raportul.
-4. **Spațiu pe disc:** verifică dacă există loc pentru backup plus upgrade (mod `--copy`, care păstrează vechiul cluster intact pentru revenire). Dacă nu, se oprește și cere eliberarea spațiului.
-5. **Upgrade-ul propriu-zis**, doar în fereastra de mentenanță: backup nou, verificat prin restaurare de probă; oprirea `finet-web` și `finet-worker`; `pg_upgrade --copy`; pornirea noului cluster; `ANALYZE` (`vacuumdb --all --analyze-in-stages`); pornirea aplicației.
-6. **Verificare după upgrade:** `/api/health`, câteva interogări de control (numărul de tranzacții și suma lor pe fiecare gospodărie, comparate cu valorile dinainte) și testele de fum. **Dacă orice verificare pică, revenire automată** la clusterul vechi (care a rămas neatins), apoi notificare.
-7. **Curățenie:** clusterul vechi se păstrează `PG_OLD_CLUSTER_KEEP_DAYS` zile (implicit 14), apoi se șterge automat. Versiunea nouă devine implicită în CI (vezi mai jos) printr-un PR automat.
-- `PG_AUTO_MAJOR_UPGRADE=true` pornește pașii 5–7. Cu `false`, jobul face doar pașii 1–4 și trimite raportul, iar upgrade-ul așteaptă confirmarea administratorului.
-- Fiecare rulare scrie un raport (ce versiune, ce verificări au trecut, durata, dacă a fost revenire) și trimite notificarea pe canalul configurat (email sau Telegram).
+**Conexiuni**
+- Aplicația web și API-ul: prin pooler-ul Supabase (Supavisor), în **modul tranzacție** (portul 6543), cu instrucțiunile pregătite dezactivate în driver (`prepare: false`). Contextul RLS se setează cu `SET LOCAL` în aceeași tranzacție, compatibil cu acest mod.
+- Workerul (pg-boss) și migrațiile: conexiune în **modul sesiune** (portul 5432 al pooler-ului) sau conexiunea directă, cu un număr mic de conexiuni.
+- Limitele de conexiuni ale planului se notează în `docs/INFRA.md`, iar pool-urile se dimensionează sub ele.
 
-**3. CI urmărește aceeași versiune.**
-- Workflow-ul de teste folosește imaginea `postgres:<versiunea majoră din producție>`, citită dintr-un singur fișier (`ops/postgres/VERSION`).
-- Un workflow programat (săptămânal) rulează testele și pe ultima versiune majoră publicată (inclusiv beta și RC, marcate ca „informativ”), ca problemele de compatibilitate să apară înainte de upgrade.
-- După un upgrade major reușit în producție, scriptul actualizează `ops/postgres/VERSION` printr-un PR.
+**Planul Supabase**
+- Planul gratuit are limite (bază de date mică, spațiu de stocare mic), **suspendă proiectul după o perioadă fără activitate** și nu oferă backup-uri descărcabile. Pentru date reale se recomandă planul plătit (backup-uri zilnice, fără suspendare); decizia e a operatorului și se notează într-un ADR.
+- Indiferent de plan, FINET face **și backup propriu** (Faza 3): `pg_dump` din Supabase plus fișierele din storage, criptat cu restic, în altă destinație.
+
+**Versiunea PostgreSQL și actualizările**
+- Versiunea o stabilește Supabase. Proiectul nou se creează pe cea mai nouă versiune oferită de Supabase.
+- Actualizările minore și de securitate le aplică Supabase.
+- Trecerea la o versiune majoră nouă se face din panoul Supabase („Upgrade project”) și implică o scurtă întrerupere. Procedura FINET (`docs/INFRA.md`): backup propriu verificat înainte; anunț către familie; upgrade în fereastra de noapte; verificarea datelor după (numărul și suma tranzacțiilor pe gospodărie, comparate cu valorile dinainte); actualizarea versiunii din `ops/postgres/VERSION`.
+- Un job săptămânal verifică dacă Supabase oferă o versiune majoră nouă pentru proiect și trimite o notificare. Upgrade-ul nu se face automat, pentru că nu poate fi repetat pe o copie fără un al doilea proiect.
+
+**CI urmărește aceeași versiune**
+- Testele rulează pe imaginea `postgres:<versiunea majoră din ops/postgres/VERSION>`, adică versiunea proiectului Supabase.
+- Un workflow săptămânal rulează testele și pe versiunea majoră următoare, ca problemele de compatibilitate să apară înainte de upgrade.
 
 ## 4. Reguli de execuție
 
@@ -387,14 +396,14 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 
 ### Faza 0 — Fundație și infrastructură
 - **Înainte de cod**, verifică și raportează starea sistemului: spațiul pe disc, Node, pnpm, nginx, Ollama, LiteLLM. Propune un plan de eliberare a discului (minimum 8 GB liberi) și **așteaptă aprobarea** înainte de orice ștergere sau instalare.
-- După aprobare: ultima versiune stabilă PostgreSQL (în prezent 18), nativ, din repository-ul PGDG, cu actualizările minore automate configurate (3.5, punctul 1), cu baze separate pentru dezvoltare și teste și cu roluri separate (`app`, cu `NOBYPASSRLS`, și `migrator`).
+- Proiectul Supabase configurat conform 3.5 (de operator, după `docs/INFRA.md`): regiune UE, schema `finet` neexpusă, Data API oprit sau fără schema `finet`, SSL obligatoriu, Network Restrictions pe IP-ul serverului, rolurile `finet_migrator` și `finet_app` (`NOBYPASSRLS`), bucket privat pentru fișiere. Dezvoltarea și CI folosesc PostgreSQL local, în container.
 - Proiect Next.js, TypeScript strict, Tailwind, shadcn/ui, ESLint, Prettier, Vitest, Playwright. `lib/config.ts` cu `APP_MODE`, modulul `entitlements` pentru `personal`, `lib/storage.ts`, `lib/money.ts` complet cu teste.
 - Unități systemd pentru `web` și `worker`, un vhost nginx local și accesul prin Cloudflare (3.1): `cloudflared` ca serviciu, hostname-ul în Cloudflare DNS, aplicația Access cu politica pentru emailurile familiei, verificarea JWT-ului Access în middleware și `/api/health`. Pașii din panoul Cloudflare (domeniu, tunel, Access, WARP) se fac de operator după instrucțiunile din `docs/INFRA.md`; agentul nu primește chei API Cloudflare decât dacă operatorul alege asta.
-- `ops/postgres/VERSION`, actualizările minore automate (3.5, punctul 1) și canalul de notificări operaționale (3.1), cu un mesaj de test trimis efectiv.
+- `ops/postgres/VERSION` (versiunea majoră a proiectului Supabase), jobul săptămânal care anunță o versiune majoră nouă (3.5) și canalul de notificări operaționale (3.1), cu un mesaj de test trimis efectiv.
 - GitHub Actions: install, lint, type-check, teste (cu Postgres ca serviciu, versiunea din `ops/postgres/VERSION`), build, scanarea secretelor.
-- Documentație: `CLAUDE.md` (scurt, cu trimitere la acest prompt), `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md` (cu o secțiune pentru fazele Android), `docs/adr/0001-stack.md`.
+- Documentație: `CLAUDE.md` (există deja; se actualizează cu comenzile proiectului), `README.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/ROADMAP.md` (cu o secțiune pentru fazele Android), `docs/adr/0001-stack.md`.
 - **Sarcină umană, pornită în paralel:** colectarea a 50–100 de bonuri reale (inclusiv șterse, mototolite, lungi, cu reduceri și garanție SGR) și a câte 2–3 extrase pentru băncile folosite, anonimizate, în `fixtures/`, fiecare cu rezultatul așteptat completat manual.
-- **Acceptare:** aplicația goală răspunde pe hostname-ul Cloudflare, pe HTTPS, doar după login Access cu un email permis (un email nepermis e refuzat); o cerere directă către server, ocolind tunelul, nu primește răspuns; un telefon cu WARP înrolat ajunge la `/api/health`; `/api/health` e verde; CI e verde; testele pentru bani trec; `unattended-upgrades --dry-run` arată pachetele PostgreSQL din PGDG; notificarea de test a ajuns.
+- **Acceptare:** aplicația goală răspunde pe hostname-ul Cloudflare, pe HTTPS, doar după login Access cu un email permis (un email nepermis e refuzat); o cerere directă către server, ocolind tunelul, nu primește răspuns; un telefon cu WARP înrolat ajunge la `/api/health`; `/api/health` e verde; CI e verde; testele pentru bani trec; aplicația se conectează la Supabase prin pooler cu `sslmode=verify-full`; un test confirmă că tabelele din schema `finet` **nu** sunt accesibile prin Data API-ul Supabase cu cheia `anon`; o conexiune la bază de pe alt IP decât al serverului e refuzată; notificarea de test a ajuns.
 
 ### Faza 1 — Autentificare, profil, gospodărie
 - Login cu parolă și magic link, logout, resetare și schimbare parolă, listă de sesiuni active cu revocare.
@@ -474,14 +483,14 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - **Scanare offline:** pozele se păstrează temporar în IndexedDB, se încarcă automat la revenirea conexiunii și se șterg local după confirmarea serverului. Starea „în așteptare” este vizibilă.
 - Audit de accesibilitate (Lighthouse ≥ 90) și de securitate pe `docs/SECURITY_CHECKLIST.md`.
 - Export și ștergere GDPR pentru contul utilizatorului.
-- Upgrade-ul automat major al PostgreSQL (3.5, punctele 2 și 3): scriptul, timerul systemd, repetiția pe copie, revenirea automată și notificările.
+- Procedura de upgrade major pe Supabase (3.5), scrisă și încercată: backup propriu, verificarea datelor înainte și după, actualizarea `ops/postgres/VERSION`.
 - Pagina „Statistici” pentru administrator (6.5).
 - Pagina „Setări → Aplicația Android” (descărcare, cod QR, pași de instalare) și `GET /api/v1/app/android/latest`, conform secțiunii 12.1 din promptul Android.
 - **Acceptare:**
   - E2E pentru scanarea offline și sincronizarea ulterioară;
   - E2E pentru exportul și ștergerea contului;
   - `docs/SECURITY_CHECKLIST.md` completat cu dovezi;
-  - o repetiție completă a upgrade-ului PostgreSQL pe o copie, de pe versiunea curentă pe următoarea disponibilă (beta sau RC, dacă nu există încă una stabilă), plus un test de revenire forțată, ambele documentate cu rezultatul;
+  - o restaurare a backup-ului propriu într-un PostgreSQL local pe versiunea majoră următoare, cu migrațiile și testele rulate pe el, documentată cu rezultatul;
   - pagina „Statistici” afișează datele reale din Faza 2, fără nicio informație financiară.
 
 > **Reper v1.0 personal:** după Faza 9, varianta `personal` este completă.
@@ -532,7 +541,9 @@ Conversia valutară cu cursul BNR, notificări push, email și Telegram, alte li
 | Risc | Impact | Măsură |
 |---|---|---|
 | OCR slab pe bonuri reale | Produsul nu convinge | Set de validare înainte de cod; evaluare per furnizor (Faza 6); ecran de verificare obligatoriu |
-| Disc aproape plin (5,3 GB liberi) | Totul se oprește; upgrade-ul major PostgreSQL nu are loc | Eliberare înainte de Faza 0; comprimarea imaginilor; cotă; spațiul ocupat afișat în `/api/health` și notificare sub un prag; storage extern la nevoie |
+| Disc aproape plin pe LXC (5,3 GB liberi) | Aplicația sau AI-ul local se opresc | Baza de date și fișierele stau pe Supabase; pe disc rămân aplicația, modelul AI și fișierele temporare; spațiul ocupat afișat în `/api/health` și notificare sub un prag |
+| Dependența de Supabase | Suspendarea proiectului (planul gratuit), întreruperi, schimbări de preț | Backup propriu zilnic cu restic; acces doar prin Postgres standard (fără funcții specifice Supabase), deci mutarea pe alt PostgreSQL înseamnă doar restaurarea backup-ului; planul plătit pentru date reale |
+| Expunerea accidentală prin Data API Supabase | Date financiare accesibile din internet | Schema `finet` neexpusă, Data API oprit, fără drepturi pentru `anon`, test automat în Faza 0 |
 | Modele AI locale mari | Nu încap pe disc sau în RAM | Se măsoară în Faza 6; rezervă externă cu consimțământ |
 | Formatele extraselor se schimbă | Importul se strică | Un parser per bancă, fișiere de test și alertă la eșecul de parsare |
 | Erori în logica banilor | Grav, mai ales în familie | `bigint` în unități minore, restul cel mai mare, teste dedicate |
