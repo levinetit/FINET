@@ -246,7 +246,7 @@ Modelele concrete se aleg în Faza 6 după evaluarea pe bonurile tale (`pnpm eva
 | Poză din galerie: JPEG, PNG, WebP, **HEIC/HEIF** | alegere de fișier sau „Partajează” | HEIC convertit în JPEG (pe telefon în aplicația Android; pe server pentru PWA, cu o bibliotecă cu suport HEIC), apoi ca mai sus |
 | Captură de ecran a unui bon digital | galerie sau „Partajează” | ca o poză |
 | **PDF** (bon electronic, factură, bon trimis pe email) | „Partajează” sau alegere de fișier | dacă PDF-ul are text: se extrage textul și se trimite la modelul **text** (mai ieftin și mai precis); dacă e scanat: fiecare pagină se transformă în imagine și merge la **vision** |
-| Bon lung din 2–4 poze | modul bon lung | fiecare poză citită separat, apoi unire algoritmică (6.x, Faza 6), fără LLM |
+| Bon lung din 2–4 poze | modul bon lung | fiecare poză citită separat, apoi unire algoritmică (Faza 6), fără LLM |
 
 Limite comune pe server (aceleași pentru web și Android, expuse prin API): tipurile de mai sus, verificate după conținut; dimensiune maximă per fișier și număr maxim de pagini per PDF, configurabile.
 
