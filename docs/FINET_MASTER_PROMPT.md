@@ -146,7 +146,7 @@ O singură bază de cod, **o singură schemă de bază de date**. Modul schimbă
 | Email (SMTP) | Opțional; fără SMTP, resetarea parolei se face din CLI, iar magic link e dezactivat | Obligatoriu |
 | Planuri și plăți | Nu există; rutele de billing răspund 404 | Stripe, planuri, perioadă de probă, recomandări |
 | Limite | Doar limitele tehnice din env (`AI_DAILY_DOCUMENT_LIMIT`, `AI_MONTHLY_BUDGET`, `STORAGE_QUOTA_MB`) | Limitele planului, plus limitele tehnice globale |
-| Administrare | Pagină minimă: utilizatori, stare joburi, spațiu ocupat, ultimul backup | Panou complet, feedback, raportări de bug-uri, anunțuri |
+| Administrare | Pagină minimă: utilizatori, stare joburi, spațiu ocupat, ultimul backup, statistici de utilizare (6.5) | Panou complet, feedback, raportări de bug-uri, anunțuri |
 | `robots.txt` | `Disallow: /` | Indexare doar pentru paginile publice |
 
 Reguli:
@@ -342,6 +342,32 @@ Cerințe:
 - **Onboarding în 3 pași** (adaugă un cont sau importă, setează un buget, creează un obiectiv), cu opțiunea de a încărca date demo într-o gospodărie marcată „Demo”, separată de datele reale.
 - Datele demo se creează doar prin `pnpm db:seed:demo` sau din onboarding, niciodată automat în producție.
 
+### 6.5 Statistici de utilizare (web și Android)
+
+Statisticile se calculează pe server, din date proprii, fără servicii externe de urmărire pe paginile autentificate.
+
+**Date:**
+- `client_installations`: installation_id (unic), user_id, platform (`android`, `web`), app_version, version_code, os_version, device_model, locale, first_seen_at, last_seen_at. Actualizat din antetul `X-FINET-Client` (cel mult o scriere pe instalare la 15 minute).
+- `app_events`: id, user_id, household_id, installation_id, name, screen nullable, error_code nullable, app_version, occurred_at. Lista numelor permise e fixă și validată cu Zod; orice alt câmp e respins. Fără sume, descrieri, comercianți sau text liber.
+- `app_downloads`: user_id nullable, version, source (`finet_page`, `qr`), created_at, pentru descărcările din pagina FINET. Descărcările directe de pe GitHub se citesc agregat din API-ul GitHub (`download_count` per release).
+- Login-urile și sesiunile vin din tabelele Better Auth existente (data, platforma și, pentru adresa IP, doar forma trunchiată la afișare).
+
+**Retenție:** evenimentele detaliate se păstrează 13 luni, apoi se agregă pe zi și pe versiune și se șterg; la ștergerea contului, evenimentele utilizatorului se șterg sau se anonimizează (user_id și installation_id eliminate).
+
+**Pagina „Statistici”** (doar administrator; în `personal` în pagina de setări a administratorului, în `saas` în panoul de administrare):
+- **Utilizatori activi:** zilnic, săptămânal, lunar (DAU, WAU, MAU), pe web și pe Android.
+- **Instalări:** câte instalări active există și pe ce versiuni; cine are o versiune sub `minSupportedVersionCode` sau sub ultima versiune („Ana: v1.0.2, ultima activitate acum 3 zile”).
+- **Descărcări:** pe versiune, din GitHub și din pagina FINET.
+- **Conectări:** login-uri pe zi, sesiuni expirate, eșecuri de autentificare (agregat, pentru a observa atacuri).
+- **Utilizarea funcțiilor:** bonuri scanate și confirmate, extrase importate, tranzacții adăugate pe platformă, ecranele cele mai folosite.
+- **Erori:** cele mai frecvente coduri de eroare pe versiune.
+- **Pe utilizator:** în modul `personal`, administratorul vede lista membrilor cu ultima activitate, platforma și versiunea. În modul `saas`, administratorul vede implicit doar date agregate; detaliile pe un utilizator anume sunt disponibile numai pentru suport, cu motiv notat în `audit_events`.
+- Nicio statistică nu arată date financiare ale utilizatorilor.
+
+**Consimțământ:** evenimentele de utilizare respectă comutatorul din setările utilizatorului (`consents`, tip `usage_stats`); în `saas` sunt oprite până la acord. Politica de confidențialitate descrie exact lista de evenimente.
+
+**Faze:** tabelele și endpointul `/api/v1/app/events` în aceeași fază FINET cu login-ul mobil (Faza 1 sau imediat după); pagina „Statistici” în Faza 9 pentru `personal` și în Faza 11 pentru panoul `saas`.
+
 ## 7. Faze de implementare
 
 Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROADMAP.md` actualizat (complet, parțial, neimplementat); raportul din secțiunea 8.
@@ -443,7 +469,7 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Mențiuni legale pentru consumatori din România, în footer-ul fiecărei pagini: datele firmei care operează serviciul (denumire, CUI, număr de înregistrare la Registrul Comerțului, sediu, contact) și linkurile ANPC SAL și platforma europeană SOL.
 - Turnstile, Google OAuth, traducerea în engleză.
 - Feedback și raportare de bug-uri din aplicație (fără date financiare), anunțuri de la administrator.
-- Panou de administrare: utilizatori, gospodării, joburi, feedback. Acțiunile administratorului sunt auditate. Administratorul **nu vede** datele financiare ale utilizatorilor.
+- Panou de administrare: utilizatori, gospodării, joburi, feedback, statistici de utilizare agregate (6.5). Acțiunile administratorului sunt auditate. Administratorul **nu vede** datele financiare ale utilizatorilor.
 - Monitorizarea erorilor; analytics doar pe paginile publice; nume de produs definitiv.
 - **Acceptare:** rutele de admin răspund 404 pentru non-administratori și în modul `personal`; testele E2E de bază trec în ambele moduri.
 
