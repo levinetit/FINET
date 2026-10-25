@@ -21,13 +21,14 @@ Principiu director: **nu construim o clonă.** Mai puține funcții la start, da
 
 ## 2. Analiza produsului de referință (finpulse.day)
 
-Surse, toate publice și fără autentificare: verificările proprii din 2026-10-25 (`manifest.json`, `robots.txt`, `sitemap.xml`, `sw.js`, textul indexat al paginii) și rapoartele „Radar” din aceeași zi (antete HTTP, fișiere JavaScript publice). Afirmațiile din rapoartele Radar nu au fost verificate independent. Aplicația de după autentificare nu a fost inspectată. Ce urmează este o descriere, nu o specificație de copiat.
+Surse, toate publice și fără autentificare: verificările proprii din 2026-10-25 (`manifest.json`, `robots.txt`, `sitemap.xml`, `sw.js`, textul indexat al paginii) și rapoartele „Radar” din aceeași zi (antete HTTP, fișiere JavaScript publice). Afirmațiile din rapoartele Radar nu au fost verificate independent. Rândurile marcate **(C)** provin din dashboard-ul unui cont gratuit propriu, gol, văzut pe 25.10.2026; fluxurile cu date (bonuri, potriviri, decontări) nu au fost încă văzute. Ce urmează este o descriere, nu o specificație de copiat.
 
 ### 2.1 Ce oferă
 
 | Modul | Ce face la referință | Unde intră la noi |
 |---|---|---|
-| Dashboard | Total lunar, pe categorii, trend, comparație cu luna anterioară; onboarding în 3 pași (importă, setează buget, creează obiectiv) | Faza 3 |
+| Dashboard | Total lunar, pe categorii, trend, comparație cu luna anterioară; onboarding în 3 pași (importă, setează buget, creează obiectiv). **(C)** Totul pe o singură pagină: carduri Venituri, Cheltuieli, Sold net, Număr de tranzacții; widget de împărțire „Ai de dat / Ai de primit”; obiective active; bugete lunare cu selector de lună (ultimele 12 luni); grafice „Cheltuieli pe categorii”, „Evoluție lunară”, „Trend zilnic”; filtre avansate (interval de date, comerciant, tip, sumă minimă și maximă, categorie, etichete); lista de tranzacții cu „Adaugă cash / manual” | Faza 3 (împărțirea: Faza 8) |
+| Clasificare **(C)** | Două dimensiuni: 17 categorii pe tranzacție (Cumpărături, Haine, Alimente, Mâncare, Restaurante, Transport, Utilități, Asociație / Întreținere, Chirie / Rată, Sănătate & Farmacie, Educație, Divertisment, Vacanțe, Casă & Reparații, Copii, Abonamente, Altele) plus 25 de etichete (de exemplu Igiena casei, Igienă personală, Băuturi & Cafea, Farmacie & Suplimente, Carburant, Familie, Copii, Personal, Animale) | Categorii plus etichete (5.4), cu categorii care nu se suprapun |
 | Bugete | General sau pe categorie, comune și individuale, semafor verde/galben/roșu, alerte la apropierea limitei | Faza 3 (comune: Faza 8) |
 | Obiective | Nume, sumă țintă, termen, progres, stare; ștergere cu confirmare | Faza 3 |
 | Bonuri | Foto (inclusiv bonuri șterse sau mototolite), PDF, mai multe fișiere deodată; coadă cu prioritate după plan (`/api/upload-queue`, `processing_batches`); extrage comerciant, dată, total, TVA și **fiecare produs** cu cantitate și preț unitar; categorisire la nivel de produs; arhivă cu căutare în textul OCR; recunoaște garanția SGR (0,50 lei per ambalaj) și reducerile de pe cardurile de fidelitate | Faza 6 |
@@ -36,12 +37,13 @@ Surse, toate publice și fără autentificare: verificările proprii din 2026-10
 | Recurențe | Detectarea abonamentelor (Netflix, Spotify, sală, chirie), generarea tranzacțiilor la scadență | Faza 5 (reguli) și Faza 7 (detectare din extrase) |
 | Familie | Până la 6 membri, bugete comune și individuale, împărțire 50/50, solduri reciproce, decontări (`/api/family/info`) | Faza 8 |
 | Liste de cumpărături | Bifare la raft, comparație AI listă ↔ bon, detectarea achizițiilor neplanificate | Faza 10 |
-| Rapoarte | Rapoarte personalizate pe orice produs din bonuri, prețuri pe magazin, variația prețurilor în timp, „verdict financiar AI” | Faza 3 (de bază), Faza 10 (prețuri) |
+| Rapoarte | Rapoarte personalizate pe orice produs din bonuri, prețuri pe magazin, variația prețurilor în timp, „verdict financiar AI”. **(C)** Pagina „Rapoarte inteligente și micro-cheltuieli”, doar pentru planurile plătite, are trei secțiuni: rapoarte predefinite (Pro), generator pe articole (Ultra), comparator și evoluția prețurilor (Ultra). Perioade: toată arhiva, luna curentă, luna trecută, ultimele 3 luni, anul acesta. Rapoartele predefinite: pungi și sacoșe, garanția SGR, cumpărături din impuls de la casă, produse nealimentare la supermarket (igienă, menaj), cafea și băuturi la bucată, economii din cupoane și carduri de fidelitate. Fiecare arată totalul, numărul de bucăți, prețul mediu, proiecția anuală, un sfat, istoricul achizițiilor și export CSV | Faza 3 (de bază), Faza 10 (micro-cheltuieli și prețuri) |
 | Export | CSV, Excel, PDF pentru tranzacții, bonuri, obiective, bugete | Faza 3 (CSV), Faza 10 (Excel/PDF) |
 | Autentificare | Email și parolă, magic link, Google, Facebook | Faza 1 (email, parolă, magic link); Google în faza `saas` |
-| Recomandări | Cod unic; distribuire prin WhatsApp, Telegram, email; invitatul primește 30 de zile Pro, iar cel care invită +1 lună per prieten, maximum 10 | Faza 12, doar `saas` |
+| Recomandări | Cod unic (`/ref/FIN-XXXXXX`); distribuire prin WhatsApp, Telegram, email și copiere; **(C)** invitatul primește 1 lună Pro, cel care invită +1 lună; contoare „prieteni invitați” și „luni câștigate”. Feedback-ul trimis aduce 14 zile Pro | Faza 12, doar `saas` |
+| Mențiuni legale **(C)** | Footer cu firma care operează serviciul, termeni, confidențialitate (GDPR) și link ANPC / SAL | Faza 11, obligatoriu în `saas` |
 | Administrare | Utilizatori, abonamente, anunțuri (`/api/broadcast`), feedback, raportări de bug-uri | Faza 11, doar `saas` |
-| Limbi | ro, en, es, fr, de, it, pl, tr | ro de la start; en în faza `saas`; restul doar la cerere |
+| Limbi | ro, en, es, fr, de, it, pl, tr în cod; **(C)** selectorul arată ro, en, fr, it, es, de | ro de la start; en în faza `saas`; restul doar la cerere |
 
 ### 2.2 Planuri (doar referință pentru `saas`)
 
@@ -69,6 +71,11 @@ Rapoartele se contrazic pentru Starter: unul spune 1 document pe zi, altul 50 de
 5. **CSP incompletă.** → La noi, CSP completă cu nonce (6.3).
 6. **Dependență de furnizori AI externi pentru funcția centrală.** → La noi, procesare locală întâi, cu furnizor extern doar ca rezervă și cu consimțământ (Faza 6).
 7. **Fără demo public.** → La noi, date demo opționale la onboarding.
+8. **(C) Sumele nu au format românesc:** „0.00 RON”, cu punct zecimal. → La noi, `0,00 lei` peste tot (5.3).
+9. **(C) Categorii care se suprapun:** Alimente, Mâncare și Cumpărături; Copii apare și ca categorie, și ca etichetă. → La noi, categorii distincte, iar etichetele acoperă restul.
+10. **(C) „Cheltuieli pe categorii” pare să se bazeze doar pe bonuri** (starea goală spune „Niciun bon în perioada selectată”), deci tranzacțiile manuale probabil nu apar acolo. Este o deducție. → La noi, graficul include toate cheltuielile: liniile bonurilor acolo unde există bon, categoria tranzacției în rest.
+11. **(C) Google Analytics se încarcă și pe paginile cu date financiare, iar pagina are `lang="en"`** deși interfața e în română. → La noi, fără analytics pe paginile autentificate și `lang` setat după limba interfeței.
+12. **(C) Un dashboard foarte încărcat:** statistici, împărțire, obiective, bugete, trei grafice, filtre, tranzacții, recomandări și feedback pe aceeași pagină. → La noi, dashboard-ul arată rezumatul, iar tranzacțiile și filtrele au pagina lor.
 
 ## 3. Infrastructură și stack
 
@@ -181,9 +188,10 @@ Reguli:
 - Exportul CSV este UTF-8 cu BOM, separator `;` și zecimale cu virgulă. Valorile sunt protejate împotriva CSV injection (prefixează `=`, `+`, `-`, `@`).
 
 ### 5.4 Categorii implicite (sistem, nu se pot șterge, dar se pot ascunde)
-- **Cheltuieli:** Alimente, Restaurante și cafenele, Locuință (chirie/rată), Utilități (curent, gaz, apă), Internet și telefonie, Transport și combustibil, Sănătate și farmacie, Îmbrăcăminte și încălțăminte, Copii, Educație, Divertisment, Abonamente, Cadouri și donații, Taxe și impozite, Asigurări, Casă și întreținere, Igienă și cosmetice, Animale de companie, Altele.
+- **Cheltuieli:** Alimente, Restaurante și cafenele, Locuință (chirie/rată), Utilități (curent, gaz, apă), Internet și telefonie, Transport și combustibil, Sănătate și farmacie, Îmbrăcăminte și încălțăminte, Copii, Educație, Divertisment, Abonamente, Cadouri și donații, Taxe și impozite, Asigurări, Asociația de proprietari (întreținere bloc), Casă și reparații, Igienă și cosmetice, Animale de companie, Vacanțe și călătorii, Altele.
 - **Venituri:** Salariu, Freelance/PFA, Chirii încasate, Dobânzi și dividende, Rambursări, Cadouri primite, Alte venituri.
-- Categoriile au o ierarhie opțională (`parent_id`) pe un singur nivel.
+- Categoriile au o ierarhie opțională (`parent_id`) pe un singur nivel. O tranzacție, sau o linie de bon, are **o singură** categorie; categoriile nu se suprapun.
+- **Etichete:** o a doua dimensiune, liberă, cu mai multe etichete pe tranzacție sau pe linie de bon. Exemple: Personal, Familie, Copii, Vacanța 2027, Deductibil, Cadou. Etichetele implicite pot fi ascunse, iar utilizatorul își poate crea altele. Filtrele și rapoartele funcționează atât pe categorii, cât și pe etichete.
 
 ### 5.5 Bonuri fiscale românești
 - **Câmpuri de antet:** comerciant, CUI (cu validarea cifrei de control), adresa magazinului, data și ora, numărul bonului, metoda de plată, total.
@@ -229,6 +237,8 @@ Toate datele financiare aparțin unei **gospodării**, nu direct unui utilizator
 - `matches`: household_id, receipt_id, transaction_id, score, reasons_json, status (`suggested`, `confirmed`, `rejected`), decided_by. Unic pe receipt_id pentru cele confirmate.
 - `consents`: user_id, kind (de exemplu `external_ai`), granted_at, revoked_at.
 
+**Etichete (Faza 3):** `tags` (household_id nullable pentru cele de sistem, name, color, hidden), `transaction_tags` (transaction_id, tag_id), `receipt_line_tags` (receipt_line_id, tag_id). Ambele tabele de legătură au cheie unică pe pereche.
+
 **Familie (Faza 8):** `household_invites` (token hash, expires_at, used_at), `transaction_splits` (transaction_id, user_id, share_minor), `settlements` (household_id, from_user_id, to_user_id, amount_minor, currency, settled_on, note).
 
 **Liste de cumpărături (Faza 10):** `shopping_lists`, `shopping_list_items` (name, quantity, checked, matched_receipt_line_id).
@@ -260,6 +270,7 @@ Cerințe:
 - **AI extern:** se folosește doar după consimțământ explicit (`consents`), cu furnizorul numit în politica de confidențialitate. Imaginile trimise extern nu conțin metadate. Fără consimțământ se folosește doar procesarea locală.
 - Webhook-urile Stripe se acceptă doar cu semnătură verificată și se procesează o singură dată.
 - Erori uniforme, fără stack trace în producție. Loguri structurate (pino) **fără** sume, descrieri, text OCR, emailuri complete sau tokenuri.
+- Fără scripturi de analytics sau de urmărire pe paginile autentificate. Elementul `<html>` are `lang` setat după limba interfeței.
 - Nicio dată sensibilă în URL, analytics sau rapoartele de erori. Fără credențiale bancare și fără numere complete de card (din extrase se păstrează doar ultimele 4 cifre, dacă apar).
 - `pnpm audit` în CI, plus Dependabot sau Renovate.
 - **GDPR:** export complet (JSON, CSV și fișierele originale), ștergerea contului, retenția documentată în `docs/PRIVACY_NOTES.md` (de exemplu, imaginile originale se șterg după N luni, configurabil, iar datele extrase rămân).
@@ -297,7 +308,8 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - **Acceptare:** teste pentru solduri, transferuri (inclusiv rollback) și izolarea între gospodării pentru fiecare endpoint; E2E pentru adăugarea unei cheltuieli și verificarea soldului.
 
 ### Faza 3 — Dashboard, bugete, obiective, rapoarte, export, backup
-- Dashboard: total lunar, pe categorii, trend, comparație cu luna anterioară, totaluri separate pe monedă. Onboarding în 3 pași.
+- Dashboard: venituri, cheltuieli, sold net și număr de tranzacții; cheltuieli pe categorii (din toate sursele); evoluția lunară și trendul zilnic; comparație cu luna anterioară; totaluri separate pe monedă; selector de lună. Onboarding în 3 pași.
+- Etichete (5.4) și filtre pe pagina de tranzacții: interval de date, comerciant, tip, sumă minimă și maximă, categorie, etichete. Filtrele se păstrează în URL fără date sensibile (de exemplu doar ID-uri de categorie și intervale), ca o vedere să poată fi salvată.
 - Bugete generale și pe categorie, cu semafor (verde sub pragul de avertizare, galben între prag și 100%, roșu peste 100%) și avertizare în aplicație.
 - Obiective: țintă, termen, progres, stare.
 - Raport lunar și export CSV.
@@ -350,10 +362,16 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 ### Faza 10 — Liste de cumpărături și prețuri (comună ambelor moduri)
 - Liste comune, bifare la raft, comparație listă ↔ bon (produse neplanificate, produse uitate).
 - Prețuri per produs normalizat și per magazin, evoluție în timp, cel mai ieftin magazin pentru produsele tale. Rezultatele sunt afișate doar când există suficiente date (prag configurabil).
+- **Rapoarte de micro-cheltuieli** peste `receipt_lines`: pungi și sacoșe, garanții SGR (plătite față de recuperate), cumpărături de la casă (dulciuri, gumă), produse nealimentare la supermarket, cafea și băuturi la bucată, economii din reduceri și carduri de fidelitate.
+  - Fiecare raport e o **definiție în date**, nu cod separat (`report_definitions`: nume, reguli de potrivire pe `normalized_name`, categorie, etichetă sau tip de linie, sfat). Utilizatorul își poate face propriul raport din aceleași reguli, ceea ce acoperă „generatorul pe articole”.
+  - Fiecare raport afișează totalul pe perioadă, numărul de bucăți, prețul mediu pe unitate, proiecția anuală (calculată din perioada efectiv acoperită de bonuri și marcată ca estimare), istoricul liniilor potrivite (cu link la bon) și export CSV.
+  - Sfaturile sunt texte fixe, verificabile; nu se afișează sume de economie inventate.
+- **Acceptare:** teste pentru regulile de potrivire pe linii de bon reale din `fixtures/receipts` (de exemplu, „PUNGA RAFIE” intră la pungi, iar „PUNGI MENAJ 35L” nu), pentru proiecția anuală pe perioade scurte și pentru exportul CSV.
 - Export Excel și PDF.
 
 ### Faza 11 — Fundația SaaS (doar `APP_MODE=saas`)
 - Pagini publice randate pe server: prezentare, `/pricing`, `/help` (ghid, întrebări frecvente), `/terms`, `/privacy`, cu texte juridice revizuite de un om.
+- Mențiuni legale pentru consumatori din România, în footer-ul fiecărei pagini: datele firmei care operează serviciul (denumire, CUI, număr de înregistrare la Registrul Comerțului, sediu, contact) și linkurile ANPC SAL și platforma europeană SOL.
 - Turnstile, Google OAuth, traducerea în engleză.
 - Feedback și raportare de bug-uri din aplicație (fără date financiare), anunțuri de la administrator.
 - Panou de administrare: utilizatori, gospodării, joburi, feedback. Acțiunile administratorului sunt auditate. Administratorul **nu vede** datele financiare ale utilizatorilor.
