@@ -116,4 +116,44 @@ describe.skipIf(!TEST_ADMIN_URL)("drepturi pe coloane pentru finet_app (M5)", ()
     const admins = await fx.scratch.admin`select id from finet.users where is_platform_admin`;
     expect(admins.map((a) => a.id)).toEqual([U]);
   });
+  it("DELETE pe users → 42501 (ștergerea administratorului ar redeschide bootstrap-ul)", async () => {
+    expect(await sqlState(() => fx.db.execute(sql`delete from finet.users where id = ${V}`))).toBe(
+      "42501",
+    );
+  });
+
+  it("finet_app nu are niciun drept pe bootstrap_state", async () => {
+    for (const statement of [
+      sql`select * from finet.bootstrap_state`,
+      sql`insert into finet.bootstrap_state (key) values ('admin_bootstrapped')`,
+      sql`update finet.bootstrap_state set created_at = now()`,
+      sql`delete from finet.bootstrap_state`,
+    ]) {
+      expect(await sqlState(() => fx.db.execute(statement))).toBe("42501");
+    }
+  });
+
+  it("bootstrap irepetabil: după ștergerea administratorului (de operator) promovarea rămâne închisă", async () => {
+    const promote = (id: string) =>
+      withRlsOn(fx.db, { userId: id }, async (tx) => {
+        const rows = await tx.execute<{ ok: boolean }>(
+          sql`select finet.promote_first_admin(${id}::uuid) as ok`,
+        );
+        return rows[0]!.ok;
+      });
+    const rows = await fx.scratch.admin`select key from finet.bootstrap_state`;
+    expect(rows).toEqual([{ key: "admin_bootstrapped" }]);
+    // Administratorul se promovează din nou pe sine: refuzat (bootstrap-ul a avut loc).
+    expect(await promote(U)).toBe(false);
+    await fx.scratch.admin`delete from finet.users where id = ${U}`;
+    expect(await fx.scratch.admin`select 1 from finet.users where is_platform_admin`).toHaveLength(
+      0,
+    );
+    expect(await promote(V)).toBe(false);
+    const after = await fx.scratch.admin`select key from finet.bootstrap_state`;
+    expect(after).toEqual([{ key: "admin_bootstrapped" }]);
+    const [v] = await fx.scratch.admin<{ is_platform_admin: boolean }[]>`
+      select is_platform_admin from finet.users where id = ${V}`;
+    expect(v!.is_platform_admin).toBe(false);
+  });
 });

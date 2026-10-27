@@ -4,7 +4,7 @@ import { TEST_ADMIN_URL } from "@/db/testing";
 import { verifyPassword } from "@/modules/auth/password";
 import { type AuthFixture, createAuthFixture } from "@/modules/auth/testing";
 import { findPasswordHash } from "@/modules/auth/users.repo";
-import { createUserWithHousehold, provisionCreatedUser } from "@/modules/auth/users.service";
+import { createUserWithHousehold } from "@/modules/auth/users.service";
 
 import { type AdminIo, main, parseArgs } from "./cli";
 
@@ -158,19 +158,13 @@ describe.skipIf(!TEST_ADMIN_URL)("CLI admin pe PostgreSQL real", () => {
           emailVerified: true,
         }),
       ).rejects.toThrow();
-      // Calea hook-ului Better Auth: compensare (utilizatorul creat de Better Auth se șterge).
-      await fx.scratch.admin`
-        insert into finet.users (id, email, name) values ('11111111-1111-4111-8111-111111111111', 'hook@exemplu.ro', 'Hook')`;
-      await expect(
-        provisionCreatedUser(fx.db, "11111111-1111-4111-8111-111111111111"),
-      ).rejects.toThrow();
     } finally {
       await fx.scratch.admin.unsafe(
         "drop trigger test_fail on finet.households; drop function finet.test_fail();",
       );
     }
     const rows = await fx.scratch.admin`
-      select email from finet.users where email in ('eva@exemplu.ro', 'hook@exemplu.ro')`;
+      select email from finet.users where email in ('eva@exemplu.ro')`;
     expect(rows.length).toBe(0);
     const prefs = await fx.scratch.admin`
       select 1 from finet.user_preferences p left join finet.users u on u.id = p.user_id where u.id is null`;

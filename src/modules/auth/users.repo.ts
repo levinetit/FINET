@@ -121,7 +121,3 @@ export async function deleteSessionsOfUser(
   const deleted = await tx.delete(authSessions).where(where).returning({ id: authSessions.id });
   return deleted.length;
 }
-
-export async function deleteUser(db: Executor, userId: string): Promise<void> {
-  await db.delete(users).where(eq(users.id, userId));
-}

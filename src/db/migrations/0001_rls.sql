@@ -23,7 +23,7 @@
 --     where schemaname = 'finet'), apoi
 --   alter table finet.<tabel> no force row level security; ... disable row level security;
 --   drop function finet.create_household(text, text, text), finet.member_role(uuid),
---     finet.promote_first_admin(uuid),
+--     finet.promote_first_admin(uuid); drop table finet.bootstrap_state;
 --     finet.current_household_id(), finet.current_user_id();
 --   revoke all on all tables in schema finet from finet_app;
 --   delete from finet.__drizzle_migrations where hash = '<hash-ul 0001_rls>';
@@ -105,9 +105,24 @@ create function finet.create_household(
   $$;
 --> statement-breakpoint
 
+-- Starea de bootstrap a platformei (M5): un rând `admin_bootstrapped` după prima promovare.
+-- Doar proprietarul (finet_migrator, prin funcția de mai jos) scrie aici; finet_app nu are
+-- niciun drept. Nu e declarat în schema Drizzle (tabel intern, scris de mână).
+create table finet.bootstrap_state (
+  key text primary key check (key in ('admin_bootstrapped')),
+  created_at timestamptz not null default now()
+);
+--> statement-breakpoint
+revoke all on finet.bootstrap_state from public;
+--> statement-breakpoint
+
 -- Primul administrator al platformei (M5): aplicația nu are UPDATE pe `users.is_platform_admin`;
--- CLI-ul (`admin:create-user`) promovează utilizatorul DIN CONTEXT doar dacă nu există încă
--- niciun administrator. Serializată cu același lock ca crearea utilizatorilor din CLI.
+-- CLI-ul (`admin:create-user`) promovează utilizatorul DIN CONTEXT doar o singură dată în viața
+-- bazei: funcția refuză (false) dacă bootstrap-ul a avut deja loc (rândul din
+-- `bootstrap_state` rămâne și după ștergerea administratorului) sau dacă există deja un
+-- administrator. Verificarea contextului e doar apărare în adâncime: `app.user_id` îl setează
+-- aplicația însăși, deci garanția reală e caracterul irepetabil (ADR 0003). Serializată cu
+-- același lock ca crearea utilizatorilor din CLI.
 create function finet.promote_first_admin(p_user_id uuid) returns boolean
   language plpgsql volatile security definer
   set search_path = pg_catalog
@@ -118,12 +133,17 @@ create function finet.promote_first_admin(p_user_id uuid) returns boolean
         using errcode = '42501';
     end if;
     perform pg_advisory_xact_lock(hashtext('finet.create_user'));
-    if exists (select 1 from finet.users u where u.is_platform_admin) then
+    if exists (select 1 from finet.bootstrap_state b where b.key = 'admin_bootstrapped')
+       or exists (select 1 from finet.users u where u.is_platform_admin) then
       return false;
     end if;
     update finet.users set is_platform_admin = true, updated_at = now()
      where id = p_user_id and status = 'active';
-    return found;
+    if not found then
+      return false;
+    end if;
+    insert into finet.bootstrap_state (key) values ('admin_bootstrapped');
+    return true;
   end
   $$;
 --> statement-breakpoint
@@ -287,9 +307,11 @@ revoke all on finet.users, finet.auth_sessions, finet.auth_accounts, finet.auth_
 -- compromis nu se poate face administrator, nu poate reactiva un cont și nu poate muta un cont
 -- pe alt email); `is_platform_admin` se setează doar prin finet.promote_first_admin(), iar
 -- `status` doar de operator. INSERT-ul în `users` are listă de coloane: `status` și
--- `is_platform_admin` iau valorile implicite (`active`, `false`).
+-- `is_platform_admin` iau valorile implicite (`active`, `false`). Fără DELETE pe `users`
+-- (ștergerea administratorului ar fi redeschis bootstrap-ul; ștergerea contului vine într-o
+-- fază viitoare, printr-o funcție SECURITY DEFINER dedicată).
 -- Restul: ce scrie Better Auth (sesiuni prelungite, parola la resetare, verificări consumate).
-grant select, delete on finet.users to finet_app;
+grant select on finet.users to finet_app;
 --> statement-breakpoint
 grant insert (id, name, email, email_verified, image, created_at, updated_at)
   on finet.users to finet_app;

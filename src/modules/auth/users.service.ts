@@ -13,7 +13,6 @@ import { hashPassword } from "./password";
 import { normalizeEmail } from "./request";
 import {
   deleteSessionsOfUser,
-  deleteUser,
   findUserByEmail,
   insertCredentialAccount,
   insertDefaultPreferences,
@@ -24,7 +23,7 @@ import {
 } from "./users.repo";
 
 /**
- * Crearea și administrarea utilizatorilor (CLI-ul `admin`, hook-ul Better Auth). Fără importuri
+ * Crearea și administrarea utilizatorilor (CLI-ul `admin`; Better Auth nu creează utilizatori). Fără importuri
  * Next.js sau Better Auth: CLI-ul se împachetează fără ele.
  *
  * Regula „gospodăria personală automată” (Faza 1): utilizatorul, contul cu parolă, preferințele
@@ -119,30 +118,6 @@ export async function createUserWithHousehold(
     });
     return { created: true, userId, householdId, isPlatformAdmin };
   });
-}
-
-/**
- * Completează un utilizator creat de Better Auth (hook-ul `user.create.after`, pentru căile
- * viitoare din `saas`): preferințe + gospodărie personală + audit, într-o tranzacție. Dacă
- * eșuează, utilizatorul se șterge (compensare: Better Auth a scris deja rândul `users` în
- * tranzacția lui) și eroarea se propagă, deci crearea contului eșuează.
- */
-export async function provisionCreatedUser(db: Db, userId: string): Promise<string> {
-  try {
-    return await withRlsOn(db, { userId }, async (tx) => {
-      await insertDefaultPreferences(tx, userId);
-      const householdId = await createHousehold(tx, { name: PERSONAL_HOUSEHOLD_NAME });
-      await insertAudit(tx, userId, householdId, {
-        action: "user.created",
-        targetType: "user",
-        targetId: userId,
-      });
-      return householdId;
-    });
-  } catch (error) {
-    await deleteUser(db, userId);
-    throw error;
-  }
 }
 
 /** Resetarea parolei de către operator: parola nouă + revocarea TUTUROR sesiunilor. */

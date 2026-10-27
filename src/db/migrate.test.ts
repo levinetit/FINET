@@ -182,6 +182,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       "auth_rate_limits",
       "auth_sessions",
       "auth_verifications",
+      "bootstrap_state",
       "consents",
       "household_members",
       "households",

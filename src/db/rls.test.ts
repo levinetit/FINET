@@ -7,14 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createHousehold as createHouseholdSql } from "./households";
 import { type Db, RlsContextError, createDb, withRlsOn } from "./index";
 import { runMigrations } from "./migrate";
-import {
-  auditEvents,
-  consents,
-  householdMembers,
-  households,
-  userPreferences,
-  users,
-} from "./schema";
+import { auditEvents, consents, householdMembers, households, userPreferences } from "./schema";
 import {
   MIGRATIONS_DIR,
   type ScratchDatabase,
@@ -551,7 +544,8 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS pe PostgreSQL real (rolul finet_app)", () 
     const U = randomUUID();
     await createUser(U, "temporar@exemplu.ro");
     const H = await createHousehold(U, "Temporară");
-    await app.db.delete(users).where(eq(users.id, U));
+    // `finet_app` nu are DELETE pe `users` (M5); ștergerea e o operație a operatorului.
+    await scratch.admin`delete from finet.users where id = ${U}`;
     const [h] = await scratch.admin<{ created_by: string | null }[]>`
       select created_by from finet.households where id = ${H}`;
     expect(h).toEqual({ created_by: null });

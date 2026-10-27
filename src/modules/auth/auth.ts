@@ -33,7 +33,6 @@ import {
   sessionUserAgent,
 } from "./request";
 import { findUserByEmail, findUserById } from "./users.repo";
-import { provisionCreatedUser } from "./users.service";
 
 /**
  * Configurația Better Auth (master prompt 3.2, 6.3; ADR 0003). Doar pe server.
@@ -148,7 +147,6 @@ export function createAuth(deps: AuthDeps) {
   const baseURL = config.appUrl ?? "http://localhost:3000";
   const origin = new URL(baseURL).origin;
   const secure = baseURL.startsWith("https://") || config.nodeEnv === "production";
-  const personal = config.appMode === "personal";
 
   const plugins = [
     bearer({ requireSignature: true }),
@@ -259,14 +257,11 @@ export function createAuth(deps: AuthDeps) {
     databaseHooks: {
       user: {
         create: {
-          before: async (user) => {
-            // În `personal` nicio cale Better Auth nu creează utilizatori (doar CLI-ul).
-            if (personal) return false;
-            return { data: { ...user, email: normalizeEmail(user.email) } };
-          },
-          after: async (user) => {
-            await provisionCreatedUser(db, user.id);
-          },
+          // Nicio cale Better Auth nu creează utilizatori, în niciun mod (doar CLI-ul): înregistrarea
+          // publică din `saas` nu e implementată, iar `finet_app` nu poate insera
+          // `status`/`is_platform_admin` și nu poate șterge utilizatori (M5), deci nici o
+          // compensare după o creare eșuată. Faza `saas` va aduce o funcție de creare dedicată.
+          before: async () => false,
         },
       },
       session: {

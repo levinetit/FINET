@@ -144,4 +144,20 @@ describe.skipIf(!TEST_ADMIN_URL)("client nativ, corpuri non-JSON, ceas controlat
     const rows = await fx.scratch.admin`select 1 from finet.users where email = 'nou@exemplu.ro'`;
     expect(rows.length).toBe(0);
   });
+  it("Better Auth nu poate crea utilizatori în niciun mod (doar CLI-ul)", async () => {
+    for (const mode of ["personal", "saas"]) {
+      const e = authEnv(fx.db, { config: testConfig({ APP_MODE: mode }) });
+      const ctx = await e.auth.$context;
+      const created = await ctx.internalAdapter
+        .createUser(
+          { email: `ba-${mode}@exemplu.ro`, name: "BA", emailVerified: true },
+          { method: "magic-link" },
+        )
+        .catch(() => null);
+      expect(created ?? null, mode).toBeNull();
+      const rows = await fx.scratch
+        .admin`select 1 from finet.users where email = ${`ba-${mode}@exemplu.ro`}`;
+      expect(rows.length, mode).toBe(0);
+    }
+  });
 });
