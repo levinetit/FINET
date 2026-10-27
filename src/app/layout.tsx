@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 
+import { THEME_COOKIE, forcedTheme } from "./_lib/theme";
 import { fontDisplay, fontMono, fontSans } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FINET",
+  title: { default: "FINET", template: "%s · FINET" },
   description: "Finanțe personale și de familie",
   // Modul `personal` nu se indexează (master prompt 3.3).
   robots: { index: false, follow: false },
@@ -18,9 +20,19 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+/**
+ * Layout-ul rădăcină. Citirea cookie-urilor face TOATE paginile dinamice: nonce-ul CSP
+ * (`src/proxy.ts`) se aplică doar la randarea per cerere (o pagină statică ar avea scripturi
+ * fără nonce, blocate de CSP).
+ */
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const theme = forcedTheme((await cookies()).get(THEME_COOKIE)?.value);
   return (
-    <html lang="ro" className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}>
+    <html
+      lang="ro"
+      data-theme={theme}
+      className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}
+    >
       <body>{children}</body>
     </html>
   );

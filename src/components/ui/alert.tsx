@@ -12,7 +12,8 @@ export function Alert({
   children,
   ...props
 }: ComponentProps<"div"> & { tone?: "error" | "ok" | "info" }) {
-  const empty = children === null || children === undefined || children === false || children === "";
+  const empty =
+    children === null || children === undefined || children === false || children === "";
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
