@@ -2,7 +2,8 @@
 name: verifier
 description: Independently verify a completed FINET task against acceptance criteria, run safe local tests, inspect the diff and report regressions without implementing fixes.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: claude-sonnet-5-5
+effort: medium
 permissionMode: plan
 maxTurns: 20
 ---

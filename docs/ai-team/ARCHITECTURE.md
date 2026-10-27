@@ -22,6 +22,8 @@ La verificarea prin GitHub Contents API, `package.json` și `docs/ROADMAP.md` nu
 | Securitate | `security` | read-only | citire + verificări locale sigure | constatări cu severitate |
 | Verificator | `verifier` | read-only | citire + teste locale sigure | verdict QA independent |
 
+Modele și efort: `programmer` rulează pe `claude-opus-5-5`, iar ceilalți șase agenți pe `claude-sonnet-5-5`, toți cu `effort: medium`. Valorile sunt setate în frontmatter-ul fiecărui fișier din `.claude/agents/` (ID complet, nu alias, ca modelul să nu se schimbe singur). Pentru o schimbare, editează `model` și `effort` în fișierul agentului.
+
 Notă de implementare: în Claude Code, agentul coordonator este ghidul de rol și raportare. Sesiunea principală Claude Code este cea care lansează agenții nativi, le transmite rezultatele și păstrează controlul asupra integrării; un subagent nu trebuie tratat ca manager autonom al celorlalți subagenți.
 
 ## 4. Flux logic

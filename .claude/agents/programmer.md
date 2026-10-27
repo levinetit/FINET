@@ -2,7 +2,8 @@
 name: programmer
 description: Implement one explicitly approved FINET task on the current feature/phase branch, following existing conventions and adding focused tests.
 tools: Read, Grep, Glob, Edit, Write, Bash
-model: inherit
+model: claude-opus-5-5
+effort: medium
 permissionMode: default
 maxTurns: 24
 ---

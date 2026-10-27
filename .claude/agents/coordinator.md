@@ -2,7 +2,8 @@
 name: coordinator
 description: Use to coordinate a FINET task, define scope, delegate independent workstreams, enforce gates, and prepare an integration decision. The parent Claude Code session remains responsible for launching subagents and asking the human for integration approval.
 tools: Read, Grep, Glob
-model: inherit
+model: claude-sonnet-5-5
+effort: medium
 permissionMode: plan
 maxTurns: 12
 ---

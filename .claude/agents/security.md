@@ -2,7 +2,8 @@
 name: security
 description: Independently audit a FINET change or design for authorization, household isolation, secrets, API misuse, financial data exposure, unsafe migrations and dependency risk.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: claude-sonnet-5-5
+effort: medium
 permissionMode: plan
 maxTurns: 18
 ---

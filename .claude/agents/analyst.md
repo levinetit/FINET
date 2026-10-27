@@ -2,7 +2,8 @@
 name: analyst
 description: Analyze FINET requirements, domain rules, edge cases, data consistency, and conflicts between the user request, master prompt, docs and existing code.
 tools: Read, Grep, Glob
-model: inherit
+model: claude-sonnet-5-5
+effort: medium
 permissionMode: plan
 maxTurns: 14
 ---

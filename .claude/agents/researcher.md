@@ -2,7 +2,8 @@
 name: researcher
 description: Read-only repository reconnaissance. Use to map the actual FINET implementation, dependencies, APIs, tests, CI and documentation before planning changes.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: claude-sonnet-5-5
+effort: medium
 permissionMode: plan
 maxTurns: 16
 ---

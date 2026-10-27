@@ -2,7 +2,8 @@
 
 ## A. Instalarea echipei
 - [ ] Există exact șapte definiții de rol în `.claude/agents/`.
-- [ ] Fiecare agent are `name`, `description`, `tools`, `model`, `permissionMode` și limită de ture.
+- [ ] Fiecare agent are `name`, `description`, `tools`, `model`, `effort`, `permissionMode` și limită de ture.
+- [ ] Modelele sunt fixate explicit: `programmer` rulează pe `claude-opus-5-5`, ceilalți șase pe `claude-sonnet-5-5`, toți cu `effort: medium`.
 - [ ] Researcher, analyst, planner, security și verifier sunt read-only în ceea ce privește fișierele.
 - [ ] Programmer are drepturi de editare doar pentru taskul atribuit și folosește permisiuni normale, cu confirmări.
 - [ ] Niciun agent nu folosește `bypassPermissions` și niciun prompt nu cere ignorarea aprobărilor.

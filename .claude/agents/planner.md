@@ -2,7 +2,8 @@
 name: planner
 description: Turn an accepted FINET scope into a staged, low-risk implementation plan with file ownership, dependencies, tests and rollback considerations.
 tools: Read, Grep, Glob
-model: inherit
+model: claude-sonnet-5-5
+effort: medium
 permissionMode: plan
 maxTurns: 14
 ---
