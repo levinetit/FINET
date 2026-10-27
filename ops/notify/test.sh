@@ -75,5 +75,51 @@ check "mediul are prioritate față de --env-file" 0 $? "chat 7" "$out"
 out=$(clean_env sh "$N" --env-file "$TMP/lipsa.env" --dry-run x 2>&1)
 check "--env-file inexistent → 2" 2 $? "nu poate fi citit" "$out"
 
+# Valori pe mai multe linii (LF/CR): refuzate pe toată valoarea, înaintea regex-urilor. Fără ele,
+# `grep` ar valida doar o linie, iar un CR/LF în SMTP_FROM/NOTIFY_EMAIL_TO ar injecta antete.
+# (Linia nouă e literală: `$(printf '\n')` ar fi șirul gol.)
+NL='
+'
+CR=$(printf '\r')
+out=$(clean_env NOTIFY_TELEGRAM_BOT_TOKEN="$FAKE_TOKEN${NL}url = \"http://rau\"" \
+  NOTIFY_TELEGRAM_CHAT_ID=1 sh "$N" --dry-run x 2>&1)
+check "token cu LF (prima linie validă) → 2" 2 $? "NOTIFY_TELEGRAM_BOT_TOKEN conține un caracter de linie nouă" "$out"
+out=$(clean_env NOTIFY_TELEGRAM_BOT_TOKEN="$FAKE_TOKEN" NOTIFY_TELEGRAM_CHAT_ID="-1001${NL}42" \
+  sh "$N" --dry-run x 2>&1)
+check "chat id cu LF → 2" 2 $? "NOTIFY_TELEGRAM_CHAT_ID conține" "$out"
+out=$(clean_env NOTIFY_TELEGRAM_BOT_TOKEN="$FAKE_TOKEN$CR" NOTIFY_TELEGRAM_CHAT_ID=1 \
+  sh "$N" --dry-run x 2>&1)
+check "token cu CR final → 2" 2 $? "NOTIFY_TELEGRAM_BOT_TOKEN conține" "$out"
+
+EMAIL_OK="SMTP_HOST=smtp.exemplu.invalid SMTP_FROM=finet@exemplu.invalid NOTIFY_EMAIL_TO=a@exemplu.invalid"
+for var in SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD SMTP_FROM NOTIFY_EMAIL_TO; do
+  case "$var" in
+    SMTP_HOST) bad="smtp.exemplu.invalid${NL}x" ;;
+    SMTP_PORT) bad="587${NL}25" ;;
+    SMTP_FROM) bad="finet@exemplu.invalid${CR}${NL}Bcc: altcineva@exemplu.invalid" ;;
+    NOTIFY_EMAIL_TO) bad="a@exemplu.invalid${NL}Bcc: altcineva@exemplu.invalid" ;;
+    *) bad="valoare${NL}url = \"http://rau\"" ;;
+  esac
+  # shellcheck disable=SC2086
+  out=$(clean_env $EMAIL_OK SMTP_USER=u SMTP_PASSWORD=p "$var=$bad" sh "$N" --dry-run x 2>&1)
+  check "$var cu linie nouă → 2" 2 $? "$var conține un caracter de linie nouă" "$out"
+  case "$out" in *altcineva*|*rau*) echo "FAIL: valoarea lui $var apare în mesaj"; FAILS=$((FAILS + 1)) ;; esac
+done
+
+# Fișier de mediu cu terminații CRLF: valoarea ar purta un CR → refuzat, cu numele variabilei.
+printf 'NOTIFY_TELEGRAM_BOT_TOKEN=%s\r\nNOTIFY_TELEGRAM_CHAT_ID=42\r\n' "$FAKE_TOKEN" > "$TMP/crlf.env"
+out=$(clean_env sh "$N" --env-file "$TMP/crlf.env" --dry-run x 2>&1)
+check "--env-file cu CRLF → 2" 2 $? "NOTIFY_TELEGRAM_BOT_TOKEN conține" "$out"
+
+# curl_quote refuză CR/LF (apărare în plus față de verificarea de mai sus).
+out=$(NL="$NL" CR="$CR" sh -c '
+  eval "$(sed -n "/^curl_quote() {/,/^}/p" "$1")"
+  curl_quote "a$2b" >/dev/null; echo "lf=$?"
+  curl_quote "a$3b" >/dev/null; echo "cr=$?"
+  curl_quote "a\"b"; echo " ok=$?"' _ "$N" "$NL" "$CR" 2>&1)
+check "curl_quote refuză LF" 0 0 "lf=2" "$out"
+check "curl_quote refuză CR" 0 0 "cr=2" "$out"
+check "curl_quote scapă ghilimelele" 0 0 'a\"b ok=0' "$out"
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "notify.sh: toate testele au trecut"; else echo "notify.sh: $FAILS eșecuri"; exit 1; fi

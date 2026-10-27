@@ -79,6 +79,23 @@ load_env_file() {
 
 [ -n "$ENV_FILE" ] && load_env_file "$ENV_FILE"
 
+# Nicio valoare de configurare nu poate conține LF sau CR: `grep` validează pe linii, deci o
+# valoare pe mai multe linii ar trece de regex cu o singură linie corectă, iar un CR/LF în
+# SMTP_FROM sau NOTIFY_EMAIL_TO ar injecta antete în email. Verificarea e pe toată valoarea,
+# ÎNAINTE de orice regex. Mesajul numește variabila, nu valoarea.
+NL='
+'
+CR=$(printf '\r')
+for key in NOTIFY_TELEGRAM_BOT_TOKEN NOTIFY_TELEGRAM_CHAT_ID NOTIFY_EMAIL_TO \
+  SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD SMTP_FROM; do
+  eval "value=\${$key-}"
+  case "$value" in
+    *"$NL"*|*"$CR"*)
+      fail_config "$key conține un caracter de linie nouă (LF/CR; fișier de mediu cu terminații CRLF?)" ;;
+  esac
+done
+unset value
+
 if [ "$TEST" -eq 1 ]; then
   [ $# -eq 0 ] || usage
   MESSAGE="FINET: mesaj de test al canalului de notificări ($(hostname 2>/dev/null || echo necunoscut), $(date -u '+%Y-%m-%dT%H:%M:%SZ'))."
@@ -87,8 +104,12 @@ else
   MESSAGE=$*
 fi
 
-# Escape pentru valorile scrise între ghilimele în configurația curl.
+# Escape pentru valorile scrise între ghilimele în configurația curl. Refuză (cod 2, fără
+# ieșire) orice valoare cu LF sau CR: o linie nouă ar începe o opțiune curl nouă.
 curl_quote() {
+  case "$1" in
+    *"$NL"*|*"$CR"*) return 2 ;;
+  esac
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
@@ -183,10 +204,17 @@ if [ -n "$SMTP_HOST_V" ]; then
     printf 'Content-Transfer-Encoding: 8bit\r\n\r\n%s\r\n' "$MESSAGE"
   } > "$BODY"
 
+  # Valorile citate se calculează înaintea pipeline-ului, ca un refuz al `curl_quote` să
+  # oprească scriptul (într-un `$(...)` din pipeline eroarea s-ar pierde).
+  CURL_USER=
+  if [ -n "${SMTP_USER-}" ]; then
+    Q_USER=$(curl_quote "$SMTP_USER") || fail_config "SMTP_USER conține caractere nepermise"
+    Q_PASS=$(curl_quote "${SMTP_PASSWORD-}") || fail_config "SMTP_PASSWORD conține caractere nepermise"
+    CURL_USER="user = \"$Q_USER:$Q_PASS\""
+  fi
   {
-    if [ -n "${SMTP_USER-}" ]; then
-      printf 'user = "%s:%s"\n' "$(curl_quote "$SMTP_USER")" "$(curl_quote "${SMTP_PASSWORD-}")"
-    fi
+    [ -n "$CURL_USER" ] && printf '%s\n' "$CURL_USER"
+    :
   } | curl -sS --max-time 30 -K - $TLS_OPT --url "$SMTP_URL" \
       --mail-from "$FROM_ADDR" --mail-rcpt "$TO_ADDR" --upload-file "$BODY" || {
     echo "$PROG: trimiterea emailului a eșuat" >&2
