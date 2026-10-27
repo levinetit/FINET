@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { S3Config } from "@/lib/config";
 import { NotImplementedError } from "@/lib/errors";
 import type { Storage, StorageKey } from "@/lib/storage/types";
