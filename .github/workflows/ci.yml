@@ -131,3 +131,105 @@ jobs:
       - name: Audit dependențe (producție)
         continue-on-error: true
         run: pnpm audit --prod
+
+  # E2E Playwright (Faza 1): login, logout, sesiuni, parolă, rate limiting, antete, `next`, în
+  # AMBELE moduri (`personal`, apoi `saas`, secvențial: două `next dev` în același director s-ar
+  # bloca), plus proiectul `access` pe serverul de producție. Serverul de dezvoltare rulează cu
+  # Access dezactivat DOAR pentru test (config.ts refuză asta în producție).
+  e2e:
+    needs: pg-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      postgres:
+        image: postgres:${{ needs.pg-version.outputs.major }}-alpine
+        env:
+          POSTGRES_USER: finet
+          POSTGRES_PASSWORD: finet_ci
+          POSTGRES_DB: finet_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U finet -d finet_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Aplicația ca `finet_app` (NOBYPASSRLS); parole fictive din ops/postgres/test-bootstrap.sql.
+      DATABASE_URL: postgres://finet_app:finet_app_ci@localhost:5432/finet_test
+      APP_MODE: personal
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Parola utilizatorilor E2E, doar pentru baza temporară a job-ului (nu e un secret real).
+      E2E_PASSWORD: e2e-parola-de-test-ci-1
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Activează pnpm (corepack)
+        run: corepack enable
+
+      - name: Instalează dependențele
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap roluri FINET (Postgres de test)
+        run: >-
+          docker exec -i ${{ job.services.postgres.id }}
+          psql -U finet -d finet_test -v ON_ERROR_STOP=1 -q
+          < ops/postgres/test-bootstrap.sql
+
+      - name: Împachetează uneltele (migrații, CLI admin)
+        run: pnpm build:tools
+
+      - name: Migrații
+        env:
+          FINET_ROLE: migrate
+          DATABASE_URL: ""
+          MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_test
+        run: node dist/tools/migrate.mjs
+
+      # Câte trei utilizatori pentru fiecare mod (e2e/fixtures.ts); parola din stdin, niciodată
+      # ca argument.
+      - name: Utilizatorii E2E (CLI admin)
+        env:
+          FINET_ROLE: admin
+        run: |
+          set -eu
+          for mode in personal saas; do
+            for kind in main parola sesiuni; do
+              printf '%s\n' "$E2E_PASSWORD" | node dist/tools/admin.mjs create-user \
+                --email "e2e-$kind-$mode@finet.test" --name "E2E $kind" --password-stdin
+            done
+          done
+
+      - name: Build (serverul de producție pentru proiectul `access`)
+        run: pnpm build
+
+      - name: Instalează Chromium (Playwright)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E — modul personal (smoke, auth, access)
+        env:
+          E2E_APP_MODE: personal
+        run: pnpm test:e2e
+
+      - name: E2E — modul saas (smoke, auth)
+        env:
+          E2E_APP_MODE: saas
+          E2E_SERVER: dev
+          APP_MODE: saas
+        run: pnpm test:e2e --project=smoke --project=auth
+
+      - name: Raport Playwright (la eșec)
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
