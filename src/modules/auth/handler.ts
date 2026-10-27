@@ -9,6 +9,9 @@ import {
   type RateLimitKind,
   hitRateLimit,
   incrementDailyStat,
+  isKnownIp,
+  markKnownIp,
+  peekRateLimit,
   rateLimitKey,
   resetRateLimit,
 } from "./rate-limit";
@@ -44,6 +47,9 @@ export type AuthHandlerDeps = Readonly<{
 
 const AUTH_BASE = "/api/auth";
 const MAX_BODY_BYTES = 16 * 1024;
+
+/** Cât timp un IP de încredere rămâne „cunoscut” pentru un email după un login reușit. */
+export const KNOWN_IP_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const RATE_LIMITED_MESSAGE = "Prea multe încercări. Încearcă din nou mai târziu.";
 
@@ -88,10 +94,10 @@ const LIMITED_PATHS = new Set([
 type Limited = Readonly<{ kind: RateLimitKind; rule: RateLimitRule; subject: string }>;
 
 /**
- * Limitele unei cereri. Login-ul are DOUĂ (M2): pe IP + email și pe email singur (cheie fără
- * IP, `loginEmail`), ca încercările distribuite pe multe IP-uri să fie plafonate. Găleata mobilă
- * (mai mare) se alege după antetul `X-FINET-Client`, controlat de client, deci DOAR când IP-ul e
- * de încredere (cererea a trecut prin Access); altfel se aplică limita web, mai strictă.
+ * Limitele numărate la FIECARE încercare (pe IP + email etc.). Găleata mobilă (mai mare) se
+ * alege după antetul `X-FINET-Client`, controlat de client, deci DOAR când IP-ul e de încredere
+ * (cererea a trecut prin Access); altfel se aplică limita web, mai strictă. Plafonul pe email
+ * singur (M2) e separat: numără doar eșecurile (`handleAuthRequest`).
  */
 function limitsFor(
   sub: string,
@@ -111,7 +117,6 @@ function limitsFor(
         mobile
           ? { kind: "mobile_login", rule: limits.mobileLogin, subject: email }
           : { kind: "login", rule: limits.login, subject: email },
-        { kind: "login_email", rule: limits.loginEmail, subject: email },
       ];
     }
     case "/sign-in/magic-link":
@@ -184,20 +189,31 @@ export async function handleAuthRequest(
 
   const ip = trustedClientIp(request.headers, policy);
   const limited = limitsFor(sub, method, body, headers, config, ip !== null);
-  // Toate cheile se resetează după un login reușit (decizia mea, ADR 0003: altfel utilizatorii
-  // cu mai multe dispozitive și testele E2E ar consuma plafonul pe email cu login-uri reușite;
-  // un atacator distribuit primește o fereastră nouă doar când victima se conectează).
   const limitKeys: string[] = [];
   let retryAfter = 0;
   for (const limit of limited) {
-    const key =
-      limit.kind === "login_email"
-        ? rateLimitKey(limit.kind, null, limit.subject)
-        : rateLimitKey(limit.kind, ip, limit.subject);
+    const key = rateLimitKey(limit.kind, ip, limit.subject);
     limitKeys.push(key);
     // Toate limitele se numără (și când una e deja depășită).
     const result = await hitRateLimit(db, key, limit.rule, now());
     if (!result.allowed) retryAfter = Math.max(retryAfter, result.retryAfterSeconds);
+  }
+
+  // Plafonul pe email singur (M2, compromisul din ADR 0003): numără DOAR eșecurile, de pe orice
+  // IP, și se resetează la un login reușit. Depășit, blochează (429 uniform) — cu o excepție: un
+  // IP de încredere care a avut un login reușit pentru acest email în ultimele 30 de zile trece
+  // (limitele pe IP + email rămân), ca un atacator să nu poată bloca proprietarul contului.
+  const isLogin = sub === "/sign-in/email" && method === "POST";
+  const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
+  const emailCapKey = isLogin ? rateLimitKey("login_email", null, email) : null;
+  const knownIpKey = isLogin && ip ? rateLimitKey("known_ip", ip, email) : null;
+  const emailRule = config.auth.rateLimits.loginEmail;
+  if (emailCapKey && retryAfter === 0) {
+    const cap = await peekRateLimit(db, emailCapKey, emailRule, now());
+    if (cap.count >= emailRule.max) {
+      const known = knownIpKey ? await isKnownIp(db, knownIpKey, KNOWN_IP_TTL_MS, now()) : false;
+      if (!known) retryAfter = cap.retryAfterSeconds;
+    }
   }
   if (retryAfter > 0) {
     return jsonError(429, "rate_limited", RATE_LIMITED_MESSAGE, {
@@ -230,9 +246,15 @@ export async function handleAuthRequest(
   });
   const response = await auth.handler(forwarded);
 
-  if (sub === "/sign-in/email" && method === "POST") {
-    if (response.status === 401) await incrementDailyStat(db, "login_failed", now());
-    else if (response.ok) for (const key of limitKeys) await resetRateLimit(db, key);
+  if (isLogin) {
+    if (response.status === 401) {
+      await incrementDailyStat(db, "login_failed", now());
+      if (emailCapKey) await hitRateLimit(db, emailCapKey, emailRule, now());
+    } else if (response.ok) {
+      for (const key of limitKeys) await resetRateLimit(db, key);
+      if (emailCapKey) await resetRateLimit(db, emailCapKey);
+      if (knownIpKey) await markKnownIp(db, knownIpKey, KNOWN_IP_TTL_MS, now());
+    }
   }
   return response;
 }

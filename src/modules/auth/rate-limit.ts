@@ -21,7 +21,8 @@ import type { RateLimitRule } from "@/lib/config";
  * pe email (mai strictă, niciodată mai permisivă).
  */
 
-export type RateLimitKind = "login" | "mobile_login" | "login_email" | "email" | "password_change";
+export type RateLimitKind =
+  "login" | "mobile_login" | "login_email" | "known_ip" | "email" | "password_change";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;
@@ -62,6 +63,18 @@ function kindPrefixOf(key: string): string | null {
   return `finet:${match[1]}:`;
 }
 
+/** Curățarea throttled a tipului cheii `key` (vezi sus). */
+async function maybeCleanup(db: Db, key: string, windowMs: number, now: number): Promise<void> {
+  const prefix = kindPrefixOf(key);
+  if (!prefix || now - (lastCleanup.get(prefix) ?? -Infinity) < CLEANUP_INTERVAL_MS) return;
+  lastCleanup.set(prefix, now);
+  try {
+    await cleanupExpired(db, prefix, windowMs, now);
+  } catch {
+    // Curățarea e oportunistă: o eroare nu blochează limitarea.
+  }
+}
+
 export async function cleanupExpired(
   db: Db,
   prefix: string,
@@ -90,15 +103,7 @@ export async function hitRateLimit(
 ): Promise<RateLimitResult> {
   const windowMs = rule.windowSeconds * 1000;
   const expiredBefore = now - windowMs;
-  const prefix = kindPrefixOf(key);
-  if (prefix && now - (lastCleanup.get(prefix) ?? -Infinity) >= CLEANUP_INTERVAL_MS) {
-    lastCleanup.set(prefix, now);
-    try {
-      await cleanupExpired(db, prefix, windowMs, now);
-    } catch {
-      // Curățarea e oportunistă: o eroare nu blochează limitarea.
-    }
-  }
+  await maybeCleanup(db, key, windowMs, now);
   const rows = await db.execute<Row>(sql`
     insert into finet.auth_rate_limits (key, count, last_request)
     values (${key}, 1, ${now})
@@ -116,6 +121,55 @@ export async function hitRateLimit(
     count,
     retryAfterSeconds: Math.max(1, Math.ceil((start + windowMs - now) / 1000)),
   };
+}
+
+/**
+ * Citește contorul fără să-l crească (plafonul pe email numără doar eșecurile, M2): numărul de
+ * încercări din fereastra curentă și secundele până la redeschiderea ei.
+ */
+export async function peekRateLimit(
+  db: Db,
+  key: string,
+  rule: RateLimitRule,
+  now: number = Date.now(),
+): Promise<{ count: number; retryAfterSeconds: number }> {
+  const windowMs = rule.windowSeconds * 1000;
+  const rows = await db.execute<Row>(sql`
+    select count, last_request from finet.auth_rate_limits where key = ${key}`);
+  const row = rows[0];
+  const start = Number(row?.last_request ?? 0);
+  if (!row || start <= now - windowMs) return { count: 0, retryAfterSeconds: 0 };
+  return {
+    count: Number(row.count),
+    retryAfterSeconds: Math.max(1, Math.ceil((start + windowMs - now) / 1000)),
+  };
+}
+
+/** Marchează o pereche (IP de încredere, email) cu login reușit (`last_request` = acum). */
+export async function markKnownIp(
+  db: Db,
+  key: string,
+  ttlMs: number,
+  now: number = Date.now(),
+): Promise<void> {
+  // Rândurile `known_ip` mai vechi de 2 × TTL se curăță la fel ca celelalte.
+  await maybeCleanup(db, key, ttlMs, now);
+  await db.execute(sql`
+    insert into finet.auth_rate_limits (key, count, last_request) values (${key}, 1, ${now})
+    on conflict (key) do update set last_request = ${now}`);
+}
+
+/** `true` dacă perechea a avut un login reușit în ultimele `withinMs` milisecunde. */
+export async function isKnownIp(
+  db: Db,
+  key: string,
+  withinMs: number,
+  now: number = Date.now(),
+): Promise<boolean> {
+  const rows = await db.execute<{ ok: number }>(sql`
+    select 1 as ok from finet.auth_rate_limits
+     where key = ${key} and last_request > ${now - withinMs}`);
+  return rows.length > 0;
 }
 
 /** Șterge contorul (de exemplu după un login reușit). */
