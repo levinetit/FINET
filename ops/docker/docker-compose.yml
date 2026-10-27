@@ -211,11 +211,22 @@ services:
 
   finet-migrate:
     <<: *common
+    # Imaginea de unelte (ținta `tools` din Dockerfile), separată de imaginea web: conține
+    # runner-ul de migrații (src/db/migrate.ts, împachetat în dist/tools/migrate.mjs), migrațiile
+    # SQL și node_modules de producție, fără serverul Next.js.
+    image: ${FINET_TOOLS_IMAGE:-finet:tools}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: tools
     container_name: finet-migrate
     hostname: finet-migrate
-    # One-shot: rulează migrațiile cu rolul `finet_migrator` și se oprește. Doar el primește
-    # secretul finet_migrate_database_url (MIGRATOR_DATABASE_URL_FILE). În Faza 0 nu există migrații (Drizzle vine în Faza 1): comanda e un
-    # stub care doar anunță asta. Rulare explicită:
+    # One-shot: aplică migrațiile (src/db/migrations) cu rolul `finet_migrator` și se oprește;
+    # idempotent (a doua rulare nu aplică nimic), cod de ieșire ≠ 0 la eroare. Doar el primește
+    # secretul finet_migrate_database_url (MIGRATOR_DATABASE_URL_FILE). URL-ul trebuie să fie
+    # o conexiune în modul sesiune (pooler 5432 sau directă), nu pooler-ul tranzacție (6543).
+    # Rulare explicită (doar operatorul, după backup):
+    #   docker compose ... --profile migrate build finet-migrate
     #   docker compose ... --profile migrate run --rm finet-migrate
     profiles: [migrate]
     restart: "no"
@@ -231,10 +242,7 @@ services:
       NODE_ENV: production
       APP_MODE: personal
       NODE_OPTIONS: --max-old-space-size=192
-    command:
-      - node
-      - -e
-      - "console.log('finet-migrate: nicio migrație în Faza 0 (Drizzle vine în Faza 1)')"
+    command: ["node", "dist/tools/migrate.mjs"]
     volumes:
       - *ca-volume
     tmpfs:

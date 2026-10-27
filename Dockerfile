@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 # Imaginea FINET (serviciile finet-web și finet-worker). Build în trei etape:
 # deps (dependențe) → build (next build, ieșire standalone) → runner (doar ce rulează, user non-root).
+# Ținta separată `tools` (finet:tools, serviciul finet-migrate): runner-ul de migrații și, din F1-B,
+# uneltele CLI; se construiește cu `--target tools` și nu rulează `next build`.
+# `runner` rămâne ULTIMA etapă: un `docker build` fără `--target` produce imaginea web.
 # Nicio variabilă secretă nu intră în imagine: configurația vine la rulare, din mediul containerului.
 
 ARG NODE_IMAGE=node:24.22.1-bookworm-slim
@@ -23,6 +26,38 @@ RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build
+
+# --- prod-deps (doar pentru `tools`) --------------------------------------------------------
+FROM ${NODE_IMAGE} AS prod-deps
+WORKDIR /app
+ENV COREPACK_HOME=/opt/corepack
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile --prod
+
+# --- tools-build: împachetează uneltele (scripts/build-tools.mjs → dist/tools/*.mjs) ---------
+FROM ${NODE_IMAGE} AS tools-build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json tsconfig.json ./
+COPY scripts/build-tools.mjs ./scripts/
+COPY src ./src
+RUN node scripts/build-tools.mjs
+
+# --- tools --------------------------------------------------------------------------------
+# Rulează ca `node` (uid 1000); fișierele aparțin lui root, deci procesul nu le poate modifica.
+# Migrațiile se citesc din /app/src/db/migrations (FINET_MIGRATIONS_DIR le poate muta).
+FROM ${NODE_IMAGE} AS tools
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY --from=tools-build /app/dist/tools ./dist/tools
+COPY src/db/migrations ./src/db/migrations
+USER node
+# One-shot, fără server HTTP.
+HEALTHCHECK NONE
+CMD ["node", "dist/tools/migrate.mjs"]
 
 # --- runner -------------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS runner
