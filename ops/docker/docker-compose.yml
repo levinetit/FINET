@@ -1,0 +1,150 @@
+# FINET pe VPS-ul docker-apps (ADR 0002): două servicii din aceeași imagine, pe rețeaua externă
+# `apps`, FĂRĂ porturi publicate pe host. Intrarea vine prin cloudflare-tunnel (recomandat) sau
+# prin traefik-main (label-urile de mai jos, oprite implicit). Detalii: docs/INFRA.md.
+#
+# Rulare (doar operatorul, din checkout-ul repo-ului):
+#   docker compose -f ops/docker/docker-compose.yml \
+#     --env-file /home/docker-apps/finet/compose.env config     # verificare
+#   docker compose -f ops/docker/docker-compose.yml \
+#     --env-file /home/docker-apps/finet/compose.env up -d --build
+#
+# Două fișiere de mediu, cu roluri diferite:
+#   - `--env-file .../compose.env` (model: ops/docker/compose.env.example): variabilele de
+#     INTERPOLARE din acest fișier (${FINET_*}); nu ajung în containere.
+#   - `env_file` (${FINET_ENV_FILE}, model: ops/docker/finet.env.example): mediul aplicației
+#     (baza de date, Access, SMTP...). Stă în afara repo-ului, permisiuni 600.
+# `environment:` are prioritate peste `env_file`; acolo stau doar valorile fixe ale deploy-ului.
+
+name: finet
+
+x-common: &common
+  image: ${FINET_IMAGE:-finet:local}
+  restart: unless-stopped
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  env_file:
+    - path: ${FINET_ENV_FILE:-/home/docker-apps/finet/finet.env}
+      required: true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  finet-web:
+    <<: *common
+    container_name: finet-web
+    hostname: finet-web
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      APP_MODE: personal
+      # Access e obligatoriu în producție (src/lib/config.ts refuză `false`).
+      # CF_ACCESS_TEAM_DOMAIN și CF_ACCESS_AUD vin din env_file.
+      CF_ACCESS_REQUIRED: "true"
+      # S3 (Supabase Storage) vine în Faza 6; cu `s3` acum, /api/health raportează `degraded`.
+      STORAGE_DRIVER: local
+      STORAGE_DIR: /data/storage
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      NODE_OPTIONS: --max-old-space-size=384
+    volumes:
+      # Directorul trebuie creat înainte de operator, deținut de uid 1000 (utilizatorul `node`):
+      #   install -d -o 1000 -g 1000 -m 700 /home/docker-apps/finet/storage
+      # `create_host_path: false`: dacă lipsește, pornirea eșuează în loc să creeze un director
+      # al lui root, în care aplicația nu poate scrie.
+      - type: bind
+        source: ${FINET_DATA_DIR:-/home/docker-apps/finet}/storage
+        target: /data/storage
+        bind:
+          create_host_path: false
+    tmpfs:
+      # rootfs e read-only; Next.js scrie doar în cache și în /tmp.
+      - /tmp:size=64m,mode=1777
+      - /app/.next/cache:size=64m,uid=1000,gid=1000,mode=0700
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    healthcheck:
+      # Liveness local (Host 127.0.0.1, fără antete de proxy); vezi src/lib/access.ts.
+      # Ruta /api/health/live NU se publică prin Traefik sau tunel.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    networks:
+      apps:
+        # de confirmat de operator: IP liber pe `apps` (verificat liber la 2026-10-27, în afara
+        # adreselor ocupate; .2 și intervalul dinamic se evită).
+        ipv4_address: ${FINET_WEB_IP:-172.88.88.130}
+    labels:
+      # Varianta Traefik (oprită implicit: FINET_TRAEFIK_ENABLE=false). Varianta recomandată e
+      # cloudflare-tunnel → http://finet-web:3000 (docs/INFRA.md, ops/cloudflare/README.md).
+      traefik.enable: "${FINET_TRAEFIK_ENABLE:-false}"
+      traefik.docker.network: apps
+      # Liveness-ul e exclus explicit din router (apărare în plus față de src/proxy.ts).
+      traefik.http.routers.finet.rule: "Host(`${FINET_HOST:?FINET_HOST lipsește (compose.env)}`) && !Path(`/api/health/live`)"
+      # `websecure` și `letsencrypt` sunt numele folosite de celelalte servicii de pe host
+      # (label-uri observate pe 2026-10-27). Confirmă numele resolverului din traefik.yml.
+      traefik.http.routers.finet.entrypoints: websecure
+      traefik.http.routers.finet.tls: "true"
+      traefik.http.routers.finet.tls.certresolver: "${FINET_CERTRESOLVER:-letsencrypt}"
+      traefik.http.services.finet.loadbalancer.server.port: "3000"
+
+  finet-worker:
+    <<: *common
+    container_name: finet-worker
+    hostname: finet-worker
+    # Faza 0: workerul e un stub (pg-boss vine în Faza 5/6). Profilul `worker` îl ține oprit
+    # implicit, ca să nu consume memorie pe un host încărcat; pornire explicită:
+    #   docker compose ... --profile worker up -d finet-worker
+    profiles: [worker]
+    depends_on:
+      finet-web:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      APP_MODE: personal
+      CF_ACCESS_REQUIRED: "true"
+      STORAGE_DRIVER: local
+      STORAGE_DIR: /data/storage
+      NODE_OPTIONS: --max-old-space-size=192
+    command:
+      - node
+      - -e
+      - "console.log('finet-worker: inactiv, vine în Faza 6');const t=setInterval(()=>{},3600000);for(const s of ['SIGTERM','SIGINT'])process.on(s,()=>{clearInterval(t);process.exit(0)})"
+    volumes:
+      - type: bind
+        source: ${FINET_DATA_DIR:-/home/docker-apps/finet}/storage
+        target: /data/storage
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    # Healthcheck-ul din imagine verifică serverul web; stub-ul nu are HTTP.
+    healthcheck:
+      disable: true
+    networks:
+      apps:
+        # de confirmat de operator
+        ipv4_address: ${FINET_WORKER_IP:-172.88.88.131}
+
+networks:
+  apps:
+    external: true
