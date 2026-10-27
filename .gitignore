@@ -1,0 +1,31 @@
+# dependențe
+node_modules/
+.pnpm-store/
+
+# build Next.js
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# teste
+coverage/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# mediu și secrete
+.env
+.env.*
+!.env.example
+
+# date locale (storage de dezvoltare)
+.data/
+
+# diverse
+.DS_Store
+*.log
+npm-debug.log*
+pnpm-debug.log*

@@ -1,0 +1,33 @@
+# Doar pentru dezvoltare (Codespaces / Dev Containers). Parolele sunt de test.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/typescript-node:24-bookworm
+    volumes:
+      - ..:/workspaces/FINET:cached
+    command: sleep infinity
+    depends_on:
+      - db
+      - mailpit
+
+  db:
+    # Versiunea majoră din ops/postgres/VERSION (provizoriu 17, până există proiectul Supabase).
+    # La schimbarea fișierului VERSION se actualizează și tagul de aici.
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: finet
+      POSTGRES_PASSWORD: finet_dev
+      POSTGRES_DB: finet_dev
+    volumes:
+      - finet-dev-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finet -d finet_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    # Primește emailurile trimise de aplicație; interfața web pe portul 8025.
+    image: axllent/mailpit:v1.32
+
+volumes:
+  finet-dev-pg:

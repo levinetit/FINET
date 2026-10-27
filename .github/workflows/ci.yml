@@ -1,0 +1,106 @@
+# CI FINET: pe fiecare PR și pe main — lint, type-check, teste (cu PostgreSQL), build,
+# scanarea secretelor din fișierele de client și audit de dependențe.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Citește versiunea majoră PostgreSQL din ops/postgres/VERSION. Serviciile unui job pornesc
+  # înaintea pașilor, deci versiunea trebuie aflată într-un job separat.
+  pg-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      major: ${{ steps.read.outputs.major }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: ops/postgres/VERSION
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - id: read
+        run: |
+          major="$(tr -d '[:space:]' < ops/postgres/VERSION)"
+          if ! printf '%s' "$major" | grep -Eq '^[0-9]+$'; then
+            echo "ops/postgres/VERSION invalid: '$major'" >&2
+            exit 1
+          fi
+          echo "major=$major" >> "$GITHUB_OUTPUT"
+
+  ci:
+    needs: pg-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:${{ needs.pg-version.outputs.major }}-alpine
+        env:
+          POSTGRES_USER: finet
+          POSTGRES_PASSWORD: finet_ci
+          POSTGRES_DB: finet_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U finet -d finet_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Bază temporară, doar pentru CI; nu e un secret.
+      DATABASE_URL: postgres://finet:finet_ci@localhost:5432/finet_test
+      APP_MODE: personal
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # pnpm vine prin corepack-ul din Node 24 instalat mai sus (versiunea din `packageManager`).
+      - name: Activează pnpm (corepack)
+        run: corepack enable
+
+      - name: Instalează dependențele
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Formatare
+        run: pnpm format:check
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Teste
+        run: pnpm test
+
+      - name: Teste scripturi ops (fără rețea)
+        run: pnpm test:ops
+
+      - name: Build
+        run: pnpm build
+
+      - name: Scanează secretele din fișierele de client
+        run: pnpm scan:client-secrets
+
+      # Non-blocant la început (avertismentele tranzitive pot fi zgomot); se face blocant
+      # după ce lista e curată.
+      - name: Audit dependențe (producție)
+        continue-on-error: true
+        run: pnpm audit --prod

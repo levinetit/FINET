@@ -1,0 +1,5 @@
+# Scripturile de instalare ale dependențelor sunt blocate implicit de pnpm; aici se decide explicit.
+# unrs-resolver: postinstall-ul doar descarcă o variantă WASM de rezervă; binarul nativ vine
+# deja ca dependență opțională, deci scriptul nu e necesar.
+allowBuilds:
+  unrs-resolver: false

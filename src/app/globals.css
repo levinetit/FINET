@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+/*
+ * Tokenii FINET (master prompt 3.4). Tema urmează sistemul (`prefers-color-scheme`),
+ * iar `data-theme="light|dark"` pe <html> o poate forța. Componentele (inclusiv shadcn/ui)
+ * folosesc doar acești tokeni, niciodată culori scrise direct.
+ */
+:root {
+  --bg: #f2f5f4;
+  --surface: #ffffff;
+  --fg: #14201c;
+  --muted: #586863;
+  --line: #d3dcd8;
+  --accent: #1f45b8;
+  --accent-fg: #ffffff;
+  --marker: #f6dc6b;
+  --marker-fg: #3a2f00;
+  --paper: #fbfaf4;
+  --ok: #1d7f47;
+  --warn: #a8690f;
+  --bad: #bf3326;
+  --radius: 10px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1412;
+    --surface: #151d1a;
+    --fg: #e5ece9;
+    --muted: #93a39d;
+    --line: #29352f;
+    --accent: #87a3ff;
+    --accent-fg: #0b1430;
+    --marker: #e3c446;
+    --marker-fg: #2a2200;
+    --paper: #ecebe3;
+    --ok: #4fc483;
+    --warn: #e2ab48;
+    --bad: #ff7466;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e1412;
+  --surface: #151d1a;
+  --fg: #e5ece9;
+  --muted: #93a39d;
+  --line: #29352f;
+  --accent: #87a3ff;
+  --accent-fg: #0b1430;
+  --marker: #e3c446;
+  --marker-fg: #2a2200;
+  --paper: #ecebe3;
+  --ok: #4fc483;
+  --warn: #e2ab48;
+  --bad: #ff7466;
+  color-scheme: dark;
+}
+
+/* Varianta `dark:` din Tailwind urmează aceeași regulă ca tokenii. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+@theme inline {
+  /* Tokenii FINET ca utilitare Tailwind (bg-bg, text-fg, border-line, text-accent ...). */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-marker: var(--marker);
+  --color-marker-fg: var(--marker-fg);
+  --color-paper: var(--paper);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+
+  /* Numele așteptate de componentele shadcn/ui, legate de aceiași tokeni. */
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--fg);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-fg);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--fg);
+  --color-muted-foreground: var(--muted);
+  --color-accent-foreground: var(--accent-fg);
+  --color-destructive: var(--bad);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-display: var(--font-bricolage), "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-plex-sans), "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-plex-sans), "Segoe UI", system-ui, sans-serif;
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-bricolage), "Segoe UI", system-ui, sans-serif;
+  }
+}
+
+/* Sumele în coloane și bonurile randate: cifre cu lățime fixă. */
+@utility num {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Logo: linia se redesenează la hover; fără animație la mișcare redusă. */
+.finet-logo-line {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 0;
+}
+
+.finet-logo:hover .finet-logo-line {
+  animation: finet-logo-draw 0.9s ease;
+}
+
+@keyframes finet-logo-draw {
+  from {
+    stroke-dashoffset: 60;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finet-logo:hover .finet-logo-line {
+    animation: none;
+  }
+}
