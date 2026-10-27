@@ -90,6 +90,9 @@ jobs:
       - name: Teste
         run: pnpm test
 
+      - name: Teste scripturi ops (fără rețea)
+        run: pnpm test:ops
+
       - name: Build
         run: pnpm build
 
