@@ -73,7 +73,7 @@ URL-ul altui rol prezent în mediul unui proces, direct sau ca `_FILE`, **opreș
   - mesajele de eroare nu conțin nici conținutul, nici calea.
 - **Variabilele care acceptă `_FILE`:** `DATABASE_URL`, `WORKER_DATABASE_URL`, `MIGRATOR_DATABASE_URL`, `HEALTH_TOKEN`, `NOTIFY_TELEGRAM_BOT_TOKEN`, `SMTP_PASSWORD`, `STORAGE_S3_ACCESS_KEY_ID`, `STORAGE_S3_SECRET_ACCESS_KEY`. `BETTER_AUTH_SECRET` primește varianta `_FILE` în Faza 1, odată cu validarea lui.
 - **Ce montează compose-ul:** doar secretele folosite acum, adică URL-urile pe rol și `finet_health_token`. Tokenul e obligatoriu în deploy (decizia mea): fișierul trebuie să existe și să nu fie gol. Telegram și SMTP sunt ale `notify.sh` de pe host (`/srv/finet/env/notify.env`), nu ale containerelor. Când aplicația le va folosi, se adaugă ca secrete noi.
-- **`src/proxy.ts` nu s-a schimbat:** citește `HEALTH_TOKEN` din `getConfig()`, care rezolvă deja `HEALTH_TOKEN_FILE`. Verificat pe serverul standalone: `/api/health` cu tokenul din fișier → 200, cu un token greșit → 403. Doar `web` cere `CF_ACCESS_*`; `migrate` nu cere `STORAGE_DIR`. În Faza 0, `finet-worker` și `finet-migrate` sunt stub-uri (workerul vine în Faza 5/6, migrațiile Drizzle în Faza 1); `finet-migrate` rulează pe rețeaua implicită a proiectului (`finet_default`), nu pe `apps`, fără IP static.
+- **`src/proxy.ts` nu s-a schimbat:** citește `HEALTH_TOKEN` din `getConfig()`, care rezolvă deja `HEALTH_TOKEN_FILE`. Verificat pe serverul standalone: `/api/health` cu tokenul din fișier → 200, cu un token greșit → 403. Doar `web` cere `CF_ACCESS_*`; `migrate` nu cere `STORAGE_DIR`. `finet-worker` e încă un stub (workerul vine în Faza 5/6). Din Faza 1, `finet-migrate` folosește imaginea de unelte `finet:tools` (ținta `tools` din `Dockerfile`) și aplică migrațiile reale (`node dist/tools/migrate.mjs`, ADR 0003), idempotent, cod ≠ 0 la eroare; URL-ul trebuie să fie în modul sesiune (5432). `finet-migrate` rulează pe rețeaua implicită a proiectului (`finet_default`), nu pe `apps`, fără IP static.
 
 Ce fixează compose-ul în `environment` (au prioritate față de `env_file`): `FINET_ROLE`, `NODE_ENV=production`, `APP_MODE=personal`, `CF_ACCESS_REQUIRED=true` (web), `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage` (web, worker), `HOSTNAME=0.0.0.0`, `PORT=3000`, `NODE_OPTIONS`, căile secretelor (`DATABASE_URL_FILE` și `HEALTH_TOKEN_FILE` la web, `WORKER_DATABASE_URL_FILE` la worker, `MIGRATOR_DATABASE_URL_FILE` la migrate) și `DATABASE_CA_FILE` (toate trei).
 
@@ -225,7 +225,7 @@ Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/
 | Regiune | UE, Irlanda (`eu-west-1`), proiect creat la 2026-10-27 |
 | Versiune PostgreSQL | `17` (17.11 la 2026-10-27, verificat prin Management API); `ops/postgres/VERSION` = `17` |
 | Limita de conexiuni a planului (pooler, directe) | **TODO operator** (din panou, după alegerea planului) |
-| Pool-uri FINET | `/api/health`: 1 conexiune (`max: 1`); restul se dimensionează în Faza 1, sub limita planului |
+| Pool-uri FINET | `/api/health`: 1 conexiune (`max: 1`); clientul Drizzle (`src/db/index.ts`): implicit 5 pe proces (`DEFAULT_POOL_MAX`, decizia mea, de ajustat sub limita planului); `finet-migrate`: 1 |
 | Plan | **TODO operator** (ADR separat; planul gratuit suspendă proiectul și nu are backup-uri descărcabile) |
 
 ## 6. Acceptarea Fazei 0 (master prompt, Faza 0)

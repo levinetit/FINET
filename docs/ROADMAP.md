@@ -7,7 +7,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | Fază | Stare | Note |
 |---|---|---|
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
-| 1 — Autentificare, profil, gospodărie | neimplementat | |
+| 1 — Autentificare, profil, gospodărie | **parțial** | F1-A gata (date, RLS, authz, migrații); F1-B, F1-C în lucru — vezi mai jos |
 | 2 — Conturi, categorii, tranzacții, transferuri | neimplementat | |
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | neimplementat | |
 | 4 — Stabilizare (rezervată) | neimplementat | |
@@ -32,6 +32,16 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - CI-ul pe GitHub nu a rulat încă pe acest branch (fără push).
 - Testul automat „schema `finet` inaccesibilă prin Data API” cere un proiect și un tabel (Faza 1).
 - Sarcina umană (bonuri și extrase reale anonimizate în `fixtures/`): neînceput.
+
+### Faza 1: stare
+**F1-A (stratul de date), gata în repo, verificat local pe PostgreSQL 17 efemer:**
+- Drizzle: schema `finet` (`src/db/schema/`), migrațiile `0000_core` (generată) și `0001_rls` (de mână) în `src/db/migrations/`;
+- RLS `ENABLE` + `FORCE` pe `households`, `household_members`, `audit_events`, `user_preferences`, `consents`; contextul per tranzacție (`withRls`, `src/db/rls.ts`); `requireMember`/`withMember` (`src/lib/authz.ts`);
+- runner-ul de migrații (`src/db/migrate.ts`, imaginea `finet:tools`, serviciul `finet-migrate`), idempotent, cu evidența în `finet.__drizzle_migrations`;
+- teste de integrare pe roluri reale (`finet_app`, `finet_migrator`; `ops/postgres/test-bootstrap.sql`), pași de migrare în CI;
+- decizii și abateri: ADR 0003.
+
+**Rămâne:** F1-B (Better Auth, Argon2id, `bearer`, rate limiting, CLI admin, API), F1-C (UI, antete, E2E, documentație). Aplicarea migrațiilor pe Supabase o face operatorul (`docker compose ... --profile migrate run --rm finet-migrate`), după revizuiri și backup.
 
 ### Puncte deschise
 - **Tokenii shadcn/ui:** în FINET `muted` e o culoare de **text** și `accent` e albastrul saturat al acțiunilor, dar shadcn folosește `muted` și `accent` ca **fundaluri** discrete. Înainte de prima componentă shadcn trebuie nume separate (de exemplu `surface-2`, `accent-soft`, ca în demo), altfel componentele ies cu fundaluri greșite.
