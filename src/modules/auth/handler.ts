@@ -11,7 +11,7 @@ import {
   incrementDailyStat,
   isKnownIp,
   markKnownIp,
-  peekRateLimit,
+  releaseRateLimit,
   rateLimitKey,
   resetRateLimit,
 } from "./rate-limit";
@@ -199,18 +199,23 @@ export async function handleAuthRequest(
     if (!result.allowed) retryAfter = Math.max(retryAfter, result.retryAfterSeconds);
   }
 
-  // Plafonul pe email singur (M2, compromisul din ADR 0003): numără DOAR eșecurile, de pe orice
-  // IP, și se resetează la un login reușit. Depășit, blochează (429 uniform) — cu o excepție: un
-  // IP de încredere care a avut un login reușit pentru acest email în ultimele 30 de zile trece
-  // (limitele pe IP + email rămân), ca un atacator să nu poată bloca proprietarul contului.
+  // Plafonul pe email singur (M2, compromisul din ADR 0003): numără eșecurile de pe orice IP și
+  // se resetează la un login reușit. Rezervarea e ATOMICĂ, înainte de Better Auth (un singur
+  // `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`), ca cererile paralele să nu treacă toate
+  // de plafon; un răspuns care nu e nici 401, nici succes (validare, 5xx) restituie rezervarea.
+  // Depășit, blochează (429 uniform) — cu o excepție: un IP de încredere care a avut un login
+  // reușit pentru acest email în ultimele 30 de zile nu e blocat (dar e numărat), ca un atacator
+  // să nu poată bloca proprietarul contului; limitele pe IP + email rămân.
   const isLogin = sub === "/sign-in/email" && method === "POST";
   const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
   const emailCapKey = isLogin ? rateLimitKey("login_email", null, email) : null;
   const knownIpKey = isLogin && ip ? rateLimitKey("known_ip", ip, email) : null;
   const emailRule = config.auth.rateLimits.loginEmail;
+  let emailReserved = false;
   if (emailCapKey && retryAfter === 0) {
-    const cap = await peekRateLimit(db, emailCapKey, emailRule, now());
-    if (cap.count >= emailRule.max) {
+    const cap = await hitRateLimit(db, emailCapKey, emailRule, now());
+    emailReserved = true;
+    if (!cap.allowed) {
       const known = knownIpKey ? await isKnownIp(db, knownIpKey, KNOWN_IP_TTL_MS, now()) : false;
       if (!known) retryAfter = cap.retryAfterSeconds;
     }
@@ -249,11 +254,13 @@ export async function handleAuthRequest(
   if (isLogin) {
     if (response.status === 401) {
       await incrementDailyStat(db, "login_failed", now());
-      if (emailCapKey) await hitRateLimit(db, emailCapKey, emailRule, now());
     } else if (response.ok) {
       for (const key of limitKeys) await resetRateLimit(db, key);
       if (emailCapKey) await resetRateLimit(db, emailCapKey);
       if (knownIpKey) await markKnownIp(db, knownIpKey, KNOWN_IP_TTL_MS, now());
+    } else if (emailCapKey && emailReserved) {
+      // Nici eșec de autentificare, nici succes: nu se numără în plafonul pe email.
+      await releaseRateLimit(db, emailCapKey);
     }
   }
   return response;

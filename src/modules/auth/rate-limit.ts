@@ -124,25 +124,12 @@ export async function hitRateLimit(
 }
 
 /**
- * Citește contorul fără să-l crească (plafonul pe email numără doar eșecurile, M2): numărul de
- * încercări din fereastra curentă și secundele până la redeschiderea ei.
+ * Restituie o rezervare făcută cu `hitRateLimit` (cererea nu a fost o încercare reală, de
+ * exemplu un 400 de validare sau un 5xx): `count = greatest(count - 1, 0)`, atomic.
  */
-export async function peekRateLimit(
-  db: Db,
-  key: string,
-  rule: RateLimitRule,
-  now: number = Date.now(),
-): Promise<{ count: number; retryAfterSeconds: number }> {
-  const windowMs = rule.windowSeconds * 1000;
-  const rows = await db.execute<Row>(sql`
-    select count, last_request from finet.auth_rate_limits where key = ${key}`);
-  const row = rows[0];
-  const start = Number(row?.last_request ?? 0);
-  if (!row || start <= now - windowMs) return { count: 0, retryAfterSeconds: 0 };
-  return {
-    count: Number(row.count),
-    retryAfterSeconds: Math.max(1, Math.ceil((start + windowMs - now) / 1000)),
-  };
+export async function releaseRateLimit(db: Db, key: string): Promise<void> {
+  await db.execute(sql`
+    update finet.auth_rate_limits set count = greatest(count - 1, 0) where key = ${key}`);
 }
 
 /** Marchează o pereche (IP de încredere, email) cu login reușit (`last_request` = acum). */
