@@ -45,7 +45,7 @@ Fără porturi pe host: singurele căi către FINET sunt tunelul și (opțional)
 
 Fișiere din repo:
 - `Dockerfile`: multi-stage (deps → build → runner), Next.js `standalone`, user `node` (uid 1000), healthcheck pe `/api/health/live`.
-- `ops/docker/docker-compose.yml`: serviciile `finet-web`, `finet-worker` (profilul `worker`) și `finet-migrate` (one-shot, profilul `migrate`).
+- `ops/docker/docker-compose.yml`: serviciile `finet-web`, `finet-worker` (profilul `worker`), `finet-migrate` (one-shot, profilul `migrate`) și `finet-admin` (CLI-ul de administrare, one-shot, profilul `admin`, F1-B).
 - `ops/docker/compose.env.example`: variabilele de interpolare (`FINET_HOST`, `FINET_IMAGE`, `FINET_ENV_DIR`, `FINET_SECRETS_DIR`, `FINET_CA_DIR`, `FINET_DATABASE_CA_NAME`, `FINET_DATA_DIR`, `FINET_WEB_IP`, `FINET_WORKER_IP`, `FINET_TRAEFIK_ENABLE`, `FINET_CERTRESOLVER`). Nu conține secrete.
 - `ops/docker/finet.env.example`, `finet.worker.env.example`, `finet.migrate.env.example`: modelele mediului **nesecret**, câte unul pe serviciu. Secretele nu stau în ele (vezi „Secretele ca fișiere”).
 - `ops/notify/notify.env.example`: configurația notificărilor, doar pentru `ops/notify/notify.sh` pe host (nu ajunge în niciun container).
@@ -55,11 +55,12 @@ Fiecare proces primește doar URL-ul bazei de date al rolului său (`src/lib/con
 
 | Serviciu | `FINET_ROLE` (fixat în compose) | Secrete (fișiere în `/srv/finet/secrets/`) | Variabila din container | `env_file` (doar nesecret) | Rolul Postgres |
 |---|---|---|---|---|---|
-| `finet-web` | `web` | `finet_database_url`, `finet_health_token` | `DATABASE_URL_FILE`, `HEALTH_TOKEN_FILE` | `/srv/finet/env/finet.env` | `finet_app` (pooler, tranzacție 6543) |
+| `finet-web` | `web` | `finet_database_url`, `finet_health_token`, `finet_better_auth_secret` | `DATABASE_URL_FILE`, `HEALTH_TOKEN_FILE`, `BETTER_AUTH_SECRET_FILE` | `/srv/finet/env/finet.env` | `finet_app` (pooler, tranzacție 6543) |
 | `finet-worker` | `worker` | `finet_worker_database_url` | `WORKER_DATABASE_URL_FILE` | `/srv/finet/env/finet.worker.env` | `finet_app` (pooler, sesiune 5432) |
 | `finet-migrate` | `migrate` | `finet_migrate_database_url` | `MIGRATOR_DATABASE_URL_FILE` | `/srv/finet/env/finet.migrate.env` | `finet_migrator` (proprietarul schemei, sesiune 5432) |
+| `finet-admin` | `admin` | `finet_database_url` | `DATABASE_URL_FILE` | `/srv/finet/env/finet.admin.env` | `finet_app` (același URL ca web) |
 
-URL-ul altui rol prezent în mediul unui proces, direct sau ca `_FILE`, **oprește pornirea**, cu un mesaj care numește variabila, nu valoarea (mai sigur decât ignorarea tăcută: o greșeală de configurare se vede imediat). Fișierul altui rol nici nu se deschide. Serverul Next.js pornește doar cu `FINET_ROLE=web`. `pnpm test:ops` verifică trei lucruri: fișierele exemplu nu conțin secrete active, compose-ul nu pune secrete în `environment`, iar fiecare serviciu montează doar secretul rolului său.
+URL-ul altui rol prezent în mediul unui proces, direct sau ca `_FILE`, **oprește pornirea**, cu un mesaj care numește variabila, nu valoarea (mai sigur decât ignorarea tăcută: o greșeală de configurare se vede imediat). Fișierul altui rol nici nu se deschide. Serverul Next.js pornește doar cu `FINET_ROLE=web`. `pnpm test:ops` verifică trei lucruri: fișierele exemplu nu conțin secrete active, compose-ul nu pune secrete în `environment`, iar fiecare serviciu montează doar secretul rolului său (tokenul de sănătate și secretul Better Auth doar `finet-web`).
 
 ### Secretele ca fișiere (constatarea N1)
 **Problema:** Docker copiază valorile din `environment` și `env_file` în `/home/docker/containers/<id>/config.v2.json`, iar `backup_home_gdrive_clar.sh` urcă duminica o arhivă **necriptată** a `/home/docker` pe Google Drive. Orice secret dat ca variabilă de mediu ajunge acolo.
@@ -137,7 +138,7 @@ URL-urile Supabase au `sslmode=verify-full`. CA-ul Supabase (`prod-ca-2021.crt`,
    sudo install -o root -g root -m 600 ops/docker/finet.migrate.env.example /srv/finet/env/finet.migrate.env
    sudo install -o root -g root -m 600 ops/docker/compose.env.example       /srv/finet/compose/compose.env
    sudo install -o root -g root -m 600 ops/notify/notify.env.example        /srv/finet/env/notify.env
-   sudoedit /srv/finet/env/finet.env /srv/finet/env/finet.worker.env /srv/finet/env/finet.migrate.env /srv/finet/compose/compose.env
+   sudoedit /srv/finet/env/finet.env /srv/finet/env/finet.worker.env /srv/finet/env/finet.migrate.env /srv/finet/env/finet.admin.env /srv/finet/compose/compose.env
    ```
    Fișierele de mediu (doar valori nesecrete) sunt citite de `docker compose` (rulat cu `sudo`), deci rămân `root:root 600`.
 
@@ -152,9 +153,11 @@ URL-urile Supabase au `sslmode=verify-full`. CA-ul Supabase (`prod-ca-2021.crt`,
    unset v
    # Tokenul de sănătate: generat direct în fișier (îl citește monitorizarea cu `sudo cat`).
    openssl rand -hex 32 | sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_health_token
-   sudo ls -ln /srv/finet/secrets/    # 4 fișiere, 1000 1000, -r--------
+   # Secretul Better Auth (F1-B): generat direct în fișier, nu se afișează nicăieri.
+   openssl rand -base64 32 | sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_better_auth_secret
+   sudo ls -ln /srv/finet/secrets/    # 5 fișiere, 1000 1000, -r--------
    ```
-   - Creează toate cele patru fișiere, chiar dacă workerul și migrarea nu pornesc încă.
+   - Creează toate cele cinci fișiere, chiar dacă workerul și migrarea nu pornesc încă. Rotirea `finet_better_auth_secret` invalidează toate sesiunile și tokenurile bearer (utilizatorii se reconectează).
      - Compose nu verifică existența lor la `config` (verificat).
      - Pornirea unui serviciu al cărui fișier lipsește ar trebui să eșueze la bind mount (neverificat).
    - URL-urile: pooler-ul Supabase, `postgres://<rol>.<ref>:<parola>@<host-pooler>:<port>/postgres?sslmode=verify-full`.
@@ -194,7 +197,21 @@ URL-urile Supabase au `sslmode=verify-full`. CA-ul Supabase (`prod-ca-2021.crt`,
    sudo sh ops/notify/notify.sh --env-file /srv/finet/env/notify.env --dry-run --test
    sudo sh ops/notify/notify.sh --env-file /srv/finet/env/notify.env --test
    ```
-9. **Acceptarea** (secțiunea 6).
+9. **Primul utilizator (F1-B)**, după migrații (`--profile migrate run --rm finet-migrate`), cu imaginea de unelte (`--profile admin build finet-admin`). Primul utilizator creat devine administrator al platformei; fiecare primește automat preferințele implicite și o gospodărie personală. Parola NU se dă ca argument:
+   ```bash
+   C="sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile admin"
+   # Varianta 1: parola generată, afișată o singură dată (o copiezi în managerul de parole).
+   $C run --rm finet-admin create-user --email <email> --name '<Nume>'
+   # Varianta 2: parola aleasă, tastată la un prompt ascuns și trimisă prin stdin (`-T`).
+   sudo -v; IFS= read -rs p; echo; printf '%s\n' "$p" | $C run --rm -T finet-admin \
+     create-user --email <email> --name '<Nume>' --password-stdin; unset p
+   # Resetarea parolei (fără SMTP, singura cale); revocă toate sesiunile utilizatorului.
+   $C run --rm finet-admin reset-password --email <email>
+   # Un membru al familiei în gospodăria altcuiva (id-ul gospodăriei apare la create-user).
+   $C run --rm finet-admin add-member --household <id-gospodărie> --email <email> [--role member]
+   ```
+   `finet-admin` rulează cu rolul `finet_app` (același URL ca web, ADR 0003), pe rețeaua `finet_default`, fără secretul Better Auth. Comenzile sunt idempotente unde are sens (un utilizator sau un membru existent nu se modifică); ieșirea conține doar id-uri, nu emailuri sau parole citite; cod ≠ 0 la eroare (1) sau la utilizare greșită (2). Local: `FINET_ROLE=admin DATABASE_URL=... pnpm admin:create-user --email ... --name ...`.
+10. **Acceptarea** (secțiunea 6).
 
 Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env down` (nu șterge `/srv/finet/`; nu există volume Docker numite).
 

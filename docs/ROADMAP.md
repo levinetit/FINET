@@ -7,7 +7,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | Fază | Stare | Note |
 |---|---|---|
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
-| 1 — Autentificare, profil, gospodărie | **parțial** | F1-A gata (date, RLS, authz, migrații); F1-B, F1-C în lucru — vezi mai jos |
+| 1 — Autentificare, profil, gospodărie | **parțial** | F1-A (date, RLS, authz, migrații) și F1-B (Better Auth, API, CLI) gata; F1-C în lucru — vezi mai jos |
 | 2 — Conturi, categorii, tranzacții, transferuri | neimplementat | |
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | neimplementat | |
 | 4 — Stabilizare (rezervată) | neimplementat | |
@@ -41,7 +41,16 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - teste de integrare pe roluri reale (`finet_app`, `finet_migrator`; `ops/postgres/test-bootstrap.sql`), pași de migrare în CI;
 - decizii și abateri: ADR 0003.
 
-**Rămâne:** F1-B (Better Auth, Argon2id, `bearer`, rate limiting, CLI admin, API), F1-C (UI, antete, E2E, documentație). Aplicarea migrațiilor pe Supabase o face operatorul (`docker compose ... --profile migrate run --rm finet-migrate`), după revizuiri și backup.
+**F1-B (autentificarea server-side, fără UI), gata în repo, verificat local pe PostgreSQL 17 efemer:**
+- Better Auth 1.7.13 (adaptorul Drizzle pe `users`/`auth_*`, id-uri uuid din bază), parole Argon2id prin `crypto.argon2` din Node (m=19 MiB, t=2, p=1), minimum 10 caractere, HIBP opțional (oprit implicit);
+- `personal`: `/api/auth/sign-up/*` → 404, utilizatori doar din CLI; magic link (de unică folosință, 10 minute, nu creează conturi) și resetarea prin email doar cu SMTP (Nodemailer);
+- sesiuni în bază (30 de zile, prelungite cel mult o dată pe zi, fără cookie cache), pluginul `bearer` (doar tokenuri semnate) pentru Android, sesiunea mobilă afișată „Telefon Android” (`X-FINET-Client`);
+- rate limiting în `auth_rate_limits` pe IP de încredere (`cf-connecting-ip` doar după JWT Access) + email normalizat: login web, login mobil, emailuri, resetare, schimbarea parolei; login-urile eșuate numărate agregat pe zi;
+- API `/api/v1/me` (GET/PATCH), `/me/sessions` (GET), `/me/sessions/{id}` (DELETE), `/me/sessions/revoke-others`, `/me/password`; CSRF pe mutațiile cu cookie; erori `{ error: { code, message, fields? } }`;
+- gospodăria personală și preferințele create atomic cu utilizatorul; CLI `admin` (`create-user`, `reset-password`, `add-member`; `dist/tools/admin.mjs`, serviciul `finet-admin`); audit pentru login, parolă, sesiuni, creare utilizator, add-member;
+- decizii: ADR 0003 („Autentificarea (F1-B)”).
+
+**Rămâne:** F1-C (UI login/profil/sesiuni, antete CSP, E2E Playwright în CI, `docs/SECURITY_CHECKLIST.md`). Înregistrarea publică în `saas` (cu verificare email) nu e implementată (sign-up rămâne oprit și în `saas`, cu 400 de la Better Auth). OpenAPI (`docs/openapi.json`) pentru `/api/v1` nu e generat încă (6.4; de făcut odată cu primele endpointuri din Faza 2 sau în F1-C). Aplicarea migrațiilor pe Supabase o face operatorul (`docker compose ... --profile migrate run --rm finet-migrate`), după revizuiri și backup.
 
 ### Puncte deschise
 - **Tokenii shadcn/ui:** în FINET `muted` e o culoare de **text** și `accent` e albastrul saturat al acțiunilor, dar shadcn folosește `muted` și `accent` ca **fundaluri** discrete. Înainte de prima componentă shadcn trebuie nume separate (de exemplu `surface-2`, `accent-soft`, ca în demo), altfel componentele ies cu fundaluri greșite.
@@ -82,7 +91,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
 | Fază | Stare | Depinde de (web) |
 |---|---|---|
 | A — Fundație (Flutter în `mobile/`, temă, navigare, client Dio, date simulate, CI) | neimplementat | — |
-| B — Autentificare și profil | neimplementat | Faza 1 + API `/api/v1/` |
+| B — Autentificare și profil | neimplementat (API-ul web există din F1-B: login `bearer`, `/api/v1/me`, sesiuni) | Faza 1 + API `/api/v1/` |
 | C — Funcții de bază (dashboard, tranzacții, bugete) | neimplementat | Fazele 2–3 |
 | D — Recurențe și documente (bonuri, extrase, partajare) | neimplementat | Fazele 5–7 |
 | E — Stabilizare și livrare (APK semnat, GitHub Releases) | neimplementat | Faza 9 (pagina de descărcare) |
