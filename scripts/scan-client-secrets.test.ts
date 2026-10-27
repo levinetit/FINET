@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -46,6 +46,23 @@ describe("parseSecretNames", () => {
 
   it("marcajul se aplică doar variabilei imediat următoare", () => {
     expect(parseSecretNames("# secret\nA_KEY=1\nB_KEY=2")).toEqual(["A_KEY"]);
+  });
+
+  it("ia și variabila marcată, dar comentată, fără să mute marcajul pe următoarea", () => {
+    expect(
+      parseSecretNames("# secret\n# WORKER_URL=postgres://x\nSMTP_HOST=localhost\n# secret\nB=1"),
+    ).toEqual(["WORKER_URL", "B"]);
+    // Un comentariu obișnuit (fără `NUME=`) sau o variabilă comentată nemarcată nu contează.
+    expect(parseSecretNames("# OPTIONAL_X=1\n# secret\n# o notă\nA_KEY=1")).toEqual(["A_KEY"]);
+  });
+
+  it("păstrează în listă toate URL-urile bazei de date din .env.example al repo-ului", () => {
+    const text = readFileSync(join(import.meta.dirname, "..", ".env.example"), "utf8");
+    const names = parseSecretNames(text);
+    for (const n of ["DATABASE_URL", "WORKER_DATABASE_URL", "MIGRATOR_DATABASE_URL"]) {
+      expect(names).toContain(n);
+    }
+    expect(names).not.toContain("SMTP_HOST");
   });
 });
 

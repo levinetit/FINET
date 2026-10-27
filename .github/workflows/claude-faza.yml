@@ -55,7 +55,8 @@ jobs:
 
     env:
       DATABASE_URL: postgres://finet:finet_ci@localhost:5432/finet_test
-      MIGRATOR_DATABASE_URL: postgres://finet:finet_ci@localhost:5432/finet_test
+      # Fără MIGRATOR_/WORKER_DATABASE_URL la nivel de job: serverul web (rolul implicit) nu
+      # pornește dacă le vede. Migrațiile le primesc explicit, pe comanda care le rulează.
       APP_MODE: personal
 
     steps:

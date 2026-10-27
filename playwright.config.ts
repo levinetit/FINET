@@ -18,15 +18,24 @@ const devURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${devPort}`;
 const prodURL = `http://127.0.0.1:${prodPort}`;
 const only = process.env.E2E_SERVER;
 
-// Mediul fiecărui server, peste mediul curent (fără secrete: valori fictive).
+// Mediul fiecărui server, peste mediul curent (fără secrete: valori fictive). Serverul e rolul
+// `web`, care refuză să pornească dacă vede URL-urile workerului sau ale migratorului; ele se
+// golesc aici, ca un mediu de dezvoltare care le exportă să nu oprească testele.
+const webRole: Record<string, string> = {
+  FINET_ROLE: "web",
+  WORKER_DATABASE_URL: "",
+  MIGRATOR_DATABASE_URL: "",
+};
 const devEnv: Record<string, string> = {
   ...(process.env as Record<string, string>),
+  ...webRole,
   NODE_ENV: "development",
   APP_MODE: "personal",
   CF_ACCESS_REQUIRED: "false",
 };
 const prodEnv: Record<string, string> = {
   ...(process.env as Record<string, string>),
+  ...webRole,
   NODE_ENV: "production",
   APP_MODE: "personal",
   CF_ACCESS_REQUIRED: "true",

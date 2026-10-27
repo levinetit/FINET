@@ -20,7 +20,9 @@ export const SECRET_PATTERNS = [
 
 /**
  * Extrage din conținutul unui `.env.example` numele variabilelor marcate cu un rând `# secret`
- * imediat deasupra. Variabilele `NEXT_PUBLIC_*` sunt publice și se ignoră mereu.
+ * imediat deasupra. Variabila poate fi și comentată (`# NUME=...`, de exemplu URL-urile altor
+ * roluri, care nu se pun în mediul web), ca să rămână în lista scanată. Variabilele
+ * `NEXT_PUBLIC_*` sunt publice și se ignoră mereu.
  * @param {string} text
  * @returns {string[]}
  */
@@ -33,7 +35,8 @@ export function parseSecretNames(text) {
       marked = true;
       continue;
     }
-    const match = /^([A-Z][A-Z0-9_]*)\s*=/.exec(line);
+    const match =
+      /^([A-Z][A-Z0-9_]*)\s*=/.exec(line) ?? (marked ? /^#\s*([A-Z][A-Z0-9_]*)=/.exec(line) : null);
     if (match) {
       const name = match[1];
       if (marked && !name.startsWith("NEXT_PUBLIC_")) names.push(name);

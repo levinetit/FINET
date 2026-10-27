@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConfigError, parseConfig } from "@/lib/config";
+import { ConfigError, parseConfig, resetConfigForTests } from "@/lib/config";
+import { validateConfigOrExit } from "@/lib/config-startup";
 
 // Mediu minim valid pentru dezvoltare.
 const DEV = { APP_MODE: "personal", NODE_ENV: "development" } as const;
@@ -33,6 +34,7 @@ describe("parseConfig", () => {
     expect(c.storage.s3).toBeNull();
     expect(c.access).toEqual({ required: false, teamDomain: null, aud: null });
     expect(c.database.url).toBeNull();
+    expect(c.role).toBe("web");
     expect(c.ai.dailyDocumentLimit).toBe(50);
     expect(c.ai.monthlyBudget).toEqual({ amountMinor: 0n, currency: "USD" });
     expect(c.notify).toEqual({ telegram: null, smtp: null });
@@ -189,5 +191,149 @@ describe("parseConfig", () => {
 
   it("ignoră variabilele necunoscute din mediu", () => {
     expect(() => parseConfig({ ...DEV, PATH: "/usr/bin", ALTCEVA: "x" })).not.toThrow();
+  });
+});
+
+describe("parseConfig pe rol (FINET_ROLE)", () => {
+  const URL_WEB = "postgres://finet_app.ref:p-web@pooler.exemplu.invalid:6543/postgres";
+  const URL_WORKER = "postgres://finet_app.ref:p-worker@pooler.exemplu.invalid:5432/postgres";
+  const URL_MIGRATOR = "postgres://finet_migrator.ref:p-mig@pooler.exemplu.invalid:5432/postgres";
+
+  it("implicit e `web`; șirul gol înseamnă tot `web`", () => {
+    expect(parseConfig(DEV).role).toBe("web");
+    expect(parseConfig({ ...DEV, FINET_ROLE: "" }).role).toBe("web");
+    expect(parseConfig({ ...DEV, FINET_ROLE: "web", DATABASE_URL: URL_WEB }).database.url).toBe(
+      URL_WEB,
+    );
+  });
+
+  it("refuză un rol necunoscut", () => {
+    expect(issuesOf({ ...DEV, FINET_ROLE: "admin" })).toEqual(["FINET_ROLE"]);
+    expect(issuesOf({ ...DEV, FINET_ROLE: "WEB" })).toEqual(["FINET_ROLE"]);
+  });
+
+  it("web respinge WORKER_DATABASE_URL și MIGRATOR_DATABASE_URL (în dezvoltare și în producție)", () => {
+    for (const base of [DEV, PROD]) {
+      expect(issuesOf({ ...base, WORKER_DATABASE_URL: URL_WORKER })).toEqual([
+        "WORKER_DATABASE_URL",
+      ]);
+      expect(issuesOf({ ...base, MIGRATOR_DATABASE_URL: URL_MIGRATOR })).toEqual([
+        "MIGRATOR_DATABASE_URL",
+      ]);
+      expect(
+        issuesOf({
+          ...base,
+          DATABASE_URL: URL_WEB,
+          WORKER_DATABASE_URL: URL_WORKER,
+          MIGRATOR_DATABASE_URL: URL_MIGRATOR,
+        }),
+      ).toEqual(["WORKER_DATABASE_URL", "MIGRATOR_DATABASE_URL"]);
+    }
+  });
+
+  it("web: mesajul numește variabila interzisă, nu valoarea", () => {
+    let message = "";
+    try {
+      parseConfig({ ...PROD, MIGRATOR_DATABASE_URL: URL_MIGRATOR });
+    } catch (error) {
+      message = (error as Error).message + JSON.stringify((error as ConfigError).issues);
+    }
+    expect(message).toContain("MIGRATOR_DATABASE_URL");
+    expect(message).toContain("FINET_ROLE=web");
+    expect(message).not.toContain("p-mig");
+    expect(message).not.toContain("pooler.exemplu.invalid");
+  });
+
+  it("worker cere WORKER_DATABASE_URL și respinge celelalte URL-uri", () => {
+    const worker = { ...PROD, FINET_ROLE: "worker" };
+    expect(issuesOf(worker)).toEqual(["WORKER_DATABASE_URL"]);
+    const c = parseConfig({ ...worker, WORKER_DATABASE_URL: URL_WORKER });
+    expect(c.role).toBe("worker");
+    expect(c.database).toEqual({ url: URL_WORKER });
+    expect(issuesOf({ ...worker, WORKER_DATABASE_URL: URL_WORKER, DATABASE_URL: URL_WEB })).toEqual(
+      ["DATABASE_URL"],
+    );
+    expect(
+      issuesOf({ ...worker, WORKER_DATABASE_URL: URL_WORKER, MIGRATOR_DATABASE_URL: URL_MIGRATOR }),
+    ).toEqual(["MIGRATOR_DATABASE_URL"]);
+  });
+
+  it("migrate cere MIGRATOR_DATABASE_URL și respinge celelalte URL-uri", () => {
+    const migrate = { ...DEV, FINET_ROLE: "migrate" };
+    expect(issuesOf(migrate)).toEqual(["MIGRATOR_DATABASE_URL"]);
+    const c = parseConfig({ ...migrate, MIGRATOR_DATABASE_URL: URL_MIGRATOR });
+    expect(c.role).toBe("migrate");
+    expect(c.database).toEqual({ url: URL_MIGRATOR });
+    expect(
+      issuesOf({ ...migrate, MIGRATOR_DATABASE_URL: URL_MIGRATOR, DATABASE_URL: URL_WEB }),
+    ).toEqual(["DATABASE_URL"]);
+    expect(
+      issuesOf({
+        ...migrate,
+        MIGRATOR_DATABASE_URL: URL_MIGRATOR,
+        WORKER_DATABASE_URL: URL_WORKER,
+      }),
+    ).toEqual(["WORKER_DATABASE_URL"]);
+  });
+
+  it("URL-ul interzis gol (`VAR=`) e tratat ca nesetat, deci nu blochează pornirea", () => {
+    expect(() =>
+      parseConfig({ ...DEV, WORKER_DATABASE_URL: "", MIGRATOR_DATABASE_URL: "" }),
+    ).not.toThrow();
+  });
+
+  it("Config nu mai expune URL-urile altor roluri", () => {
+    const c = parseConfig({ ...DEV, DATABASE_URL: URL_WEB });
+    expect(Object.keys(c.database)).toEqual(["url"]);
+  });
+});
+
+describe("validateConfigOrExit (pornirea serverului web)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    resetConfigForTests();
+  });
+
+  function start(env: Record<string, string>): { exited: number | null; log: string } {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("APP_MODE", "personal");
+    vi.stubEnv("CF_ACCESS_REQUIRED", "false");
+    vi.stubEnv("FINET_ROLE", "");
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("WORKER_DATABASE_URL", "");
+    vi.stubEnv("MIGRATOR_DATABASE_URL", "");
+    for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
+    resetConfigForTests();
+    let exited: number | null = null;
+    const log: string[] = [];
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      exited = code ?? 0;
+      return undefined as never;
+    }) as typeof process.exit);
+    vi.spyOn(console, "error").mockImplementation((m: unknown) => void log.push(String(m)));
+    validateConfigOrExit();
+    return { exited, log: log.join("\n") };
+  }
+
+  it("pornește cu rolul web implicit", () => {
+    expect(start({}).exited).toBeNull();
+  });
+
+  it("se oprește dacă mediul web conține URL-ul migratorului (fără să-l afișeze)", () => {
+    const r = start({ MIGRATOR_DATABASE_URL: "postgres://m:parola-mig@h.exemplu.invalid/db" });
+    expect(r.exited).toBe(1);
+    expect(r.log).toContain("MIGRATOR_DATABASE_URL");
+    expect(r.log).not.toContain("parola-mig");
+  });
+
+  it("se oprește cu FINET_ROLE=worker sau migrate, chiar dacă mediul e valid pentru acel rol", () => {
+    const w = start({ FINET_ROLE: "worker", WORKER_DATABASE_URL: "postgres://w:p@h/db" });
+    expect(w.exited).toBe(1);
+    expect(w.log).toContain("FINET_ROLE");
+    resetConfigForTests();
+    vi.restoreAllMocks();
+    const m = start({ FINET_ROLE: "migrate", MIGRATOR_DATABASE_URL: "postgres://m:p@h/db" });
+    expect(m.exited).toBe(1);
   });
 });

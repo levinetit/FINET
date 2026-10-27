@@ -1,5 +1,7 @@
 // Mediu de dezvoltare FINET (Codespaces / Dev Containers): Node 24 + pnpm, PostgreSQL local, Mailpit.
 // Doar pentru dezvoltare: parole de test, fără date reale (docs/GHID_CONSTRUIRE.md, secțiunea 3).
+// Doar DATABASE_URL: rolul `web` (implicit) refuză WORKER_/MIGRATOR_DATABASE_URL în mediu
+// (src/lib/config.ts); comenzile de worker/migrare le primesc explicit, doar pentru ele.
 {
   "name": "FINET",
   "dockerComposeFile": "docker-compose.yml",
@@ -14,8 +16,6 @@
   "remoteEnv": {
     "PATH": "${containerEnv:HOME}/.local/bin:${containerEnv:PATH}",
     "DATABASE_URL": "postgres://finet:finet_dev@db:5432/finet_dev",
-    "WORKER_DATABASE_URL": "postgres://finet:finet_dev@db:5432/finet_dev",
-    "MIGRATOR_DATABASE_URL": "postgres://finet:finet_dev@db:5432/finet_dev",
     "APP_MODE": "personal",
     "SMTP_HOST": "mailpit",
     "SMTP_PORT": "1025"

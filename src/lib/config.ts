@@ -17,6 +17,7 @@ import { CURRENCIES, parseAmount, type Money } from "@/lib/money";
  *   cu `NODE_ENV=production` fără mediul de producție.
  * - Niciun secret în `NEXT_PUBLIC_*`: singura variabilă publică e `NEXT_PUBLIC_APP_NAME`.
  * - Mesajele de eroare folosesc doar numele variabilei și codul problemei, niciodată valoarea.
+ * - Fiecare proces primește doar URL-ul bazei de date al rolului său (`FINET_ROLE`, vezi `Role`).
  */
 
 // ---------------------------------------------------------------------------------------------
@@ -24,6 +25,15 @@ import { CURRENCIES, parseAmount, type Money } from "@/lib/money";
 // ---------------------------------------------------------------------------------------------
 
 export type AppMode = "personal" | "saas";
+/**
+ * Rolul procesului (`FINET_ROLE`), care decide ce URL de bază de date primește:
+ * - `web` (implicit): serverul Next.js, doar `DATABASE_URL`;
+ * - `worker`: procesul de fundal (Faza 5/6), doar `WORKER_DATABASE_URL`;
+ * - `migrate`: rularea migrațiilor (Faza 1+), doar `MIGRATOR_DATABASE_URL`.
+ * URL-urile celorlalte roluri, dacă apar în mediu, opresc pornirea: un proces compromis nu
+ * trebuie să aibă la îndemână drepturile altui rol (de exemplu proprietarul schemei).
+ */
+export type Role = "web" | "worker" | "migrate";
 export type NodeEnv = "development" | "production" | "test";
 
 export type S3Config = Readonly<{
@@ -54,13 +64,17 @@ export type AccessConfig = Readonly<{
 
 export type Config = Readonly<{
   nodeEnv: NodeEnv;
+  role: Role;
   appMode: AppMode;
   appName: string;
   appUrl: string | null;
   database: Readonly<{
+    /**
+     * URL-ul bazei pentru rolul curent: `DATABASE_URL` (web), `WORKER_DATABASE_URL` (worker)
+     * sau `MIGRATOR_DATABASE_URL` (migrate). `null` doar pentru `web` fără `DATABASE_URL`
+     * (Faza 0: `/api/health` raportează `db: unknown`).
+     */
     url: string | null;
-    workerUrl: string | null;
-    migratorUrl: string | null;
   }>;
   storage: StorageConfig;
   access: AccessConfig;
@@ -116,6 +130,7 @@ const nonNegativeInt = z
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).optional(),
+  FINET_ROLE: z.enum(["web", "worker", "migrate"]).optional(),
   APP_MODE: z.enum(["personal", "saas"]),
   APP_URL: z.url({ protocol: /^https?$/ }).optional(),
   NEXT_PUBLIC_APP_NAME: z.string().min(1).max(40).optional(),
@@ -162,6 +177,20 @@ const envSchema = z.object({
 
 type RawEnv = z.infer<typeof envSchema>;
 const ENV_KEYS = Object.keys(envSchema.shape) as (keyof RawEnv)[];
+
+type DatabaseVariable = "DATABASE_URL" | "WORKER_DATABASE_URL" | "MIGRATOR_DATABASE_URL";
+
+/** Variabila de bază de date a fiecărui rol; celelalte două sunt interzise în acel rol. */
+const ROLE_DATABASE_VARIABLE: Readonly<Record<Role, DatabaseVariable>> = {
+  web: "DATABASE_URL",
+  worker: "WORKER_DATABASE_URL",
+  migrate: "MIGRATOR_DATABASE_URL",
+};
+const DATABASE_VARIABLES: readonly DatabaseVariable[] = [
+  "DATABASE_URL",
+  "WORKER_DATABASE_URL",
+  "MIGRATOR_DATABASE_URL",
+];
 
 /** Valori implicite (decizia mea, documentate în `.env.example`). */
 const DEFAULTS = {
@@ -228,6 +257,18 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
   const nodeEnv: NodeEnv = e.NODE_ENV ?? "development";
   const isProduction = nodeEnv === "production";
 
+  // Baza de date pe rol (decizia mea: regula se aplică în orice NODE_ENV, nu doar în producție,
+  // ca dezvoltarea să nu ascundă un mediu amestecat). `web` poate rula fără `DATABASE_URL` în
+  // Faza 0; `worker` și `migrate` nu au sens fără URL-ul lor.
+  const role: Role = e.FINET_ROLE ?? "web";
+  const databaseVariable = ROLE_DATABASE_VARIABLE[role];
+  for (const variable of DATABASE_VARIABLES) {
+    if (variable !== databaseVariable && e[variable] !== undefined) {
+      issues.push({ variable, problem: `nu e permisă când FINET_ROLE=${role}` });
+    }
+  }
+  if (role !== "web") need(databaseVariable, `când FINET_ROLE=${role}`);
+
   // Cloudflare Access: implicit obligatoriu în producție; dezactivarea în producție e refuzată.
   const accessRequired = e.CF_ACCESS_REQUIRED ? e.CF_ACCESS_REQUIRED === "true" : isProduction;
   if (isProduction && !accessRequired) {
@@ -285,14 +326,11 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
 
   return Object.freeze({
     nodeEnv,
+    role,
     appMode: e.APP_MODE,
     appName: e.NEXT_PUBLIC_APP_NAME ?? DEFAULTS.appName,
     appUrl: e.APP_URL ?? null,
-    database: Object.freeze({
-      url: e.DATABASE_URL ?? null,
-      workerUrl: e.WORKER_DATABASE_URL ?? null,
-      migratorUrl: e.MIGRATOR_DATABASE_URL ?? null,
-    }),
+    database: Object.freeze({ url: e[databaseVariable] ?? null }),
     storage: Object.freeze({
       driver,
       dir: e.STORAGE_DIR ?? DEFAULTS.storageDir,

@@ -255,6 +255,11 @@ describe("FAIL-CLOSED", () => {
       vi.stubEnv("CF_ACCESS_AUD", AUD);
       vi.stubEnv("CF_ACCESS_REQUIRED", "");
       vi.stubEnv("HEALTH_TOKEN", "");
+      // Izolare față de mediul în care rulează testele: rolul web nu acceptă URL-urile
+      // workerului și migratorului (src/lib/config.ts).
+      vi.stubEnv("FINET_ROLE", "");
+      vi.stubEnv("WORKER_DATABASE_URL", "");
+      vi.stubEnv("MIGRATOR_DATABASE_URL", "");
       for (const [k, v] of Object.entries(extra)) vi.stubEnv(k, v);
       resetConfigForTests();
     }
@@ -324,6 +329,9 @@ describe("FAIL-CLOSED", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("APP_MODE", "personal");
     vi.stubEnv("CF_ACCESS_REQUIRED", "false");
+    vi.stubEnv("FINET_ROLE", "");
+    vi.stubEnv("WORKER_DATABASE_URL", "");
+    vi.stubEnv("MIGRATOR_DATABASE_URL", "");
     resetConfigForTests();
     const res = await proxy(new NextRequest("http://localhost:3000/"));
     expect(res.headers.get("x-middleware-next")).toBe("1");
