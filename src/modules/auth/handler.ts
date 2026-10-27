@@ -3,7 +3,7 @@ import "server-only";
 import type { Db } from "@/db";
 import type { Config, RateLimitRule } from "@/lib/config";
 
-import type { FinetAuth } from "./auth";
+import { type FinetAuth, isAllowedAuthPath } from "./auth";
 import { checkPasswordPolicy, PASSWORD_PROBLEM_MESSAGES } from "./password";
 import {
   type RateLimitKind,
@@ -144,6 +144,8 @@ export async function handleAuthRequest(
   if (config.appMode === "personal" && (sub === "/sign-up" || sub.startsWith("/sign-up/"))) {
     return notFound();
   }
+  // M1: doar căile din lista permisă ajung la Better Auth.
+  if (!isAllowedAuthPath(sub)) return notFound();
 
   const policy = { accessVerified: config.access.required };
   const headers = withTrustedClientIp(request.headers, policy);

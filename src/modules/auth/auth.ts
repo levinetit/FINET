@@ -68,7 +68,43 @@ export const DISABLED_AUTH_PATHS = [
   "/revoke-other-sessions",
   "/list-accounts",
   "/unlink-account",
+  // M1: căi active implicit, nefolosite de FINET și fără rate limiting propriu.
+  "/verify-password",
+  "/send-verification-email",
+  "/verify-email",
+  "/update-session",
+  "/link-social",
+  "/refresh-token",
+  "/get-access-token",
+  "/account-info",
+  "/sign-in/social",
+  "/delete-user/callback",
 ] as const;
+
+/**
+ * M1: lista PERMISĂ a căilor Better Auth expuse prin HTTP (`handler.ts` răspunde 404 la orice
+ * altceva, inclusiv la căile adăugate de o versiune nouă Better Auth sau de un plugin). Un test
+ * parcurge `auth.api` din instanța reală și verifică regula.
+ */
+export const ALLOWED_AUTH_PATHS: ReadonlySet<string> = new Set([
+  "/get-session",
+  "/sign-out",
+  "/sign-in/email",
+  "/sign-in/magic-link",
+  "/magic-link/verify",
+  "/request-password-reset",
+  "/reset-password",
+  "/ok",
+  "/error",
+]);
+
+/** Căile cu parametru permise (callback-ul linkului de resetare: `/reset-password/<token>`). */
+export const ALLOWED_AUTH_PREFIXES: readonly string[] = ["/reset-password/"];
+
+export function isAllowedAuthPath(sub: string): boolean {
+  if (ALLOWED_AUTH_PATHS.has(sub)) return true;
+  return ALLOWED_AUTH_PREFIXES.some((p) => sub.startsWith(p) && !sub.slice(p.length).includes("/"));
+}
 
 /** Mesajul uniform pentru credențiale greșite (același cod ca Better Auth). */
 const INVALID_CREDENTIALS = {
