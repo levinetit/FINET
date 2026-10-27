@@ -1,0 +1,32 @@
+// Mediu de dezvoltare FINET (Codespaces / Dev Containers): Node 24 + pnpm, PostgreSQL local, Mailpit.
+// Doar pentru dezvoltare: parole de test, fără date reale (docs/GHID_CONSTRUIRE.md, secțiunea 3).
+{
+  "name": "FINET",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/FINET",
+  "forwardPorts": [3000, 8025],
+  "portsAttributes": {
+    "3000": { "label": "FINET" },
+    "8025": { "label": "Mailpit" }
+  },
+  "postCreateCommand": "corepack enable --install-directory ~/.local/bin && pnpm install",
+  "remoteEnv": {
+    "PATH": "${containerEnv:HOME}/.local/bin:${containerEnv:PATH}",
+    "DATABASE_URL": "postgres://finet:finet_dev@db:5432/finet_dev",
+    "WORKER_DATABASE_URL": "postgres://finet:finet_dev@db:5432/finet_dev",
+    "MIGRATOR_DATABASE_URL": "postgres://finet:finet_dev@db:5432/finet_dev",
+    "APP_MODE": "personal",
+    "SMTP_HOST": "mailpit",
+    "SMTP_PORT": "1025"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  }
+}
