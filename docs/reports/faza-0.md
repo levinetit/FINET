@@ -46,12 +46,14 @@ Mediu: container `node:24`, uid 1009, 2 GB RAM, pnpm 12.15.0 prin corepack, pe h
 | `shellcheck` | **NOT RUN**: nu e disponibil în container sau pe host |
 | `docker compose -f ops/docker/docker-compose.yml --env-file <compose.env.example cu FINET_ENV_FILE=finet.env.example> --profile worker config` (Compose 2.26.1, fără `up`) | PASS; fără `FINET_HOST` → eroare explicită (exit 15), cum e intenționat |
 | `ops/supabase/roles.sql` cu psql pe PostgreSQL 17 efemer (superuser local, cu rolurile `anon`/`authenticated` create înainte) | PASS: fără parole → eroare (exit 3); parole scurte → eroare (exit 3); cu parole fictive → roluri `nobypassrls`, schema deținută de `finet_migrator`, `anon`/`authenticated` fără `USAGE`. **Nu** e verificat pe Supabase (rolul `postgres` acolo nu e superuser) |
-| `docker build` al imaginii | rulat în T1 (log existent `dbuild.log`, build reușit), **nu reverificat în T4** |
-| Pornirea serverului standalone cu configurații invalide și verificările proxy | rulat în T3 (script de test local), **nu reverificat în T4** în afara E2E `access` de mai sus |
+| `docker build` al imaginii | **NOT RUN pe HEAD**: există un log de build reușit dintr-o sesiune anterioară (commit necunoscut); nereverificat în T4 (memoria hostului) |
+| Server standalone (build-ul de mai sus) pornit cu configurații diferite, cereri `fetch` locale | PASS: `APP_MODE` lipsă → exit 1 cu „APP_MODE: valoare nepermisă”; `CF_ACCESS_REQUIRED=false` în producție → exit 1; `/api/health/live` local → 200, cu `cf-connecting-ip` sau `x-forwarded-for` extern → 403; `/`, `/api/health`, token greșit, JWT invalid, `/favicon.ico` → 403; `/api/health` cu `HEALTH_TOKEN` corect → 200 `degraded` (`db: unknown`, `storage: ok`); `/_next/static/...` → 200. Notă: cazul `Host: finet.exemplu.invalid` a dat 200 pentru că `fetch` din Node nu trimite antetul `Host` suprascris, deci nu testează nimic; logica e acoperită de testele unitare din `src/proxy.test.ts` |
 | CI pe GitHub Actions | **NOT RUN** (fără push) |
 | Toate criteriile de acceptare care cer Cloudflare, Supabase, telefon, IP extern, notificare reală, pornire pe VPS | **NOT RUN – așteaptă operatorul** (`docs/INFRA.md`, secțiunea 6) |
 
-Containerele și rețeaua de test (`finet-ci-pg`, `finet-ci-net`) au fost șterse după rulare (`docker rm -fv`, `docker network rm`).
+Containerele și rețeaua de test (`finet-ci-pg`, `finet-ci-net`) au fost șterse după rulare (`docker rm -fv`, `docker network rm`), la fel imaginea `postgres:17-alpine` trasă pentru test (`docker rmi`).
+
+IP-urile `172.88.88.130`/`.131`: libere printre containerele de pe `apps` și negăsite în compose-urile Portainer și locale de pe host (`grep`, 2026-10-27); confirmarea finală rămâne a operatorului.
 
 ## 4. Pornire și deploy
 - Local: `README.md` („Rulare locală”).
@@ -69,6 +71,8 @@ Containerele și rețeaua de test (`finet-ci-pg`, `finet-ci-net`) au fost șters
 - Liveness: un container de pe `apps` cu `Host: 127.0.0.1` primește „ok” (fără alte informații).
 - Toate containerele de pe `apps` pot ajunge la `finet-web:3000`; protecția e JWT-ul Access (fail closed) și, din Faza 1, login-ul.
 - `/home/docker-apps/finet/` poate intra în backup-ul hostului pe Google Drive: de verificat (`docs/PRIVACY_NOTES.md`).
+- Document canonic neactualizat: `docs/GHID_CONSTRUIRE.md` (4.2–4.6, 5.2, 6, 10.1) descrie încă deploy-ul nativ (systemd, nginx, `/etc/finet/finet.env`); `NOTIFY_EMAIL_TO` lipsește din `.env.example` din rădăcină. De decis de operator.
+- CA-ul Supabase în container (montare + `NODE_EXTRA_CA_CERTS`) nu e încă în compose; de adăugat după primul test de conexiune.
 - Revizuirea de securitate dedicată (agentul `security`) nu a fost rulată în T4.
 - Tokenii shadcn (`muted`, `accent`) intră în conflict cu semantica FINET: de rezolvat înainte de prima componentă.
 
