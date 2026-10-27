@@ -12,19 +12,55 @@
 # pe Google Drive (inclusiv o copie NECRIPTATĂ), fără excluderi pentru FINET (docs/INFRA.md,
 # „Date în afara /home”).
 #
-# Fișierele de mediu, cu roluri diferite:
+# Configurația, în trei feluri de fișiere:
 #   - `--env-file .../compose.env` (model: ops/docker/compose.env.example): variabilele de
 #     INTERPOLARE din acest fișier (${FINET_*}); nu ajung în containere și nu conțin secrete.
-#   - `env_file`, câte unul PE SERVICIU, din ${FINET_ENV_DIR} (permisiuni 600, în afara
-#     repo-ului), ca fiecare container să vadă doar secretele rolului său (FINET_ROLE,
-#     src/lib/config.ts):
-#       finet-web     → finet.env          (DATABASE_URL; model finet.env.example)
-#       finet-worker  → finet.worker.env   (WORKER_DATABASE_URL; model finet.worker.env.example)
-#       finet-migrate → finet.migrate.env  (MIGRATOR_DATABASE_URL; model finet.migrate.env.example)
-#     Rolul web refuză să pornească dacă vede URL-ul workerului sau al migratorului.
-# `environment:` are prioritate peste `env_file`; acolo stau doar valorile fixe ale deploy-ului.
+#   - SECRETELE, ca fișiere (`secrets:` mai jos), din ${FINET_SECRETS_DIR} (implicit
+#     /srv/finet/secrets): câte un fișier pe secret, deținut de uid 1000, mod 400. Docker le
+#     montează read-only în /run/secrets/<nume>, iar aplicația le citește prin variabilele
+#     `*_FILE` (src/lib/secret-files.ts). Constatarea N1: valorile din `environment`/`env_file`
+#     ajung în /home/docker/containers/<id>/config.v2.json (deci în arhiva săptămânală
+#     NECRIPTATĂ a /home/docker); fișierele montate ca secrete nu ajung acolo, doar calea lor.
+#     Fiecare serviciu primește DOAR secretele rolului său (FINET_ROLE, src/lib/config.ts):
+#       finet-web     → finet_database_url, finet_health_token
+#       finet-worker  → finet_worker_database_url
+#       finet-migrate → finet_migrate_database_url
+#     Rolul web refuză să pornească dacă vede URL-ul (sau `_FILE`-ul) workerului ori al
+#     migratorului.
+#   - `env_file`, câte unul PE SERVICIU, din ${FINET_ENV_DIR}: doar variabile NESECRETE
+#     (APP_URL, CF_ACCESS_*, limite). Modele: ops/docker/finet*.env.example.
+# `environment:` are prioritate peste `env_file`; acolo stau valorile fixe ale deploy-ului și
+# căile `*_FILE`. Niciun secret în `environment` (verificat de ops/docker/test-env-examples.sh).
+#
+# CA-ul bazei (Supabase, public): ${FINET_CA_DIR} (implicit /srv/finet/ca) montat read-only în
+# /run/finet/ca; DATABASE_CA_FILE indică fișierul, iar URL-urile trebuie să aibă
+# `sslmode=verify-full` (config.ts refuză CA-ul altfel). Vezi docs/INFRA.md.
 
 name: finet
+
+# Secretele, ca fișiere pe host (create de operator, docs/INFRA.md pasul 4). În modul fără
+# swarm, compose le montează ca bind read-only și păstrează proprietarul și modul fișierului
+# de pe host (uid/gid/mode din sintaxa lungă NU se aplică), deci fișierele trebuie să fie
+# `1000:1000 0400` (uid 1000 = utilizatorul `node` din imagine).
+secrets:
+  finet_database_url:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_database_url
+  finet_health_token:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_health_token
+  finet_worker_database_url:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_worker_database_url
+  finet_migrate_database_url:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_migrate_database_url
+
+x-ca-volume: &ca-volume
+  # CA-ul Supabase (prod-ca-2021.crt din panoul Supabase), read-only. Directorul trebuie să
+  # existe (create_host_path: false), altfel pornirea eșuează.
+  type: bind
+  source: ${FINET_CA_DIR:-/srv/finet/ca}
+  target: /run/finet/ca
+  read_only: true
+  bind:
+    create_host_path: false
 
 x-common: &common
   image: ${FINET_IMAGE:-finet:local}
@@ -51,8 +87,16 @@ services:
     env_file:
       - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.env
         required: true
+    secrets:
+      - finet_database_url
+      # Decizia mea: tokenul de sănătate e obligatoriu în deploy (fișierul trebuie să existe și
+      # să nu fie gol), ca monitorizarea internă să nu depindă de JWT-ul Access.
+      - finet_health_token
     environment:
       FINET_ROLE: web
+      DATABASE_URL_FILE: /run/secrets/finet_database_url
+      HEALTH_TOKEN_FILE: /run/secrets/finet_health_token
+      DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
       NODE_ENV: production
       APP_MODE: personal
       # Access e obligatoriu în producție (src/lib/config.ts refuză `false`).
@@ -65,6 +109,7 @@ services:
       PORT: "3000"
       NODE_OPTIONS: --max-old-space-size=384
     volumes:
+      - *ca-volume
       # Directorul trebuie creat înainte de operator, deținut de uid 1000 (utilizatorul `node`):
       #   install -d -o 1000 -g 1000 -m 700 /srv/finet/storage
       # `create_host_path: false`: dacă lipsește, pornirea eșuează în loc să creeze un director
@@ -127,8 +172,12 @@ services:
     env_file:
       - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.worker.env
         required: true
+    secrets:
+      - finet_worker_database_url
     environment:
       FINET_ROLE: worker
+      WORKER_DATABASE_URL_FILE: /run/secrets/finet_worker_database_url
+      DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
       NODE_ENV: production
       APP_MODE: personal
       STORAGE_DRIVER: local
@@ -139,6 +188,7 @@ services:
       - -e
       - "console.log('finet-worker: inactiv, vine în Faza 6');const t=setInterval(()=>{},3600000);for(const s of ['SIGTERM','SIGINT'])process.on(s,()=>{clearInterval(t);process.exit(0)})"
     volumes:
+      - *ca-volume
       - type: bind
         source: ${FINET_DATA_DIR:-/srv/finet}/storage
         target: /data/storage
@@ -163,7 +213,7 @@ services:
     container_name: finet-migrate
     hostname: finet-migrate
     # One-shot: rulează migrațiile cu rolul `finet_migrator` și se oprește. Doar el primește
-    # MIGRATOR_DATABASE_URL. În Faza 0 nu există migrații (Drizzle vine în Faza 1): comanda e un
+    # secretul finet_migrate_database_url (MIGRATOR_DATABASE_URL_FILE). În Faza 0 nu există migrații (Drizzle vine în Faza 1): comanda e un
     # stub care doar anunță asta. Rulare explicită:
     #   docker compose ... --profile migrate run --rm finet-migrate
     profiles: [migrate]
@@ -171,8 +221,12 @@ services:
     env_file:
       - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.migrate.env
         required: true
+    secrets:
+      - finet_migrate_database_url
     environment:
       FINET_ROLE: migrate
+      MIGRATOR_DATABASE_URL_FILE: /run/secrets/finet_migrate_database_url
+      DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
       NODE_ENV: production
       APP_MODE: personal
       NODE_OPTIONS: --max-old-space-size=192
@@ -180,6 +234,8 @@ services:
       - node
       - -e
       - "console.log('finet-migrate: nicio migrație în Faza 0 (Drizzle vine în Faza 1)')"
+    volumes:
+      - *ca-volume
     tmpfs:
       - /tmp:size=16m,mode=1777
     mem_limit: 256m
