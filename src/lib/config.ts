@@ -2,8 +2,9 @@ import "server-only";
 
 import { z } from "zod";
 
+import { VERIFYING_SSL_MODES, databaseTlsParams } from "@/lib/db-url";
 import { CURRENCIES, parseAmount, type Money } from "@/lib/money";
-import { resolveSecretFiles } from "@/lib/secret-files";
+import { SecretFileError, readSmallFile, resolveSecretFiles } from "@/lib/secret-files";
 
 /**
  * Configurația FINET (master prompt 3.3, 6.3): variabilele de mediu, citite O SINGURĂ DATĂ și
@@ -79,6 +80,12 @@ export type Config = Readonly<{
      * (Faza 0: `/api/health` raportează `db: unknown`).
      */
     url: string | null;
+    /**
+     * Conținutul PEM al CA-ului bazei de date (`DATABASE_CA_FILE`, de exemplu CA-ul Supabase),
+     * citit o singură dată la pornire; `null` dacă variabila nu e setată. Folosit de
+     * `src/lib/db-client.ts` cu `sslmode=verify-full`.
+     */
+    ca: string | null;
   }>;
   storage: StorageConfig;
   access: AccessConfig;
@@ -142,6 +149,8 @@ const envSchema = z.object({
   DATABASE_URL: postgresUrl,
   WORKER_DATABASE_URL: postgresUrl,
   MIGRATOR_DATABASE_URL: postgresUrl,
+  // Calea către CA-ul bazei (nu e secret: certificatul e public).
+  DATABASE_CA_FILE: optionalString,
 
   STORAGE_DRIVER: z.enum(["local", "s3"]).optional(),
   STORAGE_DIR: optionalString,
@@ -306,6 +315,39 @@ export function parseConfig(
   }
   if (role !== "web") need(databaseVariable, `când FINET_ROLE=${role}`);
 
+  // TLS spre bază (decizia mea): `sslrootcert` din URL nu e citit de postgres.js, ci trimis
+  // serverului ca parametru de conexiune, care refuză conexiunea; CA-ul vine din
+  // DATABASE_CA_FILE. Un CA setat fără `sslmode=verify-full`/`verify-ca` ar da o încredere falsă
+  // (conexiunea nu l-ar folosi), deci e refuzat.
+  const databaseUrl = e[databaseVariable] ?? null;
+  const urlVariable = secrets.fromFile.has(databaseVariable)
+    ? `${databaseVariable}_FILE`
+    : databaseVariable;
+  const tls = databaseUrl ? databaseTlsParams(databaseUrl) : null;
+  if (tls?.hasSslRootCert) {
+    issues.push({
+      variable: urlVariable,
+      problem: "parametrul sslrootcert nu e suportat; CA-ul se dă prin DATABASE_CA_FILE",
+    });
+  }
+  let databaseCa: string | null = null;
+  if (e.DATABASE_CA_FILE !== undefined) {
+    if (tls && (tls.sslmode === null || !VERIFYING_SSL_MODES.includes(tls.sslmode))) {
+      issues.push({
+        variable: "DATABASE_CA_FILE",
+        problem: `cere sslmode=verify-full (sau verify-ca) în ${urlVariable}`,
+      });
+    }
+    try {
+      databaseCa = readCaFile(e.DATABASE_CA_FILE);
+    } catch (error) {
+      issues.push({
+        variable: "DATABASE_CA_FILE",
+        problem: error instanceof SecretFileError ? error.problem : "fișierul nu poate fi citit",
+      });
+    }
+  }
+
   // Cloudflare Access: implicit obligatoriu în producție; dezactivarea în producție e refuzată.
   const accessRequired = e.CF_ACCESS_REQUIRED ? e.CF_ACCESS_REQUIRED === "true" : isProduction;
   if (isProduction && !accessRequired) {
@@ -369,7 +411,7 @@ export function parseConfig(
     appMode: e.APP_MODE,
     appName: e.NEXT_PUBLIC_APP_NAME ?? DEFAULTS.appName,
     appUrl: e.APP_URL ?? null,
-    database: Object.freeze({ url: e[databaseVariable] ?? null }),
+    database: Object.freeze({ url: databaseUrl, ca: databaseCa }),
     storage: Object.freeze({
       driver,
       dir: e.STORAGE_DIR ?? DEFAULTS.storageDir,
@@ -414,6 +456,24 @@ export function parseConfig(
         : null,
     }),
   });
+}
+
+/** Un pachet de certificate CA încape lejer; limita doar oprește un fișier greșit. */
+export const CA_FILE_MAX_BYTES = 65536;
+
+/** Citește CA-ul (PEM) și verifică doar că pare un certificat; validarea reală o face TLS. */
+function readCaFile(path: string): string {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(readSmallFile(path, CA_FILE_MAX_BYTES));
+  } catch (error) {
+    if (error instanceof SecretFileError) throw error;
+    throw new SecretFileError("conținutul nu e text UTF-8");
+  }
+  if (!text.includes("-----BEGIN CERTIFICATE-----")) {
+    throw new SecretFileError("nu conține un certificat PEM (-----BEGIN CERTIFICATE-----)");
+  }
+  return text;
 }
 
 let cached: Config | null = null;

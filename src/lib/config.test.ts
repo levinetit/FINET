@@ -1,4 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ConfigError, parseConfig, resetConfigForTests } from "@/lib/config";
 import { validateConfigOrExit } from "@/lib/config-startup";
@@ -249,7 +253,7 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
     expect(issuesOf(worker)).toEqual(["WORKER_DATABASE_URL"]);
     const c = parseConfig({ ...worker, WORKER_DATABASE_URL: URL_WORKER });
     expect(c.role).toBe("worker");
-    expect(c.database).toEqual({ url: URL_WORKER });
+    expect(c.database).toEqual({ url: URL_WORKER, ca: null });
     expect(issuesOf({ ...worker, WORKER_DATABASE_URL: URL_WORKER, DATABASE_URL: URL_WEB })).toEqual(
       ["DATABASE_URL"],
     );
@@ -263,7 +267,7 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
     expect(issuesOf(migrate)).toEqual(["MIGRATOR_DATABASE_URL"]);
     const c = parseConfig({ ...migrate, MIGRATOR_DATABASE_URL: URL_MIGRATOR });
     expect(c.role).toBe("migrate");
-    expect(c.database).toEqual({ url: URL_MIGRATOR });
+    expect(c.database).toEqual({ url: URL_MIGRATOR, ca: null });
     expect(
       issuesOf({ ...migrate, MIGRATOR_DATABASE_URL: URL_MIGRATOR, DATABASE_URL: URL_WEB }),
     ).toEqual(["DATABASE_URL"]);
@@ -310,7 +314,7 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
 
   it("Config nu mai expune URL-urile altor roluri", () => {
     const c = parseConfig({ ...DEV, DATABASE_URL: URL_WEB });
-    expect(Object.keys(c.database)).toEqual(["url"]);
+    expect(Object.keys(c.database)).toEqual(["url", "ca"]);
   });
 });
 
@@ -361,5 +365,89 @@ describe("validateConfigOrExit (pornirea serverului web)", () => {
     vi.restoreAllMocks();
     const m = start({ FINET_ROLE: "migrate", MIGRATOR_DATABASE_URL: "postgres://m:p@h/db" });
     expect(m.exited).toBe(1);
+  });
+});
+
+describe("DATABASE_CA_FILE", () => {
+  // CA FICTIV (doar formă PEM).
+  const PEM = "-----BEGIN CERTIFICATE-----\nMIIfictiv\n-----END CERTIFICATE-----\n";
+  const VERIFY = "postgres://finet_app:parola-fictiva@db.exemplu.invalid:6543/postgres";
+  let caDir: string;
+  beforeAll(() => {
+    caDir = mkdtempSync(join(tmpdir(), "finet-ca-"));
+  });
+  afterAll(() => {
+    rmSync(caDir, { recursive: true, force: true });
+  });
+  const caFile = (name: string, content: string): string => {
+    const path = join(caDir, name);
+    writeFileSync(path, content);
+    return path;
+  };
+
+  it("fără DATABASE_CA_FILE, `database.ca` e null", () => {
+    expect(
+      parseConfig({ ...DEV, DATABASE_URL: `${VERIFY}?sslmode=verify-full` }).database.ca,
+    ).toBeNull();
+  });
+
+  it("citește CA-ul o dată, cu sslmode=verify-full sau verify-ca", () => {
+    const path = caFile("ca.crt", PEM);
+    for (const mode of ["verify-full", "verify-ca"]) {
+      const c = parseConfig({
+        ...DEV,
+        DATABASE_URL: `${VERIFY}?sslmode=${mode}`,
+        DATABASE_CA_FILE: path,
+      });
+      expect(c.database.ca).toBe(PEM);
+    }
+    // Web fără bază configurată: CA-ul e citit, dar nefolosit.
+    expect(parseConfig({ ...DEV, DATABASE_CA_FILE: path }).database.ca).toBe(PEM);
+  });
+
+  it("refuză CA-ul cu sslmode care nu verifică certificatul (încredere falsă)", () => {
+    const path = caFile("ca2.crt", PEM);
+    for (const suffix of ["?sslmode=require", "?sslmode=disable", ""]) {
+      expect(
+        issuesOf({ ...DEV, DATABASE_URL: `${VERIFY}${suffix}`, DATABASE_CA_FILE: path }),
+      ).toEqual(["DATABASE_CA_FILE"]);
+    }
+  });
+
+  it("refuză un fișier lipsă, gol sau care nu e PEM", () => {
+    const env = { ...DEV, DATABASE_URL: `${VERIFY}?sslmode=verify-full` };
+    expect(issuesOf({ ...env, DATABASE_CA_FILE: join(caDir, "absent") })).toEqual([
+      "DATABASE_CA_FILE",
+    ]);
+    expect(issuesOf({ ...env, DATABASE_CA_FILE: caFile("gol.crt", "") })).toEqual([
+      "DATABASE_CA_FILE",
+    ]);
+    expect(issuesOf({ ...env, DATABASE_CA_FILE: caFile("text.crt", "nu e certificat") })).toEqual([
+      "DATABASE_CA_FILE",
+    ]);
+    expect(issuesOf({ ...env, DATABASE_CA_FILE: caDir })).toEqual(["DATABASE_CA_FILE"]);
+  });
+
+  it("refuză `sslrootcert` în URL (postgres.js nu-l citește; serverul ar refuza conexiunea)", () => {
+    expect(
+      issuesOf({ ...DEV, DATABASE_URL: `${VERIFY}?sslmode=verify-full&sslrootcert=/ca.crt` }),
+    ).toEqual(["DATABASE_URL"]);
+    expect(issuesOf({ ...DEV, DATABASE_URL: `${VERIFY}?sslrootcert=system` })).toEqual([
+      "DATABASE_URL",
+    ]);
+    // Pentru un URL citit din fișier, problema e raportată pe `_FILE`.
+    const urlFile = caFile("url", `${VERIFY}?sslmode=verify-full&sslrootcert=/x\n`);
+    expect(issuesOf({ ...DEV, DATABASE_URL_FILE: urlFile })).toEqual(["DATABASE_URL_FILE"]);
+  });
+
+  it("se aplică URL-ului rolului curent (worker)", () => {
+    const path = caFile("ca3.crt", PEM);
+    const c = parseConfig({
+      ...DEV,
+      FINET_ROLE: "worker",
+      WORKER_DATABASE_URL: `${VERIFY}?sslmode=verify-full`,
+      DATABASE_CA_FILE: path,
+    });
+    expect(c.database.ca).toBe(PEM);
   });
 });

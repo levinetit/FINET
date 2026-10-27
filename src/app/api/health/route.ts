@@ -23,6 +23,7 @@ export async function GET(): Promise<Response> {
     }
     report = await runHealthChecks({
       databaseUrl: config.database.url,
+      databaseCa: config.database.ca,
       storage,
       diskDir: config.storage.dir,
     });
