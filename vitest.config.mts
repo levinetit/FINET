@@ -6,6 +6,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // `server-only` aruncă în afara condiției `react-server` (pe care Vitest nu o folosește);
+      // în teste îl înlocuim cu varianta goală din același pachet.
+      "server-only": fileURLToPath(new URL("./node_modules/server-only/empty.js", import.meta.url)),
     },
   },
   test: {
