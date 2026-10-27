@@ -1,10 +1,66 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = Number(process.env.PORT ?? 3000);
-const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${port}`;
+/**
+ * Teste E2E, în două proiecte cu servere separate:
+ * - `smoke` (browser): `pnpm dev` cu Access dezactivat (NODE_ENV=development,
+ *   CF_ACCESS_REQUIRED=false), ca pagina să poată fi verificată fără JWT;
+ * - `access` (doar HTTP, fără browser): serverul de producție (`.next/standalone/server.js`,
+ *   după `pnpm build`) cu CF_ACCESS_REQUIRED=true, ca să dovedească refuzul fără JWT.
+ *
+ * `E2E_SERVER=dev|prod` pornește doar serverul necesar (de exemplu `E2E_SERVER=prod
+ * pnpm test:e2e --project=access`). Cu `E2E_BASE_URL` se testează o instanță deja pornită
+ * (proiectul `smoke`), fără servere locale.
+ */
 
-// Teste E2E. Implicit pornesc aplicația construită (`pnpm build` înainte);
-// cu E2E_BASE_URL se testează o instanță deja pornită.
+const devPort = Number(process.env.E2E_DEV_PORT ?? 3000);
+const prodPort = Number(process.env.E2E_PROD_PORT ?? 3001);
+const devURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${devPort}`;
+const prodURL = `http://127.0.0.1:${prodPort}`;
+const only = process.env.E2E_SERVER;
+
+// Mediul fiecărui server, peste mediul curent (fără secrete: valori fictive).
+const devEnv: Record<string, string> = {
+  ...(process.env as Record<string, string>),
+  NODE_ENV: "development",
+  APP_MODE: "personal",
+  CF_ACCESS_REQUIRED: "false",
+};
+const prodEnv: Record<string, string> = {
+  ...(process.env as Record<string, string>),
+  NODE_ENV: "production",
+  APP_MODE: "personal",
+  CF_ACCESS_REQUIRED: "true",
+  // Domeniu `.invalid` (RFC 2606): cheile Access nu pot fi descărcate, deci orice JWT e refuzat.
+  CF_ACCESS_TEAM_DOMAIN: "echipa-e2e.invalid",
+  CF_ACCESS_AUD: "e2e-aud",
+  STORAGE_DIR: ".data/e2e-storage",
+  PORT: String(prodPort),
+  HOSTNAME: "127.0.0.1",
+};
+
+const devServer = {
+  command: `pnpm dev --port ${devPort}`,
+  url: devURL,
+  env: devEnv,
+  reuseExistingServer: !process.env.CI,
+  timeout: 180_000,
+};
+const prodServer = {
+  command: "node .next/standalone/server.js",
+  url: `${prodURL}/api/health/live`,
+  env: prodEnv,
+  reuseExistingServer: false,
+  timeout: 60_000,
+};
+
+const webServer = process.env.E2E_BASE_URL
+  ? undefined
+  : only === "dev"
+    ? [devServer]
+    : only === "prod"
+      ? [prodServer]
+      : [devServer, prodServer];
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -12,16 +68,20 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL,
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: process.env.E2E_BASE_URL
-    ? undefined
-    : {
-        command: `pnpm start --port ${port}`,
-        url: baseURL,
-        reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
-      },
+  projects: [
+    {
+      name: "smoke",
+      testMatch: /smoke\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      // Doar fixture-ul `request`: nu pornește niciun browser.
+      name: "access",
+      testMatch: /access\.spec\.ts$/,
+      use: { baseURL: prodURL },
+    },
+  ],
+  webServer,
 });
