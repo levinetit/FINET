@@ -64,8 +64,8 @@ URL-ul altui rol prezent în mediul unui proces, direct sau ca `_FILE`, **opreș
 ### Secretele ca fișiere (constatarea N1)
 **Problema:** Docker copiază valorile din `environment` și `env_file` în `/home/docker/containers/<id>/config.v2.json`, iar `backup_home_gdrive_clar.sh` urcă duminica o arhivă **necriptată** a `/home/docker` pe Google Drive. Orice secret dat ca variabilă de mediu ajunge acolo.
 
-**Soluția (T7):** secretele FINET sunt fișiere în `/srv/finet/secrets/`, montate de compose prin `secrets:` în `/run/secrets/<nume>`. Aplicația le citește prin `<NUME>_FILE` (`src/lib/secret-files.ts`), o singură dată la pornire. În `config.v2.json` apare doar calea montării, nu valoarea.
-- Am verificat local, pe Compose 2.26.1, cu un container de probă și o valoare fictivă: valoarea apare de 0 ori în `config.v2.json`, iar fișierul e montat read-only cu proprietarul și modul de pe host (`1000:1000 0400`). Modul fără swarm **nu** aplică `uid`/`gid`/`mode` din sintaxa lungă, deci fișierele de pe host trebuie să fie `1000:1000 0400` (uid 1000 = `node`).
+**Soluția (T7):** secretele FINET sunt fișiere în `/srv/finet/secrets/`, montate de compose prin `secrets:` în `/run/secrets/<nume>`. Aplicația le citește prin `<NUME>_FILE` (`src/lib/secret-files.ts`), o singură dată per instanță a modulului de configurație. Serverul Next le citește la pornire (validarea din `instrumentation`). Proxy-ul (`src/proxy.ts`) are în build propria copie a modulului și le citește la prima cerere (verificat: fișierul tokenului făcut necitibil după pornire → `/api/health` cu tokenul dă 403, fail closed). Fișierul montat rămâne același până la recrearea containerului, deci cele două citiri văd aceeași valoare. În `config.v2.json` apare doar calea montării, nu valoarea.
+- Am verificat local, pe Compose 2.26.1, cu un container de probă și o valoare fictivă: valoarea apare de 0 ori în `config.v2.json`, iar fișierul e montat read-only cu proprietarul și modul de pe host (`1000:1000 0400`). Conform documentației Compose (neverificat aici, am testat doar sintaxa scurtă), modul fără swarm nu aplică `uid`/`gid`/`mode` din sintaxa lungă, deci fișierele de pe host trebuie să fie `1000:1000 0400` (uid 1000 = `node`).
 - **Regulile fișierelor** (`src/lib/secret-files.ts`):
   - `X` și `X_FILE` setate împreună dau eroare;
   - fișierul trebuie să fie un fișier obișnuit (un symlink spre un fișier e acceptat, un director e refuzat), citibil și de cel mult 4096 octeți, pe o singură linie;
@@ -75,7 +75,7 @@ URL-ul altui rol prezent în mediul unui proces, direct sau ca `_FILE`, **opreș
 - **Ce montează compose-ul:** doar secretele folosite acum, adică URL-urile pe rol și `finet_health_token`. Tokenul e obligatoriu în deploy (decizia mea): fișierul trebuie să existe și să nu fie gol. Telegram și SMTP sunt ale `notify.sh` de pe host (`/srv/finet/env/notify.env`), nu ale containerelor. Când aplicația le va folosi, se adaugă ca secrete noi.
 - **`src/proxy.ts` nu s-a schimbat:** citește `HEALTH_TOKEN` din `getConfig()`, care rezolvă deja `HEALTH_TOKEN_FILE`. Verificat pe serverul standalone: `/api/health` cu tokenul din fișier → 200, cu un token greșit → 403. Doar `web` cere `CF_ACCESS_*`; `migrate` nu cere `STORAGE_DIR`. În Faza 0, `finet-worker` și `finet-migrate` sunt stub-uri (workerul vine în Faza 5/6, migrațiile Drizzle în Faza 1); `finet-migrate` rulează pe rețeaua implicită a proiectului (`finet_default`), nu pe `apps`, fără IP static.
 
-Ce fixează compose-ul (au prioritate față de `env_file`): `FINET_ROLE`, `NODE_ENV=production`, `APP_MODE=personal`, `CF_ACCESS_REQUIRED=true` (web), `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage` (web, worker), `HOSTNAME=0.0.0.0`, `PORT=3000`, `NODE_OPTIONS`.
+Ce fixează compose-ul în `environment` (au prioritate față de `env_file`): `FINET_ROLE`, `NODE_ENV=production`, `APP_MODE=personal`, `CF_ACCESS_REQUIRED=true` (web), `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage` (web, worker), `HOSTNAME=0.0.0.0`, `PORT=3000`, `NODE_OPTIONS`, căile secretelor (`DATABASE_URL_FILE` și `HEALTH_TOKEN_FILE` la web, `WORKER_DATABASE_URL_FILE` la worker, `MIGRATOR_DATABASE_URL_FILE` la migrate) și `DATABASE_CA_FILE` (toate trei).
 
 Întărire: `read_only: true` (tmpfs pentru `/tmp` și `/app/.next/cache`), `cap_drop: [ALL]`, `no-new-privileges`, `init: true`, `pids_limit`, limite de memorie (web 512 MB, worker 256 MB; `memswap_limit` egal, fără swap) și CPU (1,0 / 0,5), loguri `json-file` 3×10 MB.
 
@@ -156,7 +156,7 @@ URL-urile Supabase au `sslmode=verify-full`. CA-ul Supabase (`prod-ca-2021.crt`,
    ```
    - Creează toate cele patru fișiere, chiar dacă workerul și migrarea nu pornesc încă.
      - Compose nu verifică existența lor la `config` (verificat).
-     - Pornirea unui serviciu al cărui fișier lipsește eșuează (bind mount).
+     - Pornirea unui serviciu al cărui fișier lipsește ar trebui să eșueze la bind mount (neverificat).
    - URL-urile: pooler-ul Supabase, `postgres://<rol>.<ref>:<parola>@<host-pooler>:<port>/postgres?sslmode=verify-full`.
      - `finet_database_url`: portul 6543, rolul `finet_app`.
      - `finet_worker_database_url`: portul 5432, rolul `finet_app`.

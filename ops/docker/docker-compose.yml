@@ -40,7 +40,8 @@ name: finet
 
 # Secretele, ca fișiere pe host (create de operator, docs/INFRA.md pasul 4). În modul fără
 # swarm, compose le montează ca bind read-only și păstrează proprietarul și modul fișierului
-# de pe host (uid/gid/mode din sintaxa lungă NU se aplică), deci fișierele trebuie să fie
+# de pe host (verificat cu sintaxa scurtă; după documentația Compose, uid/gid/mode din
+# sintaxa lungă nu se aplică fără swarm, neverificat), deci fișierele trebuie să fie
 # `1000:1000 0400` (uid 1000 = utilizatorul `node` din imagine).
 secrets:
   finet_database_url:
