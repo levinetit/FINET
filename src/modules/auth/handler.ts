@@ -76,6 +76,15 @@ export function authSubpath(pathname: string): string | null {
   return sub === "" ? "/" : sub;
 }
 
+/** Căile cu rate limiting (și, deci, doar cu corp JSON). */
+const LIMITED_PATHS = new Set([
+  "/sign-in/email",
+  "/sign-in/magic-link",
+  "/request-password-reset",
+  "/forget-password",
+  "/reset-password",
+]);
+
 type Limited = Readonly<{ kind: RateLimitKind; rule: RateLimitRule; subject: string }>;
 
 function limitFor(
@@ -139,6 +148,13 @@ export async function handleAuthRequest(
   const policy = { accessVerified: config.access.required };
   const headers = withTrustedClientIp(request.headers, policy);
   const method = request.method.toUpperCase();
+
+  // Căile limitate acceptă doar JSON: un corp form-urlencoded ar ocoli normalizarea emailului,
+  // cheia de rate limiting pe email și politica parolei.
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+  if (method === "POST" && LIMITED_PATHS.has(sub) && !contentType.startsWith("application/json")) {
+    return jsonError(415, "unsupported_media_type", "Corpul trebuie să fie JSON.");
+  }
 
   let body: Record<string, unknown> | null = null;
   let bodyText: string | null = null;

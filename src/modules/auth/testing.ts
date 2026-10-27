@@ -90,13 +90,16 @@ export function authRequest(
   init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
 ): Request {
   const method = init.method ?? (init.body === undefined ? "GET" : "POST");
+  const headers: Record<string, string> = {
+    origin: APP_URL,
+    ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
+    ...init.headers,
+  };
+  // `origin: ""` = fără antetul Origin (clientul nativ Android nu îl trimite).
+  if (headers.origin === "") delete headers.origin;
   return new Request(`${APP_URL}${path}`, {
     method,
-    headers: {
-      origin: APP_URL,
-      ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
-      ...init.headers,
-    },
+    headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
 }
