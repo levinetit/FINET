@@ -1,0 +1,13 @@
+pnpm-lock.yaml
+.next/
+out/
+build/
+coverage/
+playwright-report/
+test-results/
+node_modules/
+# documentele canonice și demo-ul nu se reformatează automat
+docs/
+.claude/
+# Markdown-ul (documentație) nu se reformatează automat
+**/*.md
