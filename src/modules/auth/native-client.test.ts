@@ -160,4 +160,29 @@ describe.skipIf(!TEST_ADMIN_URL)("client nativ, corpuri non-JSON, ceas controlat
       expect(rows.length, mode).toBe(0);
     }
   });
+  it("get-session pentru un utilizator dezactivat → null și sesiunile lui sunt revocate (L5)", async () => {
+    await createUserWithHousehold(fx.db, {
+      email: "dez@exemplu.ro",
+      name: "Dez",
+      password: PASSWORD,
+      firstUserBecomesAdmin: false,
+      emailVerified: true,
+    });
+    const r = await login(env, "dez@exemplu.ro", PASSWORD, { "x-finet-client": "android/1.0" });
+    expect(r.response.status).toBe(200);
+    const get = (headers: Record<string, string>) =>
+      handleAuthRequest(authRequest("/api/auth/get-session", { headers }), env).then((res) =>
+        res.json(),
+      );
+    expect(await get({ cookie: r.cookie })).not.toBeNull();
+    // Operatorul dezactivează contul (finet_app nu poate scrie `status`, M5).
+    await fx.scratch
+      .admin`update finet.users set status = 'disabled' where email = 'dez@exemplu.ro'`;
+    expect(await get({ cookie: r.cookie })).toBeNull();
+    expect(await get({ origin: "", authorization: `Bearer ${r.bearer}` })).toBeNull();
+    const rows = await fx.scratch.admin`
+      select 1 from finet.auth_sessions s join finet.users u on u.id = s.user_id
+       where u.email = 'dez@exemplu.ro'`;
+    expect(rows.length).toBe(0);
+  });
 });

@@ -22,6 +22,7 @@ import {
   trustedClientIp,
   withTrustedClientIp,
 } from "./request";
+import { deleteSessionsOfUser, findUserById } from "./users.repo";
 
 /**
  * Intrarea HTTP a Better Auth (`/api/auth/*`), în fața `auth.handler`. Cererea a trecut deja de
@@ -148,6 +149,16 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown> |
   }
 }
 
+/** Id-ul utilizatorului din răspunsul `get-session` (`{ session, user }` sau `null`). */
+async function sessionUserId(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.clone().json()) as { user?: { id?: unknown } } | null;
+    return typeof body?.user?.id === "string" ? body.user.id : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function handleAuthRequest(
   request: Request,
   deps: AuthHandlerDeps,
@@ -250,6 +261,19 @@ export async function handleAuthRequest(
     body: method === "GET" || method === "HEAD" ? undefined : (bodyText ?? (await request.text())),
   });
   const response = await auth.handler(forwarded);
+
+  // L5: `get-session` nu întoarce sesiunea unui utilizator dezactivat (Better Auth nu știe de
+  // `status`): sesiunile lui se revocă, iar răspunsul e cel pentru „fără sesiune” (`null`).
+  if (sub === "/get-session" && response.ok) {
+    const userId = await sessionUserId(response);
+    if (userId) {
+      const user = await findUserById(db, userId);
+      if (!user || user.status !== "active") {
+        await deleteSessionsOfUser(db, userId);
+        return Response.json(null, { status: 200, headers: { "Cache-Control": "no-store" } });
+      }
+    }
+  }
 
   if (isLogin) {
     if (response.status === 401) {
