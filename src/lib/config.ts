@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { CURRENCIES, parseAmount, type Money } from "@/lib/money";
+import { resolveSecretFiles } from "@/lib/secret-files";
 
 /**
  * Configurația FINET (master prompt 3.3, 6.3): variabilele de mediu, citite O SINGURĂ DATĂ și
@@ -18,6 +19,9 @@ import { CURRENCIES, parseAmount, type Money } from "@/lib/money";
  * - Niciun secret în `NEXT_PUBLIC_*`: singura variabilă publică e `NEXT_PUBLIC_APP_NAME`.
  * - Mesajele de eroare folosesc doar numele variabilei și codul problemei, niciodată valoarea.
  * - Fiecare proces primește doar URL-ul bazei de date al rolului său (`FINET_ROLE`, vezi `Role`).
+ * - Secretele (`SECRET_VARIABLES` din `src/lib/secret-files.ts`) pot veni și din fișiere:
+ *   `<NUME>_FILE=/run/secrets/...` (secretele Docker, constatarea N1). Fișierele se citesc tot o
+ *   singură dată, odată cu restul configurației; `X` și `X_FILE` împreună sunt o eroare.
  */
 
 // ---------------------------------------------------------------------------------------------
@@ -226,30 +230,63 @@ function describeIssue(issue: z.core.$ZodIssue): string {
 // Parsare
 // ---------------------------------------------------------------------------------------------
 
+export type ParseOptions = Readonly<{
+  /** Citirea unui fișier secret (`X_FILE`); implicit din disc. Doar pentru teste. */
+  readSecret?: (path: string) => string;
+}>;
+
+const ROLES: readonly Role[] = ["web", "worker", "migrate"];
+const isRole = (value: string): value is Role => (ROLES as readonly string[]).includes(value);
+
 /**
- * Validează un set de variabile de mediu și construiește configurația. Funcție pură (nu citește
- * `process.env`), folosită de `getConfig()` și de teste.
+ * Validează un set de variabile de mediu și construiește configurația. Nu citește `process.env`
+ * (o folosesc `getConfig()` și testele); singurul efect e citirea fișierelor indicate de
+ * variabilele `*_FILE` prezente în `env`.
  */
-export function parseConfig(env: Readonly<Record<string, string | undefined>>): Config {
+export function parseConfig(
+  env: Readonly<Record<string, string | undefined>>,
+  options: ParseOptions = {},
+): Config {
+  // Rolul se află înaintea validării, ca fișierele cu URL-urile altor roluri să nu fie deschise.
+  // Un `FINET_ROLE` invalid e raportat de schemă; atunci nu se citește niciun fișier.
+  const rawRole = env.FINET_ROLE === undefined || env.FINET_ROLE === "" ? "web" : env.FINET_ROLE;
+  const knownRole = isRole(rawRole) ? rawRole : null;
+  const forbidden = new Map<string, string>();
+  if (knownRole) {
+    for (const variable of DATABASE_VARIABLES) {
+      if (variable !== ROLE_DATABASE_VARIABLE[knownRole]) {
+        forbidden.set(variable, `nu e permisă când FINET_ROLE=${knownRole}`);
+      }
+    }
+  }
+  const secrets = knownRole
+    ? resolveSecretFiles(env, { forbidden, read: options.readSecret })
+    : { env, fromFile: new Set<string>(), issues: [] };
+
   // Doar cheile cunoscute; șirul gol înseamnă „nesetat”.
   const input: Record<string, string> = {};
   for (const key of ENV_KEYS) {
-    const value = env[key];
+    const value = secrets.env[key];
     if (value !== undefined && value !== "") input[key] = value;
   }
 
   const parsed = envSchema.safeParse(input);
   if (!parsed.success) {
-    throw new ConfigError(
-      parsed.error.issues.map((issue) => ({
-        variable: String(issue.path[0] ?? "(necunoscută)"),
-        problem: describeIssue(issue),
-      })),
-    );
+    throw new ConfigError([
+      ...secrets.issues,
+      ...parsed.error.issues.map((issue) => {
+        const variable = String(issue.path[0] ?? "(necunoscută)");
+        // O valoare citită din fișier se raportează sub numele variabilei `_FILE`.
+        return {
+          variable: secrets.fromFile.has(variable) ? `${variable}_FILE` : variable,
+          problem: describeIssue(issue),
+        };
+      }),
+    ]);
   }
 
   const e = parsed.data;
-  const issues: ConfigIssue[] = [];
+  const issues: ConfigIssue[] = [...secrets.issues];
   const need = (variable: keyof RawEnv, when: string): void => {
     if (e[variable] === undefined) issues.push({ variable, problem: `obligatorie ${when}` });
   };
