@@ -35,7 +35,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 
 ### Puncte deschise
 - **Tokenii shadcn/ui:** în FINET `muted` e o culoare de **text** și `accent` e albastrul saturat al acțiunilor, dar shadcn folosește `muted` și `accent` ca **fundaluri** discrete. Înainte de prima componentă shadcn trebuie nume separate (de exemplu `surface-2`, `accent-soft`, ca în demo), altfel componentele ies cu fundaluri greșite.
-- Versiunea PostgreSQL reală (provizoriu `17`).
+- Versiunea PostgreSQL: confirmată `17` (17.11, eu-west-1, 2026-10-27).
 - Planul Supabase (ADR separat).
 - Varianta de intrare (tunel vs Traefik) și IP-urile statice.
 

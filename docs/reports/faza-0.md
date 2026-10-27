@@ -149,3 +149,12 @@ IP-urile `172.88.88.130`/`.131`: libere printre containerele de pe `apps` și ne
 4. Notificarea de test reală; apoi jobul de versiune PostgreSQL (după Supabase).
 5. Rularea E2E `smoke` într-un mediu cu browsere (Codespaces sau CI) și, eventual, E2E în CI în ambele moduri.
 6. Tokenii shadcn, apoi Faza 1.
+
+## 8. Actualizare 2026-10-27 (după PR #11): Supabase configurat și aplicația pornită pe VPS
+
+Făcute de coordonator, cu tokenurile din `/home/docker-apps/secrete/` (autorizate de operator), fără parole în repo sau în chat:
+- **Supabase** (proiect `eu-west-1`, PostgreSQL 17.11): rolurile `finet_migrator` și `finet_app` (SCRAM, `NOBYPASSRLS`, limite 5/30), schema `finet` deținută de migrator, `anon`/`authenticated` fără `USAGE`, `create` în `public` revocat; SSL enforcement pornit; Network Restrictions doar pentru IP-ul VPS-ului (IPv4 și IPv6); bucket privat `finet-docs`. Conexiunile prin pooler (6543 web, 5432 worker/migrate) cu `sslmode=verify-full` și CA-ul Supabase: OK.
+- **Host**: `/srv/finet/{env,compose,secrets,storage,ca,src}`; secretele ca fișiere 0400 (uid 1000); imagine construită cu un builder buildx limitat la 1600 MB; `finet-web` pornit pe `apps` la `172.88.88.130`, healthy, ~57 MiB RAM.
+- **Verificat pe container**: `/` fără JWT → 403; `/api/health` fără token → 403; `/api/health/live` din afara loopback → 403; `/api/health` cu token → 200 `{"status":"ok","checks":{"db":"ok","storage":"ok","queue":"unknown","ai":"unknown"}}`; `config.v2.json` al containerului conține 0 URL-uri Postgres (N1 închis pentru FINET).
+- **Cloudflare**: aplicația Access „FINET (personal)” pentru `finet.levinetit.com` (doar proprietarul) creată. **Intrarea în tunel și înregistrarea DNS NU sunt făcute** (clasificatorul de permisiuni a blocat modificarea configurației tunelului `vpsde` și a DNS-ului); aplicația nu e accesibilă din internet.
+- **NOT RUN**: testul din exterior (login Access), WARP pe telefon, notificarea reală, conexiune refuzată de pe alt IP, E2E `smoke`.

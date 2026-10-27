@@ -222,8 +222,8 @@ Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|
-| Regiune | UE, propunere Frankfurt `eu-central-1` (de confirmat la creare) |
-| Versiune PostgreSQL | provizoriu `17` (`ops/postgres/VERSION`), de înlocuit cu cea reală |
+| Regiune | UE, Irlanda (`eu-west-1`), proiect creat la 2026-10-27 |
+| Versiune PostgreSQL | `17` (17.11 la 2026-10-27, verificat prin Management API); `ops/postgres/VERSION` = `17` |
 | Limita de conexiuni a planului (pooler, directe) | **TODO operator** (din panou, după alegerea planului) |
 | Pool-uri FINET | `/api/health`: 1 conexiune (`max: 1`); restul se dimensionează în Faza 1, sub limita planului |
 | Plan | **TODO operator** (ADR separat; planul gratuit suspendă proiectul și nu are backup-uri descărcabile) |
