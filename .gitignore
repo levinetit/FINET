@@ -6,6 +6,8 @@ node_modules/
 .next/
 out/
 build/
+# unelte împachetate (scripts/build-tools.mjs)
+dist/
 next-env.d.ts
 *.tsbuildinfo
 
