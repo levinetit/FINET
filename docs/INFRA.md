@@ -236,6 +236,30 @@ Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/
 
 **Verificare după deploy** (operatorul): `sudo rclone ls Gdrive:vpnde/home | grep -i finet` și `sudo rclone ls GdriveCrypt:home | grep -i finet` nu afișează fișiere de date FINET.
 
+## 4b. Faza 1 pe producție (operatorul, după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune. Ordinea:
+
+1. **Backup înainte de migrații** (Supabase: backup-ul zilnic al planului sau un `pg_dump` al schemei `finet` cu URL-ul migratorului). Faza 1 e prima cu tabele, deci în practică baza e goală.
+2. **Secretul Better Auth** (dacă nu există deja): `openssl rand -base64 32 | sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_better_auth_secret` (doar `finet-web` îl primește; rotirea lui invalidează toate sesiunile și tokenurile bearer).
+3. **`/srv/finet/env/finet.admin.env`** din `ops/docker/finet.admin.env.example` (nesecret; URL-ul bazei vine din `finet_database_url`), și `APP_URL=https://finet.<domeniu>` în `finet.env` (originea exactă din browser: Better Auth și CSRF-ul din `/api/v1` o compară cu `Origin`).
+4. **Migrațiile**, ca `finet_migrator` (portul 5432, modul sesiune), cu imaginea de unelte:
+   ```bash
+   C="sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env"
+   $C --profile migrate build finet-migrate
+   $C --profile migrate run --rm finet-migrate      # „aplicate acum 2” prima dată
+   $C --profile migrate run --rm finet-migrate      # a doua oară: „aplicate acum 0” (idempotent)
+   ```
+   Runner-ul rulează toate migrațiile în așteptare într-o singură tranzacție (sub `pg_advisory_xact_lock`) și refuză o migrație aplicată și modificată ulterior (ADR 0003).
+5. **Primul utilizator**: pasul 9 din secțiunea 4 (`finet-admin create-user`, parola din stdin sau generată).
+6. **Redeploy `finet-web`** cu imaginea nouă, apoi verificări prin Access: `/login` se deschide, login → `/dashboard` cu „Gospodăria mea”, `/profile` arată sesiunea curentă; antetele: `curl -sD- -o /dev/null https://finet.<domeniu>/login` (cu cookie-ul Access) conține `content-security-policy` cu `nonce-`, `strict-transport-security`, `x-frame-options: DENY`. Fără Access, orice cale dă 403, tot cu antetele de securitate.
+
+**Rollback:**
+- aplicația: imaginea anterioară a `finet-web` (`docker compose up -d finet-web` cu tag-ul vechi). F1-C nu are migrații; cookie-ul `finet_theme` rămâne inofensiv.
+- migrațiile Fazei 1 nu au „down” automat. Pe o bază fără date reale: `drop schema finet cascade` ca proprietar și recrearea schemei goale după `ops/supabase/README.md` (`roles.sql`), apoi rularea migrațiilor din nou. Cu date reale: restaurarea backup-ului de la pasul 1. Nicio operație distructivă fără decizia explicită a operatorului.
+
+**HSTS `preload`:** nu e pus. Se adaugă doar după decizia operatorului (domeniul stabil, toate subdomeniile pe HTTPS), în `src/lib/security-headers.ts`.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

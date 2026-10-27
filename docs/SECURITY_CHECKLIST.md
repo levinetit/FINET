@@ -1,0 +1,106 @@
+# FINET — lista de verificare de securitate
+
+Creată în Faza 1 (F1-C) și completată la fiecare revizuire de securitate. Referința: master prompt 6.3 (OWASP ASVS nivel 2). Stări: **DONE** (implementat și verificat prin dovada din coloană), **PARTIAL** (implementat, dar verificarea sau o parte lipsește), **TODO** (neimplementat). „NOT RUN” în dovadă înseamnă că testul există, dar nu a fost rulat încă în mediul indicat.
+
+Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizuire independentă); `security` = revizuirea dedicată (T5 în Faza 0, F1-A în Faza 1). Revizuirea de securitate a Fazei 1 complete (F1-B + F1-C) **nu a avut loc încă**.
+
+## 1. Autentificare
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Parole Argon2id (m=19 MiB, t=2, p=1), minimum 10 caractere, maximum 128 | DONE | `src/modules/auth/password.ts`, `password.test.ts` | 2026-10-27 · programmer (F1-B) |
+| HIBP opțional (k-anonymity), oprit implicit | DONE | `AUTH_HIBP_ENABLED`, `password.test.ts` (fetcher simulat) | 2026-10-27 · programmer |
+| Cookie-uri `HttpOnly`, `SameSite=Lax`, `Secure` (prefix `__Secure-` cu https / producție) | DONE | `src/modules/auth/auth.ts` (`defaultCookieAttributes`), `auth.test.ts` | 2026-10-27 · programmer |
+| Sesiuni în bază, fără cookie cache (revocarea are efect imediat), 30 de zile | DONE | `auth.ts`, `auth.test.ts` (expirare cu ceas simulat) | 2026-10-27 · programmer |
+| Login prin `bearer` (doar tokenuri semnate) pentru Android | DONE | `native-client.test.ts` | 2026-10-27 · programmer |
+| Rate limiting: login web, login mobil, emailuri, resetare, schimbarea parolei (pe IP de încredere + email) | DONE | `rate-limit.ts`, `auth.test.ts`, `me.test.ts`; în UI: E2E „rate limiting vizibil” (NOT RUN local, CI) | 2026-10-28 · programmer |
+| Mesaje uniforme (fără enumerarea conturilor) la login, magic link, 429 | DONE | `handler.ts`, `src/app/login/login-form.tsx`; E2E „parolă greșită și email inexistent” (NOT RUN local) | 2026-10-28 · programmer |
+| Înregistrare publică dezactivată în `personal` (`/register` și `/api/auth/sign-up/*` → 404) | DONE | `handler.ts`, `src/app/register/page.tsx`; verificat pe `next dev` (404); E2E (NOT RUN local) | 2026-10-28 · programmer |
+| Magic link de unică folosință, 10 minute, doar cu SMTP | DONE | `auth.ts`, `auth.test.ts` (mailer fals); butonul din UI apare doar cu SMTP configurat | 2026-10-28 · programmer |
+| Schimbarea parolei revocă celelalte sesiuni | DONE | `password.service.ts`, `me.test.ts`; E2E cu două contexte (NOT RUN local) | 2026-10-28 · programmer |
+| Lista sesiunilor și revocarea (individual, „celelalte”), cu confirmare | DONE | `/api/v1/me/sessions*`, `src/app/(app)/profile/sessions-list.tsx`; E2E (NOT RUN local) | 2026-10-28 · programmer |
+| `?next=` fără open redirect (doar cale relativă internă) | DONE | `src/app/_lib/next-path.ts`, `next-path.test.ts` (29 de forme respinse); verificat pe `next dev` (`next=//evil.com` → `/dashboard`); E2E (NOT RUN local) | 2026-10-28 · programmer |
+| Parola nu ajunge într-un URL înainte de hidratare (formulare `method="post"`, butoane active doar după hidratare) | DONE | `src/app/_lib/use-hydrated.ts`, formularele din `src/app/**` | 2026-10-28 · programmer |
+| Înregistrare `saas` cu verificarea emailului | TODO | Faza 11 | — |
+| Verificarea E2E în browser a fluxurilor de mai sus | PARTIAL | proiectul `auth` din `playwright.config.ts`, job `e2e` în CI: NOT RUN (browserele nu se instalează pe hostul agentului; prima rulare pe GitHub) | 2026-10-28 · programmer |
+
+## 2. Autorizare și RLS
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Stratul 1: `requireMember`/`withMember`, apartenența verificată în bază, 404 uniform | DONE | `src/lib/authz.ts`, `authz.test.ts` | 2026-10-27 · programmer (F1-A) |
+| Stratul 2: RLS `ENABLE` + `FORCE` pe toate tabelele cu `household_id` | DONE | `src/db/migrations/0001_rls.sql`, `rls.test.ts`, `migrate.test.ts` | 2026-10-27 · programmer |
+| Constatarea RLS F1-A (MEDIUM: re-revendicarea unei gospodării fără membri) | DONE | `finet.create_household`, ramura „claim” eliminată (ADR 0003); test în `rls.test.ts` | 2026-10-27 · security |
+| Aplicația ca `finet_app` (`NOBYPASSRLS`), fără drepturi DDL; nimic pentru `anon`/`authenticated` | DONE | `ops/postgres/test-bootstrap.sql`, `rls.test.ts` | 2026-10-27 · programmer |
+| `user_id` din sesiunea verificată, niciodată din cerere; `PATCH /me` strict (respinge `household_id` etc.) | DONE | `session.ts`, `profile.schema.ts`, `me.test.ts` | 2026-10-27 · programmer |
+| CSRF pe mutațiile cu cookie (`Origin` = `APP_URL`) | DONE | `assertSameOrigin`, `me.test.ts`; UI-ul folosește aceleași rute | 2026-10-28 · programmer |
+| Paginile protejate verifică sesiunea pe server, fail closed (eroare → login) | DONE | `src/app/_lib/session.ts`; `next dev`: `/dashboard` fără sesiune → 307 `/login?next=%2Fdashboard` | 2026-10-28 · programmer |
+| Migrațiile aplicate pe Supabase și RLS verificat acolo | TODO | operatorul (`docs/INFRA.md`, „Faza 1”) | — |
+
+## 3. Antete
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| CSP cu nonce per cerere: `default-src 'self'`, `script-src 'self' 'nonce-…'`, `style-src 'self' 'nonce-…'`, `img-src 'self' data:`, `font-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` | DONE | `src/lib/security-headers.ts`, `src/proxy.ts`, `proxy.test.ts`, `security-headers.test.ts`; standalone: `e2e/access.spec.ts` (PASS local) | 2026-10-28 · programmer |
+| Fiecare `<script>` randat poartă nonce-ul; nicio pagină statică | DONE | `next build`: toate rutele `ƒ`; `next dev` `/login`: 21 de scripturi, 0 fără nonce, 0 atribute `style=` | 2026-10-28 · programmer |
+| Fără încălcări CSP în browser | PARTIAL | E2E „antetele de securitate… fără încălcări CSP” (NOT RUN local) | 2026-10-28 · programmer |
+| Antetele și pe răspunsurile 403 ale proxy-ului | DONE | `proxy.test.ts`, `access.spec.ts` (PASS local) | 2026-10-28 · programmer |
+| HSTS `max-age=31536000; includeSubDomains` (fără `preload`: decizia operatorului) | DONE | idem | 2026-10-28 · programmer |
+| `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()` | DONE | idem; asset-urile statice prin `next.config.ts` (`headers()`, fără CSP) | 2026-10-28 · programmer |
+| CORS închis (niciun `Access-Control-Allow-*`) | DONE | `proxy.test.ts`, `access.spec.ts` (preflight → 403 fără antete CORS) | 2026-10-28 · programmer |
+| `'unsafe-eval'` / `'unsafe-inline'` doar în dezvoltare | DONE | `buildCsp`, testele pe ambele moduri | 2026-10-28 · programmer |
+| Pagina `global-error` implicită Next (stiluri inline) | TODO | apare doar la o eroare în layout-ul rădăcină; înlocuită în Faza 9 | — |
+
+## 4. Secrete
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Secretele prin fișiere (`*_FILE`, Docker `secrets:`), inclusiv `BETTER_AUTH_SECRET` | DONE | `src/lib/secret-files.ts`, `ops/docker/docker-compose.yml`, `pnpm test:ops` (PASS) | 2026-10-27 · security (N1, T7) |
+| Valorile de exemplu refuzate la pornire | DONE | `config.ts` (`PLACEHOLDER_SECRET`), `config.test.ts` | 2026-10-27 · programmer |
+| Secrete pe rol (`FINET_ROLE`), URL-urile altor roluri refuzate | DONE | `config.ts`, `config.test.ts` (F1) | 2026-10-27 · security |
+| Niciun secret în `.next/static` | DONE | `pnpm scan:client-secrets` (PASS, 2026-10-28) | 2026-10-28 · programmer |
+| Scanerul: id bot Telegram 8–12 cifre, excepția JWT `anon` (N3) | TODO | `docs/ROADMAP.md` | — |
+| Scanare de secrete în istoric/PR (gitleaks) (F6) | TODO | `docs/ROADMAP.md` | — |
+
+## 5. Încărcări de fișiere (viitor, Faza 6)
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Tip după conținut, dimensiune maximă, cotă, EXIF eliminat, nume generate, servire autorizată, limite ZIP | TODO | Faza 6 | — |
+| Storage local confinat (realpath, `O_NOFOLLOW`, scriere atomică) | DONE | `src/lib/storage/local.ts`, `storage.test.ts` | 2026-10-27 · security (T5) |
+| Curățarea fișierelor temporare orfane și limita la `put` (F9) | TODO | Faza 6 | — |
+
+## 6. Date personale în loguri
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Erorile de configurație numesc variabila, nu valoarea | DONE | `config.ts`, `config.test.ts` | 2026-10-27 · programmer |
+| Better Auth: doar nivelul și mesajul în log | DONE | `auth.ts` (`logger`) | 2026-10-27 · programmer |
+| Audit fără emailuri, IP-uri, user-agent (doar id-uri și tipuri) | DONE | `audit.ts`, ADR 0003 | 2026-10-27 · programmer |
+| UI: erorile neprevăzute fără detalii (`[ui] sesiunea nu a putut fi verificată`) | DONE | `src/app/_lib/session.ts`, `src/app/error.tsx` | 2026-10-28 · programmer |
+| Loguri structurate (pino) | TODO | faza în care apar logurile de business | — |
+
+## 7. CI și lanțul de aprovizionare
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| `pnpm install --frozen-lockfile`, `minimumReleaseAge` pnpm 12, postinstall blocat | DONE | `pnpm-workspace.yaml`, CI | 2026-10-27 · programmer |
+| `pnpm audit --prod` în CI | PARTIAL | non-blocant (F6) | 2026-10-27 · security |
+| Acțiuni GitHub fixate pe SHA, imaginea de bază pe digest, hash în `packageManager` (F6) | TODO | `docs/ROADMAP.md` | — |
+| Dependabot | DONE | `.github/dependabot.yml` | 2026-10-27 · programmer |
+| E2E în CI (ambele moduri) | PARTIAL | job `e2e` în `.github/workflows/ci.yml`: NOT RUN (fără push) | 2026-10-28 · programmer |
+| Dependențe noi în F1-C | DONE | niciuna (componentele shadcn și iconițele scrise de mână) | 2026-10-28 · programmer |
+
+## 8. Infrastructură
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Cloudflare Access obligatoriu în producție, fail closed | DONE | `src/proxy.ts`, `access.ts`, `proxy.test.ts`, `access.spec.ts` (PASS local) | 2026-10-27 · security |
+| Liveness doar `GET` de pe loopback (F3) | DONE | `access.ts`, testele | 2026-10-27 · security |
+| Containere: non-root, rootfs read-only, `cap_drop: ALL`, fără porturi publicate | DONE | `Dockerfile`, compose | 2026-10-27 · security |
+| Date și secrete în `/srv/finet`, în afara backup-ului `/home` (F2) | DONE | `docs/INFRA.md` 4a | 2026-10-27 · security |
+| Arhiva necriptată `/home/docker` cu mediul altor containere | TODO | decizia operatorului (`docs/INFRA.md` 4a) | — |
+| Data API Supabase oprit, schema `finet` neexpusă (test automat pe proiect real) | TODO | operatorul | — |
+| `roles.sql` pe Supabase PG16+ (N4) | TODO | de verificat pe proiectul real | — |
+| `notify.sh`: antetul `From:` curățat (N5) | TODO | `docs/ROADMAP.md` | — |
+| Stub-urile worker/migrate validează rolul (N2) | PARTIAL | `finet-migrate` folosește `parseConfig` din F1-A; `finet-worker` încă stub | 2026-10-27 · programmer |

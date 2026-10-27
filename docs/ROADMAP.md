@@ -7,7 +7,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | Fază | Stare | Note |
 |---|---|---|
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
-| 1 — Autentificare, profil, gospodărie | **parțial** | F1-A (date, RLS, authz, migrații) și F1-B (Better Auth, API, CLI) gata; F1-C în lucru — vezi mai jos |
+| 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
 | 2 — Conturi, categorii, tranzacții, transferuri | neimplementat | |
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | neimplementat | |
 | 4 — Stabilizare (rezervată) | neimplementat | |
@@ -27,8 +27,8 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - Infrastructura nu e deployată și nu e verificată: Supabase, Cloudflare (tunel, Access, WARP) și pornirea containerelor pe VPS le face operatorul (`docs/INFRA.md`, secțiunea 4). Toate criteriile de acceptare care le cer sunt `NOT RUN`.
 - Jobul săptămânal pentru versiunea PostgreSQL: neimplementat (`ops/postgres/version-check.md`); la fel workflow-ul de test pe versiunea majoră următoare.
 - Notificarea de test nu a fost trimisă efectiv (doar `--dry-run`).
-- shadcn/ui: doar `components.json`, nicio componentă.
-- E2E `smoke` (browser) nu a rulat (browserele Playwright nu sunt instalate în mediul agentului); E2E nu rulează în CI.
+- shadcn/ui: rezolvat în F1-C (componente scrise de mână, tokenii mapați).
+- E2E `smoke` (browser) nu a rulat local; din F1-C rulează în CI (job `e2e`), încă nerulat (fără push).
 - CI-ul pe GitHub nu a rulat încă pe acest branch (fără push).
 - Testul automat „schema `finet` inaccesibilă prin Data API” cere un proiect și un tabel (Faza 1).
 - Sarcina umană (bonuri și extrase reale anonimizate în `fixtures/`): neînceput.
@@ -50,10 +50,22 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - gospodăria personală și preferințele create atomic cu utilizatorul; CLI `admin` (`create-user`, `reset-password`, `add-member`; `dist/tools/admin.mjs`, serviciul `finet-admin`); audit pentru login, parolă, sesiuni, creare utilizator, add-member;
 - decizii: ADR 0003 („Autentificarea (F1-B)”).
 
-**Rămâne:** F1-C (UI login/profil/sesiuni, antete CSP, E2E Playwright în CI, `docs/SECURITY_CHECKLIST.md`). Înregistrarea publică în `saas` (cu verificare email) nu e implementată (sign-up rămâne închis și în `saas`: `/api/auth/sign-up/email` e cale dezactivată, 404). OpenAPI (`docs/openapi.json`) pentru `/api/v1` nu e generat încă (6.4; de făcut odată cu primele endpointuri din Faza 2 sau în F1-C). Aplicarea migrațiilor pe Supabase o face operatorul (`docker compose ... --profile migrate run --rm finet-migrate`), după revizuiri și backup.
+**F1-C (UI, antete, E2E, documentație), gata în repo:**
+- antetele de securitate pe toate răspunsurile proxy-ului (inclusiv 403): CSP cu nonce per cerere (fără `unsafe-*` în producție), HSTS fără `preload`, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, CORS închis; verificate în teste unitare și pe serverul standalone (`e2e/access.spec.ts`, PASS local);
+- paginile `/login`, `/dashboard` (placeholder), `/profile` (preferințe, parolă, sesiuni), logout, `/` și `/register` (404 în `personal`), cu `?next=` validat (fără open redirect); navigare jos pe telefon, meniu lateral pe desktop;
+- tokenii `surface-2`/`accent-soft` și numele shadcn mapate corect; componentele UI fără dependențe noi; textele în `src/messages/ro.ts`;
+- E2E Playwright (proiectul `auth`, ambele moduri) și job-ul `e2e` în CI; `docs/SECURITY_CHECKLIST.md`; ADR 0003 („UI și antete (F1-C)”).
+
+**Rămâne pentru închiderea Fazei 1:**
+- prima rulare a job-ului `e2e` pe GitHub (local NOT RUN: browserele nu se instalează pe hostul agentului) și eventualele ajustări;
+- aplicarea migrațiilor pe Supabase de operator (`docs/INFRA.md`, „Faza 1”), apoi verificarea în browser prin Access;
+- revizuirea de securitate a Fazei 1 (F1-B + F1-C) și actualizarea `docs/SECURITY_CHECKLIST.md`;
+- înregistrarea publică `saas` cu verificarea emailului: Faza 11 (sign-up rămâne închis și în `saas`);
+- OpenAPI (`docs/openapi.json`) pentru `/api/v1`: odată cu primele endpointuri din Faza 2;
+- **TODO:** micșorarea imaginii `finet:tools` (583 MB, include `next`): de exemplu `pnpm deploy --prod` cu doar `postgres`/`drizzle-orm`/`zod` (dependențele externe ale `dist/tools/*.mjs`). Neîncercat: cere un build Docker, nepermis pe hostul cu memorie mică.
 
 ### Puncte deschise
-- **Tokenii shadcn/ui:** în FINET `muted` e o culoare de **text** și `accent` e albastrul saturat al acțiunilor, dar shadcn folosește `muted` și `accent` ca **fundaluri** discrete. Înainte de prima componentă shadcn trebuie nume separate (de exemplu `surface-2`, `accent-soft`, ca în demo), altfel componentele ies cu fundaluri greșite.
+- **Tokenii shadcn/ui:** închis în F1-C (`surface-2`, `accent-soft`; ADR 0003).
 - Versiunea PostgreSQL: confirmată `17` (17.11, eu-west-1, 2026-10-27).
 - Planul Supabase (ADR separat).
 - Varianta de intrare (tunel vs Traefik) și IP-urile statice.
@@ -66,7 +78,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
   - hash-ul în `packageManager` (`pnpm@12.15.0+sha512...`), verificat de corepack;
   - `pnpm audit --prod` blocant de la severitatea HIGH (acum non-blocant);
   - scanare de secrete în istoric și în PR-uri (gitleaks) în CI.
-- **F8 (rest) — antetele de securitate:** CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors` → **Faza 9** (hardening).
+- **F8 (rest) — antetele de securitate: închis în F1-C** (CSP cu nonce, HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`; `docs/SECURITY_CHECKLIST.md`). Rămân pentru Faza 9: `preload` la HSTS (decizia operatorului), pagina `global-error` proprie.
 - **F9 — storage local (Faza 6, odată cu ingestia):** curățarea fișierelor temporare orfane `*.tmp-*` rămase după o scriere întreruptă; limită de dimensiune la `put` (pe lângă cota totală).
 - **F2 (rest) / N1 — secretele în data-root-ul Docker: închis tehnic în T7.**
   - Ce s-a făcut: URL-urile bazei și `HEALTH_TOKEN` intră în containere ca fișiere (`secrets:` → `/run/secrets/`, citite prin `*_FILE`, `src/lib/secret-files.ts`), deci nu mai ajung în `config.v2.json`.
