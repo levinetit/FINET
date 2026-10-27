@@ -1,8 +1,8 @@
 # FINET — infrastructură (Docker pe VPS-ul docker-apps)
 
-Decizia de infrastructură: [ADR 0002](adr/0002-deploy-docker-pe-vps.md) (Docker pe `docker-apps`, nu nativ pe LXC 1999). Acest document înlocuiește, pentru deploy, secțiunile 4.2–4.6, 5.2, 6 și 10.1 din `docs/GHID_CONSTRUIRE.md` (ghidul descrie încă varianta nativă și nu a fost modificat).
+Decizia de infrastructură: [ADR 0002](adr/0002-deploy-docker-pe-vps.md) (Docker pe `docker-apps`, nu nativ pe LXC 1999). `docs/GHID_CONSTRUIRE.md` a fost aliniat la această variantă (Docker pe VPS); acest document rămâne sursa detaliată pentru deploy.
 
-**Starea la 2026-10-27:** nimic nu e deployat. Agentul n-a atins serverul: n-a creat directoare, n-a pornit containere FINET, n-a modificat Traefik, firewall-ul, Portainer sau Cloudflare. Toți pașii de mai jos îi face operatorul.
+**Starea la 2026-10-27:** Supabase e configurat (roluri, schema `finet`, SSL, restricții de rețea, bucket privat `finet-docs`), `finet-web` rulează pe VPS la `172.88.88.130`, iar `finet.levinetit.com` e publicat prin tunelul `vpsde` în spatele Cloudflare Access (doar proprietarul). Pașii de mai jos descriu procedura pentru oricine o reface; ce a rămas neverificat (login Access cu email permis și nepermis, WARP, notificarea reală, conexiune refuzată de pe alt IP) e marcat `NOT RUN` în `docs/reports/faza-0.md`, secțiunea 8.
 
 ## 1. Faptele despre VPS (sursa: documentația hostului și comenzi doar de citire, 2026-10-27)
 
