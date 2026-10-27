@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:ops": "sh ops/notify/test.sh",
+    "test:ops": "sh ops/notify/test.sh && sh ops/docker/test-env-examples.sh",
     "test:e2e": "playwright test",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "scan:client-secrets": "node scripts/scan-client-secrets.mjs .next/static"

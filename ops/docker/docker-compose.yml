@@ -1,4 +1,4 @@
-# FINET pe VPS-ul docker-apps (ADR 0002): două servicii din aceeași imagine, pe rețeaua externă
+# FINET pe VPS-ul docker-apps (ADR 0002): servicii din aceeași imagine, pe rețeaua externă
 # `apps`, FĂRĂ porturi publicate pe host. Intrarea vine prin cloudflare-tunnel (recomandat) sau
 # prin traefik-main (label-urile de mai jos, oprite implicit). Detalii: docs/INFRA.md.
 #
@@ -6,13 +6,18 @@
 #   docker compose -f ops/docker/docker-compose.yml \
 #     --env-file /home/docker-apps/finet/compose.env config     # verificare
 #   docker compose -f ops/docker/docker-compose.yml \
-#     --env-file /home/docker-apps/finet/compose.env up -d --build
+#     --env-file /home/docker-apps/finet/compose.env up -d --build finet-web
 #
-# Două fișiere de mediu, cu roluri diferite:
+# Fișierele de mediu, cu roluri diferite:
 #   - `--env-file .../compose.env` (model: ops/docker/compose.env.example): variabilele de
-#     INTERPOLARE din acest fișier (${FINET_*}); nu ajung în containere.
-#   - `env_file` (${FINET_ENV_FILE}, model: ops/docker/finet.env.example): mediul aplicației
-#     (baza de date, Access, SMTP...). Stă în afara repo-ului, permisiuni 600.
+#     INTERPOLARE din acest fișier (${FINET_*}); nu ajung în containere și nu conțin secrete.
+#   - `env_file`, câte unul PE SERVICIU, din ${FINET_ENV_DIR} (permisiuni 600, în afara
+#     repo-ului), ca fiecare container să vadă doar secretele rolului său (FINET_ROLE,
+#     src/lib/config.ts):
+#       finet-web     → finet.env          (DATABASE_URL; model finet.env.example)
+#       finet-worker  → finet.worker.env   (WORKER_DATABASE_URL; model finet.worker.env.example)
+#       finet-migrate → finet.migrate.env  (MIGRATOR_DATABASE_URL; model finet.migrate.env.example)
+#     Rolul web refuză să pornească dacă vede URL-ul workerului sau al migratorului.
 # `environment:` are prioritate peste `env_file`; acolo stau doar valorile fixe ale deploy-ului.
 
 name: finet
@@ -25,9 +30,6 @@ x-common: &common
   cap_drop: [ALL]
   security_opt:
     - no-new-privileges:true
-  env_file:
-    - path: ${FINET_ENV_FILE:-/home/docker-apps/finet/finet.env}
-      required: true
   logging:
     driver: json-file
     options:
@@ -42,7 +44,11 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+    env_file:
+      - path: ${FINET_ENV_DIR:-/home/docker-apps/finet}/finet.env
+        required: true
     environment:
+      FINET_ROLE: web
       NODE_ENV: production
       APP_MODE: personal
       # Access e obligatoriu în producție (src/lib/config.ts refuză `false`).
@@ -114,10 +120,13 @@ services:
     depends_on:
       finet-web:
         condition: service_healthy
+    env_file:
+      - path: ${FINET_ENV_DIR:-/home/docker-apps/finet}/finet.worker.env
+        required: true
     environment:
+      FINET_ROLE: worker
       NODE_ENV: production
       APP_MODE: personal
-      CF_ACCESS_REQUIRED: "true"
       STORAGE_DRIVER: local
       STORAGE_DIR: /data/storage
       NODE_OPTIONS: --max-old-space-size=192
@@ -144,6 +153,42 @@ services:
       apps:
         # de confirmat de operator
         ipv4_address: ${FINET_WORKER_IP:-172.88.88.131}
+
+  finet-migrate:
+    <<: *common
+    container_name: finet-migrate
+    hostname: finet-migrate
+    # One-shot: rulează migrațiile cu rolul `finet_migrator` și se oprește. Doar el primește
+    # MIGRATOR_DATABASE_URL. În Faza 0 nu există migrații (Drizzle vine în Faza 1): comanda e un
+    # stub care doar anunță asta. Rulare explicită:
+    #   docker compose ... --profile migrate run --rm finet-migrate
+    profiles: [migrate]
+    restart: "no"
+    env_file:
+      - path: ${FINET_ENV_DIR:-/home/docker-apps/finet}/finet.migrate.env
+        required: true
+    environment:
+      FINET_ROLE: migrate
+      NODE_ENV: production
+      APP_MODE: personal
+      NODE_OPTIONS: --max-old-space-size=192
+    command:
+      - node
+      - -e
+      - "console.log('finet-migrate: nicio migrație în Faza 0 (Drizzle vine în Faza 1)')"
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    healthcheck:
+      disable: true
+    # Decizia mea: fără `apps` și fără IP static. Migrarea are nevoie doar de ieșire spre
+    # Supabase (rețeaua implicită a proiectului, `finet_default`), nu de celelalte containere,
+    # iar un container scurt fără IP fix pe `apps` ar putea ocupa adresa altui serviciu.
+    networks:
+      - default
 
 networks:
   apps:
