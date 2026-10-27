@@ -1,0 +1,24 @@
+# FINET — task brief
+
+- **Task ID:**
+- **Solicitant / issue:**
+- **Obiectiv:**
+- **Scope inclus:**
+- **Scope exclus:**
+- **Branch de lucru:**
+- **Commit de bază:**
+- **Documente canonice consultate:**
+- **Starea implementării confirmată de researcher:**
+- **Criterii de acceptare (pass/fail):**
+  - [ ]
+- **Invariante financiare / de autorizare:**
+- **Fișiere deținute de programmer:**
+- **Dependențe:**
+- **Comenzi de verificare descoperite în repo:**
+- **Migrare / rollback:**
+- **Riscuri și aprobări necesare:**
+- **Security verdict:**
+- **Verifier verdict:**
+- **Comenzi executate și rezultate exacte:**
+- **Comenzi/teste NOT RUN și motiv:**
+- **Decizie operator:** `APPROVE` / `REQUEST_CHANGES` / `REJECT`
