@@ -34,5 +34,5 @@ Stack-ul aplicației (ADR 0001), Supabase (3.5), Cloudflare Access cu politica p
 ## Consecințe
 - Pozitiv: spațiu pe disc suficient, infrastructură TLS/tunel existentă, izolare prin container (rootfs read-only, `cap_drop: ALL`, `no-new-privileges`, limite de memorie/CPU).
 - Negativ / riscuri: hostul e partajat și încărcat (RAM disponibilă mică) → limite modeste (web 512 MB, worker 256 MB) și risc de OOM sub presiune; FINET împarte rețeaua `apps` cu alte servicii (orice container de acolo poate cere `finet-web:3000`; aplicația rămâne fail-closed); presiunea pe disc e cauza cunoscută a mai multor incidente pe acest host → loguri limitate (`json-file`, 3×10 MB), date în Supabase.
-- `docs/GHID_CONSTRUIRE.md` (secțiunile 4.2, 4.3, 4.6, 5.2, 6, 10.1) descrie încă varianta nativă; documentul e canonic și nu a fost modificat. `docs/INFRA.md` e sursa pentru varianta Docker.
+- `docs/GHID_CONSTRUIRE.md` a fost aliniat la varianta Docker (PR separat, aprobat de operator). `docs/INFRA.md` rămâne sursa detaliată pentru deploy.
 - Deploy-ul automat din GitHub (ghid, secțiunea 6) nu e implementat; deploy-ul îl face operatorul manual.

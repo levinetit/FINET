@@ -1,6 +1,6 @@
 # FINET — infrastructură (Docker pe VPS-ul docker-apps)
 
-Decizia de infrastructură: [ADR 0002](adr/0002-deploy-docker-pe-vps.md) (Docker pe `docker-apps`, nu nativ pe LXC 1999). Acest document înlocuiește, pentru deploy, secțiunile 4.2–4.6, 5.2, 6 și 10.1 din `docs/GHID_CONSTRUIRE.md` (ghidul descrie încă varianta nativă și nu a fost modificat).
+Decizia de infrastructură: [ADR 0002](adr/0002-deploy-docker-pe-vps.md) (Docker pe `docker-apps`, nu nativ pe LXC 1999). `docs/GHID_CONSTRUIRE.md` a fost aliniat la această variantă (Docker pe VPS); acest document rămâne sursa detaliată pentru deploy.
 
 **Starea la 2026-10-27:** nimic nu e deployat. Agentul n-a atins serverul: n-a creat directoare, n-a pornit containere FINET, n-a modificat Traefik, firewall-ul, Portainer sau Cloudflare. Toți pașii de mai jos îi face operatorul.
 
@@ -73,7 +73,7 @@ Ce fixează compose-ul (au prioritate față de `env_file`): `FINET_ROLE`, `NODE
 ### Supabase din container
 `DATABASE_URL` cu `sslmode=verify-full` are nevoie de certificatul CA Supabase în container. Driverul `postgres` (postgres.js 3.4.9) transformă `sslmode=verify-full` în TLS cu verificarea certificatului față de CA-urile de încredere ale Node (cele de sistem plus `NODE_EXTRA_CA_CERTS`).
 
-**`sslrootcert` din URL NU funcționează cu postgres.js** (verificat 2026-10-27 pe PostgreSQL 17 efemer): parametrul nu e citit ca fișier CA, ci trimis serverului ca parametru de conexiune, iar serverul refuză conexiunea cu `unrecognized configuration parameter "sslrootcert"` (singura excepție e valoarea `sslrootcert=system`). Deci URL-urile din `finet*.env` **nu** conțin `sslrootcert` (spre deosebire de exemplul din `docs/GHID_CONSTRUIRE.md` 10.1, gândit pentru psql).
+**`sslrootcert` din URL NU funcționează cu postgres.js** (verificat 2026-10-27 pe PostgreSQL 17 efemer): parametrul nu e citit ca fișier CA, ci trimis serverului ca parametru de conexiune, iar serverul refuză conexiunea cu `unrecognized configuration parameter "sslrootcert"` (singura excepție e valoarea `sslrootcert=system`). Deci URL-urile din `finet*.env` **nu** conțin `sslrootcert` (`psql` îl acceptă, de aceea verificarea manuală din `docs/GHID_CONSTRUIRE.md` 4.4 folosește `PGSSLROOTCERT`).
 
 Variante pentru CA-ul Supabase:
 1. **Acum, fără cod nou (NOT RUN: nevalidat pe un server TLS real):** operatorul pune CA-ul în `/srv/finet/ca/supabase-ca.crt` (644), îl montează read-only (`/srv/finet/ca/supabase-ca.crt:/run/finet/supabase-ca.crt:ro`) și setează `NODE_EXTRA_CA_CERTS=/run/finet/supabase-ca.crt` în fișierul de mediu al fiecărui serviciu care se conectează. Limitare: CA-ul Supabase se adaugă la CA-urile publice, nu le înlocuiește. Montarea nu e încă în compose (se adaugă după primul test de conexiune).
