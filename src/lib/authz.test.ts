@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 
+import { sql } from "drizzle-orm";
 import type postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { type Db, createDb, withRlsOn } from "@/db";
 import { createHousehold } from "@/db/households";
 import { runMigrations } from "@/db/migrate";
-import { auditEvents, householdMembers, users } from "@/db/schema";
+import { auditEvents, householdMembers } from "@/db/schema";
 import {
   MIGRATIONS_DIR,
   type ScratchDatabase,
@@ -68,7 +69,10 @@ describe.skipIf(!TEST_ADMIN_URL)("requireMember pe PostgreSQL real", () => {
       [B, "b@exemplu.ro"],
       [C, "c@exemplu.ro"],
     ] as const) {
-      await app.db.insert(users).values({ id, email, name: email });
+      // Listă explicită de coloane: `finet_app` are INSERT doar pe ele (M5).
+      await app.db.execute(
+        sql`insert into finet.users (id, email, name) values (${id}, ${email}, ${email})`,
+      );
     }
     HA = await withRlsOn(app.db, { userId: A }, (tx) => createHousehold(tx, { name: "Casa A" }));
     HB = await withRlsOn(app.db, { userId: B }, (tx) => createHousehold(tx, { name: "Casa B" }));

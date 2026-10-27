@@ -23,6 +23,7 @@
 --     where schemaname = 'finet'), apoi
 --   alter table finet.<tabel> no force row level security; ... disable row level security;
 --   drop function finet.create_household(text, text, text), finet.member_role(uuid),
+--     finet.promote_first_admin(uuid),
 --     finet.current_household_id(), finet.current_user_id();
 --   revoke all on all tables in schema finet from finet_app;
 --   delete from finet.__drizzle_migrations where hash = '<hash-ul 0001_rls>';
@@ -104,11 +105,36 @@ create function finet.create_household(
   $$;
 --> statement-breakpoint
 
+-- Primul administrator al platformei (M5): aplicația nu are UPDATE pe `users.is_platform_admin`;
+-- CLI-ul (`admin:create-user`) promovează utilizatorul DIN CONTEXT doar dacă nu există încă
+-- niciun administrator. Serializată cu același lock ca crearea utilizatorilor din CLI.
+create function finet.promote_first_admin(p_user_id uuid) returns boolean
+  language plpgsql volatile security definer
+  set search_path = pg_catalog
+  as $$
+  begin
+    if p_user_id is null or p_user_id is distinct from finet.current_user_id() then
+      raise exception 'promote_first_admin: doar utilizatorul din context'
+        using errcode = '42501';
+    end if;
+    perform pg_advisory_xact_lock(hashtext('finet.create_user'));
+    if exists (select 1 from finet.users u where u.is_platform_admin) then
+      return false;
+    end if;
+    update finet.users set is_platform_admin = true, updated_at = now()
+     where id = p_user_id and status = 'active';
+    return found;
+  end
+  $$;
+--> statement-breakpoint
+
 revoke all on function finet.current_user_id(), finet.current_household_id(),
-  finet.member_role(uuid), finet.create_household(text, text, text) from public;
+  finet.member_role(uuid), finet.create_household(text, text, text),
+  finet.promote_first_admin(uuid) from public;
 --> statement-breakpoint
 grant execute on function finet.current_user_id(), finet.current_household_id(),
-  finet.member_role(uuid), finet.create_household(text, text, text) to finet_app;
+  finet.member_role(uuid), finet.create_household(text, text, text),
+  finet.promote_first_admin(uuid) to finet_app;
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------
@@ -256,8 +282,30 @@ revoke all on finet.users, finet.auth_sessions, finet.auth_accounts, finet.auth_
   finet.auth_rate_limits, finet.households, finet.household_members, finet.audit_events,
   finet.user_preferences, finet.consents from public;
 --> statement-breakpoint
-grant select, insert, update, delete on finet.users, finet.auth_sessions, finet.auth_accounts,
+-- Tabelele de autentificare: drepturi PE COLOANE (M5). Aplicația nu poate scrie
+-- `users.is_platform_admin`, `users.status`, `users.email` sau `users.id` după creare (un proces
+-- compromis nu se poate face administrator, nu poate reactiva un cont și nu poate muta un cont
+-- pe alt email); `is_platform_admin` se setează doar prin finet.promote_first_admin(), iar
+-- `status` doar de operator. INSERT-ul în `users` are listă de coloane: `status` și
+-- `is_platform_admin` iau valorile implicite (`active`, `false`).
+-- Restul: ce scrie Better Auth (sesiuni prelungite, parola la resetare, verificări consumate).
+grant select, delete on finet.users to finet_app;
+--> statement-breakpoint
+grant insert (id, name, email, email_verified, image, created_at, updated_at)
+  on finet.users to finet_app;
+--> statement-breakpoint
+grant update (name, image, email_verified, updated_at) on finet.users to finet_app;
+--> statement-breakpoint
+grant select, insert, delete on finet.auth_sessions, finet.auth_accounts,
   finet.auth_verifications, finet.auth_rate_limits to finet_app;
+--> statement-breakpoint
+grant update (expires_at, updated_at) on finet.auth_sessions to finet_app;
+--> statement-breakpoint
+grant update (password, updated_at) on finet.auth_accounts to finet_app;
+--> statement-breakpoint
+grant update (value, expires_at, updated_at) on finet.auth_verifications to finet_app;
+--> statement-breakpoint
+grant update (count, last_request) on finet.auth_rate_limits to finet_app;
 --> statement-breakpoint
 -- households: fără INSERT (crearea doar prin finet.create_household()).
 grant select, update, delete on finet.households to finet_app;

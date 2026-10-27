@@ -19,7 +19,7 @@ import {
   insertDefaultPreferences,
   insertUser,
   lockUserCreation,
-  platformAdminExists,
+  promoteFirstAdmin,
   setPasswordHash,
 } from "./users.repo";
 
@@ -103,14 +103,11 @@ export async function createUserWithHousehold(
         isPlatformAdmin: existing.isPlatformAdmin,
       };
     }
-    const isPlatformAdmin = input.firstUserBecomesAdmin && !(await platformAdminExists(tx));
-    await insertUser(tx, {
-      id: userId,
-      email,
-      name,
-      emailVerified: input.emailVerified,
-      isPlatformAdmin,
-    });
+    await insertUser(tx, { id: userId, email, name, emailVerified: input.emailVerified });
+    // M5: aplicația nu poate scrie `is_platform_admin`; promovarea trece prin funcția dedicată.
+    const isPlatformAdmin = input.firstUserBecomesAdmin
+      ? await promoteFirstAdmin(tx, userId)
+      : false;
     if (passwordHash) await insertCredentialAccount(tx, userId, passwordHash);
     await insertDefaultPreferences(tx, userId);
     const householdId = await createHousehold(tx, { name: PERSONAL_HOUSEHOLD_NAME });

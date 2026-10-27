@@ -76,7 +76,10 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS pe PostgreSQL real (rolul finet_app)", () 
   let HB: string;
 
   async function createUser(id: string, email: string) {
-    await app.db.insert(users).values({ id, email, name: email.split("@")[0]! });
+    // Listă explicită de coloane: `finet_app` are INSERT doar pe ele (M5).
+    await app.db.execute(
+      sql`insert into finet.users (id, email, name) values (${id}, ${email}, ${email.split("@")[0]!})`,
+    );
   }
 
   /** Crearea gospodăriei: doar prin finet.create_household (gospodăria + owner, atomic). */
@@ -396,7 +399,8 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS pe PostgreSQL real (rolul finet_app)", () 
       // Un utilizator dezactivat nu poate crea gospodării.
       const D = randomUUID();
       await createUser(D, "dezactivat@exemplu.ro");
-      await app.db.update(users).set({ status: "disabled" }).where(eq(users.id, D));
+      // Dezactivarea e o operație a operatorului (M5: `finet_app` nu poate scrie `status`).
+      await scratch.admin`update finet.users set status = 'disabled' where id = ${D}`;
       expect(await sqlState(() => createHousehold(D, "X"))).toBe("42501");
       // PUBLIC nu are EXECUTE (doar finet_app).
       const [priv] = await scratch.admin<{ app: boolean; anon: boolean }[]>`

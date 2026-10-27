@@ -36,25 +36,30 @@ export async function lockUserCreation(tx: Tx): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('finet.create_user'))`);
 }
 
-export async function platformAdminExists(tx: Tx): Promise<boolean> {
-  const rows = await tx
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.isPlatformAdmin, true))
-    .limit(1);
-  return rows.length > 0;
-}
-
 export type NewUserRow = Readonly<{
   id: string;
   email: string;
   name: string;
   emailVerified: boolean;
-  isPlatformAdmin: boolean;
 }>;
 
+/**
+ * INSERT cu listă explicită de coloane (M5): `finet_app` are INSERT doar pe coloanele de mai
+ * jos, iar `tx.insert(users)` din Drizzle ar enumera toate coloanele (cu `default`).
+ * `status` și `is_platform_admin` iau valorile implicite.
+ */
 export async function insertUser(tx: Tx, row: NewUserRow): Promise<void> {
-  await tx.insert(users).values(row);
+  await tx.execute(sql`
+    insert into finet.users (id, email, name, email_verified)
+    values (${row.id}, ${row.email}, ${row.name}, ${row.emailVerified})`);
+}
+
+/** Promovează utilizatorul din context ca prim administrator (dacă nu există niciunul). */
+export async function promoteFirstAdmin(tx: Tx, userId: string): Promise<boolean> {
+  const rows = await tx.execute<{ promoted: boolean }>(
+    sql`select finet.promote_first_admin(${userId}::uuid) as promoted`,
+  );
+  return rows[0]?.promoted === true;
 }
 
 export async function insertCredentialAccount(
