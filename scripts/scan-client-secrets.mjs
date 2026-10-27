@@ -16,6 +16,17 @@ export const SECRET_PATTERNS = [
   { name: "Stripe restricted key", regex: /rk_live_[0-9A-Za-z]{8,}/g },
   { name: "Stripe webhook secret", regex: /whsec_[0-9A-Za-z]{8,}/g },
   { name: "cheie privată PEM", regex: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g },
+  // Token de bot Telegram: <id 8–10 cifre>:<35 de caractere>, delimitat ca să nu prindă
+  // fragmente din numere sau identificatori mai lungi.
+  {
+    name: "token bot Telegram",
+    regex: /(?<![0-9A-Za-z_-])\d{8,10}:[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])/g,
+  },
+  // JWT: antet și payload JSON în base64url (încep amândouă cu `{"` → `eyJ`).
+  { name: "JWT", regex: /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\./g },
+  // URL Postgres cu parolă (`utilizator:parola@`); fără parolă nu e un secret.
+  { name: "URL Postgres cu parolă", regex: /postgres(?:ql)?:\/\/[^\s:@/]+:[^\s@/]+@/g },
+  { name: "cheie de acces AWS", regex: /(?<![0-9A-Z])AKIA[0-9A-Z]{16}(?![0-9A-Z])/g },
 ];
 
 /**

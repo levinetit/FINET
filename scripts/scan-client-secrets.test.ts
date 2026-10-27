@@ -13,6 +13,14 @@ const SCRIPT = join(import.meta.dirname, "scan-client-secrets.mjs");
 const fakeStripeKey = ["sk", "live", "0123456789abcdefXYZ"].join("_");
 const fakeWebhookSecret = ["whsec", "0123456789abcdef"].join("_");
 const fakePem = ["-----BEGIN", "RSA PRIVATE KEY-----"].join(" ");
+// Telegram: 10 cifre + `:` + 35 de caractere; JWT: antet și payload base64url; AWS: AKIA + 16.
+const fakeTelegram = ["1234567890", "A".repeat(20) + "b_c-d" + "9".repeat(10)].join(":");
+const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
+const fakeJwt = [b64({ alg: "RS256", typ: "JWT" }), b64({ sub: "test-local" }), "semnatura"].join(
+  ".",
+);
+const fakePgUrl = ["postgres", "//finet_app:parola-fictiva@db.exemplu.invalid:5432/x"].join(":");
+const fakeAws = ["AK", "IA", "ABCDEFGHIJ012345"].join("");
 
 const ENV_EXAMPLE = [
   "# Modul",
@@ -88,6 +96,35 @@ describe("scanDirectory", () => {
     expect(kinds).toContain("cheie privată PEM");
   });
 
+  it.each([
+    ["token bot Telegram", fakeTelegram],
+    ["JWT", fakeJwt],
+    ["URL Postgres cu parolă", fakePgUrl],
+    ["URL Postgres cu parolă", fakePgUrl.replace("postgres:", "postgresql:")],
+    ["cheie de acces AWS", fakeAws],
+  ])("găsește: %s", (kind, value) => {
+    writeFileSync(join(dir, "chunks", "leak.js"), `var x=${JSON.stringify(value)};`);
+    expect(scanDirectory(dir, { secretNames: [] })).toEqual([
+      { file: join("chunks", "leak.js"), kind },
+    ]);
+  });
+
+  it("nu dă fals-pozitive pe forme apropiate, dar nesecrete", () => {
+    writeFileSync(
+      join(dir, "chunks", "ok.js"),
+      [
+        // Ore/porturi și identificatori cu `:`, prea scurți sau prea lungi pentru Telegram.
+        'a="12:30";b="127.0.0.1:3000";c="1234567:' + "A".repeat(35) + '"',
+        'd="12345678901:' + "A".repeat(35) + '";e="1234567890:' + "A".repeat(36) + '"',
+        // URL Postgres fără parolă și text `eyJ` izolat.
+        'f="postgres://localhost:5432/db";g="postgres://user@host/db";h="eyJhbGciOi"',
+        // Prefix AWS fără lungimea completă sau în interiorul unui șir mai lung.
+        'i="AKIA123";j="XAKIA' + "A".repeat(16) + '";k="AKIA' + "A".repeat(17) + '"',
+      ].join(";"),
+    );
+    expect(scanDirectory(dir, { secretNames: [] })).toEqual([]);
+  });
+
   it("găsește numele unei variabile secrete, dar nu și al uneia publice", () => {
     writeFileSync(join(dir, "c.js"), "x=process.env.BETTER_AUTH_SECRET;y=NEXT_PUBLIC_APP_NAME");
     expect(scanDirectory(dir, { secretNames })).toEqual([
@@ -126,6 +163,15 @@ describe("CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("leak.js");
     expect(result.stderr).not.toContain(fakeStripeKey);
+  });
+
+  it("nu afișează valoarea nici pentru tiparele noi", () => {
+    writeFileSync(join(dir, "leak.js"), [fakeTelegram, fakeJwt, fakePgUrl, fakeAws].join("\n"));
+    const result = run(dir);
+    expect(result.status).toBe(1);
+    for (const v of [fakeTelegram, fakeJwt, "parola-fictiva", fakeAws]) {
+      expect(result.stderr).not.toContain(v);
+    }
   });
 
   it("iese cu 2 dacă directorul lipsește", () => {
