@@ -22,9 +22,10 @@
 #     ajung în /home/docker/containers/<id>/config.v2.json (deci în arhiva săptămânală
 #     NECRIPTATĂ a /home/docker); fișierele montate ca secrete nu ajung acolo, doar calea lor.
 #     Fiecare serviciu primește DOAR secretele rolului său (FINET_ROLE, src/lib/config.ts):
-#       finet-web     → finet_database_url, finet_health_token
+#       finet-web     → finet_database_url, finet_health_token, finet_better_auth_secret
 #       finet-worker  → finet_worker_database_url
 #       finet-migrate → finet_migrate_database_url
+#       finet-admin   → finet_database_url (CLI-ul de administrare, rolul Postgres finet_app)
 #     Rolul web refuză să pornească dacă vede URL-ul (sau `_FILE`-ul) workerului ori al
 #     migratorului.
 #   - `env_file`, câte unul PE SERVICIU, din ${FINET_ENV_DIR}: doar variabile NESECRETE
@@ -52,6 +53,9 @@ secrets:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_worker_database_url
   finet_migrate_database_url:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_migrate_database_url
+  # Secretul Better Auth (F1-B): `openssl rand -base64 32`, doar pentru finet-web.
+  finet_better_auth_secret:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_better_auth_secret
 
 x-ca-volume: &ca-volume
   # CA-ul Supabase (prod-ca-2021.crt din panoul Supabase), read-only. Directorul trebuie să
@@ -93,10 +97,12 @@ services:
       # Decizia mea: tokenul de sănătate e obligatoriu în deploy (fișierul trebuie să existe și
       # să nu fie gol), ca monitorizarea internă să nu depindă de JWT-ul Access.
       - finet_health_token
+      - finet_better_auth_secret
     environment:
       FINET_ROLE: web
       DATABASE_URL_FILE: /run/secrets/finet_database_url
       HEALTH_TOKEN_FILE: /run/secrets/finet_health_token
+      BETTER_AUTH_SECRET_FILE: /run/secrets/finet_better_auth_secret
       DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
       NODE_ENV: production
       APP_MODE: personal
@@ -256,6 +262,58 @@ services:
     # Decizia mea: fără `apps` și fără IP static. Migrarea are nevoie doar de ieșire spre
     # Supabase (rețeaua implicită a proiectului, `finet_default`), nu de celelalte containere,
     # iar un container scurt fără IP fix pe `apps` ar putea ocupa adresa altui serviciu.
+    networks:
+      - default
+
+  finet-admin:
+    <<: *common
+    # CLI-ul de administrare (F1-B, ADR 0003): imaginea de unelte, `dist/tools/admin.mjs`.
+    # Rolul de proces `admin` cu URL-ul aplicației (finet_database_url, rolul Postgres
+    # finet_app, NOBYPASSRLS): aceleași drepturi ca serverul web, fără server HTTP, fără
+    # secretul Better Auth și fără URL-ul migratorului. One-shot, pornit doar explicit:
+    #   docker compose ... --profile admin run --rm -T finet-admin \
+    #     create-user --email <email> --name <nume> --password-stdin < /cale/parola
+    #   docker compose ... --profile admin run --rm finet-admin create-user --email ... --name ...
+    #     (fără --password-stdin: parola se generează și se afișează o singură dată)
+    #   docker compose ... --profile admin run --rm -T finet-admin reset-password --email <email> --password-stdin
+    #   docker compose ... --profile admin run --rm finet-admin add-member --household <id> --email <email>
+    # Parola nu se dă niciodată ca argument (ar rămâne în istoric și în `ps`). Detalii: docs/INFRA.md.
+    image: ${FINET_TOOLS_IMAGE:-finet:tools}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: tools
+    container_name: finet-admin
+    hostname: finet-admin
+    profiles: [admin]
+    restart: "no"
+    # `-T` + stdin: `docker compose run` păstrează stdin deschis pentru --password-stdin.
+    stdin_open: true
+    env_file:
+      - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.admin.env
+        required: true
+    secrets:
+      - finet_database_url
+    environment:
+      FINET_ROLE: admin
+      DATABASE_URL_FILE: /run/secrets/finet_database_url
+      DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
+      NODE_ENV: production
+      APP_MODE: personal
+      NODE_OPTIONS: --max-old-space-size=192
+    entrypoint: ["node", "dist/tools/admin.mjs"]
+    command: []
+    volumes:
+      - *ca-volume
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    healthcheck:
+      disable: true
+    # Ca finet-migrate: doar ieșire spre Supabase, fără `apps` și fără IP static.
     networks:
       - default
 

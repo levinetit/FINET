@@ -7,7 +7,8 @@
 #  2. docker-compose.yml nu pune niciun secret în `environment` (nici `NUME:`, nici `NUME=`),
 #     doar variabilele `NUME_FILE`.
 #  3. Regula pe rol (F1, src/lib/config.ts), verificată pe compose: fiecare serviciu primește
-#     DOAR `_FILE`-ul și secretul (`secrets:`) URL-ului său de bază de date.
+#     DOAR `_FILE`-ul și secretul (`secrets:`) URL-ului său de bază de date; tokenul de
+#     sănătate și secretul Better Auth sunt doar ale lui finet-web.
 # Se uită doar la liniile active (nu la comentarii).
 set -u
 
@@ -35,7 +36,7 @@ SECRETS=$(awk '
 if [ -z "$SECRETS" ]; then
   fail ".env.example nu are nicio variabilă marcată # secret"
 else
-  for required in DATABASE_URL WORKER_DATABASE_URL MIGRATOR_DATABASE_URL HEALTH_TOKEN; do
+  for required in DATABASE_URL WORKER_DATABASE_URL MIGRATOR_DATABASE_URL HEALTH_TOKEN BETTER_AUTH_SECRET; do
     if echo "$SECRETS" | grep -qx "$required"; then ok "$required e marcată secret"; else fail "$required nu e marcată # secret în .env.example"; fi
   done
 fi
@@ -107,13 +108,30 @@ check_role() {
 check_role finet-web DATABASE_URL_FILE finet_database_url web
 check_role finet-worker WORKER_DATABASE_URL_FILE finet_worker_database_url worker
 check_role finet-migrate MIGRATOR_DATABASE_URL_FILE finet_migrate_database_url migrate
+# CLI-ul de administrare (F1-B): drepturile aplicației (DATABASE_URL, finet_app).
+check_role finet-admin DATABASE_URL_FILE finet_database_url admin
 
 # Tokenul de sănătate e doar al serverului web.
-for svc in finet-worker finet-migrate; do
+for svc in finet-worker finet-migrate finet-admin; do
   if service_block "$svc" | grep -Eq "finet_health_token|HEALTH_TOKEN_FILE"; then
     fail "$svc primește tokenul de sănătate"
   else
     ok "$svc fără tokenul de sănătate"
+  fi
+done
+
+# Secretul Better Auth (F1-B): doar serverul web (cookie-uri și tokenuri bearer).
+if service_block finet-web | grep -Eq "^[[:space:]]+-[[:space:]]+finet_better_auth_secret[[:space:]]*$" \
+  && service_block finet-web | grep -Eq "^[[:space:]]+BETTER_AUTH_SECRET_FILE:"; then
+  ok "finet-web primește secretul Better Auth"
+else
+  fail "finet-web nu primește secretul Better Auth (finet_better_auth_secret + BETTER_AUTH_SECRET_FILE)"
+fi
+for svc in finet-worker finet-migrate finet-admin; do
+  if service_block "$svc" | grep -Eq "finet_better_auth_secret|BETTER_AUTH_SECRET"; then
+    fail "$svc primește secretul Better Auth"
+  else
+    ok "$svc fără secretul Better Auth"
   fi
 done
 
