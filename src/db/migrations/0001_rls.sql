@@ -84,6 +84,9 @@ create function finet.create_household(
   declare
     v_user uuid := finet.current_user_id();
     v_id uuid := gen_random_uuid();
+    -- L1: plafonul de gospodării create de un utilizator (protecție față de abuz; de schimbat
+    -- doar printr-o migrație nouă).
+    c_max_households constant integer := 20;
   begin
     if v_user is null then
       raise exception 'create_household: lipsește utilizatorul din context'
@@ -92,6 +95,13 @@ create function finet.create_household(
     if not exists (select 1 from finet.users u where u.id = v_user and u.status = 'active') then
       raise exception 'create_household: utilizator inexistent sau dezactivat'
         using errcode = '42501';
+    end if;
+    -- Serializat per utilizator, ca două creări paralele să nu depășească plafonul.
+    perform pg_advisory_xact_lock(hashtext('finet.create_household:' || v_user::text));
+    if (select count(*) from finet.households h where h.created_by = v_user)
+       >= c_max_households then
+      raise exception 'create_household: plafonul de % gospodării a fost atins', c_max_households
+        using errcode = '54000';
     end if;
     perform set_config('finet.creating_household', v_id::text, true);
     insert into finet.households (id, name, default_currency, timezone, created_by)
