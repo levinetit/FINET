@@ -59,10 +59,10 @@ Revizuirea `security` a dat PASS_WITH_FINDINGS (F1–F9). Remediate, câte un co
 |---|---|
 | `pnpm install --frozen-lockfile` | PASS („Lockfile is up to date”; nicio dependență nouă) |
 | `pnpm lint`, `pnpm format:check`, `pnpm typecheck` | PASS |
-| `pnpm test` cu PostgreSQL 17 efemer | PASS: 8 fișiere, **227 teste** (înainte de T5: 203, rulate din nou la începutul T5) |
+| `pnpm test` cu PostgreSQL 17 efemer | PASS: 8 fișiere, **228 teste** (înainte de T5: 203, rulate din nou la începutul T5) |
 | `pnpm build` (după `rm -rf .next`) | PASS |
-| `pnpm scan:client-secrets` pe build-ul curat | PASS („9 tipare, 9 nume de variabile”; fără fals-pozitive cu tiparele noi Telegram/JWT/URL Postgres/AWS) |
-| `pnpm test:ops` | PASS: `notify.sh` 30 de verificări (înainte 17; cele 13 noi pică pe vechiul `notify.sh`), `ops/docker/test-env-examples.sh` 12 verificări |
+| `pnpm scan:client-secrets` pe build-ul curat | PASS („9 tipare, 9 nume de variabile”; fără fals-pozitive cu tiparele noi Telegram/JWT/URL Postgres/AWS; tokenul Telegram e prins și în forma `.../bot<id>:<cheie>/...`) |
+| `pnpm test:ops` | PASS: `notify.sh` 30 de verificări (înainte 17). Testul nou rulat pe vechiul `notify.sh` (`99f895b`) dă 13 linii `FAIL`: valori cu LF/CR acceptate (token, chat id, `SMTP_*`, `NOTIFY_EMAIL_TO`, fișier CRLF), `curl_quote` fără refuz, iar `NOTIFY_EMAIL_TO` cu `Bcc:` pe linia a doua ajungea în ieșire, `ops/docker/test-env-examples.sh` 12 verificări |
 | `E2E_SERVER=prod pnpm test:e2e --project=access` | PASS: 10 teste (înainte 6). Observat: `HEAD`/`POST /api/health/live` de pe loopback → 403; `X-Forwarded-For` public → 403; `/api/health/live%2f`, `%2F`, `/api/health/%6cive` → 403; `/api/health/live/` → **308** spre `/api/health/live` (redirecționarea Next rulează înaintea proxy-ului; ținta trece apoi prin aceleași reguli) |
 | Server standalone cu medii amestecate | PASS: `MIGRATOR_DATABASE_URL` sau `WORKER_DATABASE_URL` în mediul web → exit 1, mesajul numește variabila, valoarea nu apare în log; `FINET_ROLE=worker` → exit 1; mediu web curat → `GET /api/health/live` 200, `HEAD` 403 |
 | `docker compose -f ops/docker/docker-compose.yml --env-file <compose.env.example cu FINET_ENV_DIR spre copii ale celor 3 exemple> config` implicit, `--profile worker`, `--profile migrate` | PASS (exit 0); fiecare serviciu primește doar URL-ul rolului său; `finet-migrate`: `restart: "no"`, doar rețeaua `finet_default` |

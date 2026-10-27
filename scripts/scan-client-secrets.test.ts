@@ -98,6 +98,7 @@ describe("scanDirectory", () => {
 
   it.each([
     ["token bot Telegram", fakeTelegram],
+    ["token bot Telegram", `https://api.telegram.org/bot${fakeTelegram}/sendMessage`],
     ["JWT", fakeJwt],
     ["URL Postgres cu parolă", fakePgUrl],
     ["URL Postgres cu parolă", fakePgUrl.replace("postgres:", "postgresql:")],
