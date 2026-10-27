@@ -276,6 +276,32 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
     ).toEqual(["WORKER_DATABASE_URL"]);
   });
 
+  it("în producție, doar web cere CF_ACCESS_*; migrate nu cere nici STORAGE_DIR", () => {
+    const bare = { APP_MODE: "personal", NODE_ENV: "production" };
+    expect(issuesOf(bare)).toEqual(["CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "STORAGE_DIR"]);
+    expect(issuesOf({ ...bare, FINET_ROLE: "worker", WORKER_DATABASE_URL: URL_WORKER })).toEqual([
+      "STORAGE_DIR",
+    ]);
+    const w = parseConfig({
+      ...bare,
+      FINET_ROLE: "worker",
+      WORKER_DATABASE_URL: URL_WORKER,
+      STORAGE_DIR: "/data/storage",
+    });
+    expect(w.storage.dir).toBe("/data/storage");
+    const m = parseConfig({ ...bare, FINET_ROLE: "migrate", MIGRATOR_DATABASE_URL: URL_MIGRATOR });
+    expect(m.database.url).toBe(URL_MIGRATOR);
+    // CF_ACCESS_REQUIRED=false rămâne refuzat în producție pentru orice rol.
+    expect(
+      issuesOf({
+        ...bare,
+        FINET_ROLE: "migrate",
+        MIGRATOR_DATABASE_URL: URL_MIGRATOR,
+        CF_ACCESS_REQUIRED: "false",
+      }),
+    ).toEqual(["CF_ACCESS_REQUIRED"]);
+  });
+
   it("URL-ul interzis gol (`VAR=`) e tratat ca nesetat, deci nu blochează pornirea", () => {
     expect(() =>
       parseConfig({ ...DEV, WORKER_DATABASE_URL: "", MIGRATOR_DATABASE_URL: "" }),

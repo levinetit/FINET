@@ -277,14 +277,16 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
       problem: "nu poate fi `false` când NODE_ENV=production",
     });
   }
-  if (accessRequired) {
+  // Doar rolul `web` servește HTTP și verifică JWT-ul Access (decizia mea): workerul și migrarea
+  // nu primesc CF_ACCESS_* în fișierele lor de mediu.
+  if (accessRequired && role === "web") {
     need("CF_ACCESS_TEAM_DOMAIN", "când CF_ACCESS_REQUIRED=true");
     need("CF_ACCESS_AUD", "când CF_ACCESS_REQUIRED=true");
   }
 
-  // Storage.
+  // Storage (migrarea nu atinge fișierele, deci nu are nevoie de STORAGE_DIR).
   const driver = e.STORAGE_DRIVER ?? "local";
-  if (isProduction) need("STORAGE_DIR", "în producție");
+  if (isProduction && role !== "migrate") need("STORAGE_DIR", "în producție");
   if (driver === "s3") {
     for (const v of [
       "STORAGE_S3_ENDPOINT",
