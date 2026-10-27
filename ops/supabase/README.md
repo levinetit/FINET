@@ -12,7 +12,7 @@ Numele exacte ale meniurilor din panoul Supabase se pot schimba; dacă un pas nu
 
 ## 2. Securitate (obligatorie, verificată la acceptarea Fazei 0)
 1. **Data API (PostgREST):** dezactivat (Settings → Data API). Dacă nu se poate dezactiva, schema `finet` **nu** apare în „Exposed schemas”.
-2. **SSL:** Settings → Database → SSL Configuration → *Enforce SSL* pornit. Descarcă certificatul CA; pe server îl pui în `/home/docker-apps/finet/supabase-ca.crt` (644) și îl montezi în container (vezi `docs/INFRA.md`, „Supabase din container”).
+2. **SSL:** Settings → Database → SSL Configuration → *Enforce SSL* pornit. Descarcă certificatul CA; pe server îl pui în `/srv/finet/ca/supabase-ca.crt` (644) și îl montezi în container (vezi `docs/INFRA.md`, „Supabase din container”).
 3. **Network Restrictions:** Settings → Database → Network Restrictions: doar IP-ul de ieșire al VPS-ului docker-apps (`curl -s https://ifconfig.me` rulat pe server; atenție, IP-ul de ieșire al containerelor de pe `apps` e același cu al hostului doar dacă nu există un NAT/proxy separat; verifică din container). Temporar și IP-ul operatorului, pentru administrare; apoi îl scoți.
 4. **Cheile `anon` și `service_role`:** nu se folosesc nicăieri în FINET (nici în env, nici în APK).
 
@@ -42,7 +42,7 @@ Din **Connect** în panou. Formatul utilizatorului pentru pooler e `<rol>.<ref-p
 | `WORKER_DATABASE_URL` | sesiune | 5432 | `finet_app` |
 | `MIGRATOR_DATABASE_URL` | sesiune | 5432 | `finet_migrator` |
 
-Toate cu `sslmode=verify-full`. Valorile reale stau doar în `/home/docker-apps/finet/finet.env` (600). Limitele de conexiuni ale planului: de completat în `docs/INFRA.md`.
+Toate cu `sslmode=verify-full`. Valorile reale stau doar în `/srv/finet/env/finet*.env` (600, câte unul pe rol: `finet.env`, `finet.worker.env`, `finet.migrate.env`). Limitele de conexiuni ale planului: de completat în `docs/INFRA.md`.
 
 ## 5. Storage (bucket privat)
 1. Storage → New bucket `finet-documents`, **privat**.

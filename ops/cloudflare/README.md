@@ -46,7 +46,7 @@ ingress:
 4. Notează:
    - **Application Audience (AUD) Tag** (în pagina aplicației, Overview sau Basic information) → `CF_ACCESS_AUD`;
    - **team domain**-ul (`<echipa>.cloudflareaccess.com`, în Settings → Custom Pages sau în URL-ul de login) → `CF_ACCESS_TEAM_DOMAIN`, fără `https://` și fără cale.
-5. Le scrii în `/home/docker-apps/finet/finet.env` (nu sunt secrete propriu-zise, dar nu se pun în repo). FINET verifică cu ele JWT-ul `Cf-Access-Jwt-Assertion` (cheile publice de la `https://<team-domain>/cdn-cgi/access/certs`, audiența, emitentul).
+5. Le scrii în `/srv/finet/env/finet.env` (nu sunt secrete propriu-zise, dar nu se pun în repo). FINET verifică cu ele JWT-ul `Cf-Access-Jwt-Assertion` (cheile publice de la `https://<team-domain>/cdn-cgi/access/certs`, audiența, emitentul).
 
 **Nu** se creează un service token pentru FINET și nici o politică „Bypass”: liveness-ul nu se publică, iar monitorizarea internă folosește `HEALTH_TOKEN` din rețeaua `apps`.
 

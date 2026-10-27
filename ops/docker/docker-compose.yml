@@ -4,9 +4,13 @@
 #
 # Rulare (doar operatorul, din checkout-ul repo-ului):
 #   docker compose -f ops/docker/docker-compose.yml \
-#     --env-file /home/docker-apps/finet/compose.env config     # verificare
+#     --env-file /srv/finet/compose/compose.env config     # verificare
 #   docker compose -f ops/docker/docker-compose.yml \
-#     --env-file /home/docker-apps/finet/compose.env up -d --build finet-web
+#     --env-file /srv/finet/compose/compose.env up -d --build finet-web
+#
+# Date și secrete în /srv/finet/, NU sub /home: backup-ul hostului face `rclone sync /home`
+# pe Google Drive (inclusiv o copie NECRIPTATĂ), fără excluderi pentru FINET (docs/INFRA.md,
+# „Date în afara /home”).
 #
 # Fișierele de mediu, cu roluri diferite:
 #   - `--env-file .../compose.env` (model: ops/docker/compose.env.example): variabilele de
@@ -45,7 +49,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     env_file:
-      - path: ${FINET_ENV_DIR:-/home/docker-apps/finet}/finet.env
+      - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.env
         required: true
     environment:
       FINET_ROLE: web
@@ -62,11 +66,11 @@ services:
       NODE_OPTIONS: --max-old-space-size=384
     volumes:
       # Directorul trebuie creat înainte de operator, deținut de uid 1000 (utilizatorul `node`):
-      #   install -d -o 1000 -g 1000 -m 700 /home/docker-apps/finet/storage
+      #   install -d -o 1000 -g 1000 -m 700 /srv/finet/storage
       # `create_host_path: false`: dacă lipsește, pornirea eșuează în loc să creeze un director
       # al lui root, în care aplicația nu poate scrie.
       - type: bind
-        source: ${FINET_DATA_DIR:-/home/docker-apps/finet}/storage
+        source: ${FINET_DATA_DIR:-/srv/finet}/storage
         target: /data/storage
         bind:
           create_host_path: false
@@ -121,7 +125,7 @@ services:
       finet-web:
         condition: service_healthy
     env_file:
-      - path: ${FINET_ENV_DIR:-/home/docker-apps/finet}/finet.worker.env
+      - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.worker.env
         required: true
     environment:
       FINET_ROLE: worker
@@ -136,7 +140,7 @@ services:
       - "console.log('finet-worker: inactiv, vine în Faza 6');const t=setInterval(()=>{},3600000);for(const s of ['SIGTERM','SIGINT'])process.on(s,()=>{clearInterval(t);process.exit(0)})"
     volumes:
       - type: bind
-        source: ${FINET_DATA_DIR:-/home/docker-apps/finet}/storage
+        source: ${FINET_DATA_DIR:-/srv/finet}/storage
         target: /data/storage
         bind:
           create_host_path: false
@@ -165,7 +169,7 @@ services:
     profiles: [migrate]
     restart: "no"
     env_file:
-      - path: ${FINET_ENV_DIR:-/home/docker-apps/finet}/finet.migrate.env
+      - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.migrate.env
         required: true
     environment:
       FINET_ROLE: migrate

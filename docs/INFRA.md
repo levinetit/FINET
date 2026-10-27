@@ -45,11 +45,22 @@ Fără porturi pe host: singurele căi către FINET sunt tunelul și (opțional)
 
 Fișiere din repo:
 - `Dockerfile`: multi-stage (deps → build → runner), Next.js `standalone`, user `node` (uid 1000), healthcheck pe `/api/health/live`.
-- `ops/docker/docker-compose.yml`: serviciile `finet-web` și `finet-worker`.
-- `ops/docker/compose.env.example`: variabilele de interpolare (`FINET_HOST`, `FINET_IMAGE`, `FINET_ENV_FILE`, `FINET_DATA_DIR`, `FINET_WEB_IP`, `FINET_WORKER_IP`, `FINET_TRAEFIK_ENABLE`, `FINET_CERTRESOLVER`).
-- `ops/docker/finet.env.example`: modelul mediului aplicației.
+- `ops/docker/docker-compose.yml`: serviciile `finet-web`, `finet-worker` (profilul `worker`) și `finet-migrate` (one-shot, profilul `migrate`).
+- `ops/docker/compose.env.example`: variabilele de interpolare (`FINET_HOST`, `FINET_IMAGE`, `FINET_ENV_DIR`, `FINET_DATA_DIR`, `FINET_WEB_IP`, `FINET_WORKER_IP`, `FINET_TRAEFIK_ENABLE`, `FINET_CERTRESOLVER`). Nu conține secrete.
+- `ops/docker/finet.env.example`, `finet.worker.env.example`, `finet.migrate.env.example`: modelele mediului, **câte unul pe serviciu**.
 
-Ce fixează compose-ul (au prioritate față de `env_file`): `NODE_ENV=production`, `APP_MODE=personal`, `CF_ACCESS_REQUIRED=true`, `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage`, `HOSTNAME=0.0.0.0`, `PORT=3000`, `NODE_OPTIONS`.
+### Secrete separate pe rol (`FINET_ROLE`)
+Fiecare proces primește doar URL-ul bazei de date al rolului său (`src/lib/config.ts`):
+
+| Serviciu | `FINET_ROLE` (fixat în compose) | `env_file` | URL permis | Rolul Postgres |
+|---|---|---|---|---|
+| `finet-web` | `web` | `/srv/finet/env/finet.env` | `DATABASE_URL` | `finet_app` (pooler, tranzacție) |
+| `finet-worker` | `worker` | `/srv/finet/env/finet.worker.env` | `WORKER_DATABASE_URL` | `finet_app` (pooler, sesiune) |
+| `finet-migrate` | `migrate` | `/srv/finet/env/finet.migrate.env` | `MIGRATOR_DATABASE_URL` | `finet_migrator` (proprietarul schemei) |
+
+URL-ul altui rol prezent în mediul unui proces **oprește pornirea**, cu un mesaj care numește variabila, nu valoarea (mai sigur decât ignorarea tăcută: o greșeală de configurare se vede imediat). Serverul Next.js pornește doar cu `FINET_ROLE=web`. `pnpm test:ops` verifică că fiecare fișier exemplu conține doar URL-ul rolului său. Doar `web` cere `CF_ACCESS_*`; `migrate` nu cere `STORAGE_DIR`. În Faza 0, `finet-worker` și `finet-migrate` sunt stub-uri (workerul vine în Faza 5/6, migrațiile Drizzle în Faza 1); `finet-migrate` rulează pe rețeaua implicită a proiectului (`finet_default`), nu pe `apps`, fără IP static.
+
+Ce fixează compose-ul (au prioritate față de `env_file`): `FINET_ROLE`, `NODE_ENV=production`, `APP_MODE=personal`, `CF_ACCESS_REQUIRED=true` (web), `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage` (web, worker), `HOSTNAME=0.0.0.0`, `PORT=3000`, `NODE_OPTIONS`.
 
 Întărire: `read_only: true` (tmpfs pentru `/tmp` și `/app/.next/cache`), `cap_drop: [ALL]`, `no-new-privileges`, `init: true`, `pids_limit`, limite de memorie (web 512 MB, worker 256 MB; `memswap_limit` egal, fără swap) și CPU (1,0 / 0,5), loguri `json-file` 3×10 MB.
 
@@ -57,10 +68,18 @@ Ce fixează compose-ul (au prioritate față de `env_file`): `NODE_ENV=productio
 
 **Workerul (decizia mea):** în Faza 0 nu există cod de worker (pg-boss vine în Faza 5/6). Serviciul există, ca structura să fie gata, dar e în profilul `worker`, deci **nu pornește implicit**; dacă e pornit, e un proces Node minimal care scrie „finet-worker: inactiv, vine în Faza 6” și răspunde la SIGTERM. Healthcheck-ul moștenit din imagine (server web) e dezactivat pentru el.
 
-**Storage:** `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage`, bind mount din `${FINET_DATA_DIR}/storage`, cu `create_host_path: false` (directorul trebuie creat de operator, deținut de uid 1000, mod 700). În Faza 0, `STORAGE_DRIVER=s3` dă `storage: unknown` și `/api/health` = `degraded` (driverul S3 e un schelet; vine în Faza 6).
+**Storage:** `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage`, bind mount din `${FINET_DATA_DIR}/storage` (implicit `/srv/finet/storage`, în afara backup-ului de `/home`), cu `create_host_path: false` (directorul trebuie creat de operator, deținut de uid 1000, mod 700). În Faza 0, `STORAGE_DRIVER=s3` dă `storage: unknown` și `/api/health` = `degraded` (driverul S3 e un schelet; vine în Faza 6).
 
 ### Supabase din container
-`DATABASE_URL` cu `sslmode=verify-full` are nevoie de certificatul CA Supabase în container. Driverul `postgres` folosește CA-urile de sistem ale Node; dacă certificatul Supabase nu e acceptat de acestea, operatorul montează CA-ul (de exemplu `/home/docker-apps/finet/supabase-ca.crt:/run/finet/supabase-ca.crt:ro`) și setează `NODE_EXTRA_CA_CERTS=/run/finet/supabase-ca.crt` în `finet.env`. **NOT RUN**: conexiunea la Supabase n-a fost încercată (nu există proiect).
+`DATABASE_URL` cu `sslmode=verify-full` are nevoie de certificatul CA Supabase în container. Driverul `postgres` (postgres.js 3.4.9) transformă `sslmode=verify-full` în TLS cu verificarea certificatului față de CA-urile de încredere ale Node (cele de sistem plus `NODE_EXTRA_CA_CERTS`).
+
+**`sslrootcert` din URL NU funcționează cu postgres.js** (verificat 2026-10-27 pe PostgreSQL 17 efemer): parametrul nu e citit ca fișier CA, ci trimis serverului ca parametru de conexiune, iar serverul refuză conexiunea cu `unrecognized configuration parameter "sslrootcert"` (singura excepție e valoarea `sslrootcert=system`). Deci URL-urile din `finet*.env` **nu** conțin `sslrootcert` (spre deosebire de exemplul din `docs/GHID_CONSTRUIRE.md` 10.1, gândit pentru psql).
+
+Variante pentru CA-ul Supabase:
+1. **Acum, fără cod nou:** operatorul pune CA-ul în `/srv/finet/ca/supabase-ca.crt` (644), îl montează read-only (`/srv/finet/ca/supabase-ca.crt:/run/finet/supabase-ca.crt:ro`) și setează `NODE_EXTRA_CA_CERTS=/run/finet/supabase-ca.crt` în fișierul de mediu al fiecărui serviciu care se conectează. Limitare: CA-ul Supabase se adaugă la CA-urile publice, nu le înlocuiește. Montarea nu e încă în compose (se adaugă după primul test de conexiune).
+2. **Mai strict, de implementat (Faza 1, odată cu clientul Drizzle):** `ssl: { ca: <conținutul fișierului>, rejectUnauthorized: true }` din cod, cu calea CA-ului într-o variabilă de mediu, ca să fie acceptat doar CA-ul Supabase. **Neimplementat:** codul actual (`src/app/api/health/checks.ts`) nu setează `ssl` explicit.
+
+**NOT RUN**: conexiunea la Supabase n-a fost încercată (nu există proiect).
 
 ### Liveness și monitorizare
 - Healthcheck-ul Docker cere `http://127.0.0.1:3000/api/health/live` din interiorul containerului. `src/proxy.ts` îl lasă fără JWT doar dacă `Host` e loopback și lipsesc antetele de proxy (`cf-connecting-ip`, `cf-ray`, `cf-ipcountry`, `x-real-ip`, `cf-access-jwt-assertion`), iar `X-Forwarded-*` indică tot loopback.
@@ -71,17 +90,23 @@ Ce fixează compose-ul (au prioritate față de `env_file`): `NODE_ENV=productio
 
 ## 4. Pașii operatorului, în ordine
 
-1. **Decide** varianta de intrare (A tunel, recomandat; B Traefik) și locul fișierelor (propunere `/home/docker-apps/finet/`).
+1. **Decide** varianta de intrare (A tunel, recomandat; B Traefik). Fișierele FINET stau în `/srv/finet/` (vezi „Date în afara `/home`”).
 2. **Supabase:** `ops/supabase/README.md` (proiect UE, Data API oprit, SSL, Network Restrictions pe IP-ul de ieșire al VPS-ului, `roles.sql` cu psql, bucket privat). Actualizează `ops/postgres/VERSION` cu versiunea reală.
 3. **Cloudflare:** `ops/cloudflare/README.md` (hostname, ruta în tunel sau DNS pentru Traefik, aplicația Access după `access-policy.md`, WARP). Notează `CF_ACCESS_TEAM_DOMAIN` și `CF_ACCESS_AUD`.
-4. **Directoare și fișiere pe server:**
+4. **Directoare și fișiere pe server** (toate în `/srv/finet/`, nimic sub `/home`):
    ```bash
-   sudo install -d -o root -g root -m 755 /home/docker-apps/finet
-   sudo install -d -o 1000 -g 1000 -m 700 /home/docker-apps/finet/storage
-   sudo install -o root -g root -m 600 ops/docker/finet.env.example /home/docker-apps/finet/finet.env
-   sudo install -o root -g root -m 600 ops/docker/compose.env.example /home/docker-apps/finet/compose.env
-   sudoedit /home/docker-apps/finet/finet.env /home/docker-apps/finet/compose.env
+   sudo install -d -o root -g root -m 755 /srv/finet
+   sudo install -d -o root -g root -m 700 /srv/finet/env       # secretele, câte un fișier pe rol
+   sudo install -d -o root -g root -m 755 /srv/finet/compose   # compose.env (fără secrete)
+   sudo install -d -o root -g root -m 755 /srv/finet/ca        # CA-ul Supabase (public)
+   sudo install -d -o 1000 -g 1000 -m 700 /srv/finet/storage   # fișierele aplicației (uid 1000 = node)
+   sudo install -o root -g root -m 600 ops/docker/finet.env.example         /srv/finet/env/finet.env
+   sudo install -o root -g root -m 600 ops/docker/finet.worker.env.example  /srv/finet/env/finet.worker.env
+   sudo install -o root -g root -m 600 ops/docker/finet.migrate.env.example /srv/finet/env/finet.migrate.env
+   sudo install -o root -g root -m 600 ops/docker/compose.env.example       /srv/finet/compose/compose.env
+   sudoedit /srv/finet/env/finet.env /srv/finet/env/finet.worker.env /srv/finet/env/finet.migrate.env /srv/finet/compose/compose.env
    ```
+   Fișierele de mediu sunt citite de `docker compose` (rulat cu `sudo`), deci rămân `root:root 600`; containerele primesc valorile ca variabile de mediu, nu fișierele. Checkout-ul repo-ului poate sta oriunde (nu conține secrete); recomandare `/srv/finet/src`, tot în afara `/home`.
 5. **IP-uri:** confirmă că `172.88.88.130`/`.131` sunt libere (inclusiv pentru containerele oprite care au IP static în compose-urile lor):
    ```bash
    sudo docker network inspect apps --format '{{range .Containers}}{{.IPv4Address}} {{.Name}}{{"\n"}}{{end}}'
@@ -90,19 +115,36 @@ Ce fixează compose-ul (au prioritate față de `env_file`): `NODE_ENV=productio
 6. **Traefik (doar varianta B):** confirmă numele resolverului în `/home/docker-apps/traefik/traefik.yml` și entrypoint-ul `websecure`; `FINET_TRAEFIK_ENABLE=true` în `compose.env`.
 7. **Validare și pornire**, din checkout-ul repo-ului:
    ```bash
-   sudo docker compose -f ops/docker/docker-compose.yml --env-file /home/docker-apps/finet/compose.env config
-   sudo docker compose -f ops/docker/docker-compose.yml --env-file /home/docker-apps/finet/compose.env up -d --build finet-web
+   sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env config
+   sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile worker --profile migrate config   # toate serviciile
+   sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env up -d --build finet-web
    sudo docker ps --filter name=finet-web    # trebuie să ajungă (healthy)
    sudo docker logs --tail 50 finet-web       # fără erori de configurație
+   # după primul deploy: nimic FINET în backup-ul de /home de pe Google Drive (ambele copii)
+   sudo rclone ls Gdrive:vpnde/home | grep -i finet         # trebuie să nu afișeze nimic
+   sudo rclone ls GdriveCrypt:home | grep -i finet          # idem, pentru copia criptată
    ```
 8. **Notificări:** completează Telegram sau SMTP + `NOTIFY_EMAIL_TO` în `finet.env`, apoi:
    ```bash
-   sudo sh ops/notify/notify.sh --env-file /home/docker-apps/finet/finet.env --dry-run --test
-   sudo sh ops/notify/notify.sh --env-file /home/docker-apps/finet/finet.env --test
+   sudo sh ops/notify/notify.sh --env-file /srv/finet/env/finet.env --dry-run --test
+   sudo sh ops/notify/notify.sh --env-file /srv/finet/env/finet.env --test
    ```
 9. **Acceptarea** (secțiunea 6).
 
-Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /home/docker-apps/finet/compose.env down` (nu șterge `/home/docker-apps/finet/`; nu există volume Docker numite).
+Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env down` (nu șterge `/srv/finet/`; nu există volume Docker numite).
+
+## 4a. Date în afara `/home` (constatare F2, verificată pe host la 2026-10-27)
+
+**Constatarea** (citire cu `sudo grep`, fără modificări pe host):
+- `backup_home_gdrive.sh` (cron 02:30) face `rclone sync /home` spre `GdriveCrypt:home` (**criptat**).
+- `backup_home_gdrive_clar.sh` (cron 03:30) face `rclone sync /home` spre `Gdrive:vpnde/home`, **NECRIPTAT**, și duminica o arhivă `tar.gz` a întregului `/home/docker` (data-root-ul Docker) spre `Gdrive:vpnde/docker-archives/`, tot necriptată.
+- Ambele `sync` folosesc `backup_home_gdrive.filter`, care exclude `/docker/**`, modelele Ollama, cache-uri și câteva baze, dar **nimic FINET**. Orice director FINET sub `/home` (de exemplu fostul `/home/docker-apps/finet/`, propus inițial, cu bonuri, extrase și fișierele `.env`) ar fi urcat zilnic pe Google Drive, inclusiv în clar.
+
+**Decizia:** toate datele și secretele FINET stau în **`/srv/finet/`** (`env/`, `storage/`, `compose/`, `ca/`), în afara surselor ambelor backup-uri. Valorile implicite din `ops/docker/docker-compose.yml` și din `compose.env.example` indică acolo. Backup-ul propriu, **criptat**, al FINET (`pg_dump` din Supabase + fișierele, cu restic) vine în **Faza 3**; până atunci, datele din `/srv/finet/storage` nu au backup (în Faza 0 nu există date reale).
+
+**Limitare rămasă (de decis de operator):** data-root-ul Docker e `/home/docker`. Docker copiază valorile din `env_file` în configurația containerului (`/home/docker/containers/<id>/config.v2.json`), iar logurile `json-file` stau tot acolo. Arhiva săptămânală necriptată a lui `/home/docker` conține deci **URL-urile bazei de date (cu parolele) și celelalte secrete FINET**, chiar dacă fișierele `.env` stau în `/srv/finet/env`. Variante: excluderea `/home/docker/containers` din arhivă (`tar --exclude`), criptarea arhivei (de exemplu prin remote-ul `GdriveCrypt`) sau, într-o fază ulterioară, secrete Docker montate ca fișiere (`secrets:`), care nu ajung în `config.v2.json` (notat în `docs/ROADMAP.md`). Agentul nu a modificat scripturile de backup.
+
+**Verificare după deploy** (operatorul): `sudo rclone ls Gdrive:vpnde/home | grep -i finet` și `sudo rclone ls GdriveCrypt:home | grep -i finet` nu afișează fișiere de date FINET.
 
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
