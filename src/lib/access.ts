@@ -74,9 +74,13 @@ export function createAccessVerifier(options: AccessVerifierOptions): AccessVeri
  * Asset-urile statice Next, excluse de la verificare (și din `matcher`-ul din `src/proxy.ts`).
  * Conțin doar cod și stiluri compilate, fără date; secretele nu ajung acolo (vezi
  * `scripts/scan-client-secrets.mjs`).
+ *
+ * `/favicon.ico` NU e exclus (decizie): nu există un favicon, iar cererea ar fi servită de
+ * pagina 404 randată prin layout-ul aplicației, fără verificare. Access trimite oricum JWT-ul
+ * și pentru favicon după login; excluderea ar fi fost doar o optimizare.
  */
 export function isStaticAssetPath(pathname: string): boolean {
-  return pathname.startsWith("/_next/static/") || pathname === "/favicon.ico";
+  return pathname.startsWith("/_next/static/");
 }
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);

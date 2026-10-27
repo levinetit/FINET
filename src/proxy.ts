@@ -48,9 +48,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   return allowed ? NextResponse.next() : forbidden();
 }
 
-// Rulează pe toate căile, mai puțin asset-urile statice Next și favicon-ul. Aceeași listă e
+// Rulează pe toate căile, mai puțin asset-urile statice Next (`/_next/static/`). Aceeași regulă e
 // verificată și în `isStaticAssetPath`, ca o modificare a matcher-ului să nu deschidă nimic.
 // Valoarea trebuie să fie literală (Next o analizează static la build).
 export const config = {
-  matcher: ["/((?!_next/static/|favicon\\.ico$).*)"],
+  matcher: ["/((?!_next/static/).*)"],
 };

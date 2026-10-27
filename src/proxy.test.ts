@@ -336,11 +336,11 @@ describe("excepții", () => {
   it("asset-urile statice trec fără JWT; restul nu", async () => {
     const p = policy();
     expect(await isRequestAllowed(req("/_next/static/chunks/app.js"), p)).toBe(true);
-    expect(await isRequestAllowed(req("/favicon.ico"), p)).toBe(true);
     for (const path of [
       "/",
       "/_next/image",
       "/_next/data/x.json",
+      "/favicon.ico",
       "/favicon.ico.bak",
       "/_next/staticx",
       "/api/health",
@@ -399,10 +399,9 @@ describe("matcher-ul din src/proxy.ts", () => {
       url: `https://finet.exemplu.invalid${url}`,
     });
 
-  it("exclude doar /_next/static/** și /favicon.ico", () => {
+  it("exclude doar /_next/static/**", () => {
     expect(matches("/_next/static/chunks/app.js")).toBe(false);
     expect(matches("/_next/static/css/x.css")).toBe(false);
-    expect(matches("/favicon.ico")).toBe(false);
   });
 
   it("acoperă orice altceva", () => {
@@ -413,6 +412,7 @@ describe("matcher-ul din src/proxy.ts", () => {
       "/api/v1/accounts",
       "/_next/image?url=x",
       "/_next/data/build/x.json",
+      "/favicon.ico",
       "/favicon.ico.bak",
       "/_next/staticx",
       "/robots.txt",
