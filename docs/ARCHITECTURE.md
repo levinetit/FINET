@@ -21,6 +21,8 @@ src/
   instrumentation.ts            # validarea configurației la pornire
   lib/
     config.ts, config-startup.ts # mediul, validat cu Zod; oprește pornirea dacă e invalid
+    secret-files.ts             # secretele din fișiere (`*_FILE`, Docker secrets)
+    db-client.ts, db-url.ts     # clientul Postgres comun (TLS cu DATABASE_CA_FILE)
     access.ts                   # verificarea JWT Access, liveness local, HEALTH_TOKEN
     money.ts                    # bani în bigint (unități minore), alocare, parsare, formatare RO
     storage.ts, storage/        # interfața Storage; driver local; S3 = schelet
@@ -44,7 +46,7 @@ ops/                            # docker, cloudflare, supabase, notify, postgres
 3. Route handler-ele / paginile răspund.
 
 ## Configurația
-`src/lib/config.ts` citește `process.env` o singură dată (leneș, nu la `next build`) și validează cu Zod. Reguli notabile: `APP_MODE` obligatoriu; `FINET_ROLE` (`web` implicit, `worker`, `migrate`) alege singurul URL de bază de date permis procesului (`DATABASE_URL`, `WORKER_DATABASE_URL`, respectiv `MIGRATOR_DATABASE_URL`); URL-ul altui rol prezent în mediu oprește pornirea, iar serverul Next.js pornește doar cu `FINET_ROLE=web` (`src/lib/config-startup.ts`); `Config.database` are doar `url` (al rolului curent); în producție `CF_ACCESS_REQUIRED=false` e refuzat și `STORAGE_DIR` e obligatoriu (nu pentru `migrate`); `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` obligatorii când Access e cerut, doar pentru `web`; `HEALTH_TOKEN` ≥ 32 caractere; `AI_MONTHLY_BUDGET` parsat ca bani (bigint), monedă `AI_MONTHLY_BUDGET_CURRENCY`; Telegram cere ambele variabile; `SMTP_HOST` cere `SMTP_FROM`. Mesajele de eroare nu conțin valori. Lista: `.env.example`.
+`src/lib/config.ts` citește `process.env` o singură dată (leneș, nu la `next build`) și validează cu Zod. Reguli notabile: `APP_MODE` obligatoriu; `FINET_ROLE` (`web` implicit, `worker`, `migrate`) alege singurul URL de bază de date permis procesului (`DATABASE_URL`, `WORKER_DATABASE_URL`, respectiv `MIGRATOR_DATABASE_URL`); URL-ul altui rol prezent în mediu oprește pornirea, iar serverul Next.js pornește doar cu `FINET_ROLE=web` (`src/lib/config-startup.ts`); `Config.database` are `url` (al rolului curent) și `ca` (PEM-ul din `DATABASE_CA_FILE`, citit o dată; cere `sslmode=verify-full`/`verify-ca`, iar `sslrootcert` din URL e refuzat); fiecare secret poate veni dintr-un fișier, `<NUME>_FILE` (`src/lib/secret-files.ts`: `X` și `X_FILE` împreună = eroare, fișier obișnuit ≤ 4096 octeți, o linie, regula pe rol se aplică și `_FILE`-urilor, ale căror fișiere nici nu se deschid); în producție `CF_ACCESS_REQUIRED=false` e refuzat și `STORAGE_DIR` e obligatoriu (nu pentru `migrate`); `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` obligatorii când Access e cerut, doar pentru `web`; `HEALTH_TOKEN` ≥ 32 caractere; `AI_MONTHLY_BUDGET` parsat ca bani (bigint), monedă `AI_MONTHLY_BUDGET_CURRENCY`; Telegram cere ambele variabile; `SMTP_HOST` cere `SMTP_FROM`. Mesajele de eroare nu conțin valori. Lista: `.env.example`.
 
 ## Bani
 `src/lib/money.ts`: sume `bigint` în unități minore, monedă obligatorie, fără `Number` pentru sume; alocare cu metoda restului cel mai mare; parsare și formatare românească. Acoperit de `src/lib/money.test.ts`.
@@ -53,10 +55,10 @@ ops/                            # docker, cloudflare, supabase, notify, postgres
 Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath, `O_NOFOLLOW`, scriere atomică). Driverul `s3` aruncă `NotImplementedError` (Faza 6).
 
 ## Sănătatea
-`/api/health`: `db` (`select 1`, client cu o conexiune, `prepare: false`), `storage` (scriere/citire/ștergere), `diskFreePercent`; `queue` și `ai` = `unknown`. `ok` doar dacă `db` și `storage` sunt `ok`; `down` (503) dacă oricare e `down`; altfel `degraded`. Fără versiuni, căi sau mesaje de eroare în răspuns.
+`/api/health`: `db` (`select 1`, clientul comun din `src/lib/db-client.ts` cu o conexiune, `prepare: false`, TLS după `sslmode` și CA), `storage` (scriere/citire/ștergere), `diskFreePercent`; `queue` și `ai` = `unknown`. `ok` doar dacă `db` și `storage` sunt `ok`; `down` (503) dacă oricare e `down`; altfel `degraded`. Fără versiuni, căi sau mesaje de eroare în răspuns.
 
 ## Deploy și CI
-- Imaginea: `Dockerfile` (multi-stage, user non-root, healthcheck). Compose: `ops/docker/docker-compose.yml` (`finet-web`, `finet-worker` și `finet-migrate`, fiecare cu `FINET_ROLE` fixat și propriul `env_file` din `/srv/finet/env/`).
+- Imaginea: `Dockerfile` (multi-stage, user non-root, healthcheck). Compose: `ops/docker/docker-compose.yml` (`finet-web`, `finet-worker` și `finet-migrate`, fiecare cu `FINET_ROLE` fixat, propriul `env_file` nesecret din `/srv/finet/env/`, doar secretele rolului său ca fișiere `secrets:` din `/srv/finet/secrets/` și CA-ul Supabase montat read-only).
 - CI: `.github/workflows/ci.yml` (install, lint, format, typecheck, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant). E2E și coverage **nu** rulează în CI.
 
 ## Planificat (nu există încă)

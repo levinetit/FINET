@@ -46,19 +46,34 @@ Fără porturi pe host: singurele căi către FINET sunt tunelul și (opțional)
 Fișiere din repo:
 - `Dockerfile`: multi-stage (deps → build → runner), Next.js `standalone`, user `node` (uid 1000), healthcheck pe `/api/health/live`.
 - `ops/docker/docker-compose.yml`: serviciile `finet-web`, `finet-worker` (profilul `worker`) și `finet-migrate` (one-shot, profilul `migrate`).
-- `ops/docker/compose.env.example`: variabilele de interpolare (`FINET_HOST`, `FINET_IMAGE`, `FINET_ENV_DIR`, `FINET_DATA_DIR`, `FINET_WEB_IP`, `FINET_WORKER_IP`, `FINET_TRAEFIK_ENABLE`, `FINET_CERTRESOLVER`). Nu conține secrete.
-- `ops/docker/finet.env.example`, `finet.worker.env.example`, `finet.migrate.env.example`: modelele mediului, **câte unul pe serviciu**.
+- `ops/docker/compose.env.example`: variabilele de interpolare (`FINET_HOST`, `FINET_IMAGE`, `FINET_ENV_DIR`, `FINET_SECRETS_DIR`, `FINET_CA_DIR`, `FINET_DATABASE_CA_NAME`, `FINET_DATA_DIR`, `FINET_WEB_IP`, `FINET_WORKER_IP`, `FINET_TRAEFIK_ENABLE`, `FINET_CERTRESOLVER`). Nu conține secrete.
+- `ops/docker/finet.env.example`, `finet.worker.env.example`, `finet.migrate.env.example`: modelele mediului **nesecret**, câte unul pe serviciu. Secretele nu stau în ele (vezi „Secretele ca fișiere”).
+- `ops/notify/notify.env.example`: configurația notificărilor, doar pentru `ops/notify/notify.sh` pe host (nu ajunge în niciun container).
 
 ### Secrete separate pe rol (`FINET_ROLE`)
-Fiecare proces primește doar URL-ul bazei de date al rolului său (`src/lib/config.ts`):
+Fiecare proces primește doar URL-ul bazei de date al rolului său (`src/lib/config.ts`), ca fișier secret:
 
-| Serviciu | `FINET_ROLE` (fixat în compose) | `env_file` | URL permis | Rolul Postgres |
-|---|---|---|---|---|
-| `finet-web` | `web` | `/srv/finet/env/finet.env` | `DATABASE_URL` | `finet_app` (pooler, tranzacție) |
-| `finet-worker` | `worker` | `/srv/finet/env/finet.worker.env` | `WORKER_DATABASE_URL` | `finet_app` (pooler, sesiune) |
-| `finet-migrate` | `migrate` | `/srv/finet/env/finet.migrate.env` | `MIGRATOR_DATABASE_URL` | `finet_migrator` (proprietarul schemei) |
+| Serviciu | `FINET_ROLE` (fixat în compose) | Secrete (fișiere în `/srv/finet/secrets/`) | Variabila din container | `env_file` (doar nesecret) | Rolul Postgres |
+|---|---|---|---|---|---|
+| `finet-web` | `web` | `finet_database_url`, `finet_health_token` | `DATABASE_URL_FILE`, `HEALTH_TOKEN_FILE` | `/srv/finet/env/finet.env` | `finet_app` (pooler, tranzacție 6543) |
+| `finet-worker` | `worker` | `finet_worker_database_url` | `WORKER_DATABASE_URL_FILE` | `/srv/finet/env/finet.worker.env` | `finet_app` (pooler, sesiune 5432) |
+| `finet-migrate` | `migrate` | `finet_migrate_database_url` | `MIGRATOR_DATABASE_URL_FILE` | `/srv/finet/env/finet.migrate.env` | `finet_migrator` (proprietarul schemei, sesiune 5432) |
 
-URL-ul altui rol prezent în mediul unui proces **oprește pornirea**, cu un mesaj care numește variabila, nu valoarea (mai sigur decât ignorarea tăcută: o greșeală de configurare se vede imediat). Serverul Next.js pornește doar cu `FINET_ROLE=web`. `pnpm test:ops` verifică că fiecare fișier exemplu conține doar URL-ul rolului său. Doar `web` cere `CF_ACCESS_*`; `migrate` nu cere `STORAGE_DIR`. În Faza 0, `finet-worker` și `finet-migrate` sunt stub-uri (workerul vine în Faza 5/6, migrațiile Drizzle în Faza 1); `finet-migrate` rulează pe rețeaua implicită a proiectului (`finet_default`), nu pe `apps`, fără IP static.
+URL-ul altui rol prezent în mediul unui proces, direct sau ca `_FILE`, **oprește pornirea**, cu un mesaj care numește variabila, nu valoarea (mai sigur decât ignorarea tăcută: o greșeală de configurare se vede imediat). Fișierul altui rol nici nu se deschide. Serverul Next.js pornește doar cu `FINET_ROLE=web`. `pnpm test:ops` verifică trei lucruri: fișierele exemplu nu conțin secrete active, compose-ul nu pune secrete în `environment`, iar fiecare serviciu montează doar secretul rolului său.
+
+### Secretele ca fișiere (constatarea N1)
+**Problema:** Docker copiază valorile din `environment` și `env_file` în `/home/docker/containers/<id>/config.v2.json`, iar `backup_home_gdrive_clar.sh` urcă duminica o arhivă **necriptată** a `/home/docker` pe Google Drive. Orice secret dat ca variabilă de mediu ajunge acolo.
+
+**Soluția (T7):** secretele FINET sunt fișiere în `/srv/finet/secrets/`, montate de compose prin `secrets:` în `/run/secrets/<nume>`. Aplicația le citește prin `<NUME>_FILE` (`src/lib/secret-files.ts`), o singură dată la pornire. În `config.v2.json` apare doar calea montării, nu valoarea.
+- Am verificat local, pe Compose 2.26.1, cu un container de probă și o valoare fictivă: valoarea apare de 0 ori în `config.v2.json`, iar fișierul e montat read-only cu proprietarul și modul de pe host (`1000:1000 0400`). Modul fără swarm **nu** aplică `uid`/`gid`/`mode` din sintaxa lungă, deci fișierele de pe host trebuie să fie `1000:1000 0400` (uid 1000 = `node`).
+- **Regulile fișierelor** (`src/lib/secret-files.ts`):
+  - `X` și `X_FILE` setate împreună dau eroare;
+  - fișierul trebuie să fie un fișier obișnuit (un symlink spre un fișier e acceptat, un director e refuzat), citibil și de cel mult 4096 octeți, pe o singură linie;
+  - se taie un singur sfârșit de linie final; un fișier gol dă eroare;
+  - mesajele de eroare nu conțin nici conținutul, nici calea.
+- **Variabilele care acceptă `_FILE`:** `DATABASE_URL`, `WORKER_DATABASE_URL`, `MIGRATOR_DATABASE_URL`, `HEALTH_TOKEN`, `NOTIFY_TELEGRAM_BOT_TOKEN`, `SMTP_PASSWORD`, `STORAGE_S3_ACCESS_KEY_ID`, `STORAGE_S3_SECRET_ACCESS_KEY`. `BETTER_AUTH_SECRET` primește varianta `_FILE` în Faza 1, odată cu validarea lui.
+- **Ce montează compose-ul:** doar secretele folosite acum, adică URL-urile pe rol și `finet_health_token`. Tokenul e obligatoriu în deploy (decizia mea): fișierul trebuie să existe și să nu fie gol. Telegram și SMTP sunt ale `notify.sh` de pe host (`/srv/finet/env/notify.env`), nu ale containerelor. Când aplicația le va folosi, se adaugă ca secrete noi.
+- **`src/proxy.ts` nu s-a schimbat:** citește `HEALTH_TOKEN` din `getConfig()`, care rezolvă deja `HEALTH_TOKEN_FILE`. Verificat pe serverul standalone: `/api/health` cu tokenul din fișier → 200, cu un token greșit → 403. Doar `web` cere `CF_ACCESS_*`; `migrate` nu cere `STORAGE_DIR`. În Faza 0, `finet-worker` și `finet-migrate` sunt stub-uri (workerul vine în Faza 5/6, migrațiile Drizzle în Faza 1); `finet-migrate` rulează pe rețeaua implicită a proiectului (`finet_default`), nu pe `apps`, fără IP static.
 
 Ce fixează compose-ul (au prioritate față de `env_file`): `FINET_ROLE`, `NODE_ENV=production`, `APP_MODE=personal`, `CF_ACCESS_REQUIRED=true` (web), `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage` (web, worker), `HOSTNAME=0.0.0.0`, `PORT=3000`, `NODE_OPTIONS`.
 
@@ -70,16 +85,32 @@ Ce fixează compose-ul (au prioritate față de `env_file`): `FINET_ROLE`, `NODE
 
 **Storage:** `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage`, bind mount din `${FINET_DATA_DIR}/storage` (implicit `/srv/finet/storage`, în afara backup-ului de `/home`), cu `create_host_path: false` (directorul trebuie creat de operator, deținut de uid 1000, mod 700). În Faza 0, `STORAGE_DRIVER=s3` dă `storage: unknown` și `/api/health` = `degraded` (driverul S3 e un schelet; vine în Faza 6).
 
-### Supabase din container
-`DATABASE_URL` cu `sslmode=verify-full` are nevoie de certificatul CA Supabase în container. Driverul `postgres` (postgres.js 3.4.9) transformă `sslmode=verify-full` în TLS cu verificarea certificatului față de CA-urile de încredere ale Node (cele de sistem plus `NODE_EXTRA_CA_CERTS`).
+### Supabase din container (TLS, `DATABASE_CA_FILE`)
+URL-urile Supabase au `sslmode=verify-full`. CA-ul Supabase (`prod-ca-2021.crt`, din panou: Settings → Database → SSL) e public, deci nu e un secret. Stă în `/srv/finet/ca/` (644), montat read-only în `/run/finet/ca` (compose: `x-ca-volume`), iar `DATABASE_CA_FILE=/run/finet/ca/${FINET_DATABASE_CA_NAME}` e fixat în `environment` pentru toate cele trei servicii.
 
-**`sslrootcert` din URL NU funcționează cu postgres.js** (verificat 2026-10-27 pe PostgreSQL 17 efemer): parametrul nu e citit ca fișier CA, ci trimis serverului ca parametru de conexiune, iar serverul refuză conexiunea cu `unrecognized configuration parameter "sslrootcert"` (singura excepție e valoarea `sslrootcert=system`). Deci URL-urile din `finet*.env` **nu** conțin `sslrootcert` (spre deosebire de exemplul din `docs/GHID_CONSTRUIRE.md` 10.1, gândit pentru psql).
+**Cum se folosește CA-ul** (`src/lib/db-client.ts`, clientul comun):
+- `verify-full` sau `verify-ca` cu `DATABASE_CA_FILE` → `ssl: { ca: <conținutul fișierului>, rejectUnauthorized: true }`. E acceptat **doar** un certificat semnat de acest CA, nu de oricare CA public.
+  - Numele serverului se verifică în ambele moduri: `verify-ca` e la fel de strict ca `verify-full` (decizia mea).
+- `verify-full` fără `DATABASE_CA_FILE` → postgres.js verifică față de trust store-ul Node: CA-urile publice, plus `NODE_EXTRA_CA_CERTS` dacă e setată la pornirea procesului.
+  - Asta e varianta de rezervă: CA-ul Supabase se **adaugă** la cele publice, nu le înlocuiește.
+- `sslmode=require` (sau `prefer`) → conexiunea e criptată, dar postgres.js **nu verifică** lanțul de certificate, deci nu protejează față de un intermediar. Nu se folosește în producție.
+- `sslmode=disable` sau lipsă → fără TLS. Rămâne valabil în dezvoltare și CI.
 
-Variante pentru CA-ul Supabase:
-1. **Acum, fără cod nou (NOT RUN: nevalidat pe un server TLS real):** operatorul pune CA-ul în `/srv/finet/ca/supabase-ca.crt` (644), îl montează read-only (`/srv/finet/ca/supabase-ca.crt:/run/finet/supabase-ca.crt:ro`) și setează `NODE_EXTRA_CA_CERTS=/run/finet/supabase-ca.crt` în fișierul de mediu al fiecărui serviciu care se conectează. Limitare: CA-ul Supabase se adaugă la CA-urile publice, nu le înlocuiește. Montarea nu e încă în compose (se adaugă după primul test de conexiune).
-2. **Mai strict, de implementat (Faza 1, odată cu clientul Drizzle):** `ssl: { ca: <conținutul fișierului>, rejectUnauthorized: true }` din cod, cu calea CA-ului într-o variabilă de mediu, ca să fie acceptat doar CA-ul Supabase. **Neimplementat:** codul actual (`src/app/api/health/checks.ts`) nu setează `ssl` explicit.
+**Reguli la pornire** (`src/lib/config.ts`), toate decizia mea:
+- `DATABASE_CA_FILE` cu un URL fără `sslmode=verify-full` sau `verify-ca` → eroare. Altfel CA-ul ar fi ignorat, cu o încredere falsă.
+- `sslrootcert` în URL → eroare. postgres.js nu-l citește ca fișier: îl trimite serverului ca parametru, iar serverul refuză conexiunea cu `unrecognized configuration parameter "sslrootcert"`, inclusiv pentru `sslrootcert=system`.
+- CA-ul trebuie să fie un fișier PEM (`-----BEGIN CERTIFICATE-----`) de cel mult 64 KiB. Se citește o singură dată.
 
-**NOT RUN**: conexiunea la Supabase n-a fost încercată (nu există proiect).
+**Ce s-a verificat:**
+- **Local (T7):** Postgres 17 efemer cu certificat semnat de un CA de test, prin `src/lib/db-client.test.ts` și serverul standalone.
+  - `verify-full` cu CA-ul corect → `db: ok`.
+  - Cu alt CA → `down`.
+  - Fără CA (CA-ul de test nu e în trust store) → `down`.
+  - Cu alt nume de host decât cel din certificat → `down`.
+  - `NODE_EXTRA_CA_CERTS` cu CA-ul corect → `ok`.
+  - `require` → `ok`, dar fără verificarea lanțului.
+- **Coordonatorul, direct cu postgres.js 3.4.9, nu prin aplicație:** pooler-ul Supabase (eu-west-1) acceptă `ssl: { ca: <prod-ca-2021.crt>, rejectUnauthorized: true }` pe 6543 și pe 5432.
+- **Prin aplicație, pe Supabase:** NOT RUN (așteaptă deploy-ul).
 
 ### Liveness și monitorizare
 - Healthcheck-ul Docker cere `GET http://127.0.0.1:3000/api/health/live` din interiorul containerului. `src/proxy.ts` îl lasă fără JWT doar pentru metoda `GET` (`HEAD`, `POST` etc. → 403), doar pe calea exactă (variantele codificate, de exemplu `%2f`, → 403; `/api/health/live/` primește de la Next un 308 spre calea exactă, înaintea proxy-ului) și doar dacă `Host` e loopback și lipsesc antetele de proxy (`cf-connecting-ip`, `cf-ray`, `cf-ipcountry`, `x-real-ip`, `cf-access-jwt-assertion`), iar `X-Forwarded-*` indică tot loopback.
@@ -96,7 +127,8 @@ Variante pentru CA-ul Supabase:
 4. **Directoare și fișiere pe server** (toate în `/srv/finet/`, nimic sub `/home`):
    ```bash
    sudo install -d -o root -g root -m 755 /srv/finet
-   sudo install -d -o root -g root -m 700 /srv/finet/env       # secretele, câte un fișier pe rol
+   sudo install -d -o root -g root -m 700 /srv/finet/env       # mediul nesecret pe rol + notify.env
+   sudo install -d -o root -g root -m 700 /srv/finet/secrets   # secretele, câte un fișier
    sudo install -d -o root -g root -m 755 /srv/finet/compose   # compose.env (fără secrete)
    sudo install -d -o root -g root -m 755 /srv/finet/ca        # CA-ul Supabase (public)
    sudo install -d -o 1000 -g 1000 -m 700 /srv/finet/storage   # fișierele aplicației (uid 1000 = node)
@@ -104,9 +136,39 @@ Variante pentru CA-ul Supabase:
    sudo install -o root -g root -m 600 ops/docker/finet.worker.env.example  /srv/finet/env/finet.worker.env
    sudo install -o root -g root -m 600 ops/docker/finet.migrate.env.example /srv/finet/env/finet.migrate.env
    sudo install -o root -g root -m 600 ops/docker/compose.env.example       /srv/finet/compose/compose.env
+   sudo install -o root -g root -m 600 ops/notify/notify.env.example        /srv/finet/env/notify.env
    sudoedit /srv/finet/env/finet.env /srv/finet/env/finet.worker.env /srv/finet/env/finet.migrate.env /srv/finet/compose/compose.env
    ```
-   Fișierele de mediu sunt citite de `docker compose` (rulat cu `sudo`), deci rămân `root:root 600`; containerele primesc valorile ca variabile de mediu, nu fișierele. Checkout-ul repo-ului poate sta oriunde (nu conține secrete); recomandare `/srv/finet/src`, tot în afara `/home`.
+   Fișierele de mediu (doar valori nesecrete) sunt citite de `docker compose` (rulat cu `sudo`), deci rămân `root:root 600`.
+
+   **Secretele**, câte un fișier `1000:1000 0400`. Valoarea se tastează (sau se lipește) la un prompt ascuns, deci nu apare în comandă, în istoricul shell-ului sau în `ps`. `sudo -v` cere parola înainte, ca promptul lui `sudo` să nu consume valoarea din stdin:
+   ```bash
+   sudo -v
+   for s in finet_database_url finet_worker_database_url finet_migrate_database_url; do
+     printf '%s (URL complet, cu sslmode=verify-full, fără sslrootcert): ' "$s"
+     IFS= read -rs v; echo
+     printf '%s' "$v" | sudo install -o 1000 -g 1000 -m 400 /dev/stdin "/srv/finet/secrets/$s"
+   done
+   unset v
+   # Tokenul de sănătate: generat direct în fișier (îl citește monitorizarea cu `sudo cat`).
+   openssl rand -hex 32 | sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_health_token
+   sudo ls -ln /srv/finet/secrets/    # 4 fișiere, 1000 1000, -r--------
+   ```
+   - Creează toate cele patru fișiere, chiar dacă workerul și migrarea nu pornesc încă.
+     - Compose nu verifică existența lor la `config` (verificat).
+     - Pornirea unui serviciu al cărui fișier lipsește eșuează (bind mount).
+   - URL-urile: pooler-ul Supabase, `postgres://<rol>.<ref>:<parola>@<host-pooler>:<port>/postgres?sslmode=verify-full`.
+     - `finet_database_url`: portul 6543, rolul `finet_app`.
+     - `finet_worker_database_url`: portul 5432, rolul `finet_app`.
+     - `finet_migrate_database_url`: portul 5432, rolul `finet_migrator`.
+     - Parola se scrie cu codificare procentuală dacă are caractere speciale.
+   - Rotirea unui secret: rescrii fișierul cu aceeași comandă, apoi recreezi serviciul (`up -d --force-recreate finet-web`). Configurația se citește doar la pornire.
+
+   **CA-ul Supabase:** descarcă `prod-ca-2021.crt` din panou (Settings → Database → SSL Configuration), apoi:
+   ```bash
+   sudo install -o root -g root -m 644 prod-ca-2021.crt /srv/finet/ca/prod-ca-2021.crt
+   ```
+   Alt nume de fișier → `FINET_DATABASE_CA_NAME` în `compose.env`. Checkout-ul repo-ului poate sta oriunde (nu conține secrete); recomandare `/srv/finet/src`, tot în afara `/home`.
 5. **IP-uri:** confirmă că `172.88.88.130`/`.131` sunt libere (inclusiv pentru containerele oprite care au IP static în compose-urile lor):
    ```bash
    sudo docker network inspect apps --format '{{range .Containers}}{{.IPv4Address}} {{.Name}}{{"\n"}}{{end}}'
@@ -120,14 +182,17 @@ Variante pentru CA-ul Supabase:
    sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env up -d --build finet-web
    sudo docker ps --filter name=finet-web    # trebuie să ajungă (healthy)
    sudo docker logs --tail 50 finet-web       # fără erori de configurație
+   # N1: niciun secret în configurația containerului (trebuie să afișeze 0 și 0)
+   sudo docker inspect finet-web --format '{{json .Config.Env}}' | grep -c 'postgres://'
+   sudo grep -c 'postgres://' /home/docker/containers/$(sudo docker inspect -f '{{.Id}}' finet-web)/config.v2.json
    # după primul deploy: nimic FINET în backup-ul de /home de pe Google Drive (ambele copii)
    sudo rclone ls Gdrive:vpnde/home | grep -i finet         # trebuie să nu afișeze nimic
    sudo rclone ls GdriveCrypt:home | grep -i finet          # idem, pentru copia criptată
    ```
-8. **Notificări:** completează Telegram sau SMTP + `NOTIFY_EMAIL_TO` în `finet.env`, apoi:
+8. **Notificări:** completează Telegram sau SMTP + `NOTIFY_EMAIL_TO` în `/srv/finet/env/notify.env` (doar pe host), apoi:
    ```bash
-   sudo sh ops/notify/notify.sh --env-file /srv/finet/env/finet.env --dry-run --test
-   sudo sh ops/notify/notify.sh --env-file /srv/finet/env/finet.env --test
+   sudo sh ops/notify/notify.sh --env-file /srv/finet/env/notify.env --dry-run --test
+   sudo sh ops/notify/notify.sh --env-file /srv/finet/env/notify.env --test
    ```
 9. **Acceptarea** (secțiunea 6).
 
@@ -140,9 +205,17 @@ Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/
 - `backup_home_gdrive_clar.sh` (cron 03:30) face `rclone sync /home` spre `Gdrive:vpnde/home`, **NECRIPTAT**, și duminica o arhivă `tar.gz` a întregului `/home/docker` (data-root-ul Docker) spre `Gdrive:vpnde/docker-archives/`, tot necriptată.
 - Ambele `sync` folosesc `backup_home_gdrive.filter`, care exclude `/docker/**`, modelele Ollama, cache-uri și câteva baze, dar **nimic FINET**. Orice director FINET sub `/home` (de exemplu fostul `/home/docker-apps/finet/`, propus inițial, cu bonuri, extrase și fișierele `.env`) ar fi urcat zilnic pe Google Drive, inclusiv în clar.
 
-**Decizia:** toate datele și secretele FINET stau în **`/srv/finet/`** (`env/`, `storage/`, `compose/`, `ca/`), în afara surselor ambelor backup-uri. Valorile implicite din `ops/docker/docker-compose.yml` și din `compose.env.example` indică acolo. Backup-ul propriu, **criptat**, al FINET (`pg_dump` din Supabase + fișierele, cu restic) vine în **Faza 3**; până atunci, datele din `/srv/finet/storage` nu au backup (în Faza 0 nu există date reale).
+**Decizia:** toate datele și secretele FINET stau în **`/srv/finet/`** (`env/`, `secrets/`, `storage/`, `compose/`, `ca/`), în afara surselor ambelor backup-uri. Valorile implicite din `ops/docker/docker-compose.yml` și din `compose.env.example` indică acolo. Backup-ul propriu, **criptat**, al FINET (`pg_dump` din Supabase + fișierele, cu restic) vine în **Faza 3**; până atunci, datele din `/srv/finet/storage` nu au backup (în Faza 0 nu există date reale).
 
-**Limitare rămasă (de decis de operator):** data-root-ul Docker e `/home/docker`. Docker copiază valorile din `env_file` în configurația containerului (`/home/docker/containers/<id>/config.v2.json`), iar logurile `json-file` stau tot acolo. Arhiva săptămânală necriptată a lui `/home/docker` conține deci **URL-urile bazei de date (cu parolele) și celelalte secrete FINET**, chiar dacă fișierele `.env` stau în `/srv/finet/env`. Variante: excluderea `/home/docker/containers` din arhivă (`tar --exclude`), criptarea arhivei (de exemplu prin remote-ul `GdriveCrypt`) sau, într-o fază ulterioară, secrete Docker montate ca fișiere (`secrets:`), care nu ajung în `config.v2.json` (notat în `docs/ROADMAP.md`). Agentul nu a modificat scripturile de backup.
+**Secretele în data-root-ul Docker (N1): închis tehnic pentru FINET (T7).**
+- Docker copiază valorile din `environment`/`env_file` în `/home/docker/containers/<id>/config.v2.json`, iar arhiva săptămânală necriptată a `/home/docker` le-ar urca pe Drive.
+- De aceea URL-urile bazei și tokenul de sănătate sunt acum **fișiere montate prin `secrets:`** (vezi „Secretele ca fișiere”). În `config.v2.json` ajunge doar calea lor.
+- `env_file` mai conține doar valori nesecrete (`APP_URL`, `CF_ACCESS_*`, limite).
+
+**Riscuri care rămân:**
+- **Logurile `json-file`** ale containerului stau tot în `/home/docker/containers/` și sunt în arhivă. Aplicația nu scrie secrete în loguri: mesajele de configurație numesc doar variabila.
+- **Celelalte containere de pe host:** arhiva necriptată existentă (și cele viitoare) conține în continuare **mediul altor containere** (alte stack-uri cu secrete în `environment`/`env_file`). E un risc preexistent, în afara FINET. Agentul nu a modificat scripturile de backup.
+  - Variante pentru operator: excluderea `/home/docker/containers` din arhivă (`tar --exclude`) sau criptarea arhivei (de exemplu prin `GdriveCrypt`).
 
 **Verificare după deploy** (operatorul): `sudo rclone ls Gdrive:vpnde/home | grep -i finet` și `sudo rclone ls GdriveCrypt:home | grep -i finet` nu afișează fișiere de date FINET.
 

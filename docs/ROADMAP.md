@@ -49,8 +49,17 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
   - scanare de secrete în istoric și în PR-uri (gitleaks) în CI.
 - **F8 (rest) — antetele de securitate:** CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors` → **Faza 9** (hardening).
 - **F9 — storage local (Faza 6, odată cu ingestia):** curățarea fișierelor temporare orfane `*.tmp-*` rămase după o scriere întreruptă; limită de dimensiune la `put` (pe lângă cota totală).
-- **F2 (rest) — secretele în data-root-ul Docker:** arhiva săptămânală necriptată a `/home/docker` conține mediul containerelor (`config.v2.json`). Decizia operatorului (excludere/criptare); ulterior, secrete Docker montate ca fișiere (`secrets:`) în locul `env_file` pentru URL-urile bazei de date. Backup-ul propriu criptat al FINET: Faza 3 (restic).
-- **F7 (rest) — CA-ul Supabase din cod:** `ssl: { ca }` explicit în clientul Postgres (Faza 1, cu Drizzle), ca să fie acceptat doar CA-ul Supabase; până atunci `NODE_EXTRA_CA_CERTS`. postgres.js nu citește `sslrootcert` din URL.
+- **F2 (rest) / N1 — secretele în data-root-ul Docker: închis tehnic în T7.**
+  - Ce s-a făcut: URL-urile bazei și `HEALTH_TOKEN` intră în containere ca fișiere (`secrets:` → `/run/secrets/`, citite prin `*_FILE`, `src/lib/secret-files.ts`), deci nu mai ajung în `config.v2.json`.
+  - Fișierele exemplu de mediu nu mai conțin secrete, iar `pnpm test:ops` verifică asta.
+  - Ce rămâne: arhiva săptămânală necriptată a `/home/docker` (existentă și viitoare) conține în continuare **mediul ALTOR containere** de pe host. E un risc preexistent, în afara FINET, iar decizia (excludere/criptare) e a operatorului.
+  - Logurile `json-file` rămân în arhivă; aplicația nu scrie secrete în ele.
+  - Backup-ul propriu criptat al FINET vine în Faza 3 (restic).
+- **F7 (rest) — CA-ul Supabase din cod: închis în T7.**
+  - `DATABASE_CA_FILE` + `src/lib/db-client.ts` → `ssl: { ca, rejectUnauthorized: true }` cu `sslmode=verify-full`/`verify-ca`.
+  - CA fără sslmode de verificare sau `sslrootcert` în URL → oprire la pornire.
+  - `NODE_EXTRA_CA_CERTS` rămâne doar ca variantă de rezervă.
+  - Clientul Drizzle din Faza 1 trebuie construit cu `postgresOptions()` din `src/lib/db-client.ts`.
 - **Workerul și migrarea reale:** `finet-worker` (Faza 5/6) și `finet-migrate` (Faza 1) sunt stub-uri; când primesc cod, își citesc configurația cu `FINET_ROLE` corespunzător (`parseConfig` e deja pregătit).
 - **Constatări minore din re-verificarea de securitate (după T5):**
   - N2: stub-urile `finet-worker`/`finet-migrate` nu apelează `parseConfig`, deci regula pe rol se aplică efectiv doar la `web`; test viitor: `FINET_ROLE=worker` + `DATABASE_URL` setat → ieșire cu cod 1.
