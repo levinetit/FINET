@@ -8,9 +8,10 @@
 --
 -- Rolurile (ops/supabase/roles.sql): finet_migrator (proprietarul schemei, rulează migrațiile)
 -- și finet_app (aplicația, NOBYPASSRLS). FORCE RLS face ca politicile să se aplice și
--- proprietarului: finet_migrator vede doar ce îi permit politicile `*_migrator_read` de mai jos
--- (households, household_members: doar SELECT, necesar funcțiilor SECURITY DEFINER), restul
--- tabelelor cu RLS îi apar goale. Proprietarul poate totuși dezactiva RLS (ALTER TABLE): FORCE
+-- proprietarului: finet_migrator vede doar ce îi permit politicile `*_migrator_*` de mai jos
+-- (households, household_members: SELECT, plus INSERT strict în interiorul
+-- `finet.create_household`; necesare funcțiilor SECURITY DEFINER), restul tabelelor cu RLS îi
+-- apar goale. Proprietarul poate totuși dezactiva RLS (ALTER TABLE): FORCE
 -- protejează de greșeli, nu de proprietar.
 --
 -- Tabelele de autentificare (users, auth_*) NU au RLS: nu aparțin unei gospodării și le
@@ -21,8 +22,7 @@
 --   drop policy ... pe fiecare tabel (lista: select policyname, tablename from pg_policies
 --     where schemaname = 'finet'), apoi
 --   alter table finet.<tabel> no force row level security; ... disable row level security;
---   drop function finet.household_has_members(uuid), finet.can_claim_household(uuid),
---     finet.member_role(uuid),
+--   drop function finet.create_household(text, text, text), finet.member_role(uuid),
 --     finet.current_household_id(), finet.current_user_id();
 --   revoke all on all tables in schema finet from finet_app;
 --   delete from finet.__drizzle_migrations where hash = '<hash-ul 0001_rls>';
@@ -44,19 +44,15 @@ create function finet.current_household_id() returns uuid
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------
--- Funcțiile de apartenență (SECURITY DEFINER, proprietar finet_migrator). O politică pe
--- household_members nu poate interoga household_members (recursivitate infinită în RLS), deci
--- verificarea „utilizatorul curent e membru” rulează cu drepturile proprietarului, care vede
--- tabelul prin politica `*_migrator_read`. `member_role` și `can_claim_household` răspund doar
--- despre utilizatorul DIN CONTEXT (nu primesc un user_id ca parametru), deci nu pot fi folosite
--- ca să afli apartenența altcuiva. Excepție: `household_has_members` (mai jos) răspunde pentru
--- orice id de gospodărie, dar spune doar „are / nu are membri” (risc rezidual: cine rulează SQL
--- arbitrar ca finet_app și cunoaște un uuid de gospodărie află dacă are membri; ADR 0003).
--- `search_path` fix: numele sunt calificate, iar un obiect cu același nume în altă schemă nu poate
--- fi strecurat.
+-- Funcțiile SECURITY DEFINER (proprietar finet_migrator, `search_path` fix: numele sunt
+-- calificate, iar un obiect cu același nume în altă schemă nu poate fi strecurat). Ele răspund
+-- și acționează DOAR pentru utilizatorul DIN CONTEXT (nu primesc un user_id ca parametru).
 -- ---------------------------------------------------------------------------------------------
 
 -- Rolul utilizatorului curent în gospodărie (`owner`/`member`) sau NULL dacă nu e membru.
+-- O politică pe household_members nu poate interoga household_members (recursivitate infinită
+-- în RLS), deci verificarea rulează cu drepturile proprietarului, care vede tabelul prin
+-- politica `household_members_migrator_read`.
 create function finet.member_role(p_household_id uuid) returns text
   language sql stable security definer
   set search_path = pg_catalog
@@ -68,44 +64,51 @@ create function finet.member_role(p_household_id uuid) returns text
   $$;
 --> statement-breakpoint
 
--- Gospodăria a fost creată de utilizatorul curent și nu are încă niciun membru: el se poate
--- adăuga ca `owner` (crearea gospodăriei personale, Faza 1; invitațiile vin în Faza 8).
-create function finet.can_claim_household(p_household_id uuid) returns boolean
-  language sql stable security definer
+-- Singura cale de creare a unei gospodării: gospodăria ȘI apartenența `owner` a utilizatorului
+-- din context, atomic (aceeași tranzacție; o eroare la oricare le anulează pe amândouă).
+-- Aplicația nu are INSERT pe households și nu există altă cale prin care cineva să devină
+-- membru al unei gospodării existente, în afară de adăugarea de către un `owner` actual
+-- (politica household_members_insert). Astfel un fost membru (inclusiv creatorul) nu se poate
+-- „re-revendica” într-o gospodărie rămasă fără membri.
+-- Variabila tranzacției `finet.creating_household` limitează politicile de INSERT ale
+-- proprietarului (`*_migrator_insert`) la rândurile create aici.
+create function finet.create_household(
+  p_name text,
+  p_default_currency text default 'RON',
+  p_timezone text default 'Europe/Bucharest'
+) returns uuid
+  language plpgsql volatile security definer
   set search_path = pg_catalog
   as $$
-    select exists (
-             select 1 from finet.households h
-              where h.id = p_household_id
-                and h.created_by = finet.current_user_id()
-           )
-       and not exists (
-             select 1 from finet.household_members m where m.household_id = p_household_id
-           )
-  $$;
---> statement-breakpoint
-
--- Gospodăria are cel puțin un membru (fără a spune care; vezi excepția de mai sus). Folosită de
--- politica de citire a gospodăriilor: rândul tocmai inserat nu e vizibil funcțiilor de mai sus în aceeași instrucțiune
--- (instantaneul instrucțiunii), deci `INSERT ... RETURNING` se bazează pe coloana `created_by` a
--- rândului plus această verificare.
-create function finet.household_has_members(p_household_id uuid) returns boolean
-  language sql stable security definer
-  set search_path = pg_catalog
-  as $$
-    select exists (
-      select 1 from finet.household_members m where m.household_id = p_household_id
-    )
+  declare
+    v_user uuid := finet.current_user_id();
+    v_id uuid := gen_random_uuid();
+  begin
+    if v_user is null then
+      raise exception 'create_household: lipsește utilizatorul din context'
+        using errcode = '42501';
+    end if;
+    if not exists (select 1 from finet.users u where u.id = v_user and u.status = 'active') then
+      raise exception 'create_household: utilizator inexistent sau dezactivat'
+        using errcode = '42501';
+    end if;
+    perform set_config('finet.creating_household', v_id::text, true);
+    insert into finet.households (id, name, default_currency, timezone, created_by)
+      values (v_id, p_name, coalesce(p_default_currency, 'RON'),
+              coalesce(p_timezone, 'Europe/Bucharest'), v_user);
+    insert into finet.household_members (household_id, user_id, role)
+      values (v_id, v_user, 'owner');
+    perform set_config('finet.creating_household', '', true);
+    return v_id;
+  end
   $$;
 --> statement-breakpoint
 
 revoke all on function finet.current_user_id(), finet.current_household_id(),
-  finet.member_role(uuid), finet.can_claim_household(uuid),
-  finet.household_has_members(uuid) from public;
+  finet.member_role(uuid), finet.create_household(text, text, text) from public;
 --> statement-breakpoint
 grant execute on function finet.current_user_id(), finet.current_household_id(),
-  finet.member_role(uuid), finet.can_claim_household(uuid),
-  finet.household_has_members(uuid) to finet_app;
+  finet.member_role(uuid), finet.create_household(text, text, text) to finet_app;
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------
@@ -132,28 +135,39 @@ alter table finet.consents enable row level security;
 alter table finet.consents force row level security;
 --> statement-breakpoint
 
--- Citire pentru proprietar, doar pe cele două tabele de care au nevoie funcțiile SECURITY
--- DEFINER de mai sus. Fără INSERT/UPDATE/DELETE pentru finet_migrator.
+-- Politicile proprietarului, doar pe cele două tabele de care au nevoie funcțiile SECURITY
+-- DEFINER de mai sus: citire, plus INSERT DOAR pentru gospodăria în curs de creare în
+-- `finet.create_household` (variabila tranzacției `finet.creating_household`). Fără
+-- UPDATE/DELETE pentru finet_migrator. Variabila nu dă nimic lui finet_app: politicile acestea
+-- se aplică doar rolului finet_migrator.
 create policy households_migrator_read on finet.households
   for select to finet_migrator using (true);
 --> statement-breakpoint
 create policy household_members_migrator_read on finet.household_members
   for select to finet_migrator using (true);
 --> statement-breakpoint
-
--- --- households -------------------------------------------------------------------------------
--- Vizibilă membrilor (lista gospodăriilor mele) și creatorului cât timp nu are membri (ca
--- INSERT ... RETURNING să funcționeze înainte de adăugarea proprietarului).
-create policy households_select on finet.households
-  for select to finet_app
-  using (
-    finet.member_role(id) is not null
-    or (created_by = (select finet.current_user_id()) and not finet.household_has_members(id))
+create policy households_migrator_insert on finet.households
+  for insert to finet_migrator
+  with check (
+    id = nullif(current_setting('finet.creating_household', true), '')::uuid
+    and created_by = (select finet.current_user_id())
   );
 --> statement-breakpoint
-create policy households_insert on finet.households
-  for insert to finet_app
-  with check (created_by = (select finet.current_user_id()));
+create policy household_members_migrator_insert on finet.household_members
+  for insert to finet_migrator
+  with check (
+    household_id = nullif(current_setting('finet.creating_household', true), '')::uuid
+    and user_id = (select finet.current_user_id())
+    and role = 'owner'
+  );
+--> statement-breakpoint
+
+-- --- households -------------------------------------------------------------------------------
+-- Vizibilă doar membrilor (lista gospodăriilor mele). Fără politică de INSERT pentru
+-- finet_app (și fără dreptul INSERT): crearea trece numai prin finet.create_household().
+create policy households_select on finet.households
+  for select to finet_app
+  using (finet.member_role(id) is not null);
 --> statement-breakpoint
 create policy households_update on finet.households
   for update to finet_app
@@ -175,17 +189,12 @@ create policy household_members_select on finet.household_members
         and finet.member_role(household_id) is not null)
   );
 --> statement-breakpoint
--- Fie proprietarul gospodăriei curente adaugă pe cineva, fie creatorul unei gospodării fără
--- membri se adaugă pe sine ca `owner`.
+-- Doar un `owner` ACTUAL al gospodăriei curente adaugă pe cineva (admin:add-member, invitațiile
+-- din Faza 8). Apartenența `owner` inițială o creează doar finet.create_household().
 create policy household_members_insert on finet.household_members
   for insert to finet_app
-  with check (
-    (household_id = (select finet.current_household_id())
-     and finet.member_role(household_id) = 'owner')
-    or (user_id = (select finet.current_user_id())
-        and role = 'owner'
-        and finet.can_claim_household(household_id))
-  );
+  with check (household_id = (select finet.current_household_id())
+              and finet.member_role(household_id) = 'owner');
 --> statement-breakpoint
 create policy household_members_update on finet.household_members
   for update to finet_app
@@ -250,8 +259,11 @@ revoke all on finet.users, finet.auth_sessions, finet.auth_accounts, finet.auth_
 grant select, insert, update, delete on finet.users, finet.auth_sessions, finet.auth_accounts,
   finet.auth_verifications, finet.auth_rate_limits to finet_app;
 --> statement-breakpoint
-grant select, insert, update, delete on finet.households, finet.household_members,
-  finet.user_preferences to finet_app;
+-- households: fără INSERT (crearea doar prin finet.create_household()).
+grant select, update, delete on finet.households to finet_app;
+--> statement-breakpoint
+grant select, insert, update, delete on finet.household_members, finet.user_preferences
+  to finet_app;
 --> statement-breakpoint
 grant select, insert, update on finet.consents to finet_app;
 --> statement-breakpoint

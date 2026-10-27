@@ -4,8 +4,9 @@ import type postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { type Db, createDb, withRlsOn } from "@/db";
+import { createHousehold } from "@/db/households";
 import { runMigrations } from "@/db/migrate";
-import { auditEvents, householdMembers, households, users } from "@/db/schema";
+import { auditEvents, householdMembers, users } from "@/db/schema";
 import {
   MIGRATIONS_DIR,
   type ScratchDatabase,
@@ -50,8 +51,8 @@ describe.skipIf(!TEST_ADMIN_URL)("requireMember pe PostgreSQL real", () => {
   const A = randomUUID();
   const B = randomUUID();
   const C = randomUUID();
-  const HA = randomUUID();
-  const HB = randomUUID();
+  let HA: string;
+  let HB: string;
 
   beforeAll(async () => {
     scratch = await createScratchDatabase("finet_it_authz");
@@ -69,15 +70,8 @@ describe.skipIf(!TEST_ADMIN_URL)("requireMember pe PostgreSQL real", () => {
     ] as const) {
       await app.db.insert(users).values({ id, email, name: email });
     }
-    for (const [userId, householdId] of [
-      [A, HA],
-      [B, HB],
-    ] as const) {
-      await withRlsOn(app.db, { userId }, async (tx) => {
-        await tx.insert(households).values({ id: householdId, name: "Casa", createdBy: userId });
-        await tx.insert(householdMembers).values({ householdId, userId, role: "owner" });
-      });
-    }
+    HA = await withRlsOn(app.db, { userId: A }, (tx) => createHousehold(tx, { name: "Casa A" }));
+    HB = await withRlsOn(app.db, { userId: B }, (tx) => createHousehold(tx, { name: "Casa B" }));
     await withRlsOn(app.db, { userId: A, householdId: HA }, (tx) =>
       tx.insert(householdMembers).values({ householdId: HA, userId: C, role: "member" }),
     );

@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import type postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { createHousehold as createHouseholdSql } from "./households";
 import { type Db, RlsContextError, createDb, withRlsOn } from "./index";
 import { runMigrations } from "./migrate";
 import {
@@ -71,23 +72,16 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS pe PostgreSQL real (rolul finet_app)", () 
   const A = randomUUID();
   const B = randomUUID();
   const C = randomUUID();
-  const HA = randomUUID();
-  const HB = randomUUID();
+  let HA: string;
+  let HB: string;
 
   async function createUser(id: string, email: string) {
     await app.db.insert(users).values({ id, email, name: email.split("@")[0]! });
   }
 
-  /** Crearea gospodăriei personale: gospodăria, apoi creatorul se adaugă ca `owner`. */
-  async function createHousehold(userId: string, householdId: string, name: string) {
-    await withRlsOn(app.db, { userId }, async (tx) => {
-      const [h] = await tx
-        .insert(households)
-        .values({ id: householdId, name, createdBy: userId })
-        .returning({ id: households.id });
-      expect(h?.id).toBe(householdId);
-      await tx.insert(householdMembers).values({ householdId, userId, role: "owner" });
-    });
+  /** Crearea gospodăriei: doar prin finet.create_household (gospodăria + owner, atomic). */
+  function createHousehold(userId: string, name: string): Promise<string> {
+    return withRlsOn(app.db, { userId }, (tx) => createHouseholdSql(tx, { name }));
   }
 
   beforeAll(async () => {
@@ -99,8 +93,8 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS pe PostgreSQL real (rolul finet_app)", () 
     await createUser(A, "ana@exemplu.ro");
     await createUser(B, "bogdan@exemplu.ro");
     await createUser(C, "cristi@exemplu.ro");
-    await createHousehold(A, HA, "Casa A");
-    await createHousehold(B, HB, "Casa B");
+    HA = await createHousehold(A, "Casa A");
+    HB = await createHousehold(B, "Casa B");
     // A (owner) îl adaugă pe C ca membru în HA.
     await withRlsOn(app.db, { userId: A, householdId: HA }, (tx) =>
       tx.insert(householdMembers).values({ householdId: HA, userId: C, role: "member" }),
@@ -273,38 +267,143 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS pe PostgreSQL real (rolul finet_app)", () 
     expect(promoted).toEqual([]);
   });
 
-  it("o gospodărie creată de altcineva nu poate fi revendicată", async () => {
-    const H = randomUUID();
-    // B creează gospodăria (fără membri); A încearcă să se adauge owner.
-    await withRlsOn(app.db, { userId: B }, (tx) =>
-      tx.insert(households).values({ id: H, name: "Nouă", createdBy: B }),
-    );
-    expect(
-      await sqlState(() =>
-        withRlsOn(app.db, { userId: A, householdId: H }, (tx) =>
-          tx.insert(householdMembers).values({ householdId: H, userId: A, role: "owner" }),
+  describe("create_household (singura cale de creare)", () => {
+    it("(a) creează gospodăria și apartenența owner atomic, pentru utilizatorul din context", async () => {
+      const H = await createHousehold(A, "Casa nouă");
+      const members = await scratch.admin<{ user_id: string; role: string }[]>`
+        select user_id, role from finet.household_members where household_id = ${H}`;
+      expect(members).toEqual([{ user_id: A, role: "owner" }]);
+      const [h] = await scratch.admin<
+        { created_by: string; name: string; default_currency: string }[]
+      >`
+        select created_by, name, default_currency from finet.households where id = ${H}`;
+      expect(h).toEqual({ created_by: A, name: "Casa nouă", default_currency: "RON" });
+      // O valoare invalidă (CHECK) anulează tot: nici gospodărie, nici apartenență.
+      const before = await scratch.admin`select 1 from finet.households`;
+      expect(
+        await sqlState(() =>
+          withRlsOn(app.db, { userId: A }, (tx) => createHouseholdSql(tx, { name: "" })),
         ),
-      ),
-    ).toBe("42501");
-    // Creatorul poate, o singură dată, doar ca owner.
-    expect(
-      await sqlState(() =>
-        withRlsOn(app.db, { userId: B }, (tx) =>
-          tx.insert(householdMembers).values({ householdId: H, userId: B, role: "member" }),
+      ).toBe("23514");
+      const after = await scratch.admin`select 1 from finet.households`;
+      expect(after.length).toBe(before.length);
+    });
+
+    it("(b) fără utilizator în context → eroare 42501, nimic creat", async () => {
+      const before = await scratch.admin`select 1 from finet.households`;
+      expect(
+        await sqlState(() =>
+          withRlsOn(app.db, { userId: null }, (tx) => createHouseholdSql(tx, { name: "Fără" })),
         ),
-      ),
-    ).toBe("42501");
-    await withRlsOn(app.db, { userId: B }, (tx) =>
-      tx.insert(householdMembers).values({ householdId: H, userId: B, role: "owner" }),
-    );
-    // Nimeni nu poate crea o gospodărie în numele altcuiva.
-    expect(
-      await sqlState(() =>
-        withRlsOn(app.db, { userId: A }, (tx) =>
-          tx.insert(households).values({ name: "X", createdBy: B }),
+      ).toBe("42501");
+      expect(
+        await sqlState(
+          () => app.client`select finet.create_household('Fără', 'RON', 'Europe/Bucharest')`,
         ),
-      ),
-    ).toBe("42501");
+      ).toBe("42501");
+      const after = await scratch.admin`select 1 from finet.households`;
+      expect(after.length).toBe(before.length);
+    });
+
+    it("aplicația nu poate insera direct în households", async () => {
+      for (const userId of [A, B]) {
+        expect(
+          await sqlState(() =>
+            withRlsOn(app.db, { userId }, (tx) =>
+              tx.insert(households).values({ name: "Direct", createdBy: userId }),
+            ),
+          ),
+        ).toBe("42501");
+      }
+    });
+
+    it("(c) nimeni nu-și poate insera singur o apartenență într-o gospodărie care nu e a lui", async () => {
+      for (const householdId of [HA, HB]) {
+        for (const role of ["owner", "member"] as const) {
+          expect(
+            await sqlState(() =>
+              withRlsOn(app.db, { userId: A, householdId }, (tx) =>
+                tx.insert(householdMembers).values({ householdId: HB, userId: A, role }),
+              ),
+            ),
+          ).toBe("42501");
+        }
+      }
+    });
+
+    it("(d) după ce toți membrii pleacă, creatorul NU mai poate redeveni membru", async () => {
+      const H = await createHousehold(B, "Rămâne goală");
+      // B (singurul membru, owner) pleacă.
+      const left = await withRlsOn(app.db, { userId: B, householdId: H }, (tx) =>
+        tx.delete(householdMembers).where(eq(householdMembers.householdId, H)).returning(),
+      );
+      expect(left.length).toBe(1);
+      for (const role of ["owner", "member"] as const) {
+        for (const householdId of [H, null]) {
+          expect(
+            await sqlState(() =>
+              withRlsOn(app.db, { userId: B, householdId }, (tx) =>
+                tx.insert(householdMembers).values({ householdId: H, userId: B, role }),
+              ),
+            ),
+          ).toBe("42501");
+        }
+      }
+      // Nici setând variabila internă a funcției: politicile ei sunt doar pentru finet_migrator.
+      expect(
+        await sqlState(() =>
+          withRlsOn(app.db, { userId: B, householdId: H }, async (tx) => {
+            await tx.execute(sql`select set_config('finet.creating_household', ${H}, true)`);
+            await tx.insert(householdMembers).values({ householdId: H, userId: B, role: "owner" });
+          }),
+        ),
+      ).toBe("42501");
+      const members =
+        await scratch.admin`select 1 from finet.household_members where household_id = ${H}`;
+      expect(members.length).toBe(0);
+      // Gospodăria nu-i mai e vizibilă.
+      const seen = await withRlsOn(app.db, { userId: B }, (tx) =>
+        tx.select().from(households).where(eq(households.id, H)),
+      );
+      expect(seen).toEqual([]);
+    });
+
+    it("(e) user_id vine doar din context: nu există parametru, A creează doar pentru A", async () => {
+      const [fn] = await scratch.admin<
+        { args: string; definer: boolean; owner: string; config: string[] }[]
+      >`
+        select pg_get_function_identity_arguments(p.oid) as args, p.prosecdef as definer,
+               pg_get_userbyid(p.proowner) as owner, p.proconfig as config
+          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'finet' and p.proname = 'create_household'`;
+      expect(fn).toEqual({
+        args: "p_name text, p_default_currency text, p_timezone text",
+        definer: true,
+        owner: "finet_migrator",
+        config: ["search_path=pg_catalog"],
+      });
+      // A, cu context A, încercând „în numele lui B” (contextul gospodăriei lui B) → tot A.
+      const H = await withRlsOn(app.db, { userId: A, householdId: HB }, (tx) =>
+        createHouseholdSql(tx, { name: "A în contextul B" }),
+      );
+      const members = await scratch.admin<{ user_id: string }[]>`
+        select user_id from finet.household_members where household_id = ${H}`;
+      expect(members).toEqual([{ user_id: A }]);
+      const seenByB = await withRlsOn(app.db, { userId: B }, (tx) =>
+        tx.select().from(households).where(eq(households.id, H)),
+      );
+      expect(seenByB).toEqual([]);
+      // Un utilizator dezactivat nu poate crea gospodării.
+      const D = randomUUID();
+      await createUser(D, "dezactivat@exemplu.ro");
+      await app.db.update(users).set({ status: "disabled" }).where(eq(users.id, D));
+      expect(await sqlState(() => createHousehold(D, "X"))).toBe("42501");
+      // PUBLIC nu are EXECUTE (doar finet_app).
+      const [priv] = await scratch.admin<{ app: boolean; anon: boolean }[]>`
+        select has_function_privilege('finet_app', 'finet.create_household(text,text,text)', 'EXECUTE') as app,
+               has_function_privilege('anon', 'finet.create_household(text,text,text)', 'EXECUTE') as anon`;
+      expect(priv).toEqual({ app: true, anon: false });
+    });
   });
 
   it("preferințe și consimțăminte: doar ale utilizatorului curent", async () => {
@@ -446,9 +545,8 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS pe PostgreSQL real (rolul finet_app)", () 
 
   it("ștergerea unui utilizator: apartenențele dispar (CASCADE), gospodăria rămâne (created_by NULL)", async () => {
     const U = randomUUID();
-    const H = randomUUID();
     await createUser(U, "temporar@exemplu.ro");
-    await createHousehold(U, H, "Temporară");
+    const H = await createHousehold(U, "Temporară");
     await app.db.delete(users).where(eq(users.id, U));
     const [h] = await scratch.admin<{ created_by: string | null }[]>`
       select created_by from finet.households where id = ${H}`;
