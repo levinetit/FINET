@@ -40,8 +40,52 @@ describe("safeNextPath", () => {
     ["login cu majuscule", "/LOGIN"],
     ["API", "/api/v1/me"],
     ["prea lung", `/${"a".repeat(600)}`],
+    // H1: dot-segmente care devin `//evil.com` după normalizarea URL-ului.
+    ["dot-segment /.//", "/.//evil.com"],
+    ["dot-segment /a/..//", "/a/..//evil.com"],
+    ["dot-segment codificat /%2e//", "/%2e//evil.com"],
+    ["dot-segment /x/..//", "/x/..//evil.com"],
+    ["dot-segment cu backslash", "/./\\/evil.com"],
+    ["dot-segment dublu codificat", "/%252e//evil.com"],
+    ["dot-segment cu cale", "/./..//evil.com/dashboard"],
   ])("respinge %s → pagina implicită", (_label, raw) => {
     expect(safeNextPath(raw)).toBe(DEFAULT_AFTER_LOGIN);
+  });
+});
+
+describe("safeNextPath: proprietatea rezultatului (H1)", () => {
+  const pieces = [
+    "/",
+    ".",
+    "..",
+    "%2e",
+    "%2E",
+    "%2f",
+    "%5c",
+    "\\",
+    "evil.com",
+    "a",
+    "?",
+    "#",
+    "//",
+    "%252e",
+  ];
+
+  it("orice rezultat începe cu un singur `/` și rămâne pe origine", () => {
+    // Combinații deterministe de fragmente (fără aleator, ca testul să fie reproductibil).
+    let checked = 0;
+    for (const a of pieces) {
+      for (const b of pieces) {
+        for (const c of pieces) {
+          const out = safeNextPath(`/${a}${b}${c}`);
+          expect(out, `/${a}${b}${c}`).toMatch(/^\/(?!\/)/);
+          expect(out).not.toContain("\\");
+          expect(new URL(out, "https://finet.invalid").origin).toBe("https://finet.invalid");
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBe(pieces.length ** 3);
   });
 });
 

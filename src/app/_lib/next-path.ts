@@ -11,6 +11,8 @@ const MAX_LENGTH = 512;
 // Caractere de control și spații (inclusiv tab/LF, pe care browserele le elimină din URL-uri).
 const UNSAFE_CHARS = /[\u0000-\u0020\u007f-\u009f\u2028\u2029\\]/;
 const BASE = "https://finet.invalid";
+/** Forma acceptată a rezultatului: un singur `/` la început, fără `\\`. */
+const SAFE_RESULT = /^\/(?!\/)[^\\]*$/;
 
 function decodeFully(value: string): string | null {
   let current = value;
@@ -40,6 +42,12 @@ export function safeNextPath(raw: unknown): string {
   if (decoded === null || decoded.startsWith("//") || UNSAFE_CHARS.test(decoded)) {
     return DEFAULT_AFTER_LOGIN;
   }
+  // Și forma decodată, normalizată, nu poate deveni protocol-relativă (`/%252e//x` → `/.//x`).
+  try {
+    if (new URL(decoded, BASE).pathname.startsWith("//")) return DEFAULT_AFTER_LOGIN;
+  } catch {
+    return DEFAULT_AFTER_LOGIN;
+  }
   let url: URL;
   try {
     url = new URL(value, BASE);
@@ -56,7 +64,19 @@ export function safeNextPath(raw: unknown): string {
   ) {
     return DEFAULT_AFTER_LOGIN;
   }
-  return `${url.pathname}${url.search}${url.hash}`;
+  // Validarea se face pe REZULTATUL normalizat (constatarea H1): `new URL()` rezolvă dot-segmentele,
+  // deci `/.//evil.com`, `/a/..//evil.com` sau `/%2e//evil.com` devin `//evil.com`
+  // (protocol-relativ) DUPĂ verificările de mai sus. Rezultatul trebuie să fie o cale care începe
+  // cu un singur `/`, fără `\` și fără caractere de control nicăieri (nici în search/hash).
+  const result = `${url.pathname}${url.search}${url.hash}`;
+  if (!SAFE_RESULT.test(result) || UNSAFE_CHARS.test(result)) return DEFAULT_AFTER_LOGIN;
+  // Același rezultat, re-parsat, trebuie să rămână pe origine (apărare suplimentară).
+  try {
+    if (new URL(result, BASE).origin !== BASE) return DEFAULT_AFTER_LOGIN;
+  } catch {
+    return DEFAULT_AFTER_LOGIN;
+  }
+  return result;
 }
 
 /** Adresa paginii de login care revine la `path` după autentificare. */

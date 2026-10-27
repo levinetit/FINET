@@ -78,12 +78,27 @@ test.describe(`autentificare (${MODE})`, () => {
     page,
     baseURL,
   }) => {
-    for (const next of ["//evil.com", "https://evil.com/", "/\\evil.com", "/%2F%2Fevil.com"]) {
+    for (const next of [
+      "//evil.com",
+      "https://evil.com/",
+      "/\\evil.com",
+      "/%2F%2Fevil.com",
+      // H1: dot-segmente normalizate la `//evil.com`.
+      "/.//evil.com",
+      "/a/..//evil.com",
+    ]) {
       await page.context().clearCookies();
       await login(page, userEmail("main"), password(), next);
       await expect(page).toHaveURL(/\/dashboard$/);
       expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin);
     }
+  });
+
+  test("H1: ?next=/.//evil.com (dot-segment) rămâne pe origine", async ({ page, baseURL }) => {
+    await page.context().clearCookies();
+    await login(page, userEmail("main"), password(), "/.//evil.com");
+    await expect(page).toHaveURL(/\/dashboard$/);
+    expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin);
   });
 
   test("rate limiting vizibil: a 6-a încercare dă „Prea multe încercări”", async ({ page }) => {
