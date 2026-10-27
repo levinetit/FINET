@@ -22,14 +22,14 @@ import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 /**
  * Variabilele secrete care acceptă și forma `<NUME>_FILE`. Lista acoperă toate variabilele
  * marcate `# secret` în `.env.example` și validate de `src/lib/config.ts` (un test le compară).
- * `BETTER_AUTH_SECRET` (Faza 1) nu e încă citit de config; se adaugă aici odată cu el
- * (decizia mea: nu accept o variabilă `_FILE` pe care nimic nu o folosește).
+ * `BETTER_AUTH_SECRET` (F1-B) e citit de config din `src/lib/config.ts` (`auth.secret`).
  */
 export const SECRET_VARIABLES = [
   "DATABASE_URL",
   "WORKER_DATABASE_URL",
   "MIGRATOR_DATABASE_URL",
   "HEALTH_TOKEN",
+  "BETTER_AUTH_SECRET",
   "NOTIFY_TELEGRAM_BOT_TOKEN",
   "SMTP_PASSWORD",
   "STORAGE_S3_ACCESS_KEY_ID",
@@ -38,8 +38,11 @@ export const SECRET_VARIABLES = [
 
 export type SecretVariable = (typeof SECRET_VARIABLES)[number];
 
-/** Variabilele marcate `# secret` în `.env.example`, dar încă necitite de config (vezi sus). */
-export const SECRET_VARIABLES_NOT_YET_VALIDATED = ["BETTER_AUTH_SECRET"] as const;
+/**
+ * Variabilele marcate `# secret` în `.env.example`, dar încă necitite de config. Goală din F1-B
+ * (`BETTER_AUTH_SECRET` e acum validată); rămâne pentru secretele fazelor următoare.
+ */
+export const SECRET_VARIABLES_NOT_YET_VALIDATED = [] as const;
 
 /** Dimensiunea maximă a unui fișier secret (o parolă, un token sau un URL, nu un certificat). */
 export const SECRET_FILE_MAX_BYTES = 4096;

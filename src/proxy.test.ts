@@ -250,6 +250,9 @@ describe("FAIL-CLOSED", () => {
       vi.stubEnv("NODE_ENV", "production");
       vi.stubEnv("APP_MODE", "personal");
       vi.stubEnv("STORAGE_DIR", "/tmp/finet-nu-se-foloseste");
+      // F1-B: web în producție cere secretul Better Auth și APP_URL https (valori FICTIVE).
+      vi.stubEnv("APP_URL", "https://finet.exemplu.invalid");
+      vi.stubEnv("BETTER_AUTH_SECRET", "secret-fictiv-de-test-0123456789abcdef");
       // Domeniu `.invalid`: JWKS-ul nu poate fi obținut niciodată.
       vi.stubEnv("CF_ACCESS_TEAM_DOMAIN", "echipa.invalid");
       vi.stubEnv("CF_ACCESS_AUD", AUD);

@@ -17,6 +17,9 @@ const PROD = {
   STORAGE_DIR: "/data/storage",
   CF_ACCESS_TEAM_DOMAIN: "echipa-exemplu.cloudflareaccess.com",
   CF_ACCESS_AUD: "aud-fictiv-0123456789",
+  // F1-B: serverul web de producție cere secretul Better Auth și APP_URL https (valori FICTIVE).
+  APP_URL: "https://finet.exemplu.invalid",
+  BETTER_AUTH_SECRET: "secret-fictiv-de-test-0123456789abcdef",
 } as const;
 
 function issuesOf(env: Record<string, string | undefined>): string[] {
@@ -212,7 +215,8 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
   });
 
   it("refuză un rol necunoscut", () => {
-    expect(issuesOf({ ...DEV, FINET_ROLE: "admin" })).toEqual(["FINET_ROLE"]);
+    // `admin` e rol valid din F1-B (CLI-ul); exemplul de rol necunoscut e `root`.
+    expect(issuesOf({ ...DEV, FINET_ROLE: "root" })).toEqual(["FINET_ROLE"]);
     expect(issuesOf({ ...DEV, FINET_ROLE: "WEB" })).toEqual(["FINET_ROLE"]);
   });
 
@@ -282,7 +286,13 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
 
   it("în producție, doar web cere CF_ACCESS_*; migrate nu cere nici STORAGE_DIR", () => {
     const bare = { APP_MODE: "personal", NODE_ENV: "production" };
-    expect(issuesOf(bare)).toEqual(["CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "STORAGE_DIR"]);
+    expect(issuesOf(bare)).toEqual([
+      "CF_ACCESS_TEAM_DOMAIN",
+      "CF_ACCESS_AUD",
+      "BETTER_AUTH_SECRET",
+      "APP_URL",
+      "STORAGE_DIR",
+    ]);
     expect(issuesOf({ ...bare, FINET_ROLE: "worker", WORKER_DATABASE_URL: URL_WORKER })).toEqual([
       "STORAGE_DIR",
     ]);
@@ -315,6 +325,80 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
   it("Config nu mai expune URL-urile altor roluri", () => {
     const c = parseConfig({ ...DEV, DATABASE_URL: URL_WEB });
     expect(Object.keys(c.database)).toEqual(["url", "ca"]);
+  });
+});
+
+describe("autentificarea (F1-B)", () => {
+  const SECRET = "secret-fictiv-de-test-0123456789abcdef";
+  const AUTH_URL_WEB = "postgres://finet_app:p-web@pooler.exemplu.invalid:6543/postgres";
+  const AUTH_URL_MIGRATOR = "postgres://finet_migrator:p-mig@pooler.exemplu.invalid:5432/postgres";
+
+  it("BETTER_AUTH_SECRET: minimum 32 de caractere; valoarea de exemplu e refuzată", () => {
+    expect(parseConfig({ ...DEV, BETTER_AUTH_SECRET: SECRET }).auth.secret).toBe(SECRET);
+    expect(parseConfig(DEV).auth.secret).toBeNull();
+    expect(issuesOf({ ...DEV, BETTER_AUTH_SECRET: "prea-scurt" })).toEqual(["BETTER_AUTH_SECRET"]);
+    expect(
+      issuesOf({ ...DEV, BETTER_AUTH_SECRET: "INVALID-inlocuieste-ma-nu-e-un-secret" }),
+    ).toEqual(["BETTER_AUTH_SECRET"]);
+    expect(issuesOf({ ...DEV, BETTER_AUTH_SECRET: "changeme-changeme-changeme-changeme" })).toEqual(
+      ["BETTER_AUTH_SECRET"],
+    );
+  });
+
+  it("BETTER_AUTH_SECRET_FILE e citit din fișier; mesajul nu conține valoarea", () => {
+    const c = parseConfig(
+      { ...DEV, BETTER_AUTH_SECRET_FILE: "/run/secrets/finet_better_auth_secret" },
+      { readSecret: () => SECRET },
+    );
+    expect(c.auth.secret).toBe(SECRET);
+    try {
+      parseConfig(
+        { ...DEV, BETTER_AUTH_SECRET_FILE: "/run/secrets/x" },
+        { readSecret: () => "INVALID-inlocuieste-ma-nu-e-un-secret" },
+      );
+      throw new Error("trebuia să arunce");
+    } catch (error) {
+      expect((error as ConfigError).issues.map((i) => i.variable)).toEqual([
+        "BETTER_AUTH_SECRET_FILE",
+      ]);
+      expect((error as Error).message).not.toContain("INVALID-inlocuieste");
+    }
+  });
+
+  it("în producție, web cere APP_URL https", () => {
+    expect(issuesOf({ ...PROD, APP_URL: "http://finet.exemplu.invalid" })).toEqual(["APP_URL"]);
+    expect(issuesOf({ ...PROD, BETTER_AUTH_SECRET: undefined })).toEqual(["BETTER_AUTH_SECRET"]);
+  });
+
+  it("limitele de rate limiting au valori implicite și se pot configura (întregi ≥ 1)", () => {
+    const c = parseConfig(DEV);
+    expect(c.auth.hibpEnabled).toBe(false);
+    expect(c.auth.rateLimits.login).toEqual({ max: 5, windowSeconds: 900 });
+    expect(c.auth.rateLimits.mobileLogin).toEqual({ max: 10, windowSeconds: 900 });
+    expect(c.auth.rateLimits.email).toEqual({ max: 3, windowSeconds: 3600 });
+    const custom = parseConfig({ ...DEV, AUTH_LOGIN_MAX_ATTEMPTS: "8", AUTH_HIBP_ENABLED: "true" });
+    expect(custom.auth.rateLimits.login.max).toBe(8);
+    expect(custom.auth.hibpEnabled).toBe(true);
+    expect(issuesOf({ ...DEV, AUTH_LOGIN_MAX_ATTEMPTS: "0" })).toEqual(["AUTH_LOGIN_MAX_ATTEMPTS"]);
+    expect(issuesOf({ ...DEV, AUTH_EMAIL_WINDOW_SECONDS: "-1" })).toEqual([
+      "AUTH_EMAIL_WINDOW_SECONDS",
+    ]);
+  });
+
+  it("FINET_ROLE=admin: doar DATABASE_URL; fără STORAGE_DIR și CF_ACCESS_* în producție", () => {
+    const bare = { APP_MODE: "personal", NODE_ENV: "production" };
+    const a = parseConfig({ ...bare, FINET_ROLE: "admin", DATABASE_URL: AUTH_URL_WEB });
+    expect(a.role).toBe("admin");
+    expect(a.database.url).toBe(AUTH_URL_WEB);
+    expect(issuesOf({ ...bare, FINET_ROLE: "admin" })).toEqual(["DATABASE_URL"]);
+    expect(
+      issuesOf({
+        ...bare,
+        FINET_ROLE: "admin",
+        DATABASE_URL: AUTH_URL_WEB,
+        MIGRATOR_DATABASE_URL: AUTH_URL_MIGRATOR,
+      }),
+    ).toEqual(["MIGRATOR_DATABASE_URL"]);
   });
 });
 

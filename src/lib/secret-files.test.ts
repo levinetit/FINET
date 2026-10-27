@@ -304,7 +304,7 @@ describe("parseConfig cu `*_FILE`", () => {
     it("cu un FINET_ROLE invalid nu se deschide niciun fișier", () => {
       const readSecret = vi.fn(() => URL_WEB);
       expect(() =>
-        parseConfig({ ...DEV, FINET_ROLE: "admin", DATABASE_URL_FILE: "/x" }, { readSecret }),
+        parseConfig({ ...DEV, FINET_ROLE: "root", DATABASE_URL_FILE: "/x" }, { readSecret }),
       ).toThrow(ConfigError);
       expect(readSecret).not.toHaveBeenCalled();
     });
