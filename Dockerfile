@@ -41,8 +41,9 @@ USER node
 EXPOSE 3000
 
 # Imaginea slim nu are curl: verificarea folosește fetch din Node.
-# /api/health e deocamdată un stub (T1), înlocuit în T3 de verificarea reală.
+# Liveness-ul /api/health/live (doar 200, fără detalii) e lăsat de src/proxy.ts fără JWT Access
+# numai pentru cereri locale (Host 127.0.0.1); /api/health detaliat cere Access sau HEALTH_TOKEN.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
 CMD ["node", "server.js"]
