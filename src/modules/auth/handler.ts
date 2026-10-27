@@ -87,30 +87,42 @@ const LIMITED_PATHS = new Set([
 
 type Limited = Readonly<{ kind: RateLimitKind; rule: RateLimitRule; subject: string }>;
 
-function limitFor(
+/**
+ * Limitele unei cereri. Login-ul are DOUĂ (M2): pe IP + email și pe email singur (cheie fără
+ * IP, `loginEmail`), ca încercările distribuite pe multe IP-uri să fie plafonate. Găleata mobilă
+ * (mai mare) se alege după antetul `X-FINET-Client`, controlat de client, deci DOAR când IP-ul e
+ * de încredere (cererea a trecut prin Access); altfel se aplică limita web, mai strictă.
+ */
+function limitsFor(
   sub: string,
   method: string,
   body: Record<string, unknown> | null,
   headers: Headers,
   config: Config,
-): Limited | null {
-  if (method !== "POST") return null;
+  ipTrusted: boolean,
+): Limited[] {
+  if (method !== "POST") return [];
   const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
   const limits = config.auth.rateLimits;
   switch (sub) {
-    case "/sign-in/email":
-      return parseClientHeader(headers.get(CLIENT_HEADER))
-        ? { kind: "mobile_login", rule: limits.mobileLogin, subject: email }
-        : { kind: "login", rule: limits.login, subject: email };
+    case "/sign-in/email": {
+      const mobile = ipTrusted && parseClientHeader(headers.get(CLIENT_HEADER)) !== null;
+      return [
+        mobile
+          ? { kind: "mobile_login", rule: limits.mobileLogin, subject: email }
+          : { kind: "login", rule: limits.login, subject: email },
+        { kind: "login_email", rule: limits.loginEmail, subject: email },
+      ];
+    }
     case "/sign-in/magic-link":
     case "/request-password-reset":
     case "/forget-password":
-      return { kind: "email", rule: limits.email, subject: email };
+      return [{ kind: "email", rule: limits.email, subject: email }];
     case "/reset-password":
       // Tokenul e în corp; limita e pe IP (subiect fix), ca ghicirea tokenurilor să fie oprită.
-      return { kind: "email", rule: limits.email, subject: "reset-password" };
+      return [{ kind: "email", rule: limits.email, subject: "reset-password" }];
     default:
-      return null;
+      return [];
   }
 }
 
@@ -170,17 +182,27 @@ export async function handleAuthRequest(
     }
   }
 
-  const limited = limitFor(sub, method, body, headers, config);
-  let limitKey: string | null = null;
-  if (limited) {
-    const ip = trustedClientIp(request.headers, policy);
-    limitKey = rateLimitKey(limited.kind, ip, limited.subject);
-    const result = await hitRateLimit(db, limitKey, limited.rule, now());
-    if (!result.allowed) {
-      return jsonError(429, "rate_limited", RATE_LIMITED_MESSAGE, {
-        "Retry-After": String(result.retryAfterSeconds),
-      });
-    }
+  const ip = trustedClientIp(request.headers, policy);
+  const limited = limitsFor(sub, method, body, headers, config, ip !== null);
+  // Toate cheile se resetează după un login reușit (decizia mea, ADR 0003: altfel utilizatorii
+  // cu mai multe dispozitive și testele E2E ar consuma plafonul pe email cu login-uri reușite;
+  // un atacator distribuit primește o fereastră nouă doar când victima se conectează).
+  const limitKeys: string[] = [];
+  let retryAfter = 0;
+  for (const limit of limited) {
+    const key =
+      limit.kind === "login_email"
+        ? rateLimitKey(limit.kind, null, limit.subject)
+        : rateLimitKey(limit.kind, ip, limit.subject);
+    limitKeys.push(key);
+    // Toate limitele se numără (și când una e deja depășită).
+    const result = await hitRateLimit(db, key, limit.rule, now());
+    if (!result.allowed) retryAfter = Math.max(retryAfter, result.retryAfterSeconds);
+  }
+  if (retryAfter > 0) {
+    return jsonError(429, "rate_limited", RATE_LIMITED_MESSAGE, {
+      "Retry-After": String(retryAfter),
+    });
   }
 
   if (sub === "/reset-password" && method === "POST" && typeof body?.newPassword === "string") {
@@ -210,7 +232,7 @@ export async function handleAuthRequest(
 
   if (sub === "/sign-in/email" && method === "POST") {
     if (response.status === 401) await incrementDailyStat(db, "login_failed", now());
-    else if (response.ok && limitKey) await resetRateLimit(db, limitKey);
+    else if (response.ok) for (const key of limitKeys) await resetRateLimit(db, key);
   }
   return response;
 }

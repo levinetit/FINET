@@ -84,6 +84,11 @@ export type AuthConfig = Readonly<{
     login: RateLimitRule;
     /** Login-ul din aplicația mobilă (`X-FINET-Client: android/...`), limite proprii. */
     mobileLogin: RateLimitRule;
+    /**
+     * Plafonul pe email SINGUR (fără IP), aplicat în plus față de `login`/`mobileLogin` (M2):
+     * oprește încercările distribuite pe multe IP-uri.
+     */
+    loginEmail: RateLimitRule;
     /** Emailurile trimise (magic link, resetarea parolei), pe IP + email. */
     email: RateLimitRule;
     /** Schimbarea parolei (cere parola curentă), pe utilizator + IP. */
@@ -208,6 +213,8 @@ const envSchema = z.object({
   AUTH_EMAIL_WINDOW_SECONDS: positiveInt,
   AUTH_PASSWORD_CHANGE_MAX_ATTEMPTS: positiveInt,
   AUTH_PASSWORD_CHANGE_WINDOW_SECONDS: positiveInt,
+  AUTH_LOGIN_EMAIL_MAX_ATTEMPTS: positiveInt,
+  AUTH_LOGIN_EMAIL_WINDOW_SECONDS: positiveInt,
 
   AI_DAILY_DOCUMENT_LIMIT: nonNegativeInt,
   AI_MONTHLY_BUDGET: z.string().max(40).optional(),
@@ -265,6 +272,8 @@ const DEFAULTS = {
   emailWindowSeconds: 60 * 60,
   passwordChangeMax: 5,
   passwordChangeWindowSeconds: 15 * 60,
+  loginEmailMax: 20,
+  loginEmailWindowSeconds: 60 * 60,
 } as const;
 
 /**
@@ -522,6 +531,10 @@ export function parseConfig(
         email: Object.freeze({
           max: int(e.AUTH_EMAIL_MAX_REQUESTS, DEFAULTS.emailMax),
           windowSeconds: int(e.AUTH_EMAIL_WINDOW_SECONDS, DEFAULTS.emailWindowSeconds),
+        }),
+        loginEmail: Object.freeze({
+          max: int(e.AUTH_LOGIN_EMAIL_MAX_ATTEMPTS, DEFAULTS.loginEmailMax),
+          windowSeconds: int(e.AUTH_LOGIN_EMAIL_WINDOW_SECONDS, DEFAULTS.loginEmailWindowSeconds),
         }),
         passwordChange: Object.freeze({
           max: int(e.AUTH_PASSWORD_CHANGE_MAX_ATTEMPTS, DEFAULTS.passwordChangeMax),

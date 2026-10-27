@@ -21,7 +21,7 @@ import type { RateLimitRule } from "@/lib/config";
  * pe email (mai strictă, niciodată mai permisivă).
  */
 
-export type RateLimitKind = "login" | "mobile_login" | "email" | "password_change";
+export type RateLimitKind = "login" | "mobile_login" | "login_email" | "email" | "password_change";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

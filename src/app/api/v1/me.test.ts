@@ -394,14 +394,26 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/me pe PostgreSQL real", () => {
       expect(JSON.stringify(keys)).not.toContain("@");
     });
 
-    it("login-ul mobil are limite proprii", async () => {
+    // Access verificat: doar atunci IP-ul (cf-connecting-ip) e de încredere (M2).
+    const ACCESS = {
+      CF_ACCESS_REQUIRED: "true",
+      CF_ACCESS_TEAM_DOMAIN: "echipa-exemplu.cloudflareaccess.com",
+      CF_ACCESS_AUD: "aud-fictiv-0123456789",
+    };
+
+    it("login-ul mobil are limite proprii doar cu IP de încredere", async () => {
       const limited = authEnv(fx.db, {
-        config: testConfig({ AUTH_LOGIN_MAX_ATTEMPTS: "1", AUTH_MOBILE_LOGIN_MAX_ATTEMPTS: "4" }),
+        config: testConfig({
+          ...ACCESS,
+          AUTH_LOGIN_MAX_ATTEMPTS: "1",
+          AUTH_MOBILE_LOGIN_MAX_ATTEMPTS: "4",
+        }),
         now: () => clock,
       });
-      const mobile = { "x-finet-client": "android/1.0" };
-      await login(limited, "carmen@exemplu.ro", "gresita-12345");
-      expect((await login(limited, "carmen@exemplu.ro", "gresita-12345")).response.status).toBe(
+      const ip = { "cf-connecting-ip": "203.0.113.20" };
+      const mobile = { ...ip, "x-finet-client": "android/1.0" };
+      await login(limited, "carmen@exemplu.ro", "gresita-12345", ip);
+      expect((await login(limited, "carmen@exemplu.ro", "gresita-12345", ip)).response.status).toBe(
         429,
       );
       for (let i = 0; i < 4; i++) {
@@ -412,7 +424,47 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/me pe PostgreSQL real", () => {
       expect(
         (await login(limited, "carmen@exemplu.ro", "gresita-12345", mobile)).response.status,
       ).toBe(429);
-      clock += 16 * 60_000;
+      clock += 61 * 60_000;
+    });
+
+    it("fără IP de încredere, antetul X-FINET-Client NU dă o găleată mai mare (M2)", async () => {
+      const limited = authEnv(fx.db, {
+        config: testConfig({ AUTH_LOGIN_MAX_ATTEMPTS: "2", AUTH_MOBILE_LOGIN_MAX_ATTEMPTS: "10" }),
+        now: () => clock,
+      });
+      const mobile = { "x-finet-client": "android/1.0" };
+      await login(limited, "carmen@exemplu.ro", "gresita-12345");
+      await login(limited, "carmen@exemplu.ro", "gresita-12345", mobile);
+      expect(
+        (await login(limited, "carmen@exemplu.ro", "gresita-12345", mobile)).response.status,
+      ).toBe(429);
+      clock += 61 * 60_000;
+    });
+
+    it("plafonul pe email: 6 IP-uri × 5 încercări pe același email → 429 după 20 (M2)", async () => {
+      const limited = authEnv(fx.db, { config: testConfig(ACCESS), now: () => clock });
+      const statuses: number[] = [];
+      for (let n = 1; n <= 6; n++) {
+        for (let i = 0; i < 5; i++) {
+          const r = await login(limited, "bogdan@exemplu.ro", "gresita-12345", {
+            "cf-connecting-ip": `198.51.100.${n}`,
+          });
+          statuses.push(r.response.status);
+        }
+      }
+      // Limita pe IP + email (5) nu e atinsă pe niciun IP; plafonul pe email (20) da.
+      expect(statuses.slice(0, 20).every((s) => s === 401)).toBe(true);
+      expect(statuses.slice(20).every((s) => s === 429)).toBe(true);
+      // Un IP nou, chiar cu parola corectă, rămâne blocat până expiră fereastra plafonului.
+      const fresh = await login(limited, "bogdan@exemplu.ro", PASSWORD_B, {
+        "cf-connecting-ip": "198.51.100.99",
+      });
+      expect(fresh.response.status).toBe(429);
+      clock += 61 * 60_000;
+      const later = await login(limited, "bogdan@exemplu.ro", PASSWORD_B, {
+        "cf-connecting-ip": "198.51.100.99",
+      });
+      expect(later.response.status).toBe(200);
     });
   });
 

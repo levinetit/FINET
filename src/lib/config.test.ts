@@ -376,6 +376,10 @@ describe("autentificarea (F1-B)", () => {
     expect(c.auth.rateLimits.login).toEqual({ max: 5, windowSeconds: 900 });
     expect(c.auth.rateLimits.mobileLogin).toEqual({ max: 10, windowSeconds: 900 });
     expect(c.auth.rateLimits.email).toEqual({ max: 3, windowSeconds: 3600 });
+    expect(c.auth.rateLimits.loginEmail).toEqual({ max: 20, windowSeconds: 3600 });
+    expect(
+      parseConfig({ ...DEV, AUTH_LOGIN_EMAIL_MAX_ATTEMPTS: "50" }).auth.rateLimits.loginEmail.max,
+    ).toBe(50);
     const custom = parseConfig({ ...DEV, AUTH_LOGIN_MAX_ATTEMPTS: "8", AUTH_HIBP_ENABLED: "true" });
     expect(custom.auth.rateLimits.login.max).toBe(8);
     expect(custom.auth.hibpEnabled).toBe(true);
