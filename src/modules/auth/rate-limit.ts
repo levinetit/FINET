@@ -35,8 +35,48 @@ export function digest(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex").slice(0, 32);
 }
 
+/** Lungimea maximă a subiectului (un email are cel mult 254 de caractere) înainte de rezumat. */
+export const SUBJECT_MAX_LENGTH = 254;
+
 export function rateLimitKey(kind: RateLimitKind, ip: string | null, subject: string): string {
-  return `finet:${kind}:${ip ?? "unknown"}:${digest(subject)}`;
+  return `finet:${kind}:${ip ?? "unknown"}:${digest(subject.slice(0, SUBJECT_MAX_LENGTH))}`;
+}
+
+/**
+ * Curățarea oportunistă (M3): la un hit, rândurile expirate de același tip (`last_request` mai
+ * vechi de 2 × fereastra) se șterg, cel mult o dată pe minut per proces și per tip, cel mult
+ * `CLEANUP_BATCH` rânduri pe rulare. Contoarele agregate (`finet:stat:*`) nu sunt atinse.
+ */
+export const CLEANUP_INTERVAL_MS = 60_000;
+export const CLEANUP_BATCH = 500;
+const lastCleanup = new Map<string, number>();
+
+/** Doar pentru teste: uită momentul ultimei curățări. */
+export function resetCleanupForTests(): void {
+  lastCleanup.clear();
+}
+
+function kindPrefixOf(key: string): string | null {
+  const match = /^finet:([a-z_]{1,32}):/.exec(key);
+  if (!match || match[1] === "stat") return null;
+  return `finet:${match[1]}:`;
+}
+
+export async function cleanupExpired(
+  db: Db,
+  prefix: string,
+  windowMs: number,
+  now: number,
+): Promise<number> {
+  const cutoff = now - 2 * windowMs;
+  const rows = await db.execute<{ id: string }>(sql`
+    delete from finet.auth_rate_limits
+     where id in (
+       select id from finet.auth_rate_limits
+        where left(key, ${prefix.length}) = ${prefix} and last_request < ${cutoff}
+        limit ${CLEANUP_BATCH})
+    returning id`);
+  return rows.length;
 }
 
 type Row = { count: number; last_request: string | number };
@@ -50,6 +90,15 @@ export async function hitRateLimit(
 ): Promise<RateLimitResult> {
   const windowMs = rule.windowSeconds * 1000;
   const expiredBefore = now - windowMs;
+  const prefix = kindPrefixOf(key);
+  if (prefix && now - (lastCleanup.get(prefix) ?? -Infinity) >= CLEANUP_INTERVAL_MS) {
+    lastCleanup.set(prefix, now);
+    try {
+      await cleanupExpired(db, prefix, windowMs, now);
+    } catch {
+      // Curățarea e oportunistă: o eroare nu blochează limitarea.
+    }
+  }
   const rows = await db.execute<Row>(sql`
     insert into finet.auth_rate_limits (key, count, last_request)
     values (${key}, 1, ${now})
