@@ -61,7 +61,16 @@ describe.skipIf(!TEST_ADMIN_URL)("fără oracol de timp la emailurile de autenti
     return ms;
   }
 
-  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  /**
+   * Media trunchiată (fără cele mai mari și mai mici 20% dintre valori): restul suitei rulează în
+   * paralel (Argon2id, alte baze), deci câteva măsurători izolate pot fi zgomot de planificare.
+   */
+  const mean = (xs: number[]) => {
+    const sorted = [...xs].sort((a, b) => a - b);
+    const cut = Math.floor(sorted.length * 0.2);
+    const kept = sorted.slice(cut, sorted.length - cut);
+    return kept.reduce((a, b) => a + b, 0) / kept.length;
+  };
 
   for (const [path, extra] of [
     ["/api/auth/sign-in/magic-link", { callbackURL: "/" }],
@@ -73,7 +82,7 @@ describe.skipIf(!TEST_ADMIN_URL)("fără oracol de timp la emailurile de autenti
       await timed(path, { email: "nimeni@exemplu.ro", ...extra });
       const known: number[] = [];
       const unknown: number[] = [];
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 15; i++) {
         known.push(await timed(path, { email: "ana@exemplu.ro", ...extra }));
         unknown.push(await timed(path, { email: `nimeni-${i}@exemplu.ro`, ...extra }));
       }
