@@ -371,6 +371,102 @@ describe("FAIL-CLOSED", () => {
         }
       }
     });
+
+    describe("antetele de securitate (6.3)", () => {
+      const nonceOf = (csp: string | null) => /'nonce-([A-Za-z0-9+/=]+)'/.exec(csp ?? "")?.[1];
+
+      function expectSecurityHeaders(res: Response) {
+        const csp = res.headers.get("content-security-policy");
+        expect(csp).toBeTruthy();
+        for (const directive of [
+          "default-src 'self'",
+          "img-src 'self' data:",
+          "font-src 'self'",
+          "connect-src 'self'",
+          "frame-ancestors 'none'",
+          "object-src 'none'",
+          "base-uri 'self'",
+          "form-action 'self'",
+        ]) {
+          expect(csp, directive).toContain(directive);
+        }
+        const nonce = nonceOf(csp);
+        expect(nonce).toMatch(/^[A-Za-z0-9+/]{22}==$/);
+        expect(csp).toContain(`script-src 'self' 'nonce-${nonce}';`);
+        expect(csp).toContain(`style-src 'self' 'nonce-${nonce}';`);
+        // În producție: fără `unsafe-*` și fără `strict-dynamic`.
+        expect(csp).not.toMatch(/unsafe-|strict-dynamic/);
+        expect(res.headers.get("strict-transport-security")).toBe(
+          "max-age=31536000; includeSubDomains",
+        );
+        expect(res.headers.get("x-frame-options")).toBe("DENY");
+        expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+        expect(res.headers.get("permissions-policy")).toBe(
+          "camera=(self), microphone=(), geolocation=()",
+        );
+        // CORS închis.
+        for (const name of res.headers.keys()) {
+          expect(name.startsWith("access-control-allow-"), name).toBe(false);
+        }
+        return nonce!;
+      }
+
+      it("pe 403 (fără JWT): toate antetele, corpul și Cache-Control neschimbate", async () => {
+        prodEnv();
+        const res = await call("/login");
+        expectSecurityHeaders(res);
+        await expectForbidden(res);
+      });
+
+      it("pe 403 din configurația invalidă: antetele sunt tot acolo", async () => {
+        prodEnv({ APP_MODE: "" });
+        const res = await call("/");
+        expectSecurityHeaders(res);
+        await expectForbidden(res);
+      });
+
+      it("pe cererea permisă: antetele în răspuns și CSP-ul cu același nonce în cerere", async () => {
+        prodEnv({ HEALTH_TOKEN });
+        const res = await call("/api/health", { [HEALTH_TOKEN_HEADER]: HEALTH_TOKEN });
+        expect(res.headers.get("x-middleware-next")).toBe("1");
+        const nonce = expectSecurityHeaders(res);
+        // Next transmite randării antetele cererii modificate prin `x-middleware-request-*`.
+        expect(res.headers.get("x-middleware-request-content-security-policy")).toBe(
+          res.headers.get("content-security-policy"),
+        );
+        expect(res.headers.get("x-middleware-request-x-nonce")).toBe(nonce);
+      });
+
+      it("liveness local: antetele sunt prezente", async () => {
+        prodEnv();
+        const res = await local("/api/health/live");
+        expect(res.headers.get("x-middleware-next")).toBe("1");
+        expectSecurityHeaders(res);
+      });
+
+      it("nonce nou la fiecare cerere", async () => {
+        prodEnv();
+        const nonces = new Set<string>();
+        for (let i = 0; i < 5; i++) nonces.add(expectSecurityHeaders(await call("/")));
+        expect(nonces.size).toBe(5);
+      });
+
+      it("un x-nonce sau CSP trimis de client e înlocuit, nu păstrat", async () => {
+        prodEnv({ HEALTH_TOKEN });
+        const res = await call("/api/health", {
+          [HEALTH_TOKEN_HEADER]: HEALTH_TOKEN,
+          "x-nonce": "nonce-de-la-client",
+          "content-security-policy": "script-src *",
+        });
+        const nonce = expectSecurityHeaders(res);
+        expect(nonce).not.toBe("nonce-de-la-client");
+        expect(res.headers.get("x-middleware-request-x-nonce")).toBe(nonce);
+        expect(res.headers.get("x-middleware-request-content-security-policy")).not.toContain(
+          "script-src *",
+        );
+      });
+    });
   });
 
   it("în dezvoltare, cu CF_ACCESS_REQUIRED=false explicit, cererea trece", async () => {
@@ -383,6 +479,11 @@ describe("FAIL-CLOSED", () => {
     resetConfigForTests();
     const res = await proxy(new NextRequest("http://localhost:3000/"));
     expect(res.headers.get("x-middleware-next")).toBe("1");
+    // În dezvoltare CSP-ul permite `eval` (stivele de erori React) și stilurile inline (overlay).
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'unsafe-eval';/);
+    expect(csp).toContain("style-src 'self' 'unsafe-inline';");
+    expect(csp).toContain("frame-ancestors 'none'");
     vi.unstubAllEnvs();
     resetConfigForTests();
   });

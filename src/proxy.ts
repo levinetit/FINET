@@ -2,11 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAccessVerifier, isRequestAllowed, type AccessVerifier } from "@/lib/access";
 import { getConfig, type AccessConfig } from "@/lib/config";
+import { NONCE_HEADER, applySecurityHeaders, buildCsp, createNonce } from "@/lib/security-headers";
 
 /**
  * Proxy Next.js 16 (fostul `middleware.ts`; rulează în runtime-ul Node): protecția Cloudflare
  * Access pentru toate cererile, cu excepțiile din `src/lib/access.ts`. FAIL CLOSED: orice
  * eroare, inclusiv configurația invalidă sau cheile Access indisponibile, dă 403 fără detalii.
+ *
+ * Antetele de securitate (6.3, `src/lib/security-headers.ts`) se adaugă DUPĂ decizia Access, pe
+ * ambele ramuri (403 și cererea permisă): CSP cu un nonce nou per cerere, pus și în antetele
+ * cererii, ca Next.js să-l atașeze scripturilor la randare. Verificarea Access rămâne prima și
+ * nu depinde de antete.
  */
 
 let verifier: { key: string; verify: AccessVerifier } | null = null;
@@ -45,7 +51,21 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   } catch {
     allowed = false;
   }
-  return allowed ? NextResponse.next() : forbidden();
+
+  const nonce = createNonce();
+  const csp = buildCsp(nonce, { development: process.env.NODE_ENV === "development" });
+  if (!allowed) {
+    const response = forbidden();
+    applySecurityHeaders(response.headers, csp);
+    return response;
+  }
+  // Valorile venite de la client pentru aceste antete interne se înlocuiesc, nu se păstrează.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(NONCE_HEADER, nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  applySecurityHeaders(response.headers, csp);
+  return response;
 }
 
 // Rulează pe toate căile, mai puțin asset-urile statice Next (`/_next/static/`). Aceeași regulă e
