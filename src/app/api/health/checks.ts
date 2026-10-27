@@ -2,8 +2,9 @@ import "server-only";
 
 import { statfs } from "node:fs/promises";
 
-import postgres from "postgres";
+import type postgres from "postgres";
 
+import { createPostgresClient } from "@/lib/db-client";
 import { NotImplementedError } from "@/lib/errors";
 import type { Storage } from "@/lib/storage";
 
@@ -25,6 +26,8 @@ export type HealthReport = {
 
 export type HealthDeps = Readonly<{
   databaseUrl: string | null;
+  /** CA-ul bazei de date (PEM, `config.database.ca`), pentru `sslmode=verify-full`. */
+  databaseCa?: string | null;
   storage: Storage | null;
   /** Directorul pentru calculul spațiului liber (STORAGE_DIR). */
   diskDir: string | null;
@@ -40,24 +43,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-// Un singur client mic, refolosit între cereri. `prepare: false` e necesar cu pooler-ul
-// Supabase în modul tranzacție.
-let db: { url: string; sql: postgres.Sql } | null = null;
+// Un singur client mic (o conexiune), refolosit între cereri; opțiunile (inclusiv TLS și
+// `prepare: false` pentru pooler) vin din `src/lib/db-client.ts`.
+let db: { url: string; ca: string | null; sql: postgres.Sql } | null = null;
 
-function dbClient(url: string): postgres.Sql {
-  if (db?.url !== url) {
+function dbClient(url: string, ca: string | null): postgres.Sql {
+  if (db?.url !== url || db.ca !== ca) {
     void db?.sql.end({ timeout: 1 }).catch(() => {});
-    db = {
-      url,
-      sql: postgres(url, {
-        max: 1,
-        prepare: false,
-        idle_timeout: 30,
-        connect_timeout: 3,
-        onnotice: () => {},
-        connection: { application_name: "finet-health" },
-      }),
-    };
+    db = { url, ca, sql: createPostgresClient(url, { ca, applicationName: "finet-health" }) };
   }
   return db.sql;
 }
@@ -69,10 +62,10 @@ export async function closeHealthDb(): Promise<void> {
   await current?.sql.end({ timeout: 1 }).catch(() => {});
 }
 
-export async function checkDb(url: string | null): Promise<CheckStatus> {
+export async function checkDb(url: string | null, ca: string | null = null): Promise<CheckStatus> {
   if (!url) return "unknown";
   try {
-    const sql = dbClient(url);
+    const sql = dbClient(url, ca);
     const rows = await withTimeout(sql`select 1 as ok`, CHECK_TIMEOUT_MS);
     return rows[0]?.ok === 1 ? "ok" : "down";
   } catch {
@@ -131,7 +124,7 @@ export function overallStatus(checks: HealthReport["checks"]): OverallStatus {
 
 export async function runHealthChecks(deps: HealthDeps): Promise<HealthReport> {
   const [dbStatus, storageStatus] = await Promise.all([
-    checkDb(deps.databaseUrl),
+    checkDb(deps.databaseUrl, deps.databaseCa ?? null),
     checkStorage(deps.storage),
   ]);
   // După verificarea storage-ului: la prima pornire, directorul abia a fost creat.

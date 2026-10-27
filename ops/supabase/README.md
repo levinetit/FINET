@@ -47,24 +47,24 @@ Verificat de agent pe PostgreSQL 17 efemer (superuser local, `anon`/`authenticat
 2. Înainte de rulare, verifici `show log_statement;` (ideal `none` sau `mod`, nu `ddl`/`all`).
 
 ### TLS cu postgres.js
-Driverul `postgres` (postgres.js) **nu** citește `sslrootcert=<fișier>` din URL: îl trimite serverului ca parametru de conexiune, iar serverul refuză conexiunea (`unrecognized configuration parameter "sslrootcert"`, verificat pe PostgreSQL 17). În URL-urile aplicației se pune doar `sslmode=verify-full`; CA-ul Supabase se dă prin `NODE_EXTRA_CA_CERTS` (acum) sau prin `ssl: { ca }` din cod (neimplementat; Faza 1). Detalii: `docs/INFRA.md`, „Supabase din container”. Pentru `psql`, `sslrootcert=<fișier>` rămâne corect.
+Driverul `postgres` (postgres.js) **nu** citește `sslrootcert=<fișier>` din URL: îl trimite serverului ca parametru de conexiune, iar serverul refuză conexiunea (`unrecognized configuration parameter "sslrootcert"`, verificat pe PostgreSQL 17). În URL-urile aplicației se pune doar `sslmode=verify-full` (FINET refuză `sslrootcert` la pornire); CA-ul Supabase (`prod-ca-2021.crt`) se dă prin `DATABASE_CA_FILE`, iar codul îl impune cu `ssl: { ca, rejectUnauthorized: true }` (`src/lib/db-client.ts`). `NODE_EXTRA_CA_CERTS` rămâne doar ca variantă de rezervă. Detalii: `docs/INFRA.md`, „Supabase din container”. Pentru `psql`, `sslrootcert=<fișier>` rămâne corect.
 
 Drepturile pe tabele (`finet_app` doar `select/insert/update/delete`) și politicile RLS vin din migrațiile Drizzle (Faza 1+), rulate cu `MIGRATOR_DATABASE_URL`.
 
 ## 4. Conexiunile
 Din **Connect** în panou. Formatul utilizatorului pentru pooler e `<rol>.<ref-proiect>`.
 
-| Variabilă | Mod pooler | Port | Rol | Fișierul de mediu (serviciul) |
+| Variabilă | Mod pooler | Port | Rol | Fișierul secret (serviciul) |
 |---|---|---|---|---|
-| `DATABASE_URL` | tranzacție | 6543 | `finet_app` | `finet.env` (`finet-web`) |
-| `WORKER_DATABASE_URL` | sesiune | 5432 | `finet_app` | `finet.worker.env` (`finet-worker`) |
-| `MIGRATOR_DATABASE_URL` | sesiune | 5432 | `finet_migrator` | `finet.migrate.env` (`finet-migrate`) |
+| `DATABASE_URL` | tranzacție | 6543 | `finet_app` | `/srv/finet/secrets/finet_database_url` (`finet-web`) |
+| `WORKER_DATABASE_URL` | sesiune | 5432 | `finet_app` | `/srv/finet/secrets/finet_worker_database_url` (`finet-worker`) |
+| `MIGRATOR_DATABASE_URL` | sesiune | 5432 | `finet_migrator` | `/srv/finet/secrets/finet_migrate_database_url` (`finet-migrate`) |
 
-Toate cu `sslmode=verify-full`. Valorile reale stau doar în `/srv/finet/env/finet*.env` (600, câte unul pe rol: `finet.env`, `finet.worker.env`, `finet.migrate.env`). Limitele de conexiuni ale planului: de completat în `docs/INFRA.md`.
+Toate cu `sslmode=verify-full`. Valorile reale stau doar în fișierele secrete (`1000:1000 0400`, câte unul pe rol), montate prin `secrets:` și citite ca `*_FILE` (`docs/INFRA.md`, pasul 4), nu în `/srv/finet/env/`. Limitele de conexiuni ale planului: de completat în `docs/INFRA.md`.
 
 ## 5. Storage (bucket privat)
 1. Storage → New bucket `finet-documents`, **privat**.
-2. Settings → Storage → S3 Connection: o cheie de acces S3 → doar în `finet.env` (`STORAGE_S3_*`).
+2. Settings → Storage → S3 Connection: o cheie de acces S3 → în Faza 6, ca fișiere secrete (`STORAGE_S3_ACCESS_KEY_ID_FILE`, `STORAGE_S3_SECRET_ACCESS_KEY_FILE`), nu în `finet.env`.
 3. **În Faza 0 nu se folosește:** driverul S3 e un schelet (`STORAGE_DRIVER=s3` dă `storage: unknown` și `/api/health` = `degraded`). Compose-ul fixează `STORAGE_DRIVER=local`. Trecerea pe S3 vine în Faza 6.
 
 ## 6. Verificări de acceptare (toate NOT RUN – așteaptă operatorul)

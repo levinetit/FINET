@@ -27,7 +27,7 @@ Stack-ul aplicației (ADR 0001), Supabase (3.5), Cloudflare Access cu politica p
 | 3.1: `cloudflared` ca serviciu systemd, `ops/cloudflare/config.yml` | tunelul existent `cloudflare-tunnel` (gestionat din panou); fără `config.yml` în repo (doar un exemplu în `ops/cloudflare/README.md`) |
 | 3.2 Deploy: systemd `web` + `worker`, Docker alternativă | Docker Compose e calea principală; fără unități systemd |
 | Faza 0: unități systemd, vhost nginx | `Dockerfile` + `ops/docker/docker-compose.yml` |
-| Ghid 10.1: `/etc/finet/finet.env` (640, `root:finet`) | `/srv/finet/env/finet.env`, `finet.worker.env`, `finet.migrate.env` (600, root), câte unul pe serviciu prin `env_file` |
+| Ghid 10.1: `/etc/finet/finet.env` (640, `root:finet`) | `/srv/finet/env/finet.env`, `finet.worker.env`, `finet.migrate.env` (600, root), câte unul pe serviciu prin `env_file`, doar valori nesecrete; secretele, din T7, ca fișiere în `/srv/finet/secrets/` montate prin `secrets:` (`docs/INFRA.md`) |
 | „Cerere directă ocolind tunelul nu primește răspuns” | adevărat cu tunelul (nu există port/rută); cu Traefik, răspunsul e 403 din aplicație |
 | Ollama/LiteLLM local „pe 127.0.0.1” | pe același host există `ollama` și `litellm-apps` pe rețeaua `apps` (de evaluat în Faza 6) |
 

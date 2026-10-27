@@ -2,7 +2,9 @@ import "server-only";
 
 import { z } from "zod";
 
+import { VERIFYING_SSL_MODES, databaseTlsParams } from "@/lib/db-url";
 import { CURRENCIES, parseAmount, type Money } from "@/lib/money";
+import { SecretFileError, readSmallFile, resolveSecretFiles } from "@/lib/secret-files";
 
 /**
  * Configurația FINET (master prompt 3.3, 6.3): variabilele de mediu, citite O SINGURĂ DATĂ și
@@ -18,6 +20,9 @@ import { CURRENCIES, parseAmount, type Money } from "@/lib/money";
  * - Niciun secret în `NEXT_PUBLIC_*`: singura variabilă publică e `NEXT_PUBLIC_APP_NAME`.
  * - Mesajele de eroare folosesc doar numele variabilei și codul problemei, niciodată valoarea.
  * - Fiecare proces primește doar URL-ul bazei de date al rolului său (`FINET_ROLE`, vezi `Role`).
+ * - Secretele (`SECRET_VARIABLES` din `src/lib/secret-files.ts`) pot veni și din fișiere:
+ *   `<NUME>_FILE=/run/secrets/...` (secretele Docker, constatarea N1). Fișierele se citesc tot o
+ *   singură dată, odată cu restul configurației; `X` și `X_FILE` împreună sunt o eroare.
  */
 
 // ---------------------------------------------------------------------------------------------
@@ -75,6 +80,12 @@ export type Config = Readonly<{
      * (Faza 0: `/api/health` raportează `db: unknown`).
      */
     url: string | null;
+    /**
+     * Conținutul PEM al CA-ului bazei de date (`DATABASE_CA_FILE`, de exemplu CA-ul Supabase),
+     * citit o singură dată la pornire; `null` dacă variabila nu e setată. Folosit de
+     * `src/lib/db-client.ts` cu `sslmode=verify-full`.
+     */
+    ca: string | null;
   }>;
   storage: StorageConfig;
   access: AccessConfig;
@@ -138,6 +149,8 @@ const envSchema = z.object({
   DATABASE_URL: postgresUrl,
   WORKER_DATABASE_URL: postgresUrl,
   MIGRATOR_DATABASE_URL: postgresUrl,
+  // Calea către CA-ul bazei (nu e secret: certificatul e public).
+  DATABASE_CA_FILE: optionalString,
 
   STORAGE_DRIVER: z.enum(["local", "s3"]).optional(),
   STORAGE_DIR: optionalString,
@@ -226,30 +239,63 @@ function describeIssue(issue: z.core.$ZodIssue): string {
 // Parsare
 // ---------------------------------------------------------------------------------------------
 
+export type ParseOptions = Readonly<{
+  /** Citirea unui fișier secret (`X_FILE`); implicit din disc. Doar pentru teste. */
+  readSecret?: (path: string) => string;
+}>;
+
+const ROLES: readonly Role[] = ["web", "worker", "migrate"];
+const isRole = (value: string): value is Role => (ROLES as readonly string[]).includes(value);
+
 /**
- * Validează un set de variabile de mediu și construiește configurația. Funcție pură (nu citește
- * `process.env`), folosită de `getConfig()` și de teste.
+ * Validează un set de variabile de mediu și construiește configurația. Nu citește `process.env`
+ * (o folosesc `getConfig()` și testele); singurul efect e citirea fișierelor indicate de
+ * variabilele `*_FILE` prezente în `env`.
  */
-export function parseConfig(env: Readonly<Record<string, string | undefined>>): Config {
+export function parseConfig(
+  env: Readonly<Record<string, string | undefined>>,
+  options: ParseOptions = {},
+): Config {
+  // Rolul se află înaintea validării, ca fișierele cu URL-urile altor roluri să nu fie deschise.
+  // Un `FINET_ROLE` invalid e raportat de schemă; atunci nu se citește niciun fișier.
+  const rawRole = env.FINET_ROLE === undefined || env.FINET_ROLE === "" ? "web" : env.FINET_ROLE;
+  const knownRole = isRole(rawRole) ? rawRole : null;
+  const forbidden = new Map<string, string>();
+  if (knownRole) {
+    for (const variable of DATABASE_VARIABLES) {
+      if (variable !== ROLE_DATABASE_VARIABLE[knownRole]) {
+        forbidden.set(variable, `nu e permisă când FINET_ROLE=${knownRole}`);
+      }
+    }
+  }
+  const secrets = knownRole
+    ? resolveSecretFiles(env, { forbidden, read: options.readSecret })
+    : { env, fromFile: new Set<string>(), issues: [] };
+
   // Doar cheile cunoscute; șirul gol înseamnă „nesetat”.
   const input: Record<string, string> = {};
   for (const key of ENV_KEYS) {
-    const value = env[key];
+    const value = secrets.env[key];
     if (value !== undefined && value !== "") input[key] = value;
   }
 
   const parsed = envSchema.safeParse(input);
   if (!parsed.success) {
-    throw new ConfigError(
-      parsed.error.issues.map((issue) => ({
-        variable: String(issue.path[0] ?? "(necunoscută)"),
-        problem: describeIssue(issue),
-      })),
-    );
+    throw new ConfigError([
+      ...secrets.issues,
+      ...parsed.error.issues.map((issue) => {
+        const variable = String(issue.path[0] ?? "(necunoscută)");
+        // O valoare citită din fișier se raportează sub numele variabilei `_FILE`.
+        return {
+          variable: secrets.fromFile.has(variable) ? `${variable}_FILE` : variable,
+          problem: describeIssue(issue),
+        };
+      }),
+    ]);
   }
 
   const e = parsed.data;
-  const issues: ConfigIssue[] = [];
+  const issues: ConfigIssue[] = [...secrets.issues];
   const need = (variable: keyof RawEnv, when: string): void => {
     if (e[variable] === undefined) issues.push({ variable, problem: `obligatorie ${when}` });
   };
@@ -268,6 +314,39 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
     }
   }
   if (role !== "web") need(databaseVariable, `când FINET_ROLE=${role}`);
+
+  // TLS spre bază (decizia mea): `sslrootcert` din URL nu e citit de postgres.js, ci trimis
+  // serverului ca parametru de conexiune, care refuză conexiunea; CA-ul vine din
+  // DATABASE_CA_FILE. Un CA setat fără `sslmode=verify-full`/`verify-ca` ar da o încredere falsă
+  // (conexiunea nu l-ar folosi), deci e refuzat.
+  const databaseUrl = e[databaseVariable] ?? null;
+  const urlVariable = secrets.fromFile.has(databaseVariable)
+    ? `${databaseVariable}_FILE`
+    : databaseVariable;
+  const tls = databaseUrl ? databaseTlsParams(databaseUrl) : null;
+  if (tls?.hasSslRootCert) {
+    issues.push({
+      variable: urlVariable,
+      problem: "parametrul sslrootcert nu e suportat; CA-ul se dă prin DATABASE_CA_FILE",
+    });
+  }
+  let databaseCa: string | null = null;
+  if (e.DATABASE_CA_FILE !== undefined) {
+    if (tls && (tls.sslmode === null || !VERIFYING_SSL_MODES.includes(tls.sslmode))) {
+      issues.push({
+        variable: "DATABASE_CA_FILE",
+        problem: `cere sslmode=verify-full (sau verify-ca) în ${urlVariable}`,
+      });
+    }
+    try {
+      databaseCa = readCaFile(e.DATABASE_CA_FILE);
+    } catch (error) {
+      issues.push({
+        variable: "DATABASE_CA_FILE",
+        problem: error instanceof SecretFileError ? error.problem : "fișierul nu poate fi citit",
+      });
+    }
+  }
 
   // Cloudflare Access: implicit obligatoriu în producție; dezactivarea în producție e refuzată.
   const accessRequired = e.CF_ACCESS_REQUIRED ? e.CF_ACCESS_REQUIRED === "true" : isProduction;
@@ -332,7 +411,7 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
     appMode: e.APP_MODE,
     appName: e.NEXT_PUBLIC_APP_NAME ?? DEFAULTS.appName,
     appUrl: e.APP_URL ?? null,
-    database: Object.freeze({ url: e[databaseVariable] ?? null }),
+    database: Object.freeze({ url: databaseUrl, ca: databaseCa }),
     storage: Object.freeze({
       driver,
       dir: e.STORAGE_DIR ?? DEFAULTS.storageDir,
@@ -377,6 +456,24 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
         : null,
     }),
   });
+}
+
+/** Un pachet de certificate CA încape lejer; limita doar oprește un fișier greșit. */
+export const CA_FILE_MAX_BYTES = 65536;
+
+/** Citește CA-ul (PEM) și verifică doar că pare un certificat; validarea reală o face TLS. */
+function readCaFile(path: string): string {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(readSmallFile(path, CA_FILE_MAX_BYTES));
+  } catch (error) {
+    if (error instanceof SecretFileError) throw error;
+    throw new SecretFileError("conținutul nu e text UTF-8");
+  }
+  if (!text.includes("-----BEGIN CERTIFICATE-----")) {
+    throw new SecretFileError("nu conține un certificat PEM (-----BEGIN CERTIFICATE-----)");
+  }
+  return text;
 }
 
 let cached: Config | null = null;
