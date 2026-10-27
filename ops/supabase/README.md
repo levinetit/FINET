@@ -5,7 +5,7 @@ Totul de aici se face **doar de operator**. Agentul nu are acces la Supabase și
 Numele exacte ale meniurilor din panoul Supabase se pot schimba; dacă un pas nu se găsește la calea indicată, caută opțiunea după nume și notează diferența în `docs/INFRA.md`.
 
 ## 1. Proiectul
-1. **New project**, regiune în UE: **Frankfurt (`eu-central-1`)**.
+1. **New project**, regiune în UE (proiectul existent: Irlanda, `eu-west-1`; Frankfurt `eu-central-1` e la fel de bună).
 2. Parola bazei generată de Supabase → doar în managerul de parole al operatorului.
 3. Notează versiunea majoră PostgreSQL (Settings → Infrastructure) și actualizează `ops/postgres/VERSION` și imaginea din `.devcontainer/docker-compose.yml` într-un PR (acum `17` e provizoriu).
 4. Planul (gratuit sau plătit) se decide de operator și se notează într-un ADR (planul gratuit suspendă proiectul după inactivitate și nu are backup-uri descărcabile).
@@ -63,7 +63,7 @@ Din **Connect** în panou. Formatul utilizatorului pentru pooler e `<rol>.<ref-p
 Toate cu `sslmode=verify-full`. Valorile reale stau doar în fișierele secrete (`1000:1000 0400`, câte unul pe rol), montate prin `secrets:` și citite ca `*_FILE` (`docs/INFRA.md`, pasul 4), nu în `/srv/finet/env/`. Limitele de conexiuni ale planului: de completat în `docs/INFRA.md`.
 
 ## 5. Storage (bucket privat)
-1. Storage → New bucket `finet-documents`, **privat**.
+1. Storage → New bucket `finet-docs`, **privat** (creat deja în proiectul existent).
 2. Settings → Storage → S3 Connection: o cheie de acces S3 → în Faza 6, ca fișiere secrete (`STORAGE_S3_ACCESS_KEY_ID_FILE`, `STORAGE_S3_SECRET_ACCESS_KEY_FILE`), nu în `finet.env`.
 3. **În Faza 0 nu se folosește:** driverul S3 e un schelet (`STORAGE_DRIVER=s3` dă `storage: unknown` și `/api/health` = `degraded`). Compose-ul fixează `STORAGE_DRIVER=local`. Trecerea pe S3 vine în Faza 6.
 
