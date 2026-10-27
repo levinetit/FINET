@@ -21,7 +21,7 @@ Cerințe: Node 24 și pnpm 12 (prin corepack, versiunea din `packageManager`).
 ```bash
 corepack enable          # sau: corepack enable --install-directory ~/.local/bin
 pnpm install
-cp .env.example .env.local   # valori de dezvoltare; APP_MODE=personal, CF_ACCESS_REQUIRED=false
+cp .env.example .env.local   # valori de dezvoltare; APP_MODE=personal, Access oprit implicit (NODE_ENV≠production), FINET_ROLE=web implicit
 pnpm dev                     # http://localhost:3000
 ```
 Fără `DATABASE_URL`, `/api/health` raportează `db: unknown` (`degraded`).

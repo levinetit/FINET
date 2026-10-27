@@ -36,7 +36,7 @@ ops/                            # docker, cloudflare, supabase, notify, postgres
 1. Cloudflare (Access) → `cloudflare-tunnel` sau `traefik-main` → `finet-web:3000` (`docs/INFRA.md`).
 2. `src/proxy.ts` rulează pe toate căile, cu matcher-ul `["/((?!_next/static/).*)"]`, și apelează `isRequestAllowed` din `src/lib/access.ts`. Ordinea excepțiilor:
    1. asset-urile statice Next (`/_next/static/`), excluse și din matcher, și din cod (`isStaticAssetPath`);
-   2. `GET /api/health/live` doar dacă cererea e locală (`isLocalProbe`: `Host` loopback, fără `cf-connecting-ip`, `cf-ray`, `cf-ipcountry`, `x-real-ip`, `cf-access-jwt-assertion`, `X-Forwarded-*` doar loopback);
+   2. `GET /api/health/live` (doar metoda `GET` și exact această cale; `HEAD`/`POST` etc. cer Access, iar `/api/health/live/` primește întâi un 308 de la Next spre calea exactă) doar dacă cererea e locală (`isLocalProbe`: `Host` loopback, fără `cf-connecting-ip`, `cf-ray`, `cf-ipcountry`, `x-real-ip`, `cf-access-jwt-assertion`, `X-Forwarded-*` doar loopback);
    3. `/api/health` cu `X-Finet-Health-Token` egal cu `HEALTH_TOKEN` (comparare în timp constant), doar dacă tokenul e configurat;
    4. altfel, cu `CF_ACCESS_REQUIRED=true`, e nevoie de un JWT `Cf-Access-Jwt-Assertion` valid (RS256, cheile de la `https://<CF_ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`, `aud`, `iss`, `exp`).
    - `/favicon.ico` **nu** e exclus (nu există favicon; cererea ar fi randată prin layout).
@@ -44,7 +44,7 @@ ops/                            # docker, cloudflare, supabase, notify, postgres
 3. Route handler-ele / paginile răspund.
 
 ## Configurația
-`src/lib/config.ts` citește `process.env` o singură dată (leneș, nu la `next build`) și validează cu Zod. Reguli notabile: `APP_MODE` obligatoriu; în producție `CF_ACCESS_REQUIRED=false` e refuzat și `STORAGE_DIR` e obligatoriu; `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` obligatorii când Access e cerut; `HEALTH_TOKEN` ≥ 32 caractere; `AI_MONTHLY_BUDGET` parsat ca bani (bigint), monedă `AI_MONTHLY_BUDGET_CURRENCY`; Telegram cere ambele variabile; `SMTP_HOST` cere `SMTP_FROM`. Mesajele de eroare nu conțin valori. Lista: `.env.example`.
+`src/lib/config.ts` citește `process.env` o singură dată (leneș, nu la `next build`) și validează cu Zod. Reguli notabile: `APP_MODE` obligatoriu; `FINET_ROLE` (`web` implicit, `worker`, `migrate`) alege singurul URL de bază de date permis procesului (`DATABASE_URL`, `WORKER_DATABASE_URL`, respectiv `MIGRATOR_DATABASE_URL`); URL-ul altui rol prezent în mediu oprește pornirea, iar serverul Next.js pornește doar cu `FINET_ROLE=web` (`src/lib/config-startup.ts`); `Config.database` are doar `url` (al rolului curent); în producție `CF_ACCESS_REQUIRED=false` e refuzat și `STORAGE_DIR` e obligatoriu (nu pentru `migrate`); `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` obligatorii când Access e cerut, doar pentru `web`; `HEALTH_TOKEN` ≥ 32 caractere; `AI_MONTHLY_BUDGET` parsat ca bani (bigint), monedă `AI_MONTHLY_BUDGET_CURRENCY`; Telegram cere ambele variabile; `SMTP_HOST` cere `SMTP_FROM`. Mesajele de eroare nu conțin valori. Lista: `.env.example`.
 
 ## Bani
 `src/lib/money.ts`: sume `bigint` în unități minore, monedă obligatorie, fără `Number` pentru sume; alocare cu metoda restului cel mai mare; parsare și formatare românească. Acoperit de `src/lib/money.test.ts`.
@@ -56,7 +56,7 @@ Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` s
 `/api/health`: `db` (`select 1`, client cu o conexiune, `prepare: false`), `storage` (scriere/citire/ștergere), `diskFreePercent`; `queue` și `ai` = `unknown`. `ok` doar dacă `db` și `storage` sunt `ok`; `down` (503) dacă oricare e `down`; altfel `degraded`. Fără versiuni, căi sau mesaje de eroare în răspuns.
 
 ## Deploy și CI
-- Imaginea: `Dockerfile` (multi-stage, user non-root, healthcheck). Compose: `ops/docker/docker-compose.yml`.
+- Imaginea: `Dockerfile` (multi-stage, user non-root, healthcheck). Compose: `ops/docker/docker-compose.yml` (`finet-web`, `finet-worker` și `finet-migrate`, fiecare cu `FINET_ROLE` fixat și propriul `env_file` din `/srv/finet/env/`).
 - CI: `.github/workflows/ci.yml` (install, lint, format, typecheck, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant). E2E și coverage **nu** rulează în CI.
 
 ## Planificat (nu există încă)
