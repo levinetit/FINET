@@ -9,6 +9,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { ro } from "@/messages/ro";
 
 import { apiFetch, goToLogin } from "../../_lib/api-client";
+import { useHydrated } from "../../_lib/use-hydrated";
 
 export type SessionRow = Readonly<{
   id: string;
@@ -29,9 +30,11 @@ export type SessionRow = Readonly<{
 export function SessionsList({ sessions }: Readonly<{ sessions: SessionRow[] }>) {
   const router = useRouter();
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const hydrated = useHydrated();
+  const busy = working || !hydrated;
   const others = sessions.filter((s) => !s.current);
 
   async function revoke(row: SessionRow) {

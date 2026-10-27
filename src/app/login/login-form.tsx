@@ -10,6 +10,7 @@ import { ro } from "@/messages/ro";
 
 import { apiFetch } from "../_lib/api-client";
 import { safeNextPath } from "../_lib/next-path";
+import { useHydrated } from "../_lib/use-hydrated";
 
 type Status = "idle" | "password" | "magic";
 
@@ -27,6 +28,7 @@ export function LoginForm({ next, magicLink }: Readonly<{ next: string; magicLin
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const hydrated = useHydrated();
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,9 +78,15 @@ export function LoginForm({ next, magicLink }: Readonly<{ next: string; magicLin
     else setError(ro.login.genericError);
   }
 
-  const busy = status !== "idle";
+  const busy = status !== "idle" || !hydrated;
   return (
-    <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate aria-busy={busy}>
+    <form
+      method="post"
+      className="flex flex-col gap-4"
+      onSubmit={onSubmit}
+      noValidate
+      aria-busy={status !== "idle"}
+    >
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="login-email">{ro.login.email}</Label>
         <Input

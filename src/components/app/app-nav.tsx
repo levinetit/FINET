@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Logo } from "@/app/_components/logo";
 import { cn } from "@/lib/utils";
+import { useHydrated } from "@/app/_lib/use-hydrated";
 import { ro } from "@/messages/ro";
 
 import { HomeIcon, LogoutIcon, UserIcon } from "./icons";
@@ -28,6 +29,7 @@ export function AppNav() {
   const pathname = usePathname();
   const [leaving, setLeaving] = useState(false);
   const [failed, setFailed] = useState(false);
+  const hydrated = useHydrated();
 
   async function logout() {
     setLeaving(true);
@@ -91,7 +93,12 @@ export function AppNav() {
           );
         })}
         <li className="md:mt-4">
-          <button type="button" onClick={logout} disabled={leaving} className={itemClass}>
+          <button
+            type="button"
+            onClick={logout}
+            disabled={leaving || !hydrated}
+            className={itemClass}
+          >
             <LogoutIcon />
             <span>{leaving ? ro.nav.loggingOut : ro.nav.logout}</span>
           </button>

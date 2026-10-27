@@ -78,3 +78,58 @@ test("liveness-ul cu / final: Next redirecționează (308) spre calea exactă, �
   const post = await request.post("/api/health/live/", { maxRedirects: 0 });
   expect(post.status()).toBe(308);
 });
+
+// Antetele de securitate pe serverul de producție (6.3): și pe 403, și pe liveness.
+function expectProductionHeaders(headers: Record<string, string>) {
+  const csp = headers["content-security-policy"] ?? "";
+  const nonce = /'nonce-([A-Za-z0-9+/=]+)'/.exec(csp)?.[1];
+  expect(nonce).toBeTruthy();
+  expect(csp).toContain(`script-src 'self' 'nonce-${nonce}';`);
+  expect(csp).toContain(`style-src 'self' 'nonce-${nonce}';`);
+  expect(csp).not.toMatch(/unsafe-|strict-dynamic/);
+  for (const directive of [
+    "default-src 'self'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ]) {
+    expect(csp).toContain(directive);
+  }
+  expect(headers["strict-transport-security"]).toBe("max-age=31536000; includeSubDomains");
+  expect(headers["x-frame-options"]).toBe("DENY");
+  expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+  expect(headers["permissions-policy"]).toBe("camera=(self), microphone=(), geolocation=()");
+  expect(Object.keys(headers).filter((h) => h.startsWith("access-control-allow-"))).toEqual([]);
+  return nonce!;
+}
+
+test("antetele de securitate pe 403 și pe liveness; nonce nou la fiecare cerere", async ({
+  request,
+}) => {
+  const login = await request.get("/login", { maxRedirects: 0 });
+  expect(login.status()).toBe(403);
+  const first = expectProductionHeaders(login.headers());
+  const live = await request.get("/api/health/live");
+  expect(live.status()).toBe(200);
+  const second = expectProductionHeaders(live.headers());
+  expect(second).not.toBe(first);
+});
+
+test("CORS închis: un preflight din altă origine nu primește Access-Control-Allow-*", async ({
+  request,
+}) => {
+  const response = await request.fetch("/api/v1/me", {
+    method: "OPTIONS",
+    headers: { Origin: "https://evil.example", "Access-Control-Request-Method": "PATCH" },
+    maxRedirects: 0,
+  });
+  expect(response.status()).toBe(403);
+  expect(Object.keys(response.headers()).filter((h) => h.startsWith("access-control-"))).toEqual(
+    [],
+  );
+});

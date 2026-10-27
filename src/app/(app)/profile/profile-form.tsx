@@ -12,6 +12,7 @@ import { ro } from "@/messages/ro";
 
 import { apiFetch, goToLogin } from "../../_lib/api-client";
 import { themeCookie } from "../../_lib/theme";
+import { useHydrated } from "../../_lib/use-hydrated";
 
 type Preferences = Readonly<{
   locale: string;
@@ -38,6 +39,7 @@ export function ProfileForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const hydrated = useHydrated();
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,7 +84,7 @@ export function ProfileForm({
       <CardHeader>
         <CardTitle id="profile-title">{ro.profile.account}</CardTitle>
       </CardHeader>
-      <form onSubmit={onSubmit} noValidate aria-busy={saving}>
+      <form method="post" onSubmit={onSubmit} noValidate aria-busy={saving}>
         <CardContent>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="profile-name">{ro.profile.name}</Label>
@@ -160,7 +162,7 @@ export function ProfileForm({
           <Alert>{error}</Alert>
           <Alert tone="ok">{saved}</Alert>
           <div>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || !hydrated}>
               {saving ? ro.profile.saving : ro.profile.save}
             </Button>
           </div>

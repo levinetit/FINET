@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { ro } from "@/messages/ro";
 
 import { apiFetch, goToLogin } from "../../_lib/api-client";
+import { useHydrated } from "../../_lib/use-hydrated";
 
 const MIN_LENGTH = 10;
 
@@ -26,6 +27,7 @@ export function PasswordForm() {
   const [fields, setFields] = useState<Fields>({});
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const hydrated = useHydrated();
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,7 +103,7 @@ export function PasswordForm() {
         <CardTitle id="password-title">{ro.password.title}</CardTitle>
         <CardDescription>{ro.password.hint}</CardDescription>
       </CardHeader>
-      <form onSubmit={onSubmit} noValidate aria-busy={busy}>
+      <form method="post" onSubmit={onSubmit} noValidate aria-busy={busy}>
         <CardContent>
           {field("currentPassword", ro.password.current, "current-password")}
           {field("newPassword", ro.password.next, "new-password")}
@@ -109,7 +111,7 @@ export function PasswordForm() {
           <Alert>{error}</Alert>
           <Alert tone="ok">{done}</Alert>
           <div>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || !hydrated}>
               {busy ? ro.password.submitting : ro.password.submit}
             </Button>
           </div>
