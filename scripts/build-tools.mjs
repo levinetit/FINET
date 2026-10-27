@@ -10,6 +10,8 @@ const EXTERNAL = ["postgres", "drizzle-orm", "zod"];
 
 const TOOLS = {
   migrate: "src/db/migrate-entry.ts",
+  // CLI-ul de administrare (F1-B): fără better-auth, nodemailer sau next în graful de importuri.
+  admin: "src/tools/admin/entry.ts",
 };
 
 for (const [name, entry] of Object.entries(TOOLS)) {
