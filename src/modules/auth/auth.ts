@@ -311,7 +311,11 @@ export function getAuthRuntime(): AuthRuntime {
   const config = getConfig();
   const db = getDb();
   runtime = {
-    auth: createAuth({ db, config, mailer: createMailer(config.notify.smtp) }),
+    auth: createAuth({
+      db,
+      config,
+      mailer: createMailer(config.notify.smtp, { production: config.nodeEnv === "production" }),
+    }),
     db,
     config,
   };

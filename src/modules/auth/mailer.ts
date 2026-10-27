@@ -18,25 +18,37 @@ export type Mailer = Readonly<{ send: (message: MailMessage) => Promise<void> }>
 type SmtpConfig = NonNullable<Config["notify"]["smtp"]>;
 
 /** Transportul Nodemailer; importul e leneș, ca modulul să nu fie încărcat fără SMTP. */
-export function createMailer(smtp: SmtpConfig | null): Mailer | null {
+/**
+ * Opțiunile transportului SMTP (funcție pură, testată). TLS (L4): 465 = TLS implicit; în
+ * producție, pe orice alt port, STARTTLS e OBLIGATORIU (fără trimitere în clar, inclusiv a
+ * parolei SMTP). În dezvoltare, doar 587 cere STARTTLS (un server local pe 1025 n-are TLS).
+ */
+export function smtpTransportOptions(smtp: SmtpConfig, production: boolean) {
+  const implicitTls = smtp.port === 465;
+  return {
+    host: smtp.host,
+    port: smtp.port,
+    secure: implicitTls,
+    requireTLS: !implicitTls && (production || smtp.port === 587),
+    tls: { rejectUnauthorized: true, minVersion: "TLSv1.2" as const },
+    auth: smtp.user ? { user: smtp.user, pass: smtp.password ?? "" } : undefined,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+    logger: false,
+    debug: false,
+  };
+}
+
+export function createMailer(
+  smtp: SmtpConfig | null,
+  options: Readonly<{ production: boolean }> = { production: true },
+): Mailer | null {
   if (!smtp) return null;
   let transport: Promise<{ sendMail: (m: object) => Promise<unknown> }> | null = null;
   const getTransport = () => {
     transport ??= import("nodemailer").then((nodemailer) =>
-      nodemailer.createTransport({
-        host: smtp.host,
-        port: smtp.port,
-        // 465 = TLS implicit; 587 (submission) = STARTTLS obligatoriu. Alte porturi (de exemplu
-        // 1025, serverul de test local) folosesc STARTTLS doar dacă serverul îl oferă.
-        secure: smtp.port === 465,
-        requireTLS: smtp.port === 587,
-        auth: smtp.user ? { user: smtp.user, pass: smtp.password ?? "" } : undefined,
-        connectionTimeout: 10_000,
-        greetingTimeout: 10_000,
-        socketTimeout: 20_000,
-        logger: false,
-        debug: false,
-      }),
+      nodemailer.createTransport(smtpTransportOptions(smtp, options.production)),
     );
     return transport;
   };
