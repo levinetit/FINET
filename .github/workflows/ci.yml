@@ -87,6 +87,33 @@ jobs:
       - name: Type-check
         run: pnpm typecheck
 
+      # Rolurile ca în ops/supabase/roles.sql (finet_migrator, finet_app NOBYPASSRLS), pe
+      # Postgres-ul de test; psql din containerul serviciului (aceeași versiune).
+      - name: Bootstrap roluri FINET (Postgres de test)
+        run: >-
+          docker exec -i ${{ job.services.postgres.id }}
+          psql -U finet -d finet_test -v ON_ERROR_STOP=1 -q
+          < ops/postgres/test-bootstrap.sql
+
+      - name: Împachetează uneltele (runner-ul de migrații)
+        run: pnpm build:tools
+
+      # Runner-ul real, ca rolul `migrate` (finet_migrator), de la zero și apoi a doua oară
+      # (idempotent: a doua rulare nu trebuie să aplice nimic).
+      - name: Migrații (de două ori)
+        env:
+          FINET_ROLE: migrate
+          # Rolul `migrate` refuză URL-ul altui rol; DATABASE_URL din job se golește aici.
+          DATABASE_URL: ""
+          # Parolă fictivă din ops/postgres/test-bootstrap.sql (doar pentru CI).
+          MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_test
+        run: |
+          set -o pipefail
+          node dist/tools/migrate.mjs
+          node dist/tools/migrate.mjs | tee migrate-2.log
+          grep -q "aplicate acum 0" migrate-2.log
+
+      # Testele de integrare își creează propriile baze (src/db/testing.ts) cu aceleași roluri.
       - name: Teste
         run: pnpm test
 
