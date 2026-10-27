@@ -172,12 +172,15 @@ test.describe(`sesiuni și parolă (${MODE})`, () => {
     await expect(page.getByText(/Parola a fost schimbată/)).toBeVisible();
   }
 
-  test("schimbarea parolei revocă celelalte sesiuni (două contexte)", async ({ browser }) => {
+  test("schimbarea parolei revocă celelalte sesiuni (două contexte)", async ({
+    browser,
+    baseURL,
+  }) => {
     const email = userEmail("parola");
     const original = password();
     const changed = `${original}-nou-${Date.now() % 100000}`;
-    const a = await browser.newContext();
-    const b = await browser.newContext();
+    const a = await browser.newContext({ baseURL });
+    const b = await browser.newContext({ baseURL });
     try {
       const pageA = await a.newPage();
       const pageB = await b.newPage();
@@ -198,7 +201,7 @@ test.describe(`sesiuni și parolă (${MODE})`, () => {
       await loginOk(pageB, email, changed);
     } finally {
       // Revenire la parola inițială, ca testul să rămână repetabil.
-      const c = await browser.newContext();
+      const c = await browser.newContext({ baseURL });
       const pageC = await c.newPage();
       await login(pageC, email, changed);
       // Dacă parola nu apucase să fie schimbată, login-ul eșuează și nu e nimic de refăcut.
@@ -218,10 +221,12 @@ test.describe(`sesiuni și parolă (${MODE})`, () => {
 
   test("lista de sesiuni: revocare individuală și „Deconectează celelalte”", async ({
     browser,
+    baseURL,
   }) => {
     const email = userEmail("sesiuni");
-    const a = await browser.newContext();
+    const a = await browser.newContext({ baseURL });
     const b = await browser.newContext({
+      baseURL,
       userAgent:
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/140.0",
     });

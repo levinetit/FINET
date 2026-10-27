@@ -14,6 +14,7 @@
 **F1-C — interfața, antetele, E2E, documentația:**
 - antetele de securitate (6.3) pe toate răspunsurile `src/proxy.ts` (și pe 403): CSP cu nonce per cerere, fără `unsafe-*` și fără `strict-dynamic` în producție; HSTS un an cu `includeSubDomains`, fără `preload`; `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; CORS închis. Asset-urile statice primesc antetele fixe din `next.config.ts`. Verificarea Access rămâne prima și neschimbată;
 - paginile `/` (redirecționare), `/login` (email + parolă; magic link doar cu SMTP, flag calculat pe server), `/dashboard` (placeholder onest, gospodăria și rolul), `/profile` (nume, temă, limbă, fus orar, monedă; schimbarea parolei; sesiunile, cu revocare individuală și „Deconectează celelalte”, cu confirmare), logout prin `POST /api/auth/sign-out`, `/register` (404 în `personal`; în `saas`, un mesaj că înregistrarea vine în Faza 11), pagini 404 și de eroare proprii;
+- logout prin `POST /api/auth/sign-out` din navigare; nu există rută `/logout` (decizia mea: un `GET /logout` dă 404, fără CSRF prin GET);
 - `?next=` validat (doar cale relativă internă), redirecționări HTTP 307 pentru rutele protejate;
 - mutațiile din browser folosesc aceleași rute ca Android (rate limiting, CSRF, audit într-un singur loc); formularele trimit doar după hidratare;
 - tokenii `surface-2`, `accent-soft`, `*-soft` și maparea numelor shadcn; componentele UI scrise de mână, fără dependențe noi; textele în `src/messages/ro.ts`;
@@ -37,6 +38,8 @@
 - Pagini: `src/app/{layout,page,not-found,error}.tsx`, `src/app/login/{page,login-form}.tsx`, `src/app/register/page.tsx`, `src/app/(app)/{layout,page-header}.tsx`, `src/app/(app)/dashboard/page.tsx`, `src/app/(app)/profile/{page,profile-form,password-form,sessions-list}.tsx`, `src/app/_lib/{session,next-path,next-path.test,api-client,theme,use-hydrated}.ts`, `src/messages/ro.ts`.
 - E2E și CI: `e2e/{auth.spec,fixtures}.ts` (noi), `e2e/{smoke,access}.spec.ts`, `playwright.config.ts`, `.github/workflows/ci.yml`.
 - Documentație: `docs/SECURITY_CHECKLIST.md` (nou), `docs/reports/faza-1.md` (nou), `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/INFRA.md`, `docs/adr/0003-auth.md`, `CLAUDE.md`, `README.md`.
+
+Atenție la commit-ul `6532ae1` („test(e2e)”): pe lângă teste, conține și o **remediere de securitate** a formularelor: `method="post"` și butoane active doar după hidratare (`src/app/_lib/use-hydrated.ts`), ca un clic înainte de hidratare să nu trimită parola într-un GET nativ (parola în URL).
 
 `src/lib/security-headers.ts` e în afara fișierelor listate pentru F1-C (decizia mea): ține regulile antetelor într-un modul pur, folosit și de `src/proxy.ts`, și de `next.config.ts`. `package.json` și lockfile-ul nu s-au schimbat.
 
