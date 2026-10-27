@@ -35,7 +35,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   try {
     const config = getConfig();
     allowed = await isRequestAllowed(
-      { pathname: request.nextUrl.pathname, headers: request.headers },
+      { method: request.method, pathname: request.nextUrl.pathname, headers: request.headers },
       {
         required: config.access.required,
         verify: verifierFor(config.access),

@@ -90,8 +90,8 @@ function policy(overrides: Partial<AccessPolicy> = {}): AccessPolicy {
   };
 }
 
-function req(pathname: string, headers: Record<string, string> = {}) {
-  return { pathname, headers: new Headers(headers) };
+function req(pathname: string, headers: Record<string, string> = {}, method = "GET") {
+  return { method, pathname, headers: new Headers(headers) };
 }
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -268,6 +268,15 @@ describe("FAIL-CLOSED", () => {
       return proxy(new NextRequest(`https://finet.exemplu.invalid${path}`, { headers }));
     }
 
+    async function local(path: string, method = "GET", headers: Record<string, string> = {}) {
+      return proxy(
+        new NextRequest(`http://127.0.0.1:3000${path}`, {
+          method,
+          headers: { host: "127.0.0.1:3000", ...headers },
+        }),
+      );
+    }
+
     async function expectForbidden(res: Response) {
       expect(res.status).toBe(403);
       expect(res.headers.get("cache-control")).toBe("no-store");
@@ -322,6 +331,42 @@ describe("FAIL-CLOSED", () => {
         }),
       );
       expect(res.headers.get("x-middleware-next")).toBe("1");
+    });
+
+    it("liveness local doar cu GET: HEAD, POST, PUT, DELETE, OPTIONS → 403", async () => {
+      prodEnv();
+      expect((await local("/api/health/live")).headers.get("x-middleware-next")).toBe("1");
+      for (const method of ["HEAD", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]) {
+        await expectForbidden(await local("/api/health/live", method));
+      }
+    });
+
+    it("liveness cu Host loopback, dar X-Forwarded-For public → 403", async () => {
+      prodEnv();
+      await expectForbidden(
+        await local("/api/health/live", "GET", { "x-forwarded-for": "203.0.113.7" }),
+      );
+    });
+
+    it("variante ale căii de liveness nu primesc excepția → 403", async () => {
+      prodEnv();
+      for (const path of [
+        "/api/health/live/",
+        "/api/health/live%2f",
+        "/api/health/live%2F",
+        "/api/health/%6cive",
+        "/api/health/live/x",
+        "/api/health/live?x=1/",
+        "/API/health/live",
+      ]) {
+        const res = await local(path);
+        // `?x=1/` păstrează calea exactă: excepția se aplică (interogarea nu schimbă calea).
+        if (path === "/api/health/live?x=1/") {
+          expect(res.headers.get("x-middleware-next"), path).toBe("1");
+        } else {
+          await expectForbidden(res);
+        }
+      }
     });
   });
 
@@ -378,6 +423,10 @@ describe("excepții", () => {
   it("liveness local nu deschide alte căi", async () => {
     const local = { host: "127.0.0.1:3000" };
     expect(await isRequestAllowed(req("/api/health/live", local), policy())).toBe(true);
+    expect(await isRequestAllowed(req("/api/health/live", local, "HEAD"), policy())).toBe(false);
+    expect(await isRequestAllowed(req("/api/health/live", local, "POST"), policy())).toBe(false);
+    expect(await isRequestAllowed(req("/api/health/live", local, "get"), policy())).toBe(false);
+    expect(await isRequestAllowed(req("/api/health/live/", local), policy())).toBe(false);
     expect(await isRequestAllowed(req("/api/health", local), policy())).toBe(false);
     expect(await isRequestAllowed(req("/", local), policy())).toBe(false);
   });

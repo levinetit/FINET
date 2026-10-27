@@ -134,17 +134,19 @@ export type AccessPolicy = Readonly<{
 /**
  * Decide dacă cererea trece. Excepții, în ordine:
  * 1. asset-urile statice Next (`isStaticAssetPath`);
- * 2. `GET /api/health/live` venit de pe loopback (`isLocalProbe`);
+ * 2. `GET /api/health/live` venit de pe loopback (`isLocalProbe`), DOAR cu metoda `GET` (exact
+ *    calea, fără `/` final sau variante codificate); `HEAD`, `POST` etc. cer Access;
  * 3. `/api/health` cu `X-Finet-Health-Token` corect (doar dacă `HEALTH_TOKEN` e configurat).
  * Altfel, cu `required`, e nevoie de un JWT Access valid.
  */
 export async function isRequestAllowed(
-  request: Readonly<{ pathname: string; headers: Headers }>,
+  // `method` e obligatoriu: un apelant care nu-l transmite nu poate primi excepția de liveness.
+  request: Readonly<{ method: string; pathname: string; headers: Headers }>,
   policy: AccessPolicy,
 ): Promise<boolean> {
-  const { pathname, headers } = request;
+  const { method, pathname, headers } = request;
   if (isStaticAssetPath(pathname)) return true;
-  if (pathname === LIVENESS_PATH && isLocalProbe(headers)) return true;
+  if (method === "GET" && pathname === LIVENESS_PATH && isLocalProbe(headers)) return true;
   if (
     pathname === HEALTH_PATH &&
     healthTokenMatches(headers.get(HEALTH_TOKEN_HEADER), policy.healthToken)

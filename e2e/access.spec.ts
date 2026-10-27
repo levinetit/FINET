@@ -44,3 +44,37 @@ test("liveness-ul cu antete Cloudflare cere Access", async ({ request }) => {
   });
   expect(response.status()).toBe(403);
 });
+
+test("liveness-ul local acceptă doar GET: HEAD și POST dau 403", async ({ request }) => {
+  expect((await request.head("/api/health/live", { maxRedirects: 0 })).status()).toBe(403);
+  expect((await request.post("/api/health/live", { maxRedirects: 0 })).status()).toBe(403);
+});
+
+test("liveness-ul cu X-Forwarded-For public cere Access", async ({ request }) => {
+  const response = await request.get("/api/health/live", {
+    headers: { "X-Forwarded-For": "203.0.113.5" },
+    maxRedirects: 0,
+  });
+  expect(response.status()).toBe(403);
+});
+
+test("variantele codificate ale căii de liveness dau 403", async ({ request }) => {
+  for (const path of ["/api/health/live%2f", "/api/health/live%2F", "/api/health/%6cive"]) {
+    const response = await request.get(path, { maxRedirects: 0 });
+    expect(response.status(), path).toBe(403);
+  }
+});
+
+test("liveness-ul cu / final: Next redirecționează (308) spre calea exactă, înainte de proxy", async ({
+  request,
+}) => {
+  // Comportament observat (Next 16.4.3): redirecționarea pentru `/` final rulează înaintea
+  // `src/proxy.ts`. Ținta e chiar calea de liveness, care trece apoi prin aceleași reguli (GET,
+  // loopback), deci nu deschide nimic în plus.
+  const response = await request.get("/api/health/live/", { maxRedirects: 0 });
+  expect(response.status()).toBe(308);
+  expect(response.headers()["location"]).toBe("/api/health/live");
+  expect(await response.text()).not.toBe("ok");
+  const post = await request.post("/api/health/live/", { maxRedirects: 0 });
+  expect(post.status()).toBe(308);
+});
