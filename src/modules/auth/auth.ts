@@ -11,7 +11,13 @@ import { authSchema } from "@/db/schema";
 import { type Config, getConfig } from "@/lib/config";
 
 import { recordAudit } from "./audit";
-import { type Mailer, createMailer, magicLinkMessage, resetPasswordMessage } from "./mailer";
+import {
+  type Mailer,
+  createMailer,
+  magicLinkMessage,
+  resetPasswordMessage,
+  sendInBackground,
+} from "./mailer";
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -152,18 +158,19 @@ export function createAuth(deps: AuthDeps) {
             disableSignUp: true,
             expiresIn: MAGIC_LINK_EXPIRES_IN_SECONDS,
             storeToken: "hashed",
-            sendMagicLink: async ({ email, url }) => {
-              // Fără cont activ: nimic de trimis, iar răspunsul rămâne același (fără enumerare).
-              const user = await findUserByEmail(db, normalizeEmail(email));
-              if (!user || user.status !== "active") return;
-              await mailer.send(
-                magicLinkMessage(
+            sendMagicLink: ({ email, url }) => {
+              // În fundal (M4): căutarea contului și trimiterea nu întârzie răspunsul. Fără cont
+              // activ: nimic de trimis, iar răspunsul rămâne același (fără enumerare).
+              sendInBackground(mailer, async () => {
+                const user = await findUserByEmail(db, normalizeEmail(email));
+                if (!user || user.status !== "active") return null;
+                return magicLinkMessage(
                   config.appName,
                   user.email,
                   url,
                   MAGIC_LINK_EXPIRES_IN_SECONDS / 60,
-                ),
-              );
+                );
+              });
             },
           }),
         ]
@@ -217,7 +224,8 @@ export function createAuth(deps: AuthDeps) {
       ...(mailer
         ? {
             sendResetPassword: async ({ user, url }) => {
-              await mailer.send(
+              // În fundal (M4): timpul răspunsului nu include trimiterea SMTP.
+              sendInBackground(mailer, () =>
                 resetPasswordMessage(
                   config.appName,
                   user.email,

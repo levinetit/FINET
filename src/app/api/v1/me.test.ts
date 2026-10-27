@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TEST_ADMIN_URL } from "@/db/testing";
 import { handleAuthRequest } from "@/modules/auth/handler";
+import { waitForBackgroundMail } from "@/modules/auth/mailer";
 import { verifyPassword } from "@/modules/auth/password";
 import {
   APP_URL,
@@ -481,6 +482,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/me pe PostgreSQL real", () => {
       expect(known.status).toBe(200);
       expect(unknown.status).toBe(200);
       expect(await known.json()).toEqual(await unknown.json());
+      await waitForBackgroundMail();
       expect(mailEnv.mailer!.sent.length).toBe(1);
       const mail = mailEnv.mailer!.sent[0]!;
       expect(mail.to).toBe("ana@exemplu.ro");
@@ -537,6 +539,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/me pe PostgreSQL real", () => {
       expect((await send()).status).toBe(200);
       expect((await send()).status).toBe(200);
       expect((await send()).status).toBe(429);
+      await waitForBackgroundMail();
       expect(limited.mailer!.sent.length).toBe(2);
       clock += 61 * 60_000;
     });
@@ -558,6 +561,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/me pe PostgreSQL real", () => {
         mailEnv,
       );
       expect(req.status).toBe(200);
+      await waitForBackgroundMail();
       const mail = mailEnv.mailer!.sent.at(-1)!;
       expect(mail.subject).toContain("Resetarea parolei");
       const link = new URL(/https?:\/\/\S+/.exec(mail.text)![0]);

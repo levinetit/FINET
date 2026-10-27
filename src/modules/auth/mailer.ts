@@ -55,6 +55,36 @@ export function createMailer(smtp: SmtpConfig | null): Mailer | null {
   };
 }
 
+/**
+ * Trimiterea în fundal (M4): răspunsul HTTP nu așteaptă căutarea contului și trimiterea, deci
+ * timpul lui nu depinde de existența contului (fără oracol de timp la magic link / resetare).
+ * O eroare se raportează fără adresă și fără conținut. Promisiunile în curs se pot aștepta
+ * (`waitForBackgroundMail`, teste și oprirea procesului).
+ */
+const pending = new Set<Promise<void>>();
+
+export function sendInBackground(
+  mailer: Mailer,
+  build: () => Promise<MailMessage | null> | MailMessage | null,
+): void {
+  const task = (async () => {
+    const message = await build();
+    if (message) await mailer.send(message);
+  })()
+    .catch(() => {
+      console.error("[auth] trimiterea emailului de autentificare a eșuat");
+    })
+    .finally(() => {
+      pending.delete(task);
+    });
+  pending.add(task);
+}
+
+/** Așteaptă emailurile trimise în fundal (teste; oprirea procesului). */
+export async function waitForBackgroundMail(): Promise<void> {
+  while (pending.size > 0) await Promise.allSettled([...pending]);
+}
+
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
