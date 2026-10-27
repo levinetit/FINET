@@ -7,7 +7,7 @@
   "type": "module",
   "packageManager": "pnpm@12.15.0",
   "engines": {
-    "node": ">=24 <25",
+    "node": ">=24.7 <25",
     "pnpm": ">=12.15.0"
   },
   "scripts": {
@@ -26,13 +26,18 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "scan:client-secrets": "node scripts/scan-client-secrets.mjs .next/static",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "pnpm build:tools && node dist/tools/migrate.mjs"
+    "db:migrate": "pnpm build:tools && node dist/tools/migrate.mjs",
+    "admin:create-user": "pnpm build:tools && node dist/tools/admin.mjs create-user",
+    "admin:reset-password": "pnpm build:tools && node dist/tools/admin.mjs reset-password",
+    "admin:add-member": "pnpm build:tools && node dist/tools/admin.mjs add-member"
   },
   "dependencies": {
+    "better-auth": "1.7.13",
     "clsx": "2.1.1",
     "drizzle-orm": "0.45.4",
     "jose": "6.2.13",
     "next": "16.4.3",
+    "nodemailer": "10.2.1",
     "postgres": "3.4.9",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -44,6 +49,7 @@
     "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.19.2",
+    "@types/nodemailer": "8.0.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitest/coverage-v8": "5.0.5",
