@@ -23,24 +23,42 @@ Rezultatul așteptat al interogărilor de verificare de la final:
 
 | Verificare | Așteptat |
 |---|---|
-| `finet_app.rolbypassrls` | `f` |
-| `finet_migrator.rolsuper`, `finet_app.rolsuper` | `f` |
+| `finet_app.rolbypassrls`, `finet_migrator.rolbypassrls` | `f` |
+| `rolsuper`, `rolcreatedb`, `rolcreaterole`, `rolreplication` (ambele roluri) | `f` |
+| `rolconnlimit` | `finet_app` = `30`, `finet_migrator` = `5` (de ajustat la planul Supabase) |
+| `rolconfig` | `finet_app` = `{search_path=finet}`; `finet_migrator` gol |
+| `create_in_public` (ambele roluri) | `f` — dacă e `t`, `PUBLIC` are încă `CREATE` pe `public` (revocarea pe rol nu ajunge); decizia de a rula `revoke create on schema public from public` e a operatorului, fiindcă schimbă schema `public` a proiectului |
 | proprietarul schemei `finet` | `finet_migrator` |
 | `usage` pentru `anon`, `authenticated` | `f` |
 | `usage` pentru `finet_app` | `t` |
 
 **Posibilă eroare, de verificat:** în unele versiuni PostgreSQL, `create schema finet authorization finet_migrator` cere ca utilizatorul curent (`postgres`) să fie membru al rolului `finet_migrator`. Dacă primești `must be able to SET ROLE "finet_migrator"`, rulează în aceeași sesiune `grant finet_migrator to postgres;` înaintea comenzii (după ce ai șters, dacă e cazul, rolurile create parțial: scriptul rulează într-o tranzacție, deci o eroare nu lasă nimic pe jumătate). Comportamentul exact nu a fost verificat pe Supabase.
 
+Verificat de agent pe PostgreSQL 17 efemer (superuser local, `anon`/`authenticated` create înainte; 2026-10-27): rezultatele de mai sus; login ca `finet_app` → `search_path` = `finet`; `create table` în `public` ca `finet_app` → `permission denied`. Cu `grant create on schema public to public`, `create_in_public` devine `t` (cazul din tabel). **Nu** e verificat pe Supabase.
+
+### Parola fără text în clar la server (recomandat)
+`create role ... password '<parola>'` trimite parola ca text; cu `log_statement = 'ddl'` sau `'all'` ea poate apărea în logurile Postgres (și în ale Supabase). Variante:
+1. **Verificator SCRAM calculat de client:** rulezi scriptul cu parole temporare (sau modifici local `create role` fără `password`), apoi, în aceeași sesiune psql:
+   ```
+   \password finet_app
+   \password finet_migrator
+   ```
+   psql calculează verificatorul `SCRAM-SHA-256$4096:<sare>$<StoredKey>:<ServerKey>` local și trimite doar `ALTER ROLE ... PASSWORD 'SCRAM-SHA-256$...'`; parola în clar nu ajunge la server. Poți folosi și un verificator precalculat direct în `create role ... password 'SCRAM-SHA-256$...'` (serverul îl stochează ca atare).
+2. Înainte de rulare, verifici `show log_statement;` (ideal `none` sau `mod`, nu `ddl`/`all`).
+
+### TLS cu postgres.js
+Driverul `postgres` (postgres.js) **nu** citește `sslrootcert=<fișier>` din URL: îl trimite serverului ca parametru de conexiune, iar serverul refuză conexiunea (`unrecognized configuration parameter "sslrootcert"`, verificat pe PostgreSQL 17). În URL-urile aplicației se pune doar `sslmode=verify-full`; CA-ul Supabase se dă prin `NODE_EXTRA_CA_CERTS` (acum) sau prin `ssl: { ca }` din cod (neimplementat; Faza 1). Detalii: `docs/INFRA.md`, „Supabase din container”. Pentru `psql`, `sslrootcert=<fișier>` rămâne corect.
+
 Drepturile pe tabele (`finet_app` doar `select/insert/update/delete`) și politicile RLS vin din migrațiile Drizzle (Faza 1+), rulate cu `MIGRATOR_DATABASE_URL`.
 
 ## 4. Conexiunile
 Din **Connect** în panou. Formatul utilizatorului pentru pooler e `<rol>.<ref-proiect>`.
 
-| Variabilă | Mod pooler | Port | Rol |
-|---|---|---|---|
-| `DATABASE_URL` | tranzacție | 6543 | `finet_app` |
-| `WORKER_DATABASE_URL` | sesiune | 5432 | `finet_app` |
-| `MIGRATOR_DATABASE_URL` | sesiune | 5432 | `finet_migrator` |
+| Variabilă | Mod pooler | Port | Rol | Fișierul de mediu (serviciul) |
+|---|---|---|---|---|
+| `DATABASE_URL` | tranzacție | 6543 | `finet_app` | `finet.env` (`finet-web`) |
+| `WORKER_DATABASE_URL` | sesiune | 5432 | `finet_app` | `finet.worker.env` (`finet-worker`) |
+| `MIGRATOR_DATABASE_URL` | sesiune | 5432 | `finet_migrator` | `finet.migrate.env` (`finet-migrate`) |
 
 Toate cu `sslmode=verify-full`. Valorile reale stau doar în `/srv/finet/env/finet*.env` (600, câte unul pe rol: `finet.env`, `finet.worker.env`, `finet.migrate.env`). Limitele de conexiuni ale planului: de completat în `docs/INFRA.md`.
 
