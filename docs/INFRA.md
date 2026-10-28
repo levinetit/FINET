@@ -78,11 +78,11 @@ URL-ul altui rol prezent în mediul unui proces, direct sau ca `_FILE`, **opreș
 
 Ce fixează compose-ul în `environment` (au prioritate față de `env_file`): `FINET_ROLE`, `NODE_ENV=production`, `APP_MODE=personal`, `CF_ACCESS_REQUIRED=true` (web), `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage` (web, worker), `HOSTNAME=0.0.0.0`, `PORT=3000`, `NODE_OPTIONS`, căile secretelor (`DATABASE_URL_FILE` și `HEALTH_TOKEN_FILE` la web, `WORKER_DATABASE_URL_FILE` la worker, `MIGRATOR_DATABASE_URL_FILE` la migrate) și `DATABASE_CA_FILE` (toate trei).
 
-Întărire: `read_only: true` (tmpfs pentru `/tmp` și `/app/.next/cache`), `cap_drop: [ALL]`, `no-new-privileges`, `init: true`, `pids_limit`, limite de memorie (web 512 MB, worker 256 MB; `memswap_limit` egal, fără swap) și CPU (1,0 / 0,5), loguri `json-file` 3×10 MB.
+Întărire: `read_only: true` (tmpfs pentru `/tmp` și `/app/.next/cache`), `cap_drop: [ALL]`, `no-new-privileges`, `init: true`, `pids_limit`, limite de memorie (web 512 MB, worker 150 MB din Faza 5; `memswap_limit` egal, fără swap) și CPU (1,0 / 0,5), loguri `json-file` 3×10 MB.
 
 **Riscul de memorie:** cu ~1,1 GB disponibili pe host, `finet-web` (până la 512 MB) poate pune presiune pe celelalte servicii; sub OOM, kernelul omoară procese din containere. Valoarea reală a consumului **nu a fost măsurată** pe host (NOT RUN). Build-ul imaginii pe host (`--build`) cere temporar ~1,5 GB (`NODE_OPTIONS=--max-old-space-size=1536` în etapa de build): fă-l când hostul are memorie liberă sau construiește imaginea în altă parte.
 
-**Workerul (decizia mea):** în Faza 0 nu există cod de worker (pg-boss vine în Faza 5/6). Serviciul există, ca structura să fie gata, dar e în profilul `worker`, deci **nu pornește implicit**; dacă e pornit, e un proces Node minimal care scrie „finet-worker: inactiv, vine în Faza 6” și răspunde la SIGTERM. Healthcheck-ul moștenit din imagine (server web) e dezactivat pentru el.
+**Workerul:** din Faza 5 (ADR 0011) e workerul pg-boss real (recurențele), rulat din imaginea de unelte (`node dist/tools/worker.mjs`), cu `mem_limit: 150m` (măsurat: RSS de vârf ~86 MB). Rămâne în profilul `worker`, deci **nu pornește implicit**; pornirea pe producție: secțiunea 4g. Healthcheck-ul Docker e dezactivat (fără HTTP); starea lui apare în `/api/health` ca `queue` (semnalul din `finet.service_heartbeats`: `ok`, `degraded` peste 180 s fără semnal, `unknown` dacă e oprit).
 
 **Storage:** `STORAGE_DRIVER=local`, `STORAGE_DIR=/data/storage`, bind mount din `${FINET_DATA_DIR}/storage` (implicit `/srv/finet/storage`, în afara backup-ului de `/home`), cu `create_host_path: false` (directorul trebuie creat de operator, deținut de uid 1000, mod 700). În Faza 0, `STORAGE_DRIVER=s3` dă `storage: unknown` și `/api/health` = `degraded` (driverul S3 e un schelet; vine în Faza 6).
 
@@ -319,13 +319,31 @@ Agentul nu a rulat nimic din această secțiune. Ordinea:
 
 **Rollback:** imaginea anterioară a `finet-web` (aplicația Fazei 3 funcționează și cu indexul nou). Indexul se poate lăsa sau șterge (comanda de la pasul 3); nu atinge datele.
 
+## 4g. Faza 5 pe producție (operatorul, după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune. Ordinea contează: schema `pgboss` → migrațiile → workerul.
+
+1. **Imaginile** din workflow-ul `images` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`): `finet` (web) și `finet:tools` (migrare, CLI și, din Faza 5, workerul).
+2. **Backup** al schemei `finet` (un `run-backup.sh` manual; altfel 4b, pasul 1).
+3. **Schema `pgboss`**, o singură dată, ca utilizatorul `postgres` al proiectului (ca la `roles.sql`, cu psql, nu din SQL Editor): `psql "<url-postgres>?sslmode=verify-full&sslrootcert=<ca.crt>" -f ops/supabase/pgboss-schema.sql`. Rezultatul așteptat: `pgboss | finet_migrator`; `anon`/`authenticated` fără USAGE. Schema **nu** se adaugă la „Exposed schemas” din Data API. Fără acest pas, migrația `0007` se oprește cu „lipsește schema pgboss deținută de finet_migrator” și nu aplică nimic (nici `0006`: toate într-o tranzacție).
+4. **Migrațiile** `0006_recurring` și `0007_pgboss` (rolul `migrate`, ca la 4f pasul 3; dacă `0005` nu e încă aplicată, se aplică împreună): prima rulare „aplicate acum 2” (sau 3), a doua „aplicate acum 0”. `0006` adaugă pe `transactions` o cheie `NOT VALID` + `VALIDATE` și un index parțial (lock scurt pe scrieri). Rollback: comenzile din antetul fiecărui fișier, doar cu backup și decizia operatorului.
+5. **Redeploy `finet-web`** (imaginea nouă citește semnalul workerului în `/api/health`). Fără variabile sau secrete noi pentru web.
+6. **Pornirea workerului.** Secretul `finet_worker_database_url` există din Faza 0 (pasul 4): trebuie să fie pooler-ul în **modul sesiune (5432)**, rolul `finet_app`, **exact** `sslmode=verify-full` (o singură dată, fără alți parametri TLS: fără `ssl=`, `sslrootcert`, `uselibpqcompat`; CA-ul vine din `DATABASE_CA_FILE`). Altfel workerul refuză să pornească (`start_failed`, motivul în log, fără URL). Verifică: `sudo sed -nE 's#^postgres(ql)?://([^:]+):.*@[^@:/]+:([0-9]+)/.*#\2 \3#p' /srv/finet/secrets/finet_worker_database_url` → `finet_app.<ref> 5432` (pooler-ul Supabase cere utilizatorul cu referința proiectului; `-n … p` afișează DOAR utilizatorul și portul, nimic dacă URL-ul nu are forma așteptată). Apoi:
+   ```bash
+   sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile worker up -d finet-worker
+   sudo docker logs --tail 20 finet-worker        # {"event":"started"} și nimic cu "start_failed"/"boss_error"
+   ```
+7. **Verificări:** `/api/health` (prin Access sau cu `X-Finet-Health-Token`) arată `"queue":"ok"` în cel mult un minut. `sudo docker stats --no-stream finet-worker`: sub 150 MiB. După primul minut 5 al orei: în log, `{"job":"recurring.generate",…}` cu contoare. Oprirea: `sudo docker compose … stop finet-worker` (oprire grațioasă, ≤ 35 s) → `"queue":"unknown"`.
+
+**Rollback:** `sudo docker compose … stop finet-worker` (regulile nu se mai generează; nimic nu se pierde: la repornire se recuperează cel mult 12 scadențe pe regulă pe rulare). Imaginea anterioară a `finet-web` funcționează și cu tabelele noi. Migrațiile: comenzile din antete (`0007`: `drop schema pgboss cascade`, cu workerul oprit).
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|
 | Regiune | UE, Irlanda (`eu-west-1`), proiect creat la 2026-10-27 |
 | Versiune PostgreSQL | `17` (17.11 la 2026-10-27, verificat prin Management API); `ops/postgres/VERSION` = `17` |
 | Limita de conexiuni a planului (pooler, directe) | **TODO operator** (din panou, după alegerea planului) |
-| Pool-uri FINET | `/api/health`: 1 conexiune (`max: 1`); clientul Drizzle (`src/db/index.ts`): implicit 5 pe proces (`DEFAULT_POOL_MAX`, decizia mea, de ajustat sub limita planului); `finet-migrate`: 1 |
+| Pool-uri FINET | `/api/health`: 1 conexiune (`max: 1`); clientul Drizzle (`src/db/index.ts`): implicit 5 pe proces (`DEFAULT_POOL_MAX`, decizia mea, de ajustat sub limita planului); `finet-migrate`: 1; `finet-worker` (Faza 5, modul sesiune 5432): 3 (`pg`, pg-boss) + 2 (postgres.js, serviciile) |
 | Plan | **TODO operator** (ADR separat; planul gratuit suspendă proiectul și nu are backup-uri descărcabile) |
 
 ## 6. Acceptarea Fazei 0 (master prompt, Faza 0)

@@ -243,3 +243,23 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | `tagMatch=any\|all`: același filtru pe gospodărie (`household_id` din sesiune), id-uri uuid validate, parametri SQL legați (fără interpolare) | DONE (Postgres 17 efemer) | `transactions.repo.ts`, `planning-api.test.ts`, `exports.test.ts` | 2026-10-28 · programmer (F4) |
 | Migrația `0005_perf_indexes`: doar un index; RLS, politici, drepturi neatinse | DONE (PG17 efemer) / TODO pe Supabase | `migrate.test.ts` (0005 peste 0000–0004) | 2026-10-28 · programmer (F4) |
 | Revizuirea `security` a Fazei 4 | TODO | agentul `security` | — |
+
+## 15. Recurențe și workerul pg-boss (F5-A, 2026-10-28)
+
+| Control | Stare | Dovadă | Data · cine |
+|---|---|---|---|
+| `recurring_rules`, `recurring_occurrences`, `service_heartbeats`: RLS `ENABLE`+`FORCE` în migrația care le creează; politici pe gospodărie; fără context RLS, `finet_app` nu vede nimic | DONE (PG17 efemer) | `0006_recurring.sql`, `migrate.test.ts`, `recurring.test.ts` (izolare) | 2026-10-28 · programmer (F5-A) |
+| Izolare între gospodării pe fiecare serviciu (citire, modificare, pauză, reluare, ștergere, generare): 404 uniform | DONE (PG17 efemer) | `recurring.test.ts` | 2026-10-28 · programmer (F5-A) |
+| `due_recurring_rules`: SECURITY DEFINER cu `search_path = pg_catalog`, proprietar `finet_migrator`, EXECUTE doar `finet_app`; întoarce doar `(rule_id, household_id, actor_user_id)`, doar reguli active scadente; „azi” plafonat la data reală, `limit` 0..1000 | DONE (PG17 efemer) | `0006_recurring.sql`, `recurring.test.ts` | 2026-10-28 · programmer (F5-A) |
+| Risc rezidual acceptat: un `finet_app` compromis poate lista id-urile regulilor scadente ale tuturor gospodăriilor (fără sume/descrieri) | ACCEPTED (de confirmat de `security`) | ADR 0011 | 2026-10-28 · programmer (F5-A) |
+| Drepturi pe coloane: tipul, `start_on`, gospodăria și creatorul regulii nu se schimbă; ocurențele nu se modifică/șterg de aplicație | DONE (PG17 efemer) | `grants.test.ts` (0006) | 2026-10-28 · programmer (F5-A) |
+| Idempotența generării: unicitate în bază `(rule_id, occurrence_date)`, `FOR UPDATE SKIP LOCKED`, 5 rulări paralele → 0 duplicate; eșec pe al doilea rând → nimic scris | DONE (PG17 efemer) | `recurring.test.ts` | 2026-10-28 · programmer (F5-A) |
+| Garda 2^53 aplicată și tranzacțiilor generate | DONE (PG17 efemer) | `recurring.test.ts` | 2026-10-28 · programmer (F5-A) |
+| Schema `pgboss`: creată de operator (deținută de `finet_migrator`), nimic pentru PUBLIC/`anon`/`authenticated`; `finet_app` fără CREATE, fără scriere în `version`/`bam` (comenzi executate de pg-boss), EXECUTE doar `job_now`/`create_queue` | DONE (PG17 efemer) / TODO pe Supabase | `0007_pgboss.sql`, `ops/supabase/pgboss-schema.sql`, `grants.test.ts`, `pgboss.test.ts` | 2026-10-28 · programmer (F5-A) |
+| Workerul fără DDL la rulare (`migrate`/`createSchema`/`reindex`/`persistQueueStats` oprite) | DONE (pg-boss real pe PG17 efemer) | `src/worker/boss.ts`, `pgboss.test.ts` | 2026-10-28 · programmer (F5-A) |
+| TLS-ul workerului fail-closed (review automat, MEDIUM): doar `sslmode` scris exact, o dată; orice alt parametru TLS/grafie/valoare/duplicat → eroare la pornire; în producție doar `verify-full` + `DATABASE_CA_FILE` (și în `parseConfig`); `ssl: { ca, rejectUnauthorized: true }` explicit (driverul `pg` ar suprascrie CA-ul din URL) | DONE (unitar + bundle real) / NOT RUN pe Supabase | `src/worker/boss.ts`, `src/lib/config.ts`, `worker.test.ts`, `config.test.ts` | 2026-10-28 · programmer (F5-A) |
+| Logurile workerului: doar contoare și coduri, fără sume, descrieri, comercianți, id-uri, URL-uri sau mesaje de eroare | DONE (test) | `jobs.ts`, `main.ts` (`errorCode`), `worker.test.ts`, `pgboss.test.ts` | 2026-10-28 · programmer (F5-A) |
+| Joburile la cerere: date validate strict (Zod), membrul verificat în bază | DONE (PG17 efemer) | `jobs.ts`, `worker.test.ts` | 2026-10-28 · programmer (F5-A) |
+| Containerul worker: imaginea de unelte, user `node`, `read_only`, `cap_drop: ALL`, doar secretul lui, `mem_limit: 150m` | DONE (`test-env-examples.sh`) | `docker-compose.yml`, `ops/docker/test-env-examples.sh` | 2026-10-28 · programmer (F5-A) |
+| `pg-boss` 12.38.0 (MIT, fără scripturi de instalare); upgrade = migrație nouă (testul pică dacă `0007` nu mai corespunde) | DONE | `package.json`, `scripts/pgboss-plan.test.ts`, ADR 0011 | 2026-10-28 · programmer (F5-A) |
+| Revizuirea `security` a F5-A | TODO | agentul `security` | — |

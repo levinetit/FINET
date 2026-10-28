@@ -143,6 +143,20 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - `@axe-core/playwright`: Faza 9, odată cu hardening-ul;
 - HSTS `preload`: decizia operatorului (Faza 9).
 
+### Faza 5: stare
+**Făcut în repo, F5-A** (ADR 0011; branch `phase/05-recurring`):
+- migrația `0006_recurring`: `recurring_rules`, `recurring_occurrences` (unicitatea `(rule_id, occurrence_date)` = idempotența), `service_heartbeats`, cheia `transactions.recurring_rule_id` → regulă (`NOT VALID` + `VALIDATE`), RLS `ENABLE`+`FORCE`, GRANT pe coloane, funcția SECURITY DEFINER `due_recurring_rules` (doar id-uri);
+- migrația `0007_pgboss` (generată din planul pg-boss 12.38.0, schema creată de operator: `ops/supabase/pgboss-schema.sql`), drepturi minime pentru `finet_app`, fără DDL la rulare;
+- calendarul recurențelor (`src/lib/calendar.ts`): ziua 31, 29 februarie, fără deplasarea zilei țintă, DST neutru;
+- serviciile `src/modules/recurring/` (CRUD, pauză/reluare fără retroactiv, contoare, generare idempotentă cu recuperare limitată la 12/regulă/rulare, `completed`, garda 2^53, pauză la cont arhivat, fereastra workerului fără înfometare);
+- workerul pg-boss (`src/worker/`, imaginea de unelte): `recurring.generate` orar, `recurring.generate-now` la cerere, reîncercări limitate, oprire grațioasă, loguri fără date financiare, semnal de viață → `/api/health` `queue`; memorie măsurată ~86 MB RSS (limita 150 MB).
+
+**Rămâne:**
+- F5-B: API `/api/v1` pentru reguli și butonul „Generează tranzacțiile scadente”, UI-ul cu filtre pe stare și contorul „X active · Y de generat · Z total”, OpenAPI, E2E;
+- operatorul: schema `pgboss`, migrațiile `0006`/`0007`, pornirea workerului (`docs/INFRA.md` 4g);
+- prima rulare CI completă (build, E2E) — local NOT RUN (memoria hostului);
+- amânat (cu motiv): fusul orar al gospodăriei pentru „azi” (azi București), reasignarea creatorului unei reguli (fallback pe proprietar), recurențele de tip transfer, detectarea din extrase (Faza 7), notificările; curățarea cheilor de idempotență mutată din cron în worker (posibilă acum, nefăcută: cron-ul din 4f rămâne).
+
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
 - **L2** — `audit_events` dispar în CASCADE la ștergerea unei gospodării: aplicația nu șterge încă gospodării; se decide odată cu ștergerea (păstrare anonimizată sau `SET NULL`).
@@ -186,9 +200,9 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
   - CA fără sslmode de verificare sau `sslrootcert` în URL → oprire la pornire.
   - `NODE_EXTRA_CA_CERTS` rămâne doar ca variantă de rezervă.
   - Clientul Drizzle din Faza 1 trebuie construit cu `postgresOptions()` din `src/lib/db-client.ts`.
-- **Workerul și migrarea reale:** `finet-worker` (Faza 5/6) și `finet-migrate` (Faza 1) sunt stub-uri; când primesc cod, își citesc configurația cu `FINET_ROLE` corespunzător (`parseConfig` e deja pregătit).
+- **Workerul și migrarea reale:** **închis** — `finet-migrate` din Faza 1, `finet-worker` din Faza 5 (F5-A); ambele trec prin `parseConfig` cu `FINET_ROLE` corespunzător.
 - **Constatări minore din re-verificarea de securitate (după T5):**
-  - N2: stub-urile `finet-worker`/`finet-migrate` nu apelează `parseConfig`, deci regula pe rol se aplică efectiv doar la `web`; test viitor: `FINET_ROLE=worker` + `DATABASE_URL` setat → ieșire cu cod 1.
+  - N2: **închis în Faza 5** — workerul apelează `parseConfig`; testul `src/worker/worker.test.ts` (`FINET_ROLE=worker` + URL-ul altui rol → cod 1, fără valori în log).
   - N3: **închis în Faza 4** (id Telegram 8–12 cifre; fără excepție pentru JWT `anon`: FINET nu trimite cheia `anon` în browser).
   - N4: pe Supabase (PG16+), `roles.sql` poate cere `grant finet_migrator to current_user;` înainte de `create schema ... authorization`; de verificat pe un proiect real (scriptul se oprește în siguranță la eroare).
   - N5: `notify.sh` scrie antetul `From:` din `SMTP_FROM` întreg; construiește-l din adresa validată plus un nume curățat și refuză virgula.

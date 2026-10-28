@@ -1,4 +1,4 @@
-# FINET — arhitectura (ce există după Fazele 1–2, F3-A, F3-B și F3-C)
+# FINET — arhitectura (ce există după Fazele 1–4 și F5-A)
 
 Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
 
@@ -101,15 +101,18 @@ Paginile din `src/app/(app)/` apelează fiecare `requireLedgerPage(<cale>)` (`sr
 ## Interfața planificării (F3-C)
 Paginile `/dashboard`, `/tags`, `/budgets` (+ `new`, `[id]`), `/goals` (+ `new`, `[id]`) și `/reports` urmează regulile din ADR 0006 (citiri pe server prin servicii, mutații prin `/api/v1/*`). Luna (`?month=`) se validează în pagină cu aceeași fereastră ca API-ul (`planning-page.ts` + `pickMonth` din `planning-ui.ts`); o lună invalidă afișează luna curentă cu un mesaj. Graficele și barele de progres sunt SVG randat pe server (`src/components/planning/charts.tsx`), scalat în întregi prin `percentOf`, cu dimensiunile ca atribute (fără `style=`) și tabel text alternativ. Exporturile CSV se descarcă prin `fetch` cu cookie (`download.ts`), mereu cu `dialect=ro`. Filtrele tranzacțiilor au `merchant` și `tagIds` (un singur parametru cu virgule spre API). Detalii: ADR 0008.
 
+## Recurențe și workerul (F5-A)
+`src/modules/recurring/` (schema/serviciu/repo, ca restul registrului): reguli cu stările `active|paused|completed`, generare idempotentă (ocurența `(rule_id, occurrence_date)` se revendică înaintea tranzacției, în aceeași tranzacție SQL; regula blocată `FOR UPDATE SKIP LOCKED`), recuperare limitată la 12 scadențe pe regulă pe rulare, reluare fără retroactiv; calendarul în `src/lib/calendar.ts`. Workerul (`src/worker/`, `FINET_ROLE=worker`, imaginea de unelte `dist/tools/worker.mjs`): pg-boss ca `finet_app` (schema `pgboss` din migrația 0007, fără DDL la rulare), jobul orar `recurring.generate` (scadențele tuturor gospodăriilor prin `finet.due_recurring_rules`, doar id-uri; generarea în contextul RLS al fiecărei gospodării) și `recurring.generate-now` (o gospodărie, un membru). Semnalul de viață în `finet.service_heartbeats`. Detalii: ADR 0011.
+
 ## Storage
 Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath, `O_NOFOLLOW`, scriere atomică). Driverul `s3` aruncă `NotImplementedError` (Faza 6).
 
 ## Sănătatea
-`/api/health`: `db` (`select 1`, clientul comun din `src/lib/db-client.ts` cu o conexiune, `prepare: false`, TLS după `sslmode` și CA), `storage` (scriere/citire/ștergere), `diskFreePercent`; `queue` și `ai` = `unknown`. `ok` doar dacă `db` și `storage` sunt `ok`; `down` (503) dacă oricare e `down`; altfel `degraded`. Fără versiuni, căi sau mesaje de eroare în răspuns.
+`/api/health`: `db` (`select 1`, clientul comun din `src/lib/db-client.ts` cu o conexiune, `prepare: false`, TLS după `sslmode` și CA), `storage` (scriere/citire/ștergere), `diskFreePercent`; `queue` din semnalul workerului (`ok`, `degraded` peste 180 s, `unknown` dacă workerul e oprit sau n-a pornit; fără pg-boss în serverul web); `ai` = `unknown`. `down` (503) dacă oricare e `down`; `degraded` dacă oricare e `degraded`; `ok` doar dacă `db` și `storage` sunt `ok`; altfel `degraded`. Fără versiuni, căi sau mesaje de eroare în răspuns.
 
 ## Deploy și CI
 - Imaginea: `Dockerfile` (multi-stage, user non-root, healthcheck). Compose: `ops/docker/docker-compose.yml` (`finet-web`, `finet-worker` și `finet-migrate`, fiecare cu `FINET_ROLE` fixat, propriul `env_file` nesecret din `/srv/finet/env/`, doar secretele rolului său ca fișiere `secrets:` din `/srv/finet/secrets/` și CA-ul Supabase montat read-only).
 - CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `smoke`, `auth`, `ledger` în `personal` apoi în `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
 
 ## Planificat (nu există încă)
-Backup-ul restic (F3-D), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), înregistrarea publică și modul `saas` (Faza 11). Graficele nu folosesc Recharts (SVG propriu, ADR 0008).
+API-ul și UI-ul recurențelor (F5-B), cozile documentelor (Faza 6), driverul S3, `lib/ai/`, sharp (Faza 6), înregistrarea publică și modul `saas` (Faza 11). Graficele nu folosesc Recharts (SVG propriu, ADR 0008).
