@@ -154,8 +154,6 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS și drepturi pe tabelele registrului (fine
       sql`update finet.client_installations set user_id = user_id`,
       sql`update finet.client_installations set installation_id = installation_id`,
       sql`update finet.app_events set name = name`,
-      sql`delete from finet.app_events`,
-      sql`delete from finet.client_installations`,
       sql`select * from finet.app_downloads`,
       sql`update finet.app_downloads set version = version`,
       sql`delete from finet.app_downloads`,
@@ -284,6 +282,29 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS și drepturi pe tabelele registrului (fine
       expect(new Set(own.map((r) => r.user_id))).toEqual(new Set([A()]));
     });
 
+    it("DELETE (revocarea usage_stats, plafonul de instalări): doar rândurile proprii", async () => {
+      const a = randomUUID();
+      const b = randomUUID();
+      await install(A(), a);
+      await install(B(), b);
+      await event(A(), null, a);
+      await event(B(), null, b);
+      const countB = async () => {
+        const [row] = await f.admin<{ i: number; e: number }[]>`
+          select (select count(*)::int from finet.client_installations where user_id = ${B()}) as i,
+                 (select count(*)::int from finet.app_events where user_id = ${B()}) as e`;
+        return row;
+      };
+      const before = await countB();
+      await as(A(), null, sql`delete from finet.app_events`);
+      await as(A(), null, sql`delete from finet.client_installations`);
+      expect(await countB()).toEqual(before);
+      const [mine] = await f.admin<{ i: number; e: number }[]>`
+        select (select count(*)::int from finet.client_installations where user_id = ${A()}) as i,
+               (select count(*)::int from finet.app_events where user_id = ${A()}) as e`;
+      expect(mine).toEqual({ i: 0, e: 0 });
+    });
+
     it("descărcări: anonime sau proprii, fără citire", async () => {
       const dl = (userId: string | null) =>
         as(
@@ -303,7 +324,7 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS și drepturi pe tabelele registrului (fine
         userId,
         hh,
         sql`insert into finet.idempotency_keys (household_id, key, request_hash)
-            values (${hh}, 'cheie-comuna-1', ${"b".repeat(64)})`,
+            values (${hh}, 'cheie-comuna-0001', ${"b".repeat(64)})`,
       );
     expect(await sqlState(() => ins(A(), f.HA))).toBeNull();
     expect(await sqlState(() => ins(B(), f.HB))).toBeNull();

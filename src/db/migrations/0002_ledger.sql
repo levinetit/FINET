@@ -33,6 +33,7 @@ CREATE TABLE "finet"."accounts" (
 	CONSTRAINT "accounts_name_trimmed" CHECK ("finet"."accounts"."name" = btrim("finet"."accounts"."name")),
 	CONSTRAINT "accounts_type_valid" CHECK ("finet"."accounts"."type" in ('cash', 'bank', 'savings', 'credit_card')),
 	CONSTRAINT "accounts_currency_valid" CHECK ("finet"."accounts"."currency" in ('RON', 'EUR', 'USD')),
+	CONSTRAINT "accounts_opening_balance_range" CHECK ("finet"."accounts"."opening_balance_minor" between -10000000000000 and 10000000000000),
 	CONSTRAINT "accounts_bank_code_format" CHECK ("finet"."accounts"."bank_code" is null or "finet"."accounts"."bank_code" ~ '^[a-z0-9_]{2,32}$')
 );
 --> statement-breakpoint
@@ -125,7 +126,7 @@ CREATE TABLE "finet"."idempotency_keys" (
 	"status_code" integer,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "idempotency_keys_household_key_key" UNIQUE("household_id","key"),
-	CONSTRAINT "idempotency_keys_key_format" CHECK ("finet"."idempotency_keys"."key" ~ '^[A-Za-z0-9_-]{8,128}$'),
+	CONSTRAINT "idempotency_keys_key_format" CHECK ("finet"."idempotency_keys"."key" ~ '^[A-Za-z0-9_-]{16,128}$'),
 	CONSTRAINT "idempotency_keys_request_hash_format" CHECK ("finet"."idempotency_keys"."request_hash" ~ '^[0-9a-f]{64}$'),
 	CONSTRAINT "idempotency_keys_status_code_range" CHECK ("finet"."idempotency_keys"."status_code" is null or "finet"."idempotency_keys"."status_code" between 100 and 599)
 );
@@ -151,7 +152,7 @@ CREATE TABLE "finet"."transactions" (
 	"external_ref" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "transactions_amount_positive" CHECK ("finet"."transactions"."amount_minor" > 0),
+	CONSTRAINT "transactions_amount_range" CHECK ("finet"."transactions"."amount_minor" between 1 and 10000000000000),
 	CONSTRAINT "transactions_type_valid" CHECK ("finet"."transactions"."type" in ('income', 'expense', 'transfer')),
 	CONSTRAINT "transactions_currency_valid" CHECK ("finet"."transactions"."currency" in ('RON', 'EUR', 'USD')),
 	CONSTRAINT "transactions_source_valid" CHECK ("finet"."transactions"."source" in ('manual', 'receipt', 'statement', 'recurring')),
@@ -530,6 +531,11 @@ create policy app_events_insert on finet.app_events
                    or (household_id = (select finet.current_household_id())
                        and (select finet.member_role(finet.current_household_id())) is not null)));
 --> statement-breakpoint
+-- Revocarea consimțământului `usage_stats` (ADR 0005) șterge evenimentele utilizatorului curent.
+create policy app_events_delete_own on finet.app_events
+  for delete to finet_app
+  using (user_id = (select finet.current_user_id()));
+--> statement-breakpoint
 -- Descărcările: anonime sau ale utilizatorului curent; aplicația nu le citește (doar adăugare).
 create policy app_downloads_insert on finet.app_downloads
   for insert to finet_app
@@ -568,11 +574,12 @@ grant select, insert, delete on finet.idempotency_keys to finet_app;
 --> statement-breakpoint
 grant update (response, status_code) on finet.idempotency_keys to finet_app;
 --> statement-breakpoint
-grant select, insert on finet.client_installations to finet_app;
+-- DELETE: revocarea `usage_stats` și plafonul de instalări per utilizator (ADR 0005).
+grant select, insert, delete on finet.client_installations to finet_app;
 --> statement-breakpoint
 grant update (platform, app_version, version_code, os_version, device_model, locale, last_seen_at)
   on finet.client_installations to finet_app;
 --> statement-breakpoint
-grant select, insert on finet.app_events to finet_app;
+grant select, insert, delete on finet.app_events to finet_app;
 --> statement-breakpoint
 grant insert on finet.app_downloads to finet_app;

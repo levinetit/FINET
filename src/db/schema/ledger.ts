@@ -81,6 +81,11 @@ export const accounts = finet.table(
     check("accounts_name_trimmed", sql`${t.name} = btrim(${t.name})`),
     check("accounts_type_valid", sql`${t.type} in ('cash', 'bank', 'savings', 'credit_card')`),
     check("accounts_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    // Plafonul sumelor (ADR 0004): |sold inițial| ≤ 10^13 unități minore (100 de miliarde).
+    check(
+      "accounts_opening_balance_range",
+      sql`${t.openingBalanceMinor} between -10000000000000 and 10000000000000`,
+    ),
     check(
       "accounts_bank_code_format",
       sql`${t.bankCode} is null or ${t.bankCode} ~ '^[a-z0-9_]{2,32}$'`,
@@ -217,7 +222,8 @@ export const transactions = finet.table(
     uniqueIndex("transactions_transfer_group_direction_key")
       .on(t.transferGroupId, t.transferDirection)
       .where(sql`${t.transferGroupId} is not null`),
-    check("transactions_amount_positive", sql`${t.amountMinor} > 0`),
+    // 1 ≤ sumă ≤ 10^13 unități minore (plafonul din ADR 0004; semnul vine din `type`).
+    check("transactions_amount_range", sql`${t.amountMinor} between 1 and 10000000000000`),
     check("transactions_type_valid", sql`${t.type} in ('income', 'expense', 'transfer')`),
     check("transactions_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
     check(
@@ -272,7 +278,7 @@ export const idempotencyKeys = finet.table(
   (t) => [
     unique("idempotency_keys_household_key_key").on(t.householdId, t.key),
     index("idempotency_keys_created_at_idx").on(t.createdAt),
-    check("idempotency_keys_key_format", sql`${t.key} ~ '^[A-Za-z0-9_-]{8,128}$'`),
+    check("idempotency_keys_key_format", sql`${t.key} ~ '^[A-Za-z0-9_-]{16,128}$'`),
     check("idempotency_keys_request_hash_format", sql`${t.requestHash} ~ '^[0-9a-f]{64}$'`),
     check(
       "idempotency_keys_status_code_range",

@@ -859,6 +859,10 @@
           "name": "accounts_currency_valid",
           "value": "\"finet\".\"accounts\".\"currency\" in ('RON', 'EUR', 'USD')"
         },
+        "accounts_opening_balance_range": {
+          "name": "accounts_opening_balance_range",
+          "value": "\"finet\".\"accounts\".\"opening_balance_minor\" between -10000000000000 and 10000000000000"
+        },
         "accounts_bank_code_format": {
           "name": "accounts_bank_code_format",
           "value": "\"finet\".\"accounts\".\"bank_code\" is null or \"finet\".\"accounts\".\"bank_code\" ~ '^[a-z0-9_]{2,32}$'"
@@ -1669,7 +1673,7 @@
       "checkConstraints": {
         "idempotency_keys_key_format": {
           "name": "idempotency_keys_key_format",
-          "value": "\"finet\".\"idempotency_keys\".\"key\" ~ '^[A-Za-z0-9_-]{8,128}$'"
+          "value": "\"finet\".\"idempotency_keys\".\"key\" ~ '^[A-Za-z0-9_-]{16,128}$'"
         },
         "idempotency_keys_request_hash_format": {
           "name": "idempotency_keys_request_hash_format",
@@ -1995,9 +1999,9 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "transactions_amount_positive": {
-          "name": "transactions_amount_positive",
-          "value": "\"finet\".\"transactions\".\"amount_minor\" > 0"
+        "transactions_amount_range": {
+          "name": "transactions_amount_range",
+          "value": "\"finet\".\"transactions\".\"amount_minor\" between 1 and 10000000000000"
         },
         "transactions_type_valid": {
           "name": "transactions_type_valid",
