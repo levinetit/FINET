@@ -1,4 +1,11 @@
-import { type APIRequestContext, type Browser, type Page, expect, test } from "@playwright/test";
+import {
+  type APIRequestContext,
+  type Browser,
+  type BrowserContext,
+  type Page,
+  expect,
+  test,
+} from "@playwright/test";
 
 import { MODE, type UserKind, loginOk, password, userEmail } from "./fixtures";
 
@@ -42,11 +49,22 @@ type Account = { id: string; name: string };
 type Rule = { id: string; status: string; nextRunOn: string; description: string };
 type Tx = { id: string; source: string; recurringRuleId: string | null; occurredOn: string };
 
+type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
+const states = new Map<UserKind, StorageState>();
+
+/** O pagină autentificată; login-ul o singură dată per utilizator (rate limit pe email). */
 async function pageAs(browser: Browser, baseURL: string, kind: UserKind): Promise<Page> {
-  const ctx = await browser.newContext({ baseURL });
-  const page = await ctx.newPage();
-  await loginOk(page, userEmail(kind), password());
-  return page;
+  let state = states.get(kind);
+  if (!state) {
+    const ctx = await browser.newContext({ baseURL });
+    const p = await ctx.newPage();
+    await loginOk(p, userEmail(kind), password());
+    state = await ctx.storageState();
+    states.set(kind, state);
+    await ctx.close();
+  }
+  const ctx = await browser.newContext({ baseURL, storageState: state });
+  return ctx.newPage();
 }
 
 function api(page: Page, baseURL: string) {
