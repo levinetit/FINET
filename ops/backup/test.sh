@@ -130,6 +130,27 @@ out=$(rb 1009000 3 FINET_BACKUP_DEST=ftp 2>&1); check "destinație invalidă →
 out=$(rb 1009000 3 FINET_BACKUP_DEST=local FAKE_RC=0 2>&1); check "destinația local" 0 $? "compose.local.yml" "$out"
 perm=$(stat -c %a "$STATE" 2> /dev/null || echo necunoscut)
 [ "$perm" = 700 ] && ok "directorul de stare e 700" || fail "directorul de stare are $perm"
+# Lanțul de încredere (LOW-1): o copie a checkout-ului cu un fișier sau un director scriibil de
+# alții → refuz (2), fără să pornească docker.
+mkdir -p "$TMP/co/ops/backup" "$TMP/co/ops/docker" "$TMP/co/ops/notify"
+cp "$DIR/run-backup.sh" "$DIR/compose.s3.yml" "$TMP/co/ops/backup/"
+cp "$DIR/../docker/docker-compose.yml" "$TMP/co/ops/docker/"
+cp "$DIR/../notify/notify.sh" "$TMP/co/ops/notify/"
+chmod -R go-w "$TMP/co"
+rb_co() { env -i PATH="$PATH" FINET_BACKUP_HOST_ENV=/nu/exista FINET_BACKUP_STATE_DIR="$STATE" \
+  FINET_BACKUP_DOCKER="$TMP/fake-docker" FINET_BACKUP_NOTIFY_CMD="$TMP/fake-notify" \
+  FINET_NOTIFY_ENV="$TMP/notify.env" FINET_BACKUP_NOW=1020000 FINET_BACKUP_DOW=3 FAKE_RC=0 \
+  sh "$TMP/co/ops/backup/run-backup.sh"; }
+out=$(rb_co 2>&1); check "checkout sigur → rulează" 0 $? "backup reușit" "$out"
+chmod o+w "$TMP/co/ops/docker/docker-compose.yml"
+out=$(rb_co 2>&1); check "compose scriibil de alții → refuz" 2 $? "docker-compose.yml" "$out"
+printf '%s' "$out" | grep -q "argumente:" && fail "docker a pornit cu un checkout nesigur" || ok "docker nu a pornit"
+grep -q "etapa permisiuni" "$NOTES" && ok "refuzul de permisiuni → alertă" || fail "refuzul de permisiuni fără alertă"
+chmod o-w "$TMP/co/ops/docker/docker-compose.yml"
+chmod g+w "$TMP/co/ops/backup"
+out=$(rb_co 2>&1); check "director scriibil de grup → refuz" 2 $? "ops/backup/" "$out"
+chmod g-w "$TMP/co/ops/backup"
+
 if command -v flock > /dev/null 2>&1; then
   out=$( (rb 1010000 3 FAKE_RC=0 FAKE_SLEEP=3 > /dev/null 2>&1 &) ; sleep 1; rb 1010001 3 FAKE_RC=0 2>&1)
   check "a doua rulare simultană → 75" 75 $? "încă în curs" "$out"

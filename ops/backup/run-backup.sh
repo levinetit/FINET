@@ -1,7 +1,9 @@
 #!/bin/sh
 # FINET — rularea zilnică a backup-ului, pe HOST, din cron-ul root (docs/BACKUP.md, „Programare”):
 #   sudo crontab -e      (NU `crontab -`: suprascrie tot crontab-ul)
-#   40 3 * * * /bin/sh /srv/finet/repo/ops/backup/run-backup.sh >> /var/log/finet-backup.log 2>&1
+#   40 3 * * * /bin/sh /srv/finet/src/ops/backup/run-backup.sh >> /var/log/finet-backup.log 2>&1
+# Checkout-ul (/srv/finet/src, docs/INFRA.md) trebuie să fie root:root, fără drept de scriere
+# pentru grup/alții; scriptul verifică asta la fiecare rulare și refuză altfel (LOW-1).
 #
 # Pornește containerul one-shot `finet-backup` (docker compose run --rm) și, la ORICE eșec
 # (backup eșuat, imagine lipsă, container oprit de OOM = 137, timeout, altă rulare în curs),
@@ -100,6 +102,54 @@ alert_failure() { # etapă, cod
   printf '%s %s\n' "$key" "$NOW" > "$STATE_DIR/last-alert"
   send "FINET: backup-ul a EȘUAT pe $HOSTNAME_V (etapa $1, cod $2). Detalii: /var/log/finet-backup.log. Fără backup reușit nu se introduc date noi importante."
 }
+
+# Lanțul de încredere (revizuirea Fazei 3, LOW-1): scriptul rulează ca root din cron, iar
+# fișierele pe care le execută sau citește (el însuși, notify.sh, compose-ul și suprapunerea,
+# compose.env, care alege imaginea pornită de root, backup-host.env, notify.env) și directoarele
+# care le conțin, până la /, trebuie să aparțină lui root (sau utilizatorului care rulează) și să
+# NU poată fi scrise de grup/alții (un director cu sticky bit, ca /tmp, e acceptat). Altfel
+# oricine poate scrie în checkout ar executa cod ca root. Nimic nu se `source`-ază: fișierele de
+# mediu se citesc doar pe chei cunoscute.
+ME_UID=$(id -u)
+untrusted() { # cale; 0 = nesigur
+  [ -e "$1" ] || return 1
+  set -- "$1" "$(stat -c '%u' "$1")" "$(stat -c '%a' "$1")"
+  [ "$2" = 0 ] || [ "$2" = "$ME_UID" ] || return 0
+  _mode=$3
+  [ "${#_mode}" -eq 4 ] && _sticky=$(( ${_mode%???} & 1 )) && _mode=${_mode#?} || _sticky=0
+  _go=${_mode#?}
+  _g=${_go%?}
+  _o=${_go#?}
+  if [ $(( _g & 2 )) -ne 0 ] || [ $(( _o & 2 )) -ne 0 ]; then
+    [ -d "$1" ] && [ "$_sticky" = 1 ] && return 1
+    return 0
+  fi
+  return 1
+}
+check_trust() {
+  _bad=
+  for f in "$DIR/run-backup.sh" "$NOTIFY" "$REPO_ROOT/ops/docker/docker-compose.yml" \
+    "$DIR/compose.$DEST.yml" "$COMPOSE_ENV" "$HOST_ENV" "$NOTIFY_ENV"; do
+    untrusted "$f" && _bad="$_bad $f"
+    _d=$(dirname "$f")
+    while :; do
+      untrusted "$_d" && _bad="$_bad $_d/"
+      [ "$_d" = / ] && break
+      _d=$(dirname "$_d")
+    done
+  done
+  [ -z "$_bad" ] && return 0
+  # shellcheck disable=SC2086 # $_bad e o listă de căi separate prin spațiu
+  log "refuz: fișiere sau directoare care pot fi scrise de alți utilizatori:$(printf '%s\n' $_bad | sort -u | tr '\n' ' ')"
+  return 1
+}
+if ! check_trust; then
+  # Alerta pleacă doar dacă notify.sh însuși e sigur.
+  if ! untrusted "$NOTIFY" && ! untrusted "$(dirname "$NOTIFY")"; then
+    alert_failure permisiuni 2
+  fi
+  exit 2
+fi
 
 # O singură rulare o dată: blocare pe descriptorul 9, ținută până la ieșire (fără flock pe
 # host, rularea continuă fără blocare).
