@@ -40,9 +40,13 @@ Alternative respinse: dump ca `finet_migrator` (eșuează), dezactivarea tempora
 
 Parola restic și adresa repository-ului: `RESTIC_PASSWORD_FILE`/`RESTIC_REPOSITORY_FILE` (native). Conexiunea la bază: un **fișier de servicii libpq** (`PGSERVICEFILE` + `PGSERVICE`) în loc de URL: parola nu apare în `ps` și nu e nevoie de parsarea unui URL în `sh` (**decizia mea**; restul aplicației folosește URL-uri, dar pg_dump ar fi primit URL-ul ca argument). Scriptul cere `sslmode=verify-full`. Cheile S3 (restic nu are `_FILE`) sunt citite în mediul procesului restic; SFTP: cheie dedicată + `known_hosts` fixat, `StrictHostKeyChecking=yes`. Secretele destinației sunt doar în suprapunerea ei (`compose.s3.yml`/`compose.sftp.yml`), ca o destinație să nu ceară fișierele alteia.
 
-### Destinația: configurabilă, aleasă de operator
+### Destinația: configurabilă; aleasă de operator: Google Drive prin rclone
 
-S3-compatibil (recomandat, cu Object Lock/versiuni), SFTP sau local. Local e documentat explicit ca **nefiind** în afara serverului. Repository-ul se inițializează doar explicit (`init`): o adresă greșită nu creează în tăcere un repository nou.
+**Decizia operatorului (2026-10-28):** `rclone:Gdrive:finet-backup/restic`, cu remote-ul `Gdrive` existent pe host (rclone, scope `drive`, ~1 TiB liber), fără `crypt` rclone (restic criptează deja totul). Implementare: pachetul `rclone~1.69` în imagine, suprapunerea `compose.rclone.yml` (secretul `finet_rclone_conf` → `RCLONE_CONFIG`, read-only, 384m), validarea din `lib.sh` (schema `rclone:<remote>:<cale>`, config existent și necitibil de alții, fără conținut în log), testul de restaurare și retenția rulate și prin `rclone:` cu un remote `local` (fără rețea). Fără `-o rclone.args`: argumentele implicite ale restic sunt corecte pentru Drive, iar `drive_use_trash` e implicit activ (decizia mea).
+
+Limitări acceptate: **fără Object Lock** (coșul Drive păstrează ~30 de zile fișierele șterse de `prune`, protecție parțială; tokenul poate goli coșul); **tokenul Drive e larg** (scope `drive` complet, `root_folder_id` nu restrânge permisiunile), deci secretul e la fel de sensibil ca tot Drive-ul și ca backup-urile hostului din același cont; **tokenul reîmprospătat nu se salvează** (config read-only, reîmprospătare în memorie la fiecare rulare, decizia mea: un config scriibil de container ar putea fi modificat persistent). Variante mai stricte, pentru mai târziu: client OAuth cu `drive.file` sau cont Google dedicat; S3 cu Object Lock.
+
+Alternativele rămân disponibile: S3-compatibil (cu Object Lock/versiuni), SFTP sau local. Local e documentat explicit ca **nefiind** în afara serverului. Repository-ul se inițializează doar explicit (`init`): o adresă greșită nu creează în tăcere un repository nou.
 
 ### Retenție, gazdă fixă, verificare
 

@@ -37,17 +37,38 @@ Garanții verificate de teste:
 - instantaneele au gazda fixă `finet` (`docker compose run` schimbă hostname-ul la fiecare rulare), deci retenția chiar se aplică;
 - restaurarea readuce identic rândurile și conținutul fiecărui tabel, secvențele, soldurile, RLS `ENABLE`+`FORCE`, politicile, GRANT-urile (inclusiv pe coloane), privilegiile implicite, funcțiile și triggerele.
 
-## 2. Destinația (alege operatorul)
+## 2. Destinația (decizia operatorului: Google Drive prin rclone)
 
-`RESTIC_REPOSITORY` e configurabil (fișierul-secret `finet_backup_repository`) și se alege suprapunerea potrivită:
+**Pe acest VPS destinația aleasă e Google Drive, prin rclone** (`rclone:Gdrive:finet-backup/restic`, secțiunea 2a). `RESTIC_REPOSITORY` rămâne configurabil (fișierul-secret `finet_backup_repository`) și se alege suprapunerea potrivită:
 
 | Destinație                                                                 | Adresa în `finet_backup_repository`         | Suprapunere         | Observații                                                                                                                                   |
 | -------------------------------------------------------------------------- | ------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **S3-compatibil** (Backblaze B2, Wasabi, Hetzner Object Storage, AWS S3)   | `s3:https://<endpoint>/<bucket>`            | `compose.s3.yml`    | recomandată: cheie dedicată cu drepturi doar pe acel bucket; ideal cu Object Lock / versiuni, ca un atacator de pe VPS să nu poată șterge tot |
+| **rclone → Google Drive** (aleasă)                                         | `rclone:Gdrive:finet-backup/restic`         | `compose.rclone.yml` | restic criptează tot cu parola restic (fără `crypt` rclone); tokenul Drive are scope complet; fără Object Lock, doar coșul Drive (2a) |
+| **S3-compatibil** (Backblaze B2, Wasabi, Hetzner Object Storage, AWS S3)   | `s3:https://<endpoint>/<bucket>`            | `compose.s3.yml`    | alternativa cu protecție reală la ștergere: cheie dedicată cu drepturi doar pe acel bucket; ideal cu Object Lock / versiuni, ca un atacator de pe VPS să nu poată șterge tot |
 | **SFTP** (storage box, alt server)                                         | `sftp:<utilizator>@<gazdă>:/<cale>`         | `compose.sftp.yml`  | cheie SSH dedicată, `known_hosts` fixat (verificat cu amprenta furnizorului), cont fără shell                                                 |
 | **Local**                                                                  | `/backup/repo`                              | `compose.local.yml` | **NU e backup în afara serverului**: pierderea discului sau a VPS-ului ia și backup-ul. Doar pentru test sau temporar                        |
 
-Nu folosi Google Drive-ul existent al hostului prin `/home`: directorul FINET trebuie să rămână în afara `rclone sync /home` (copia necriptată, `docs/INFRA.md` 4a). restic criptează oricum, dar parola și cheile ar fi pe același server.
+Nu pune repository-ul sub `/home` și nu-l lăsa să ajungă în `rclone sync /home` (copia necriptată, `docs/INFRA.md` 4a): FINET scrie direct în `Gdrive:finet-backup/restic`, prin restic, nu printr-un director local sincronizat. Backup-urile hostului scriu în `Gdrive:vpnde/...`; un `sync` șterge doar în calea lui de destinație, deci nu atinge `finet-backup/`.
+
+### 2a. rclone → Google Drive
+
+Fapte verificate pe host (coordonatorul, 2026-10-28): rclone v1.74.3; în `/root/.config/rclone/rclone.conf`, remote-ul `Gdrive` (tip `drive`, scope `drive`, funcțional, ~1 TiB liber); `GdriveCrypt` (crypt peste `Gdrive:vpnde/crypt`) și `S3` (cheie invalidă) **nu** se folosesc. Imaginea de backup are rclone 1.69 (Alpine 3.22), compatibil cu configul remote-urilor `drive`.
+
+- **Cum merge:** restic pornește `rclone serve restic --stdio` cu configul din `RCLONE_CONFIG` (secretul `finet_rclone_conf`, montat read-only în `/run/secrets/rclone.conf`). Argumentele implicite ale restic (`serve restic --stdio --b2-hard-delete`) sunt suficiente: `--b2-hard-delete` nu afectează Drive, iar `drive_use_trash` e implicit `true`, deci nu e nevoie de `-o rclone.args` (decizia mea). Suprapunerea ridică memoria la 384m (restic + rclone în același container).
+- **Coșul Drive:** `forget --prune` șterge fișiere de pachet, pe care Drive le mută în coș (~30 de zile). E o protecție **parțială** la o ștergere accidentală sau la un `prune` greșit, **nu** Object Lock: cine are tokenul poate goli coșul sau șterge definitiv. Coșul ocupă spațiu până la golire.
+- **Tokenul OAuth:** remote-ul are scope `drive` **complet**: tokenul citește și șterge tot Drive-ul contului, nu doar `finet-backup/`. `root_folder_id` restrânge doar calea folosită de rclone, nu permisiunile tokenului. Deci `finet_rclone_conf` e la fel de sensibil ca întregul Drive (și ca backup-urile hostului din `vpnde/`). Varianta mai strictă, pentru mai târziu: un client OAuth propriu cu scope `drive.file` sau un cont Google dedicat backup-ului (decizia operatorului).
+- **Reîmprospătarea tokenului:** tokenul de acces expiră în ~1 h; rclone îl reîmprospătează cu tokenul de reîmprospătare (care la Google nu se schimbă) și încearcă să-l scrie înapoi în config. Fișierul e read-only, deci noul token rămâne doar în memorie pe durata rulării (în log poate apărea un avertisment că nu s-a putut salva configul); la rularea următoare se reîmprospătează din nou. Acceptat (decizia mea): un config scriibil în container ar permite ca un container compromis să-l modifice persistent. Dacă operatorul reautorizează remote-ul `Gdrive` pe host (token nou), extrage din nou secțiunea (mai jos).
+- **Configul minim**, doar secțiunea `[Gdrive]`, fără `GdriveCrypt`/`S3`, ca root, într-un fișier `1000:1000 0400`:
+  ```bash
+  sudo sh -c 'umask 077
+    awk "/^\[/{p=(\$0==\"[Gdrive]\")} p" /root/.config/rclone/rclone.conf > /srv/finet/secrets/finet_rclone_conf
+    chown 1000:1000 /srv/finet/secrets/finet_rclone_conf && chmod 0400 /srv/finet/secrets/finet_rclone_conf'
+  sudo grep -c '^\[' /srv/finet/secrets/finet_rclone_conf      # 1 (doar [Gdrive])
+  sudo grep -o '^type = .*' /srv/finet/secrets/finet_rclone_conf # type = drive
+  printf 'rclone:Gdrive:finet-backup/restic\n' | sudo install -o 1000 -g 1000 -m 0400 /dev/stdin /srv/finet/secrets/finet_backup_repository
+  ```
+  `lib.sh` refuză un config care poate fi citit de grup/alții, un `RCLONE_CONFIG` fără repository `rclone:` și o adresă fără cale; nu afișează conținutul. Nu copia fișierul în repo, în tichete sau în loguri.
+- **Verificare înainte de `init`** (fără să scrie nimic): `sudo rclone --config /srv/finet/secrets/finet_rclone_conf lsd Gdrive: --max-depth 1` (ca root pe host) arată folderele Drive-ului.
 
 ## 3. Rolul bazei de date (`finet_backup`)
 
@@ -86,6 +107,7 @@ Pasul `role` se oprește (și nu lasă rolul creat: o singură tranzacție) dac�
 | `finet_restic_password`                  | parola repository-ului (`openssl rand -base64 32`); **păstreaz-o și în afara serverului** (manager de parole): fără ea backup-ul e de nerecuperat | toate                      |
 | `finet_backup_repository`                | adresa repository-ului (tabelul din 2)                                                                     | toate                      |
 | `finet_backup_pg_service`                | fișier de servicii libpq, secțiunea `[finet_backup]` (mai jos)                                             | backup                     |
+| `finet_rclone_conf`                      | config rclone cu DOAR secțiunea `[Gdrive]` (tokenul OAuth, scope `drive` complet), 2a                     | `compose.rclone.yml` (destinația aleasă) |
 | `finet_backup_s3_access_key_id`, `finet_backup_s3_secret_access_key` | cheile S3                                                                      | `compose.s3.yml`           |
 | `finet_backup_sftp_key`, `finet_backup_sftp_known_hosts` | cheia privată SSH și cheia publică fixată a serverului                                     | `compose.sftp.yml`         |
 | `finet_restore_pg_service`               | secțiunea `[finet_restore]`, rolul `finet_migrator` al bazei țintă                                         | doar la restaurare         |
@@ -111,7 +133,7 @@ Configurația nesecretă: `/srv/finet/env/finet.backup.env` (model `ops/docker/f
 
 1. **Imaginea**: `sudo sh ops/deploy/pull-images.sh <sha> backup` (devine `finet:backup`; `all` aduce acum și imaginea de backup, deci cere un commit construit după F3-D).
 2. **Rolul** `finet_backup` (secțiunea 3).
-3. **Destinația**: bucket-ul/contul SFTP; cheile dedicate.
+3. **Destinația**: Google Drive prin rclone (2a): `finet_rclone_conf` minim și `finet_backup_repository` = `rclone:Gdrive:finet-backup/restic`; `FINET_BACKUP_DEST=rclone` în `backup-host.env` (implicit). Alternativ: bucket-ul S3 sau contul SFTP, cu cheile dedicate.
 4. **Secretele** (secțiunea 4) și fișierele de mediu:
    ```bash
    sudo install -d -o root -g root -m 700 /srv/finet/backup-state
@@ -121,7 +143,7 @@ Configurația nesecretă: `/srv/finet/env/finet.backup.env` (model `ops/docker/f
    ```
 5. **Inițializarea repository-ului** (o singură dată; `backup` nu inițializează singur, ca o adresă greșită să nu creeze în tăcere alt repository):
    ```bash
-   C="docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.s3.yml --env-file /srv/finet/compose/compose.env --profile backup"
+   C="docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.rclone.yml --env-file /srv/finet/compose/compose.env --profile backup"
    sudo $C run --rm -T finet-backup init
    ```
 6. **Primul backup** manual, cu notificarea: `sudo sh ops/backup/run-backup.sh` → cod 0; `sudo $C run --rm -T finet-backup snapshots` arată un instantaneu `finet-db` și unul `finet-storage`. Testul notificării: `sudo sh ops/notify/notify.sh --env-file /srv/finet/env/notify.env --test`.
@@ -145,7 +167,7 @@ Cu `sudo crontab -e` (**nu** `crontab -`, care înlocuiește tot crontab-ul root
 Alternativa, dacă checkout-ul nu poate fi al lui root: copii instalate într-o cale a lui root, ca la agent-office, refăcute după fiecare `git pull` și verificate cu `cmp` (copia păstrează structura, pentru că scriptul găsește compose-ul relativ la el):
 
 ```bash
-for f in ops/backup/run-backup.sh ops/backup/compose.s3.yml ops/notify/notify.sh ops/docker/docker-compose.yml; do
+for f in ops/backup/run-backup.sh ops/backup/compose.rclone.yml ops/notify/notify.sh ops/docker/docker-compose.yml; do
   sudo install -D -o root -g root -m 0755 "/srv/finet/src/$f" "/usr/local/lib/finet/$f"
 done
 # cron: /bin/sh /usr/local/lib/finet/ops/backup/run-backup.sh
@@ -179,7 +201,7 @@ Aceeași procedură o rulează `restore-test.sh` în CI. Precondiții: schema `f
 2. `finet_restore_pg_service` → secțiunea `[finet_restore]` spre acel Postgres (`user=finet_migrator`; pentru o bază locală de probă fără TLS se adaugă `-e FINET_BACKUP_INSECURE_DB=1` doar la această rulare).
 3. `sudo install -d -o 1000 -g 1000 -m 700 /srv/finet/restore`
 4. ```bash
-   sudo docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.s3.yml -f ops/backup/compose.restore.yml \
+   sudo docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.rclone.yml -f ops/backup/compose.restore.yml \
      --env-file /srv/finet/compose/compose.env --profile backup \
      run --rm -T finet-backup restore --yes --storage-target /restore
    ```
