@@ -22,11 +22,26 @@ export type AuditAction =
   | "auth.session_revoked"
   | "auth.sessions_revoked_others"
   | "user.created"
-  | "household.member_added";
+  | "household.member_added"
+  // Registrul (Faza 2): doar CINE și pe ce obiect, fără sume sau descrieri (5.6, 6.1).
+  | "account.archived"
+  | "account.unarchived"
+  | "account.deleted"
+  | "category.deleted"
+  | "transaction.deleted"
+  | "transfer.deleted";
 
 export type AuditEvent = Readonly<{
   action: AuditAction;
-  targetType?: "user" | "session" | "household" | "household_member";
+  targetType?:
+    | "user"
+    | "session"
+    | "household"
+    | "household_member"
+    | "account"
+    | "category"
+    | "transaction"
+    | "transfer";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;
