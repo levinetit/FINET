@@ -261,7 +261,8 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       rmSync(dir, { recursive: true, force: true });
       await fresh.drop();
     }
-  });
+    // O bază nouă + trei rulări: peste plafonul implicit de 5 s pe un host încărcat.
+  }, 60_000);
 
   it("evidența stă în finet.__drizzle_migrations (nu în public sau în schema drizzle)", async () => {
     const rows = await db.admin<{ schemaname: string; tablename: string; tableowner: string }[]>`
