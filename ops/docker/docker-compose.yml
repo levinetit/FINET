@@ -202,19 +202,35 @@ services:
       DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
       NODE_ENV: production
       APP_MODE: personal
-      # Măsurat (F5-A, Postgres efemer): RSS de vârf ~86 MB, cgroup ~97 MB.
-      NODE_OPTIONS: --max-old-space-size=96
+      # Faza 6 (ADR 0013): workerul CITEȘTE documentele încărcate (preprocesare cu sharp/pdf.js).
+      STORAGE_DRIVER: local
+      STORAGE_DIR: /data/storage
+      # Măsurat (F5-A, Postgres efemer): RSS de vârf ~86 MB, cgroup ~97 MB. Faza 6: heap 160 MB;
+      # pixelii decodați de sharp/libvips și firul pdf.js (heap propriu ≤ 96 MB, `pdf-worker.ts`)
+      # stau în afara lui, sub plafonul containerului de 384 MB.
+      NODE_OPTIONS: --max-old-space-size=160
     command: ["node", "dist/tools/worker.mjs"]
     # SIGTERM: pg-boss termină jobul curent (cel mult 25 s), apoi oprirea; 35 s înainte de SIGKILL.
     stop_grace_period: 35s
-    # Fără storage (revizuirea F5, I1): workerul recurențelor nu atinge fișierele; doar CA-ul.
-    # Documentele (Faza 6) îl vor monta din nou, cu motivul notat.
+    # Storage DOAR CITIRE (Faza 6, ADR 0013; minimul de privilegii): workerul citește originalele
+    # încărcate de finet-web și le preprocesează în memorie; nu scrie, nu șterge fișiere
+    # (ștergerea o face finet-web, retenția un job de administrare). Driverul local e deschis
+    # și el doar pentru citire (`getStorage()` pentru FINET_ROLE=worker).
     volumes:
       - *ca-volume
+      - type: bind
+        source: ${FINET_DATA_DIR:-/srv/finet}/storage
+        target: /data/storage
+        read_only: true
+        bind:
+          create_host_path: false
     tmpfs:
       - /tmp:size=32m,mode=1777
-    mem_limit: 150m
-    memswap_limit: 150m
+    # Faza 6: 384 MB (sharp + pdf.js; F6-COMUN). Preprocesarea are plafoane de pixeli, pagini și
+    # timp; un document care tot depășește memoria omoară doar containerul (repornit), iar
+    # contorul `attempts` (incrementat ÎNAINTE de lucru) îl scoate din coadă după 10 încercări.
+    mem_limit: 384m
+    memswap_limit: 384m
     cpus: 0.5
     pids_limit: 128
     # Fără HTTP: starea lui se vede în /api/health (`queue`, semnalul din

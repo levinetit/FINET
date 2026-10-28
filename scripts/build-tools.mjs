@@ -7,7 +7,9 @@
 import { build } from "esbuild";
 
 // pg-boss (și `pg`, dependența lui) rămân externe: vin din node_modules-ul de producție.
-const EXTERNAL = ["postgres", "drizzle-orm", "zod", "pg-boss", "pg"];
+// sharp (binar nativ libvips), unpdf (pdf.js, încărcat și de firul izolat `pdf-worker.ts` prin
+// `import("unpdf")`) și busboy rămân și ele externe (Faza 6, ADR 0013): dependențe de producție.
+const EXTERNAL = ["postgres", "drizzle-orm", "zod", "pg-boss", "pg", "sharp", "unpdf", "busboy"];
 
 const TOOLS = {
   migrate: "src/db/migrate-entry.ts",
