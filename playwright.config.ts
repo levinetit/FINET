@@ -1,12 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Teste E2E, în patru proiecte, pe două servere:
- * - `smoke`, `auth` și `ledger` (browser): `pnpm dev` cu Access dezactivat DOAR pentru test
+ * Teste E2E, în cinci proiecte, pe două servere:
+ * - `smoke`, `auth`, `ledger` și `planning` (browser): `pnpm dev` cu Access dezactivat DOAR pentru test
  *   (NODE_ENV=development, CF_ACCESS_REQUIRED=false; `src/lib/config.ts` refuză asta în
  *   producție și nu e slăbit). `auth` cere un Postgres de test migrat (`DATABASE_URL` = rolul
  *   `finet_app`), utilizatorii E2E creați cu CLI-ul admin (`e2e/fixtures.ts`) și `E2E_PASSWORD`;
- *   `ledger` (Faza 2: conturi, tranzacții, transferuri, categorii) are aceleași cerințe;
+ *   `ledger` (Faza 2: conturi, tranzacții, transferuri, categorii) și `planning` (Faza 3:
+ *   dashboard, bugete, obiective, etichete, rapoarte, export CSV) au aceleași cerințe;
  *   Modul aplicației: `E2E_APP_MODE=personal|saas` (implicit `personal`); cele două moduri se
  *   rulează unul după altul (două `next dev` în același director s-ar bloca reciproc);
  * - `access` (doar HTTP, fără browser): serverul de producție (`.next/standalone/server.js`,
@@ -116,6 +117,12 @@ export default defineConfig({
       // Registrul (Faza 2): același server și aceeași bază ca `auth`, utilizatori proprii.
       name: "ledger",
       testMatch: /ledger\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      // Planificarea (Faza 3): același server și aceeași bază, utilizatori proprii.
+      name: "planning",
+      testMatch: /planning\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
