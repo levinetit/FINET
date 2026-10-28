@@ -99,6 +99,20 @@ describe("filtrele tranzacțiilor → interogarea API", () => {
     expect(parseFilters({ tagIds: "" }).query).toEqual({});
   });
 
+  it("etichetele „toate”: `tagMatch=all` doar cu etichete bifate, `any` e implicit", () => {
+    const all = parseFilters({ tagIds: [T1, T2], tagMatch: "all" });
+    expect(all.values.tagMatch).toBe("all");
+    expect(all.query.tagMatch).toBe("all");
+    expect(new URLSearchParams(apiSearch(all.query).slice(1)).get("tagMatch")).toBe("all");
+    expect(exportSearch(all.query).tagMatch).toBe("all");
+    // Fără etichete, `tagMatch` nu pleacă spre API (care l-ar refuza cu 400).
+    expect(parseFilters({ tagMatch: "all" }).query).toEqual({});
+    // `any` și valorile necunoscute nu se trimit (implicitul API-ului).
+    expect(parseFilters({ tagIds: T1, tagMatch: "any" }).query).toEqual({ tagIds: [T1] });
+    expect(parseFilters({ tagIds: T1, tagMatch: "x" }).query).toEqual({ tagIds: [T1] });
+    expect(Object.keys(TRANSACTION_FILTER_QUERY)).toContain("tagMatch");
+  });
+
   it("comerciantul e un filtru separat de căutare", () => {
     const f = parseFilters({ merchant: "  Mega Image ", q: "" });
     expect(f.query).toEqual({ merchant: "Mega Image" });

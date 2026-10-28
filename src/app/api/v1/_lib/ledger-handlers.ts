@@ -224,6 +224,8 @@ export const TRANSACTION_FILTER_QUERY = {
   categoryId: "string",
   // Faza 3: id-uri de etichete separate prin virgulă (oricare dintre ele) și comerciantul.
   tagIds: "string",
+  // Faza 4: `any` (implicit) sau `all`; doar împreună cu `tagIds`.
+  tagMatch: "string",
   merchant: "string",
   type: "string",
   source: "string",

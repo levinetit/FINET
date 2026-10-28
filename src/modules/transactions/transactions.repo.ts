@@ -104,6 +104,8 @@ export type ListFilters = Readonly<{
   accountId?: string;
   categoryId?: string;
   tagIds?: readonly string[];
+  /** `any` (implicit): cel puțin una dintre `tagIds`; `all`: toate. */
+  tagMatch?: "any" | "all";
   merchant?: string;
   type?: TransactionRow["type"];
   source?: TransactionRow["source"];
@@ -126,14 +128,23 @@ function filterConditions(householdId: string, filters: ListFilters): SQL[] {
   if (filters.categoryId) conditions.push(eq(t.categoryId, filters.categoryId));
   if (filters.type) conditions.push(eq(t.type, filters.type));
   if (filters.tagIds && filters.tagIds.length > 0) {
-    // EXISTS, nu JOIN: o tranzacție cu două etichete căutate apare o singură dată, deci
-    // paginarea pe cheie rămâne stabilă.
-    conditions.push(sql`exists (select 1 from ${transactionTags} tt
-      where tt.transaction_id = ${t.id} and tt.household_id = ${householdId}
-        and tt.tag_id in (${sql.join(
-          filters.tagIds.map((id) => sql`${id}::uuid`),
-          sql`, `,
-        )}))`);
+    const ids = sql.join(
+      filters.tagIds.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    );
+    if (filters.tagMatch === "all") {
+      // Toate etichetele: numărul legăturilor cu etichetele căutate = numărul lor. Corect pentru
+      // că `tagIds` sunt distincte (schema) și `(transaction_id, tag_id)` e cheie primară.
+      conditions.push(sql`(select count(*) from ${transactionTags} tt
+        where tt.transaction_id = ${t.id} and tt.household_id = ${householdId}
+          and tt.tag_id in (${ids})) = ${filters.tagIds.length}`);
+    } else {
+      // EXISTS, nu JOIN: o tranzacție cu două etichete căutate apare o singură dată, deci
+      // paginarea pe cheie rămâne stabilă.
+      conditions.push(sql`exists (select 1 from ${transactionTags} tt
+        where tt.transaction_id = ${t.id} and tt.household_id = ${householdId}
+          and tt.tag_id in (${ids}))`);
+    }
   }
   if (filters.merchant) conditions.push(ilike(t.merchant, `%${escapeLike(filters.merchant)}%`));
   if (filters.source) conditions.push(eq(t.source, filters.source));
