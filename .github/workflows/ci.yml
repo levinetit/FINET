@@ -185,6 +185,16 @@ jobs:
           -e FINET_BACKUP_BIN_DIR=/opt/finet-backup
           -v "$PWD:/work:ro" --entrypoint sh finet-backup:ci /work/ops/backup/restore-test.sh
 
+      # Aceeași procedură prin destinația rclone (decizia operatorului: Google Drive), cu un remote
+      # rclone `local` (fără rețea): restic → `rclone serve restic --stdio`, limita overlay-ului.
+      - name: Backup și restaurare prin rclone (remote local)
+        run: >-
+          docker run --rm --network host --memory=384m --memory-swap=384m
+          -e FINET_RESTORE_TEST=1 -e FINET_TEST_BACKEND=rclone -e PGHOST=localhost -e PGPORT=5432
+          -e PGUSER=finet -e PGPASSWORD=finet_ci
+          -e FINET_BACKUP_BIN_DIR=/opt/finet-backup
+          -v "$PWD:/work:ro" --entrypoint sh finet-backup:ci /work/ops/backup/restore-test.sh
+
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
