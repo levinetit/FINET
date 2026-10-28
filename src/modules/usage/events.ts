@@ -17,7 +17,7 @@ import {
   appEventsBatchSchema,
 } from "./usage.schema";
 
-import { hasActiveConsent } from "./consents";
+import { hasActiveConsent, lockUserUsage } from "./consents";
 
 /**
  * Evenimentele de utilizare (6.5, Android 10.1): `POST /api/v1/app/events`. Lista de nume,
@@ -55,6 +55,8 @@ export async function recordEvents(
   if (Object.keys(fields).length > 0) throw new ValidationError(fields, EVENTS_REJECTED_MESSAGE);
 
   return withRlsOn(db, { userId }, async (tx) => {
+    // Serializat cu revocarea (LOW-1): un lot în curs nu supraviețuiește ștergerii datelor.
+    await lockUserUsage(tx, userId);
     if (!(await hasActiveConsent(tx, userId, "usage_stats"))) return { stored: 0 };
     const householdId = await currentHouseholdIdOf(tx, userId);
     if (householdId) {

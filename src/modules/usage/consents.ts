@@ -54,6 +54,20 @@ export function getConsents(db: DbOrTx, userId: string): Promise<ConsentState[]>
   return withRlsOn(db, { userId }, (tx) => readStates(tx, userId));
 }
 
+/**
+ * Lacătul per utilizator (tranzacțional) care serializează scrierile statisticilor de utilizare
+ * (instalări, evenimente) cu schimbarea consimțămintelor (revizuirea F2, LOW-1). Aceeași cheie ca
+ * plafonul de instalări. Fără el, o scriere care a verificat acordul înaintea revocării, dar face
+ * COMMIT după ștergerea datelor, ar supraviețui revocării. Cu el: revocarea așteaptă scrierea în
+ * curs și șterge apoi și rândurile ei (READ COMMITTED: fiecare instrucțiune vede ce s-a comis),
+ * iar o scriere care începe după revocare vede acordul revocat.
+ */
+export async function lockUserUsage(tx: Tx, userId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`finet.installations:${userId}`}, 0))`,
+  );
+}
+
 export async function setConsents(
   db: DbOrTx,
   userId: string,
@@ -61,6 +75,7 @@ export async function setConsents(
 ): Promise<ConsentState[]> {
   const input = parseInput(consentsPutSchema, rawInput);
   return withRlsOn(db, { userId }, async (tx) => {
+    await lockUserUsage(tx, userId);
     const householdId = await currentHouseholdIdOf(tx, userId);
     for (const [name, value] of Object.entries(input) as [
       keyof typeof CONSENT_API_NAMES,
@@ -110,7 +125,10 @@ export async function eraseUsageData(tx: Tx, userId: string): Promise<void> {
   await tx.execute(sql`delete from finet.client_installations where user_id = ${userId}`);
 }
 
-/** `true` dacă utilizatorul are un consimțământ ACTIV de tipul dat. */
+/**
+ * `true` dacă utilizatorul are un consimțământ ACTIV de tipul dat. Scrierile care depind de
+ * rezultat iau întâi `lockUserUsage` în aceeași tranzacție.
+ */
 export async function hasActiveConsent(
   tx: Tx,
   userId: string,
