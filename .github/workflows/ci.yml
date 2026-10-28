@@ -130,6 +130,18 @@ jobs:
       - name: Scanează secretele din fișierele de client
         run: pnpm scan:client-secrets
 
+      # Faza 4 (ADR 0010): First Load JS gzip per rută ≤ pragurile din docs/PERFORMANCE.md.
+      - name: Buget de mărime JavaScript
+        run: pnpm check:bundle --json bundle-size.json
+
+      - name: Raport mărime JavaScript
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: bundle-size
+          path: bundle-size.json
+          if-no-files-found: ignore
+
       # Non-blocant la început (avertismentele tranzitive pot fi zgomot); se face blocant
       # după ce lista e curată.
       - name: Audit dependențe (producție)
