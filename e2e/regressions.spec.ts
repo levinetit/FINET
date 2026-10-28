@@ -136,7 +136,19 @@ test("(b) prefetch RSC fără sesiune nu întoarce date, pe toate rutele private
         continue;
       }
       if (status >= 300 && status < 400) {
-        expect(response.headers()["location"] ?? "", label).toContain("/login");
+        // 307 către aceeași rută cu `_rsc` canonic (Next normalizează parametrul) sau direct către
+        // /login. Urmărim lanțul (maxim 3 salturi): destinația finală trebuie să fie /login, fără
+        // conținutul paginii private.
+        const location = response.headers()["location"] ?? "";
+        if (!location.includes("/login")) {
+          const followed = await anon.get(`${route}?_rsc=${randomUUID().slice(0, 5)}`, {
+            headers: { RSC: "1" },
+            maxRedirects: 3,
+          });
+          const followedBody = await followed.text();
+          expect(followedBody, label).not.toContain(MARKER);
+          expect(`${followed.url()} ${followedBody}`, label).toContain("/login");
+        }
       } else if (status === 200) {
         // Redirecționarea `redirect()` codată în fluxul RSC, fără conținutul paginii.
         expect(body, label).toContain("/login");
