@@ -1,0 +1,132 @@
+/**
+ * Filtrele listei de tranzacții (F2-C): din parametrii paginii (`/transactions?…`, scriși de
+ * formularul GET) în interogarea API-ului `GET /api/v1/transactions` (nume exacte, parametri
+ * goi eliminați, sumele ca întregi în unități minore). `readQuery` din API e strict: un parametru
+ * necunoscut sau gol ar da 400, deci aici trec DOAR valorile completate și valide.
+ *
+ * Funcții pure, comune paginii (server) și butonului „Încarcă mai mult” (browser).
+ */
+
+import { parseAmountInput } from "./ledger-ui";
+
+export const FILTER_TYPES = ["income", "expense", "transfer"] as const;
+export const FILTER_SORTS = ["date_desc", "date_asc", "amount_desc", "amount_asc"] as const;
+
+/** Valorile formularului (text, ca în URL). */
+export type FilterValues = Readonly<{
+  q: string;
+  accountId: string;
+  categoryId: string;
+  type: string;
+  dateFrom: string;
+  dateTo: string;
+  amountMin: string;
+  amountMax: string;
+  sort: string;
+}>;
+
+/** Interogarea API (numele din `TRANSACTION_QUERY`). */
+export type TransactionApiQuery = Partial<
+  Readonly<{
+    q: string;
+    accountId: string;
+    categoryId: string;
+    type: (typeof FILTER_TYPES)[number];
+    dateFrom: string;
+    dateTo: string;
+    amountMinMinor: number;
+    amountMaxMinor: number;
+    sort: (typeof FILTER_SORTS)[number];
+  }>
+>;
+
+export type ParsedFilters = Readonly<{
+  values: FilterValues;
+  query: TransactionApiQuery;
+  /** Câmpurile respinse (de exemplu o sumă ambiguă), cu mesajul de afișat. */
+  errors: Readonly<Record<string, string>>;
+}>;
+
+const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const KEYS = [
+  "q",
+  "accountId",
+  "categoryId",
+  "type",
+  "dateFrom",
+  "dateTo",
+  "amountMin",
+  "amountMax",
+  "sort",
+] as const;
+
+type RawParams = Readonly<Record<string, string | string[] | undefined>>;
+
+function first(value: string | string[] | undefined): string {
+  const v = Array.isArray(value) ? value[0] : value;
+  return typeof v === "string" ? v.trim().slice(0, 200) : "";
+}
+
+/**
+ * Parametrii paginii → valori + interogare. Valorile invalide (id-uri, date, tipuri) se ignoră
+ * în tăcere; sumele invalide sau ambigue apar în `errors` (utilizatorul le-a scris).
+ */
+export function parseFilters(params: RawParams): ParsedFilters {
+  const values = Object.fromEntries(KEYS.map((k) => [k, first(params[k])])) as Record<
+    (typeof KEYS)[number],
+    string
+  >;
+  const query: Record<string, string | number> = {};
+  const errors: Record<string, string> = {};
+  if (values.q) query.q = values.q;
+  if (UUID.test(values.accountId)) query.accountId = values.accountId.toLowerCase();
+  if (UUID.test(values.categoryId)) query.categoryId = values.categoryId.toLowerCase();
+  if ((FILTER_TYPES as readonly string[]).includes(values.type)) query.type = values.type;
+  if (DATE.test(values.dateFrom)) query.dateFrom = values.dateFrom;
+  if (DATE.test(values.dateTo)) query.dateTo = values.dateTo;
+  if ((FILTER_SORTS as readonly string[]).includes(values.sort)) query.sort = values.sort;
+  // Toate monedele au două zecimale: intervalul de sume se parsează ca RON (decizia mea).
+  for (const [field, key] of [
+    ["amountMin", "amountMinMinor"],
+    ["amountMax", "amountMaxMinor"],
+  ] as const) {
+    if (!values[field]) continue;
+    const parsed = parseAmountInput(values[field], "RON", { positive: true });
+    if (parsed.ok) query[key] = parsed.amountMinor;
+    else errors[field] = parsed.message;
+  }
+  return { values, query: query as TransactionApiQuery, errors };
+}
+
+/** Interogarea → șirul `?…` al API-ului, cu cursorul paginii următoare (dacă există). */
+export function apiSearch(query: TransactionApiQuery, cursor?: string | null): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === "") continue;
+    params.set(key, String(value));
+  }
+  if (cursor) params.set("cursor", cursor);
+  const text = params.toString();
+  return text ? `?${text}` : "";
+}
+
+/** Adaugă rândurile noi fără duplicate (după `id`), păstrând ordinea. */
+export function appendUnique<T extends Readonly<{ id: string }>>(
+  current: readonly T[],
+  next: readonly T[],
+): T[] {
+  const seen = new Set(current.map((r) => r.id));
+  const out = [...current];
+  for (const row of next) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
+
+/** Există cel puțin un filtru activ (pentru mesajul de listă goală). */
+export function hasActiveFilters(query: TransactionApiQuery): boolean {
+  return Object.keys(query).some((k) => k !== "sort");
+}
