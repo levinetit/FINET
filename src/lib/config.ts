@@ -2,7 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
-import { VERIFYING_SSL_MODES, databaseTlsParams } from "@/lib/db-url";
+import { VERIFYING_SSL_MODES, databaseTlsParams, isTlsUrlParam } from "@/lib/db-url";
 import { CURRENCIES, parseAmount, type Money } from "@/lib/money";
 import { SecretFileError, readSmallFile, resolveSecretFiles } from "@/lib/secret-files";
 
@@ -411,6 +411,29 @@ export function parseConfig(
         problem: error instanceof SecretFileError ? error.problem : "fișierul nu poate fi citit",
       });
     }
+  }
+
+  // Workerul în producție (Faza 5, ADR 0011): TLS cu verificare OBLIGATORIU, fail-closed. Driverul
+  // `pg` al pg-boss tratează `sslmode` altfel decât postgres.js, deci se cere forma unică
+  // `sslmode=verify-full` (o singură dată, exact așa scrisă) plus CA-ul din DATABASE_CA_FILE;
+  // orice altă formă (lipsă, `disable`, `require`, grafie diferită, duplicat) oprește pornirea.
+  if (isProduction && role === "worker" && databaseUrl) {
+    let modes: string[] = [];
+    let otherTlsParams = false;
+    try {
+      const params = new URL(databaseUrl).searchParams;
+      modes = params.getAll("sslmode");
+      otherTlsParams = [...params.keys()].some((k) => isTlsUrlParam(k) && k !== "sslmode");
+    } catch {
+      modes = [];
+    }
+    if (modes.length !== 1 || modes[0] !== "verify-full" || otherTlsParams) {
+      issues.push({
+        variable: urlVariable,
+        problem: "în producție cere exact sslmode=verify-full",
+      });
+    }
+    need("DATABASE_CA_FILE", "în producție pentru FINET_ROLE=worker");
   }
 
   // Cloudflare Access: implicit obligatoriu în producție; dezactivarea în producție e refuzată.

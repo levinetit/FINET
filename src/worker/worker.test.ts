@@ -5,7 +5,7 @@ import { createAccount } from "@/modules/accounts/accounts.service";
 import { type LedgerFixture, createLedgerFixture } from "@/modules/ledger/testing";
 import { createRecurringRule } from "@/modules/recurring/recurring.service";
 
-import { bossOptions, pgConnectionOptions } from "./boss";
+import { PgTlsConfigError, bossOptions, pgConnectionOptions } from "./boss";
 import { main } from "./cli";
 import { HEARTBEAT_STALE_SECONDS, queueStateOf } from "./heartbeat";
 import { handleGenerate, handleGenerateNow } from "./jobs";
@@ -15,30 +15,76 @@ vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 const CA = "-----BEGIN CERTIFICATE-----\nfictiv\n-----END CERTIFICATE-----\n";
 
-describe("opțiunile pg-boss (fără rețea)", () => {
+describe("opțiunile pg-boss (fără rețea): TLS fail-closed", () => {
+  const BASE = "postgres://u:p@db.exemplu.invalid:5432/postgres";
+  const prod = { production: true } as const;
+  const dev = { production: false } as const;
+
   it("verify-full + CA: CA-ul explicit, sslmode scos din URL (altfel `pg` l-ar suprascrie)", () => {
-    const o = pgConnectionOptions(
-      "postgres://u:p@db.exemplu.invalid:5432/postgres?sslmode=verify-full&application_name=x",
-      CA,
-    );
-    expect(o.ssl).toEqual({ ca: CA, rejectUnauthorized: true });
-    expect(o.connectionString).not.toContain("sslmode");
-    expect(o.connectionString).toContain("application_name=x");
+    for (const env of [prod, dev]) {
+      const o = pgConnectionOptions(`${BASE}?sslmode=verify-full&application_name=x`, CA, env);
+      expect(o.ssl).toEqual({ ca: CA, rejectUnauthorized: true });
+      expect(o.connectionString).not.toMatch(/ssl/i);
+      expect(o.connectionString).toContain("application_name=x");
+    }
   });
 
-  it("verify-ca fără CA: verificare față de trust store; require: TLS fără lanț; disable/lipsă: fără TLS", () => {
-    expect(pgConnectionOptions("postgres://h/d?sslmode=verify-ca", null).ssl).toEqual({
-      rejectUnauthorized: true,
-    });
-    expect(pgConnectionOptions("postgres://h/d?sslmode=require", CA).ssl).toEqual({
+  it("producție: fără CA, disable, require sau fără sslmode → eroare (niciodată TLS oprit)", () => {
+    for (const [query, ca] of [
+      ["?sslmode=verify-full", null],
+      ["?sslmode=disable", CA],
+      ["?sslmode=require", CA],
+      ["", CA],
+    ] as const) {
+      expect(() => pgConnectionOptions(BASE + query, ca, prod)).toThrow(PgTlsConfigError);
+    }
+  });
+
+  it("oriunde: sslmode gol/necunoscut/altă grafie/duplicat, `ssl=…`, alți parametri TLS → eroare", () => {
+    for (const env of [prod, dev]) {
+      for (const query of [
+        "?sslmode=",
+        "?sslmode=no-verify",
+        "?sslmode=prefer",
+        "?sslmode=allow",
+        "?sslmode=Verify-Full",
+        "?SSLMODE=Disable",
+        "?sslmode=verify-full&sslmode=disable",
+        "?sslmode=disable&sslmode=disable",
+        "?ssl=false",
+        "?ssl=0",
+        "?ssl=true",
+        "?sslmode=verify-full&sslrootcert=/ca.crt",
+        "?sslmode=verify-full&uselibpqcompat=true",
+        "?sslmode=verify-full&SSLNegotiation=direct",
+      ]) {
+        expect(() => pgConnectionOptions(BASE + query, CA, env), query).toThrow(PgTlsConfigError);
+      }
+    }
+  });
+
+  it("în afara producției: disable/lipsă → fără TLS, require → TLS fără lanț, verify-ca fără CA → trust store", () => {
+    expect(pgConnectionOptions(`${BASE}?sslmode=disable`, null, dev).ssl).toBe(false);
+    expect(pgConnectionOptions(BASE, null, dev).ssl).toBe(false);
+    expect(pgConnectionOptions(`${BASE}?sslmode=require`, null, dev).ssl).toEqual({
       rejectUnauthorized: false,
     });
-    expect(pgConnectionOptions("postgres://h/d?sslmode=disable", CA).ssl).toBe(false);
-    expect(pgConnectionOptions("postgres://h/d", null).ssl).toBe(false);
+    expect(pgConnectionOptions(`${BASE}?sslmode=verify-ca`, null, dev).ssl).toEqual({
+      rejectUnauthorized: true,
+    });
+  });
+
+  it("eroarea nu conține URL-ul sau parola", () => {
+    try {
+      pgConnectionOptions("postgres://u:parola-secreta@h.invalid/d?sslmode=gresit", CA, prod);
+      throw new Error("trebuia să arunce");
+    } catch (error) {
+      expect(String((error as Error).message)).not.toMatch(/parola-secreta|h\.invalid|gresit/);
+    }
   });
 
   it("constructorul: fără DDL la rulare (migrate/createSchema/reindex/statistici oprite), schema pgboss", () => {
-    const o = bossOptions("postgres://h/d?sslmode=verify-full", CA);
+    const o = bossOptions(`${BASE}?sslmode=verify-full`, CA, prod);
     expect(o).toMatchObject({
       schema: "pgboss",
       migrate: false,
@@ -48,6 +94,7 @@ describe("opțiunile pg-boss (fără rețea)", () => {
       persistWarnings: false,
       supervise: true,
       schedule: true,
+      ssl: { ca: CA, rejectUnauthorized: true },
     });
     expect(o.max).toBeLessThanOrEqual(3);
   });

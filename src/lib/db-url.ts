@@ -22,3 +22,13 @@ export function databaseTlsParams(url: string): DatabaseTlsParams {
     return { sslmode: null, hasSslRootCert: false };
   }
 }
+
+/**
+ * `true` pentru un parametru de URL care ține de TLS, în orice grafie (`sslmode`, `SSLMode`,
+ * `ssl`, `sslrootcert`, `sslcert`, `sslkey`, `sslnegotiation`, `uselibpqcompat` …). Folosit de
+ * regulile fail-closed ale workerului (config.ts, src/worker/boss.ts).
+ */
+export function isTlsUrlParam(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.startsWith("ssl") || n === "uselibpqcompat";
+}

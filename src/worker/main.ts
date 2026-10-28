@@ -44,6 +44,8 @@ export const QUEUE_OPTIONS = {
 export type WorkerOptions = Readonly<{
   databaseUrl: string;
   databaseCa: string | null;
+  /** `config.nodeEnv === "production"`: TLS doar cu verificare și CA (fail-closed, `boss.ts`). */
+  production: boolean;
   log: LogFn;
 }>;
 
@@ -57,12 +59,16 @@ export function errorCode(error: unknown): string {
 
 export async function startWorker(options: WorkerOptions): Promise<RunningWorker> {
   const { log } = options;
+  // Întâi validarea TLS (aruncă `PgTlsConfigError`), înainte de a deschide vreo conexiune.
+  const bossConfig = bossOptions(options.databaseUrl, options.databaseCa, {
+    production: options.production,
+  });
   const { db, client } = createDb(options.databaseUrl, {
     ca: options.databaseCa,
     applicationName: "finet-worker",
     max: 2,
   });
-  const boss = new PgBoss(bossOptions(options.databaseUrl, options.databaseCa));
+  const boss = new PgBoss(bossConfig);
   boss.on("error", (error) => log({ event: "boss_error", code: errorCode(error) }));
 
   await boss.start();

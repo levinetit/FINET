@@ -202,6 +202,19 @@ describe("parseConfig", () => {
 });
 
 describe("parseConfig pe rol (FINET_ROLE)", () => {
+  // Workerul în producție cere sslmode=verify-full și un CA (F5-A); CA FICTIV (doar formă PEM).
+  let roleCaDir: string;
+  let WORKER_CA: string;
+  beforeAll(() => {
+    roleCaDir = mkdtempSync(join(tmpdir(), "finet-role-ca-"));
+    WORKER_CA = join(roleCaDir, "ca.crt");
+    writeFileSync(WORKER_CA, "-----BEGIN CERTIFICATE-----\nMIIfictiv\n-----END CERTIFICATE-----\n");
+  });
+  afterAll(() => {
+    rmSync(roleCaDir, { recursive: true, force: true });
+  });
+  const URL_WORKER_TLS =
+    "postgres://finet_app.ref:p-worker@pooler.exemplu.invalid:5432/postgres?sslmode=verify-full";
   const URL_WEB = "postgres://finet_app.ref:p-web@pooler.exemplu.invalid:6543/postgres";
   const URL_WORKER = "postgres://finet_app.ref:p-worker@pooler.exemplu.invalid:5432/postgres";
   const URL_MIGRATOR = "postgres://finet_migrator.ref:p-mig@pooler.exemplu.invalid:5432/postgres";
@@ -255,15 +268,51 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
   it("worker cere WORKER_DATABASE_URL și respinge celelalte URL-uri", () => {
     const worker = { ...PROD, FINET_ROLE: "worker" };
     expect(issuesOf(worker)).toEqual(["WORKER_DATABASE_URL"]);
-    const c = parseConfig({ ...worker, WORKER_DATABASE_URL: URL_WORKER });
+    const c = parseConfig({ ...DEV, FINET_ROLE: "worker", WORKER_DATABASE_URL: URL_WORKER });
     expect(c.role).toBe("worker");
     expect(c.database).toEqual({ url: URL_WORKER, ca: null });
-    expect(issuesOf({ ...worker, WORKER_DATABASE_URL: URL_WORKER, DATABASE_URL: URL_WEB })).toEqual(
-      ["DATABASE_URL"],
+    const tls = { ...worker, DATABASE_CA_FILE: WORKER_CA };
+    expect(parseConfig({ ...tls, WORKER_DATABASE_URL: URL_WORKER_TLS }).database.url).toBe(
+      URL_WORKER_TLS,
     );
     expect(
-      issuesOf({ ...worker, WORKER_DATABASE_URL: URL_WORKER, MIGRATOR_DATABASE_URL: URL_MIGRATOR }),
+      issuesOf({ ...tls, WORKER_DATABASE_URL: URL_WORKER_TLS, DATABASE_URL: URL_WEB }),
+    ).toEqual(["DATABASE_URL"]);
+    expect(
+      issuesOf({
+        ...tls,
+        WORKER_DATABASE_URL: URL_WORKER_TLS,
+        MIGRATOR_DATABASE_URL: URL_MIGRATOR,
+      }),
     ).toEqual(["MIGRATOR_DATABASE_URL"]);
+  });
+
+  it("worker în producție: fail-closed pe TLS (exact sslmode=verify-full + DATABASE_CA_FILE)", () => {
+    const tls = { ...PROD, FINET_ROLE: "worker", DATABASE_CA_FILE: WORKER_CA };
+    const base = "postgres://finet_app.ref:p-worker@pooler.exemplu.invalid:5432/postgres";
+    for (const query of [
+      "",
+      "?sslmode=disable",
+      "?sslmode=require",
+      "?sslmode=prefer",
+      "?sslmode=verify-ca",
+      "?sslmode=",
+      "?sslmode=VERIFY-FULL",
+      "?SSLMODE=verify-full",
+      "?sslmode=verify-full&sslmode=disable",
+      "?ssl=true",
+      "?sslmode=verify-full&ssl=false",
+      "?sslmode=verify-full&sslrootcert=system",
+      "?sslmode=verify-full&uselibpqcompat=true",
+    ]) {
+      expect(issuesOf({ ...tls, WORKER_DATABASE_URL: base + query })).toContain(
+        "WORKER_DATABASE_URL",
+      );
+    }
+    // Fără CA: refuzat chiar cu verify-full.
+    expect(
+      issuesOf({ ...PROD, FINET_ROLE: "worker", WORKER_DATABASE_URL: URL_WORKER_TLS }),
+    ).toEqual(["DATABASE_CA_FILE"]);
   });
 
   it("migrate cere MIGRATOR_DATABASE_URL și respinge celelalte URL-uri", () => {
@@ -293,13 +342,19 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
       "APP_URL",
       "STORAGE_DIR",
     ]);
-    expect(issuesOf({ ...bare, FINET_ROLE: "worker", WORKER_DATABASE_URL: URL_WORKER })).toEqual([
-      "STORAGE_DIR",
-    ]);
+    expect(
+      issuesOf({
+        ...bare,
+        FINET_ROLE: "worker",
+        WORKER_DATABASE_URL: URL_WORKER_TLS,
+        DATABASE_CA_FILE: WORKER_CA,
+      }),
+    ).toEqual(["STORAGE_DIR"]);
     const w = parseConfig({
       ...bare,
       FINET_ROLE: "worker",
-      WORKER_DATABASE_URL: URL_WORKER,
+      WORKER_DATABASE_URL: URL_WORKER_TLS,
+      DATABASE_CA_FILE: WORKER_CA,
       STORAGE_DIR: "/data/storage",
     });
     expect(w.storage.dir).toBe("/data/storage");

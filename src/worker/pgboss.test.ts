@@ -25,7 +25,7 @@ describe.skipIf(!TEST_ADMIN_URL)("pg-boss ca finet_app (Postgres real)", () => {
 
   beforeAll(async () => {
     fx = await createAuthFixture("finet_it_pgboss");
-    boss = new PgBoss({ ...bossOptions(fx.scratch.appUrl, null), max: 2 });
+    boss = new PgBoss({ ...bossOptions(fx.scratch.appUrl, null, { production: false }), max: 2 });
     boss.on("error", (e) => errors.push(e));
     await boss.start();
   });
@@ -102,6 +102,7 @@ describe.skipIf(!TEST_ADMIN_URL)("startWorker (pg-boss real, finet_app)", () => 
     const w = await startWorker({
       databaseUrl: f.fx.scratch.appUrl,
       databaseCa: null,
+      production: false,
       log: (e) => logs.push({ ...e }),
     });
     try {

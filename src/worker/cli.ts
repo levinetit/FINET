@@ -2,6 +2,7 @@ import "server-only";
 
 import { ConfigError, parseConfig } from "@/lib/config";
 
+import { PgTlsConfigError } from "./boss";
 import { type RunningWorker, errorCode, startWorker } from "./main";
 
 /**
@@ -36,12 +37,15 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
     const worker = await startWorker({
       databaseUrl: config.database.url,
       databaseCa: config.database.ca,
+      production: config.nodeEnv === "production",
       log,
     });
     io.onSignal(worker.stop);
     return { code: 0, worker };
   } catch (error) {
-    if (error instanceof ConfigError) {
+    if (error instanceof PgTlsConfigError) {
+      log({ event: "start_failed", reason: "tls_config", detail: error.problem });
+    } else if (error instanceof ConfigError) {
       // Mesajul ConfigError numește doar variabilele și problemele, niciodată valorile.
       log({ event: "start_failed", reason: "config", detail: error.message });
     } else {

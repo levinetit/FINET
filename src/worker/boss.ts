@@ -1,44 +1,84 @@
 import type { ConstructorOptions } from "pg-boss";
 
-import { VERIFYING_SSL_MODES, databaseTlsParams } from "@/lib/db-url";
+import { isTlsUrlParam } from "@/lib/db-url";
 
 /**
  * Opțiunile pg-boss ale workerului FINET (ADR 0011). Funcții pure, testate fără rețea.
  *
- * pg-boss folosește driverul `pg` (nu postgres.js), deci regulile TLS din `src/lib/db-client.ts`
- * se refac aici. Capcana: `pg` ÎNLOCUIEȘTE opțiunea `ssl` dată explicit cu ce deduce din `sslmode`
- * din URL (`Object.assign(config, parse(connectionString))`), deci CA-ul Supabase s-ar pierde în
- * tăcere. De aceea parametrii TLS se scot din URL și se dau DOAR prin `ssl`:
- * - `verify-full` / `verify-ca` → `{ ca?, rejectUnauthorized: true }` (cu CA-ul din
- *   DATABASE_CA_FILE dacă e dat; altfel trust store-ul Node), ca postgres.js;
- * - `require` / `prefer` / `allow` → TLS fără verificarea lanțului (ca postgres.js);
- * - `disable` sau lipsă → fără TLS (dezvoltare, CI).
+ * pg-boss folosește driverul `pg` (nu postgres.js). Capcana: `pg` ÎNLOCUIEȘTE opțiunea `ssl` dată
+ * explicit cu ce deduce din parametrii URL-ului (`Object.assign(config, parse(connectionString))`),
+ * deci CA-ul Supabase s-ar pierde în tăcere. De aceea parametrii TLS se scot din URL și TLS-ul se
+ * dă DOAR prin `ssl`, după reguli FAIL-CLOSED (nicio formă necunoscută nu oprește TLS-ul tăcut):
+ * - exact un `sslmode`, scris exact (`verify-full`, `verify-ca`, `require`, `disable`); orice alt
+ *   parametru TLS (`ssl`, `sslrootcert`, `SSLMODE`, `uselibpqcompat` …), o valoare goală,
+ *   necunoscută, altă grafie sau un duplicat → `PgTlsConfigError`;
+ * - `verify-full` / `verify-ca` → `{ ca?, rejectUnauthorized: true }`; în producție CA-ul e
+ *   obligatoriu (config.ts cere și el `verify-full` + DATABASE_CA_FILE pentru worker);
+ * - `require` (TLS fără verificarea lanțului) și `disable` / lipsă (fără TLS): DOAR în afara
+ *   producției (dezvoltare, CI); în producție → eroare. `prefer`/`allow` (pot cădea pe text
+ *   clar) → eroare oriunde.
  */
 
 export const PGBOSS_SCHEMA = "pgboss";
 
-/** Parametrii de URL care țin de TLS (eliminați; TLS-ul vine din `ssl`). */
-const TLS_URL_PARAMS = ["sslmode", "sslrootcert", "sslcert", "sslkey", "ssl", "uselibpqcompat"];
+/** Configurația TLS a workerului e invalidă. Mesajul nu conține URL-ul sau valorile lui. */
+export class PgTlsConfigError extends Error {
+  constructor(readonly problem: string) {
+    super(`TLS-ul workerului e configurat greșit: ${problem}`);
+    this.name = "PgTlsConfigError";
+  }
+}
 
 export type PgTls = false | { rejectUnauthorized: boolean; ca?: string };
 
 export type PgConnection = Readonly<{ connectionString: string; ssl: PgTls }>;
 
-export function pgConnectionOptions(url: string, ca: string | null): PgConnection {
-  const { sslmode } = databaseTlsParams(url);
-  const parsed = new URL(url);
-  for (const p of TLS_URL_PARAMS) parsed.searchParams.delete(p);
+export type PgTlsOptions = Readonly<{
+  /** `NODE_ENV=production` (`config.nodeEnv`): doar TLS verificat cu CA. */
+  production: boolean;
+}>;
+
+export function pgConnectionOptions(
+  url: string,
+  ca: string | null,
+  options: PgTlsOptions,
+): PgConnection {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new PgTlsConfigError("URL-ul bazei nu poate fi analizat");
+  }
+  const keys = [...new Set(parsed.searchParams.keys())].filter(isTlsUrlParam);
+  if (keys.some((k) => k !== "sslmode")) {
+    throw new PgTlsConfigError("parametru TLS nepermis în URL (doar sslmode, scris exact)");
+  }
+  const modes = parsed.searchParams.getAll("sslmode");
+  if (modes.length > 1) throw new PgTlsConfigError("sslmode apare de mai multe ori");
+  const mode = modes[0] ?? null;
+  parsed.searchParams.delete("sslmode");
   const connectionString = parsed.toString();
-  if (sslmode !== null && VERIFYING_SSL_MODES.includes(sslmode)) {
-    return {
-      connectionString,
-      ssl: ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: true },
-    };
+
+  switch (mode) {
+    case "verify-full":
+    case "verify-ca":
+      if (options.production && !ca) {
+        throw new PgTlsConfigError("în producție cere CA-ul (DATABASE_CA_FILE)");
+      }
+      return {
+        connectionString,
+        ssl: ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: true },
+      };
+    case "require":
+      if (options.production) throw new PgTlsConfigError("în producție cere sslmode=verify-full");
+      return { connectionString, ssl: { rejectUnauthorized: false } };
+    case "disable":
+    case null:
+      if (options.production) throw new PgTlsConfigError("în producție cere sslmode=verify-full");
+      return { connectionString, ssl: false };
+    default:
+      throw new PgTlsConfigError("valoare sslmode nepermisă");
   }
-  if (sslmode === "require" || sslmode === "prefer" || sslmode === "allow") {
-    return { connectionString, ssl: { rejectUnauthorized: false } };
-  }
-  return { connectionString, ssl: false };
 }
 
 /**
@@ -48,8 +88,12 @@ export function pgConnectionOptions(url: string, ca: string | null): PgConnectio
  * iar partițiile noi ar cere CREATE TABLE). Mentenanța (expirare, retenție) și programarea (cron)
  * rămân pornite: sunt doar DML. Pool mic (modul sesiune al pooler-ului, 5432).
  */
-export function bossOptions(url: string, ca: string | null): ConstructorOptions {
-  const conn = pgConnectionOptions(url, ca);
+export function bossOptions(
+  url: string,
+  ca: string | null,
+  options: PgTlsOptions,
+): ConstructorOptions {
+  const conn = pgConnectionOptions(url, ca, options);
   return {
     connectionString: conn.connectionString,
     ssl: conn.ssl,
