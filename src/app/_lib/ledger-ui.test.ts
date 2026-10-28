@@ -111,7 +111,9 @@ describe("datele calendaristice", () => {
   });
 
   it("formatează data fără fus orar", () => {
-    expect(formatCalendarDate("2026-01-05")).toMatch(/^5 ian\.? 2026$/);
+    // Faza 4: `zz.ll.aaaa` (5.3), ca în paginile de planificare (înainte: „5 ian. 2026”).
+    expect(formatCalendarDate("2026-01-05")).toBe("05.01.2026");
+    expect(formatCalendarDate("2026-10-28")).toBe("28.10.2026");
     expect(formatCalendarDate("x")).toBe("x");
   });
 });
