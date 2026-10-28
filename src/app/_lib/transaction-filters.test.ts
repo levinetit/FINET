@@ -54,6 +54,14 @@ describe("filtrele tranzacțiilor → interogarea API", () => {
     expect(Object.keys(f.errors)).toEqual(["amountMin"]);
   });
 
+  it("sursa (Faza 5): doar `manual` sau `recurring`, altfel ignorată", () => {
+    expect(parseFilters({ source: "recurring" }).query).toEqual({ source: "recurring" });
+    expect(parseFilters({ source: "manual" }).query).toEqual({ source: "manual" });
+    expect(parseFilters({ source: "receipt" }).query).toEqual({});
+    expect(parseFilters({ source: "x" }).query).toEqual({});
+    expect(apiSearch(parseFilters({ source: "recurring" }).query)).toBe("?source=recurring");
+  });
+
   it("parametrii repetați: doar primul", () => {
     expect(parseFilters({ type: ["income", "expense"] }).query).toEqual({ type: "income" });
   });

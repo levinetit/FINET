@@ -17,6 +17,7 @@ export const ro = {
     tags: "Etichete",
     budgets: "Bugete",
     goals: "Obiective",
+    recurring: "Recurențe",
     reports: "Rapoarte",
     profile: "Profil",
     more: "Mai mult",
@@ -265,6 +266,9 @@ export const ro = {
         budget_exists: "Există deja un buget activ pentru această categorie, monedă și domeniu.",
         goal_abandoned: "Obiectivul e abandonat: reia-l înainte de a adăuga contribuții.",
         goal_saved_negative: "Nu poți scoate mai mult decât ai economisit.",
+        recurring_completed: "Regula e completată: nu mai are scadențe.",
+        currency_change_requires_amount:
+          "Contul ales are altă monedă: completează și suma în moneda lui.",
         export_too_large:
           "Exportul are prea multe rânduri (peste 50.000). Restrânge filtrele, de exemplu la un interval de date mai scurt.",
       } as Record<string, string>,
@@ -332,6 +336,10 @@ export const ro = {
     allAccounts: "Toate conturile",
     allCategories: "Toate categoriile",
     allTypes: "Toate tipurile",
+    source: "Sursa",
+    allSources: "Toate sursele",
+    sources: { manual: "Introduse manual", recurring: "Recurente" } as Record<string, string>,
+    recurringBadge: "recurentă",
     noCategory: "Fără categorie",
     dateFrom: "De la data",
     dateTo: "Până la data",
@@ -555,6 +563,112 @@ export const ro = {
     deleteConfirm: "Sigur ștergi obiectivul? Operația nu se poate anula.",
     invalidName: "Numele are între 1 și 100 de caractere.",
     exportCsv: "Export CSV",
+  },
+  recurring: {
+    title: "Plăți recurente",
+    eyebrow: "Abonamente, chirie, rate",
+    add: "Adaugă regulă",
+    newTitle: "Regulă recurentă nouă",
+    editTitle: "Regula recurentă",
+    empty:
+      "Nu ai încă reguli recurente. O regulă generează singură tranzacția la fiecare scadență (abonamente, chirie, rate).",
+    emptyFiltered: "Nicio regulă în această stare.",
+    counts: (active: number, due: number, total: number) =>
+      `${active} ${active === 1 ? "activă" : "active"} · ${due} ${due === 1 ? "regulă scadentă" : "reguli scadente"} · ${total} total`,
+    countsHint:
+      "„Reguli scadente” = reguli active care au cel puțin o scadență negenerată până azi (nu numărul de tranzacții de creat).",
+    filterLabel: "Starea regulilor",
+    filters: {
+      all: "Toate",
+      active: "Active",
+      paused: "Puse pe pauză",
+      completed: "Completate",
+    } as Record<string, string>,
+    statuses: {
+      active: "Activă",
+      paused: "Pusă pe pauză",
+      completed: "Completată",
+    } as Record<string, string>,
+    pausedArchived: "Pusă pe pauză (cont arhivat)",
+    pausedArchivedHint:
+      "Contul regulii a fost arhivat, așa că regula a fost pusă automat pe pauză. Dezarhivează contul sau alege alt cont, apoi reia regula.",
+    dueBadge: "scadentă",
+    next: (date: string) => `următoarea scadență: ${date}`,
+    noNext: "fără scadențe rămase",
+    generate: "Generează scadentele",
+    generating: "Se generează…",
+    generateHint:
+      "Creează acum tranzacțiile scadente până azi (cel mult 12 pe regulă la o apăsare). Apăsat de două ori, nu dublează nimic.",
+    generated: (n: number) =>
+      n === 0
+        ? "Nicio tranzacție nouă: totul era deja generat."
+        : n === 1
+          ? "A fost creată o tranzacție."
+          : `Au fost create ${n} tranzacții.`,
+    generatedFailed: (n: number) =>
+      `${n === 1 ? "O regulă nu a putut fi generată" : `${n} reguli nu au putut fi generate`}; se reîncearcă automat mai târziu.`,
+    frequencies: {
+      daily: "zilnic",
+      weekly: "săptămânal",
+      monthly: "lunar",
+      yearly: "anual",
+    } as Record<string, string>,
+    every: (interval: number, frequency: string) => {
+      const unit: Record<string, [string, string]> = {
+        daily: ["zi", "zile"],
+        weekly: ["săptămână", "săptămâni"],
+        monthly: ["lună", "luni"],
+        yearly: ["an", "ani"],
+      };
+      const [one, many] = unit[frequency] ?? ["", ""];
+      return interval === 1 ? `în fiecare ${one}` : `la fiecare ${interval} ${many}`;
+    },
+    onDay: (day: number) => `în ziua ${day}`,
+    installments: (count: number, max: number) => `${count} din ${max} rate`,
+    generatedCount: (count: number) =>
+      count === 1 ? "o tranzacție generată" : `${count} tranzacții generate`,
+    description: "Descrierea",
+    descriptionHint: "Numele regulii; apare și pe tranzacțiile generate.",
+    merchant: "Comerciantul",
+    type: "Tipul",
+    account: "Contul",
+    category: "Categoria",
+    noCategory: "Fără categorie",
+    amount: "Suma",
+    frequency: "Frecvența",
+    interval: "Intervalul",
+    intervalHint: "1 = în fiecare perioadă; 2 = la fiecare două perioade etc. (cel mult 100).",
+    dayOfMonth: "Ziua din lună",
+    dayOfMonthHint: "Doar pentru lunar și anual. 29–31 înseamnă ultima zi în lunile mai scurte.",
+    startOn: "Data de început",
+    startOnHint: "Prima scadență. O dată în trecut lasă scadențele trecute de generat.",
+    startOnLocked: "Data de început nu se mai schimbă după creare.",
+    endOn: "Data de sfârșit",
+    maxOccurrences: "Numărul de rate",
+    maxOccurrencesHint: "Opțional (cel mult 1200): regula se oprește după atâtea tranzacții.",
+    typeLocked: "Tipul nu se mai schimbă după creare.",
+    noAccounts: "Adaugă întâi un cont activ, apoi poți crea reguli recurente.",
+    errors: {
+      description: "Descrierea are între 1 și 500 de caractere.",
+      interval: "Intervalul e un număr întreg între 1 și 100.",
+      dayOfMonth: "Ziua din lună e un număr întreg între 1 și 31.",
+      maxOccurrences: "Numărul de rate e un număr întreg între 1 și 1200.",
+      startOn: "Alege data de început.",
+      endOn: "Data de sfârșit e înaintea datei de început.",
+      account: "Alege contul.",
+    },
+    pause: "Pune pe pauză",
+    paused: "Regula a fost pusă pe pauză.",
+    resume: "Reia regula",
+    resumeHint:
+      "La reluare nu se generează lunile sărite: următoarea scadență e cea de azi încolo.",
+    resumed: "Regula a fost reluată.",
+    deleteConfirm:
+      "Sigur ștergi regula? Tranzacțiile deja generate rămân. Operația nu se poate anula.",
+    actionsTitle: "Starea regulii",
+    upcomingTitle: "Plăți recurente",
+    upcomingEmpty: "Nicio scadență în următoarele zile.",
+    upcomingAll: "Toate regulile",
   },
   reports: {
     title: "Rapoarte",
