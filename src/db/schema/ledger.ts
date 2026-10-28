@@ -62,7 +62,9 @@ export const accounts = finet.table(
     type: text("type", { enum: ACCOUNT_TYPES }).notNull(),
     currency: text("currency", { enum: DB_CURRENCIES }).notNull(),
     // Poate fi negativ (card de credit, descoperit de cont).
-    openingBalanceMinor: minor("opening_balance_minor").notNull().default(sql`0`),
+    openingBalanceMinor: minor("opening_balance_minor")
+      .notNull()
+      .default(sql`0`),
     bankCode: text("bank_code"),
     archivedAt: ts("archived_at"),
     createdAt: createdAt(),
@@ -348,7 +350,10 @@ export const appEvents = finet.table(
     index("app_events_user_id_idx").on(t.userId),
     index("app_events_household_id_idx").on(t.householdId),
     check("app_events_name_format", sql`${t.name} ~ '^[a-z][a-z0-9_.]{1,63}$'`),
-    check("app_events_screen_format", sql`${t.screen} is null or ${t.screen} ~ '^[a-z][a-z0-9_.]{0,63}$'`),
+    check(
+      "app_events_screen_format",
+      sql`${t.screen} is null or ${t.screen} ~ '^[a-z][a-z0-9_.]{0,63}$'`,
+    ),
     check(
       "app_events_error_code_format",
       sql`${t.errorCode} is null or ${t.errorCode} ~ '^[a-z][a-z0-9_.]{0,63}$'`,

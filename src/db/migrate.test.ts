@@ -179,11 +179,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
         applied: ["0000_core", "0001_rls", "0002_ledger"],
         alreadyApplied: 0,
       });
-      expect(lines).toEqual([
-        "aplicată: 0000_core",
-        "aplicată: 0001_rls",
-        "aplicată: 0002_ledger",
-      ]);
+      expect(lines).toEqual(["aplicată: 0000_core", "aplicată: 0001_rls", "aplicată: 0002_ledger"]);
       const second = await runMigrations(sql, { folder: MIGRATIONS_DIR });
       expect(second).toEqual({ applied: [], alreadyApplied: 3 });
     } finally {
