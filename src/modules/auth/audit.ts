@@ -34,6 +34,8 @@ export type AuditAction =
   | "tag.deleted"
   | "budget.deleted"
   | "goal.deleted"
+  // Exporturile CSV (F3-B): doar tipul exportului și numărul de rânduri, fără conținut.
+  | "export.downloaded"
   // Consimțămintele (F2-B, 6.5): doar tipul, în `metadata.kind`.
   | "consent.granted"
   | "consent.revoked";

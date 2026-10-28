@@ -2,9 +2,11 @@ import "server-only";
 
 import { z } from "zod";
 
+import type { Tx } from "@/db";
 import type { Actor } from "@/lib/authz";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { money } from "@/lib/money";
+import { insertAudit } from "@/modules/auth/audit";
 import { selectAccounts } from "@/modules/accounts/accounts.repo";
 import {
   type PlanningDeps,
@@ -43,7 +45,23 @@ import {
  * `(occurred_on, id)`, crescător), câte o tranzacție SQL pe pagină: memoria rămâne mică, iar
  * apelantul (API-ul, F3-B) poate trimite fragmentele pe măsură ce vin. Un export lung nu e un
  * instantaneu: rândurile adăugate în timpul lui pot apărea sau nu (plafonul rămâne garantat).
+ *
+ * Fiecare export acceptat se auditează (`export.downloaded`, F3-B) fără conținut: doar tipul
+ * exportului și numărul de rânduri (pentru tranzacții, numărul din numărare).
  */
+
+async function auditExport(
+  tx: Tx,
+  actor: Actor,
+  householdId: string,
+  kind: "transactions" | "goals" | "budgets",
+  rows: number,
+): Promise<void> {
+  await insertAudit(tx, actor.userId, householdId, {
+    action: "export.downloaded",
+    metadata: { kind, rows },
+  });
+}
 
 export const MAX_EXPORT_ROWS = 50_000;
 export const EXPORT_PAGE_SIZE = 1_000;
@@ -146,6 +164,7 @@ export async function* exportTransactionsCsv(
         `Exportul are peste ${maxRows} de rânduri; restrânge filtrele (de exemplu intervalul).`,
       );
     }
+    await auditExport(tx, actor, m.householdId, "transactions", total);
     const accountNames = new Map(
       (await selectAccounts(tx, m.householdId, { includeArchived: true })).map((a) => [
         a.id,
@@ -241,7 +260,9 @@ export async function exportGoalsCsv(
   const dialect = dialectOf(options);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     let out = CSV_BOM + csvHeader(GOAL_COLUMNS, dialect);
-    for (const g of (await selectGoals(tx, m.householdId)).map(goalView)) {
+    const goals = (await selectGoals(tx, m.householdId)).map(goalView);
+    await auditExport(tx, actor, m.householdId, "goals", goals.length);
+    for (const g of goals) {
       out += csvRow(
         [
           raw(g.id),
@@ -281,7 +302,9 @@ export async function exportBudgetsCsv(
     const month = await resolveMonth(tx, m.householdId, query.month, now);
     const names = await categoryNames(tx, m.householdId);
     let out = CSV_BOM + csvHeader(BUDGET_COLUMNS, dialect);
-    for (const b of await budgetStatusesIn(tx, m.householdId, actor.userId, month)) {
+    const statuses = await budgetStatusesIn(tx, m.householdId, actor.userId, month);
+    await auditExport(tx, actor, m.householdId, "budgets", statuses.length);
+    for (const b of statuses) {
       out += csvRow(
         [
           raw(b.id),

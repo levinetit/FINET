@@ -40,6 +40,14 @@ export const APP_EVENT_NAMES = [
   "update_prompt_shown",
   "update_started",
   "error_shown",
+  // Faza 3 (F3-B): doar numele, fără sume sau alte câmpuri.
+  "dashboard_viewed",
+  "report_viewed",
+  "budget_created",
+  "goal_created",
+  "goal_contribution_added",
+  "tag_created",
+  "export_downloaded",
 ] as const;
 
 /** Ecranele (doar numele, pentru `screen_view` și ca context al unei erori). */
