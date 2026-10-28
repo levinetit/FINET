@@ -144,15 +144,15 @@ test.describe(`planificarea (${MODE})`, () => {
 
     // Selectorul de lună: luna anterioară, în URL.
     const d = await client.get<Dashboard>("/api/v1/dashboard");
-    await page.getByLabel("Luna").selectOption(d.previousMonth);
+    await page.getByLabel("Luna", { exact: true }).selectOption(d.previousMonth);
     await page.getByRole("button", { name: "Arată luna" }).click();
     await expect(page).toHaveURL(new RegExp(`/dashboard\\?month=${d.previousMonth}$`));
-    await expect(page.getByLabel("Luna")).toHaveValue(d.previousMonth);
+    await expect(page.getByLabel("Luna", { exact: true })).toHaveValue(d.previousMonth);
     // O lună viitoare sau prea veche: luna curentă și un mesaj, nu o eroare.
     const response = await page.goto("/dashboard?month=2999-01");
     expect(response?.status()).toBe(200);
     await expect(page.getByText("Luna cerută nu e disponibilă")).toBeVisible();
-    await expect(page.getByLabel("Luna")).toHaveValue(month);
+    await expect(page.getByLabel("Luna", { exact: true })).toHaveValue(month);
   });
 
   test("(b) buget pe categorie: semaforul trece din verde în galben și roșu", async ({
