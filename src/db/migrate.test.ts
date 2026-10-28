@@ -21,9 +21,9 @@ function copyMigrations(): string {
 }
 
 describe("readMigrations (fără bază)", () => {
-  it("citește jurnalul repo-ului: 0000_core, apoi 0001_rls, fără CREATE SCHEMA", () => {
+  it("citește jurnalul repo-ului: 0000_core, 0001_rls, 0002_ledger, fără CREATE SCHEMA", () => {
     const migrations = readMigrations(MIGRATIONS_DIR);
-    expect(migrations.map((m) => m.tag)).toEqual(["0000_core", "0001_rls"]);
+    expect(migrations.map((m) => m.tag)).toEqual(["0000_core", "0001_rls", "0002_ledger"]);
     for (const m of migrations) {
       expect(m.hash).toMatch(/^[0-9a-f]{64}$/);
       expect(m.statements.length).toBeGreaterThan(0);
@@ -49,6 +49,33 @@ describe("readMigrations (fără bază)", () => {
       expect(rlsText).toContain(`alter table finet.${table} enable row level security`);
       expect(rlsText).toContain(`alter table finet.${table} force row level security`);
     }
+  });
+
+  it("0002_ledger: fiecare tabel creat are RLS ENABLE și FORCE în aceeași migrație, fără excepții", () => {
+    const ledger = readMigrations(MIGRATIONS_DIR).find((m) => m.tag === "0002_ledger")!;
+    const text = ledger.statements.join("\n");
+    const created = [...text.matchAll(/CREATE TABLE "finet"\."(\w+)"/g)].map((m) => m[1]!);
+    expect(created.sort()).toEqual([
+      "accounts",
+      "app_downloads",
+      "app_events",
+      "categories",
+      "category_visibility",
+      "client_installations",
+      "idempotency_keys",
+      "transactions",
+    ]);
+    for (const table of created) {
+      expect(text).toContain(`alter table finet.${table} enable row level security`);
+      expect(text).toContain(`alter table finet.${table} force row level security`);
+    }
+    // Categoriile de sistem se inserează ÎNAINTE de activarea RLS (FORCE se aplică și
+    // proprietarului).
+    expect(text.indexOf("insert into finet.categories")).toBeLessThan(
+      text.indexOf("alter table finet.categories enable row level security"),
+    );
+    // Nicio funcție nouă SECURITY DEFINER: triggerele rulează cu drepturile apelantului.
+    expect(text).not.toMatch(/security\s+definer/i);
   });
 
   it("refuză un director fără jurnal", () => {
@@ -148,10 +175,17 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     try {
       const lines: string[] = [];
       const first = await runMigrations(sql, { folder: MIGRATIONS_DIR, log: (l) => lines.push(l) });
-      expect(first).toEqual({ applied: ["0000_core", "0001_rls"], alreadyApplied: 0 });
-      expect(lines).toEqual(["aplicată: 0000_core", "aplicată: 0001_rls"]);
+      expect(first).toEqual({
+        applied: ["0000_core", "0001_rls", "0002_ledger"],
+        alreadyApplied: 0,
+      });
+      expect(lines).toEqual([
+        "aplicată: 0000_core",
+        "aplicată: 0001_rls",
+        "aplicată: 0002_ledger",
+      ]);
       const second = await runMigrations(sql, { folder: MIGRATIONS_DIR });
-      expect(second).toEqual({ applied: [], alreadyApplied: 2 });
+      expect(second).toEqual({ applied: [], alreadyApplied: 3 });
     } finally {
       await sql.end({ timeout: 5 });
     }
@@ -166,7 +200,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     ]);
     const [counted] = await db.admin<{ n: number }[]>`
       select count(*)::int as n from finet.__drizzle_migrations`;
-    expect(counted?.n).toBe(2);
+    expect(counted?.n).toBe(3);
     const schemas = await db.admin<{ nspname: string }[]>`
       select nspname from pg_namespace where nspname = 'drizzle'`;
     expect(schemas).toEqual([]);
@@ -177,15 +211,23 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       select tablename, tableowner from pg_tables where schemaname = 'finet' order by tablename`;
     expect(rows.map((r) => r.tablename)).toEqual([
       "__drizzle_migrations",
+      "accounts",
+      "app_downloads",
+      "app_events",
       "audit_events",
       "auth_accounts",
       "auth_rate_limits",
       "auth_sessions",
       "auth_verifications",
       "bootstrap_state",
+      "categories",
+      "category_visibility",
+      "client_installations",
       "consents",
       "household_members",
       "households",
+      "idempotency_keys",
+      "transactions",
       "user_preferences",
       "users",
     ]);
@@ -248,7 +290,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       expect(rows.length).toBe(0);
       const [counted] = await db.admin<{ n: number }[]>`
         select count(*)::int as n from finet.__drizzle_migrations`;
-      expect(counted?.n).toBe(2);
+      expect(counted?.n).toBe(3);
     } finally {
       await sql.end({ timeout: 5 });
       rmSync(dir, { recursive: true, force: true });
@@ -266,7 +308,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     });
     expect(err).toEqual([]);
     expect(code).toBe(0);
-    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 2"]);
+    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 3"]);
     expect(out.join("\n")).not.toContain("finet_migrator_ci");
   });
 });
