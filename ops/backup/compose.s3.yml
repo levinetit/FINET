@@ -1,0 +1,21 @@
+# Suprapunerea pentru o destinație S3-compatibilă (AWS S3, Backblaze B2, Wasabi, Hetzner Object
+# Storage, MinIO pe alt server). Se folosește DUPĂ ops/docker/docker-compose.yml:
+#   docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.s3.yml \
+#     --env-file /srv/finet/compose/compose.env --profile backup run --rm -T finet-backup <comandă>
+# finet_backup_repository conține adresa, de exemplu `s3:https://s3.eu-central-003.backblazeb2.com/finet-backup`.
+# Cheile (uid 1000, mod 400), cu drepturi DOAR pe acel bucket; restic nu are `_FILE` pentru
+# ele, deci lib.sh le citește din fișiere în mediul procesului restic.
+secrets:
+  finet_backup_s3_access_key_id:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_backup_s3_access_key_id
+  finet_backup_s3_secret_access_key:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_backup_s3_secret_access_key
+
+services:
+  finet-backup:
+    secrets:
+      - finet_backup_s3_access_key_id
+      - finet_backup_s3_secret_access_key
+    environment:
+      AWS_ACCESS_KEY_ID_FILE: /run/secrets/finet_backup_s3_access_key_id
+      AWS_SECRET_ACCESS_KEY_FILE: /run/secrets/finet_backup_s3_secret_access_key

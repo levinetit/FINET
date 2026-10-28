@@ -56,6 +56,14 @@ secrets:
   # Secretul Better Auth (F1-B): `openssl rand -base64 32`, doar pentru finet-web.
   finet_better_auth_secret:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_better_auth_secret
+  # Backup-ul (F3-D, docs/BACKUP.md): doar pentru finet-backup. Secretele destinației (S3/SFTP)
+  # și ale restaurării sunt în fișierele de suprapunere ops/backup/compose.<destinație>.yml.
+  finet_restic_password:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_restic_password
+  finet_backup_repository:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_backup_repository
+  finet_backup_pg_service:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_backup_pg_service
 
 x-ca-volume: &ca-volume
   # CA-ul Supabase (prod-ca-2021.crt din panoul Supabase), read-only. Directorul trebuie să
@@ -316,6 +324,71 @@ services:
     healthcheck:
       disable: true
     # Ca finet-migrate: doar ieșire spre Supabase, fără `apps` și fără IP static.
+    networks:
+      - default
+
+  finet-backup:
+    <<: *common
+    # Backup-ul zilnic (F3-D, ADR 0009, docs/BACKUP.md): pg_dump al schemei `finet` + fișierele
+    # din storage, criptate cu restic. Imaginea separată (ops/backup/Dockerfile, ținta `backup`,
+    # construită de workflow-ul `images`). One-shot, NU container permanent: îl pornește
+    # ops/backup/run-backup.sh din cron-ul root, cu suprapunerea destinației:
+    #   docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.rclone.yml \
+    #     --env-file /srv/finet/compose/compose.env --profile backup run --rm -T finet-backup backup
+    # Alte comenzi: init (o dată), snapshots, check [--read-data], restore --yes (cu
+    # ops/backup/compose.restore.yml). Fără apps și fără IP static (ca finet-migrate): ieșire doar
+    # spre Supabase și spre destinația backup-ului.
+    image: ${FINET_BACKUP_IMAGE:-finet:backup}
+    build:
+      context: ../..
+      dockerfile: ops/backup/Dockerfile
+      target: backup
+    hostname: finet-backup
+    profiles: [backup]
+    restart: "no"
+    # uid 1000 = proprietarul /srv/finet/storage (mod 700) și al fișierelor-secret (mod 400).
+    user: "1000:1000"
+    env_file:
+      - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.backup.env
+        required: true
+    secrets:
+      - finet_restic_password
+      - finet_backup_repository
+      - finet_backup_pg_service
+    environment:
+      RESTIC_PASSWORD_FILE: /run/secrets/finet_restic_password
+      RESTIC_REPOSITORY_FILE: /run/secrets/finet_backup_repository
+      # Conexiunea la bază: fișier de servicii libpq (rolul finet_backup, sslmode=verify-full,
+      # sslrootcert=/run/finet/ca/...); parola nu apare în argumente sau în `docker inspect`.
+      PGSERVICEFILE: /run/secrets/finet_backup_pg_service
+      PGSERVICE: finet_backup
+      FINET_BACKUP_STORAGE_DIR: /data/storage
+      FINET_BACKUP_REQUIRE_STORAGE: "1"
+      # Gazda fixă a instantaneelor (retenția grupează pe gazdă; `run` schimbă hostname-ul).
+      FINET_BACKUP_HOST: finet
+      TZ: Europe/Bucharest
+      HOME: /tmp/home
+      RESTIC_CACHE_DIR: /tmp/restic-cache
+      GOMAXPROCS: "2"
+    command: ["backup"]
+    volumes:
+      - *ca-volume
+      # Fișierele, DOAR citire.
+      - type: bind
+        source: ${FINET_DATA_DIR:-/srv/finet}/storage
+        target: /data/storage
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      # HOME (config ssh pentru SFTP) și cache-ul restic; tmpfs-ul intră în limita de memorie.
+      - /tmp:size=96m,mode=1777
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    healthcheck:
+      disable: true
     networks:
       - default
 

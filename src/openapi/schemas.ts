@@ -2,8 +2,11 @@ import { z } from "zod";
 
 import {
   ACCOUNT_TYPES,
+  BUDGET_PERIODS,
+  BUDGET_SCOPES,
   CATEGORY_KINDS,
   DB_CURRENCIES,
+  GOAL_STATUSES,
   HOUSEHOLD_ROLES,
   THEMES,
   TRANSACTION_SOURCES,
@@ -94,6 +97,9 @@ export const transactionSchema = z
     createdByUserId: uuid.nullable(),
     createdAt: instant,
     updatedAt: instant,
+    tags: z
+      .array(z.strictObject({ id: uuid, name: z.string(), color: z.string().nullable() }))
+      .meta({ description: "Etichetele tranzacției (ordonate după nume); `[]` la transferuri." }),
   })
   .meta({ title: "Transaction" });
 
@@ -180,6 +186,162 @@ export const meSchema = z
   .meta({ title: "Me" });
 
 export const sessionSchema = sessionViewSchema.meta({ title: "Session" });
+
+// --- Planificare și raportare (Faza 3, F3-B) --------------------------------------------------
+
+const int = z.number().int();
+const percent = int.meta({ description: "Procent întreg (fără float pe sume)." });
+
+export const tagSchema = z
+  .strictObject({
+    id: uuid,
+    name: z.string(),
+    color: z.string().nullable(),
+    hidden: z.boolean(),
+    isSystem: z.boolean(),
+    systemKey: z.string().nullable(),
+    usageCount: int.meta({ description: "Tranzacțiile gospodăriei care au eticheta." }),
+  })
+  .meta({ title: "Tag" });
+
+export const budgetSchema = z
+  .strictObject({
+    id: uuid,
+    categoryId: uuid.nullable().meta({ description: "`null` = buget general." }),
+    period: z.enum(BUDGET_PERIODS),
+    amountMinor: minor,
+    currency,
+    warnPct: int,
+    scope: z.enum(BUDGET_SCOPES),
+    userId: uuid.nullable().meta({ description: "Proprietarul unui buget `personal`." }),
+    archivedAt: instant.nullable(),
+    createdAt: instant,
+    updatedAt: instant,
+  })
+  .meta({ title: "Budget" });
+
+export const budgetStatusSchema = budgetSchema
+  .extend({
+    month: z.string().meta({ description: "Luna `YYYY-MM`." }),
+    spentMinor: minor.meta({
+      description: "Cheltuielile lunii în moneda bugetului (fără transferuri).",
+    }),
+    remainingMinor: minor.meta({ description: "`amountMinor − spentMinor`; negativ la depășire." }),
+    percent: percent.meta({
+      description: "`floor(spent × 100 / amount)`, limitat la 1.000.000 (doar afișare).",
+    }),
+    status: z.enum(["green", "yellow", "red"]).meta({
+      description:
+        "Semaforul din comparații exacte: verde sub `warnPct`, galben de la `warnPct` până la 100% inclusiv, roșu peste 100%.",
+    }),
+  })
+  .meta({ title: "BudgetStatus" });
+
+export const goalSchema = z
+  .strictObject({
+    id: uuid,
+    name: z.string(),
+    targetMinor: minor,
+    savedMinor: minor,
+    currency,
+    deadline: date.nullable(),
+    status: z.enum(GOAL_STATUSES),
+    accountId: uuid.nullable(),
+    progressPct: percent.meta({
+      description: "`floor(saved × 100 / target)`; poate trece de 100.",
+    }),
+    createdAt: instant,
+    updatedAt: instant,
+  })
+  .meta({ title: "Goal" });
+
+const totals = z.strictObject({
+  incomeMinor: minor,
+  expenseMinor: minor,
+  netMinor: minor,
+  transactionCount: int.meta({ description: "Venituri + cheltuieli (fără transferuri)." }),
+});
+const delta = z.strictObject({
+  diffMinor: minor,
+  percent: int.nullable().meta({ description: "`null` când luna anterioară e 0." }),
+});
+
+export const dashboardSchema = z
+  .strictObject({
+    month: z.string(),
+    previousMonth: z.string(),
+    onboarding: z.strictObject({
+      hasAccount: z.boolean(),
+      hasTransaction: z.boolean(),
+      hasBudget: z.boolean(),
+      hasGoal: z.boolean(),
+      steps: z.array(
+        z.strictObject({ key: z.enum(["import", "budget", "goal"]), done: z.boolean() }),
+      ),
+      completed: z.boolean(),
+    }),
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        totals,
+        previous: totals,
+        comparison: z.strictObject({ income: delta, expense: delta, net: delta }),
+        byCategory: z.array(
+          z.strictObject({
+            categoryId: uuid.nullable(),
+            name: z.string().nullable(),
+            isOther: z.boolean(),
+            amountMinor: minor,
+            percent,
+          }),
+        ),
+        monthly: z.array(
+          z.strictObject({
+            month: z.string(),
+            incomeMinor: minor,
+            expenseMinor: minor,
+            netMinor: minor,
+          }),
+        ),
+        daily: z.array(z.strictObject({ date, incomeMinor: minor, expenseMinor: minor })),
+      }),
+    ),
+  })
+  .meta({ title: "Dashboard" });
+
+export const monthlyReportSchema = z
+  .strictObject({
+    month: z.string(),
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        totals,
+        byCategory: z.array(
+          z.strictObject({
+            categoryId: uuid.nullable(),
+            name: z.string().nullable(),
+            amountMinor: minor,
+            count: int,
+            percent,
+            children: z.array(
+              z.strictObject({
+                categoryId: uuid.nullable(),
+                name: z.string().nullable(),
+                amountMinor: minor,
+                count: int,
+              }),
+            ),
+          }),
+        ),
+        topMerchants: z.array(
+          z.strictObject({ merchant: z.string(), amountMinor: minor, count: int }),
+        ),
+      }),
+    ),
+    budgets: z.array(budgetStatusSchema),
+    goals: z.array(goalSchema),
+  })
+  .meta({ title: "MonthlyReport" });
 
 /** `{ data }` */
 export const dataOf = <T extends z.ZodType>(schema: T) => z.strictObject({ data: schema });

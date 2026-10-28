@@ -29,6 +29,13 @@
       "when": 1793250000000,
       "tag": "0003_idempotency_purge",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793260000000,
+      "tag": "0004_budgets_goals_tags",
+      "breakpoints": true
     }
   ]
 }

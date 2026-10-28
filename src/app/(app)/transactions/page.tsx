@@ -3,6 +3,8 @@ import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 
 import { Field } from "@/components/ledger/field";
+import { ExportButton } from "@/components/planning/export-button";
+import { TagDot } from "@/components/planning/tag-chip";
 import { Alert } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,15 +15,16 @@ import { accountToJson } from "@/modules/accounts/accounts.schema";
 import { listAccounts } from "@/modules/accounts/accounts.service";
 import { categoryToJson } from "@/modules/categories/categories.schema";
 import { listCategories } from "@/modules/categories/categories.service";
-import {
-  type TransactionJson,
-  transactionToJson,
-} from "@/modules/transactions/transactions.schema";
+import { tagToJson } from "@/modules/tags/tags.schema";
+import { listTags, transactionTagRefs } from "@/modules/tags/tags.service";
+import { transactionToJson } from "@/modules/transactions/transactions.schema";
 import { listTransactions } from "@/modules/transactions/transactions.service";
 
 import { load, requireLedgerPage } from "../../_lib/ledger-page";
+import { exportPath } from "../../_lib/planning-ui";
 import {
   apiSearch,
+  exportSearch,
   FILTER_SORTS,
   FILTER_TYPES,
   hasActiveFilters,
@@ -29,7 +32,7 @@ import {
 } from "../../_lib/transaction-filters";
 import { PageHeader } from "../page-header";
 
-import { TransactionsList } from "./transactions-list";
+import { type TransactionRow, TransactionsList } from "./transactions-list";
 
 export const metadata: Metadata = { title: ro.transactions.title };
 
@@ -38,7 +41,10 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 /**
  * Tranzacțiile: căutare și filtre (formular GET, deci adresa paginii poartă filtrele), sortare,
  * prima pagină citită pe server, „Încarcă mai mult” cu cursorul API-ului. Transferurile apar ca
- * transfer, nu ca venit sau cheltuială.
+ * transfer, nu ca venit sau cheltuială. Faza 3: filtrele „comerciant” și „etichete” (oricare),
+ * etichetele pe rânduri și „Export CSV” cu aceleași filtre (fără ordine: exportul e cronologic).
+ * În URL stau id-uri, date, sume și tipul; textul liber (`q`, `merchant`) stă și el acolo, ca o
+ * vedere să se poată salva (ADR 0008, LOW-3 în SECURITY_CHECKLIST).
  */
 export default async function TransactionsPage({
   searchParams,
@@ -79,13 +85,15 @@ export default async function TransactionsPage({
   const householdId = page.householdId;
   const deps = { db: page.session.runtime.db };
   const lists = await load(async () => {
-    const [accounts, categories] = await Promise.all([
+    const [accounts, categories, tags] = await Promise.all([
       listAccounts(deps, page.actor, householdId, { includeArchived: true }),
       listCategories(deps, page.actor, householdId, { includeHidden: true }),
+      listTags(deps, page.actor, householdId, { includeHidden: true }),
     ]);
     return {
       accounts: accounts.accounts.map(accountToJson),
       categories: categories.map(categoryToJson),
+      tags: tags.map(tagToJson),
     };
   });
   if (!lists.ok) {
@@ -97,16 +105,26 @@ export default async function TransactionsPage({
     );
   }
   const { accounts, categories } = lists.value;
+  const selectedTags = new Set(filters.values.tagIds);
+  // Etichetele ascunse nu se propun, dar una deja aleasă în filtru rămâne bifabilă.
+  const tagOptions = lists.value.tags.filter((tag) => !tag.hidden || selectedTags.has(tag.id));
 
   // Filtrele invalide (de exemplu un interval inversat) dau o listă goală cu mesaj, nu o eroare.
-  let rows: TransactionJson[] = [];
+  let rows: TransactionRow[] = [];
   let nextCursor: string | null = null;
   let filterError = Object.keys(filters.errors).length > 0;
   let loadError = false;
   if (!filterError) {
     try {
       const first = await listTransactions(deps, page.actor, householdId, filters.query);
-      rows = first.data.map(transactionToJson);
+      // Etichetele rândurilor, ca în API (o singură interogare pe pagină).
+      const refs = await transactionTagRefs(
+        deps,
+        page.actor,
+        householdId,
+        first.data.filter((r) => r.type !== "transfer").map((r) => r.id),
+      );
+      rows = first.data.map((r) => ({ ...transactionToJson(r), tags: refs.get(r.id) ?? [] }));
       nextCursor = first.nextCursor;
     } catch (error) {
       unstable_rethrow(error);
@@ -138,6 +156,18 @@ export default async function TransactionsPage({
                     type="search"
                     defaultValue={v.q}
                     maxLength={200}
+                    aria-describedby={p.describedBy}
+                  />
+                )}
+              </Field>
+              <Field id="filter-merchant" label={t.merchantFilter} hint={t.merchantFilterHint}>
+                {(p) => (
+                  <Input
+                    id={p.id}
+                    name="merchant"
+                    defaultValue={v.merchant}
+                    maxLength={200}
+                    autoComplete="off"
                     aria-describedby={p.describedBy}
                   />
                 )}
@@ -220,6 +250,36 @@ export default async function TransactionsPage({
                 )}
               </Field>
             </div>
+            <fieldset className="flex flex-col gap-2" aria-describedby="filter-tags-hint">
+              <legend className="mb-1 text-sm font-medium">{t.tagsFilter}</legend>
+              {tagOptions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t.noTagsYet}</p>
+              ) : (
+                <div className="flex flex-wrap gap-2" data-testid="filter-tags">
+                  {tagOptions.map((tag) => (
+                    <label
+                      key={tag.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm has-checked:border-primary has-checked:bg-accent-soft"
+                    >
+                      <input
+                        type="checkbox"
+                        name="tagIds"
+                        value={tag.id}
+                        defaultChecked={selectedTags.has(tag.id)}
+                      />
+                      <TagDot color={tag.color} />
+                      {tag.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p id="filter-tags-hint" className="text-xs text-muted-foreground">
+                {t.tagsFilterHint}{" "}
+                <Link href="/tags" className="font-medium text-primary hover:underline">
+                  {t.manageTags}
+                </Link>
+              </p>
+            </fieldset>
             <div className="flex flex-wrap gap-2">
               <button type="submit" className={buttonClasses("secondary")}>
                 {t.apply}
@@ -230,6 +290,22 @@ export default async function TransactionsPage({
             </div>
           </form>
         </Card>
+        {accounts.length > 0 && !filterError ? (
+          <Card aria-labelledby="export-title">
+            <h2 id="export-title" className="sr-only">
+              {t.exportCsv}
+            </h2>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="text-sm text-muted-foreground">{t.exportHint}</p>
+              <ExportButton
+                path={exportPath("transactions", exportSearch(filters.query))}
+                label={t.exportCsv}
+                filename="finet-tranzactii.csv"
+                testId="export-transactions"
+              />
+            </div>
+          </Card>
+        ) : null}
         {filterError ? <Alert>{t.filterError}</Alert> : null}
         {loadError ? <Alert>{ro.ledger.loadError}</Alert> : null}
         {accounts.length === 0 ? (

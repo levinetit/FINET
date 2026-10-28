@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 
 import { ConfirmButton } from "@/components/ledger/confirm-button";
 import { Field } from "@/components/ledger/field";
+import { TagDot } from "@/components/planning/tag-chip";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,25 +27,35 @@ import { useSubmit } from "../../_lib/use-submit";
 
 export type AccountOption = Readonly<{ id: string; name: string; currency: string }>;
 export type CategoryOption = Readonly<{ id: string; name: string; kind: string }>;
+export type TagOption = Readonly<{ id: string; name: string; color: string | null }>;
+
+/** Cel mult atâtea etichete pe o tranzacție (ca `MAX_TAGS_PER_TRANSACTION` din server). */
+export const MAX_TAGS = 10;
 
 type EntryType = "income" | "expense";
 
 /**
  * Venitul sau cheltuiala: creare (`POST /api/v1/transactions`, cu `Idempotency-Key` per
  * trimitere) sau editare (`PATCH`) și ștergere (`DELETE`). Categoriile se filtrează după tip;
- * suma se parsează cu `parseAmount` și pleacă drept `amountMinor` (întreg).
+ * suma se parsează cu `parseAmount` și pleacă drept `amountMinor` (întreg). Etichetele (Faza 3):
+ * bife, cel mult 10; la editare `tagIds` se trimite mereu și ÎNLOCUIEȘTE lista (pornind de la
+ * etichetele curente, încărcate de pagină).
  */
 export function TransactionForm({
   transaction,
   initialType,
   accounts,
   categories,
+  tags = [],
+  initialTagIds = [],
   today,
 }: Readonly<{
   transaction?: TransactionJson;
   initialType: EntryType;
   accounts: readonly AccountOption[];
   categories: readonly CategoryOption[];
+  tags?: readonly TagOption[];
+  initialTagIds?: readonly string[];
   /** Data de azi (`Europe/Bucharest`), calculată pe server. */
   today: string;
 }>) {
@@ -55,6 +66,17 @@ export function TransactionForm({
   const [type, setType] = useState<EntryType>(initialType);
   const [accountId, setAccountId] = useState(transaction?.accountId ?? accounts[0]?.id ?? "");
   const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
+  const [tagIds, setTagIds] = useState<string[]>([...initialTagIds]);
+
+  function toggleTag(id: string, checked: boolean) {
+    setTagIds((current) =>
+      checked
+        ? current.includes(id)
+          ? current
+          : [...current, id]
+        : current.filter((x) => x !== id),
+    );
+  }
   const currency = asCurrency(accounts.find((a) => a.id === accountId)?.currency ?? "RON");
   const visibleCategories = categories.filter((c) => c.kind === type);
 
@@ -67,6 +89,7 @@ export function TransactionForm({
     if (!accountId) fields.accountId = ro.transactions.noAccounts;
     const occurredOn = String(form.get("occurredOn") ?? "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredOn)) fields.occurredOn = ro.ledger.errors.invalid;
+    if (tagIds.length > MAX_TAGS) fields.tagIds = ro.transactions.tooManyTags(MAX_TAGS);
     if (!amount.ok || Object.keys(fields).length > 0) {
       setErrors({ form: ro.ledger.errors.invalid, fields });
       return;
@@ -82,6 +105,7 @@ export function TransactionForm({
       merchant: text("merchant"),
       description: text("description"),
       notes: text("notes"),
+      tagIds,
     };
     const result = transaction
       ? await submit(`/api/v1/transactions/${transaction.id}`, "PATCH", body, {
@@ -277,6 +301,52 @@ export function TransactionForm({
               />
             )}
           </Field>
+          <fieldset
+            className="flex flex-col gap-2"
+            aria-describedby={errors.fields.tagIds ? "tx-tags-hint tx-tags-error" : "tx-tags-hint"}
+          >
+            <legend className="mb-1 text-sm font-medium">
+              {t.tags}
+              <span className="ml-1 font-normal text-muted-foreground">({ro.ledger.optional})</span>
+            </legend>
+            {tags.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t.noTagsYet}</p>
+            ) : (
+              <div className="flex flex-wrap gap-2" data-testid="tx-tags">
+                {tags.map((tag) => {
+                  const checked = tagIds.includes(tag.id);
+                  return (
+                    <label
+                      key={tag.id}
+                      className={
+                        "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm " +
+                        (checked ? "border-primary bg-accent-soft font-semibold" : "border-border")
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        name="tagIds"
+                        value={tag.id}
+                        checked={checked}
+                        disabled={!checked && tagIds.length >= MAX_TAGS}
+                        onChange={(e) => toggleTag(tag.id, e.target.checked)}
+                      />
+                      <TagDot color={tag.color} />
+                      {tag.name}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <p id="tx-tags-hint" className="text-xs text-muted-foreground">
+              {t.tagsHint(MAX_TAGS)}
+            </p>
+            {errors.fields.tagIds ? (
+              <p id="tx-tags-error" className="text-sm text-bad" data-testid="tx-tags-error">
+                {errors.fields.tagIds}
+              </p>
+            ) : null}
+          </fieldset>
           <Alert>{errors.form}</Alert>
           <div className="flex flex-wrap items-start gap-2">
             <Button type="submit" disabled={busy}>

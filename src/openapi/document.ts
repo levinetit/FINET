@@ -5,14 +5,20 @@ import { MAX_EVENTS_PER_BATCH } from "@/modules/usage/usage.schema";
 import { type Operation, OPERATIONS } from "./registry";
 import {
   accountSchema,
+  budgetSchema,
+  budgetStatusSchema,
   categorySchema,
   consentStateSchema,
+  dashboardSchema,
   errorSchema,
+  goalSchema,
   householdDetailSchema,
   householdSummarySchema,
   meSchema,
   moneySchema,
+  monthlyReportSchema,
   sessionSchema,
+  tagSchema,
   transactionSchema,
   transferSchema,
 } from "./schemas";
@@ -37,14 +43,20 @@ function responseSchema(schema: z.ZodType): Json {
 /** Entitățile răspunsurilor, emise o singură dată în `components.schemas` și referite prin `$ref`. */
 const COMPONENTS: ReadonlyArray<readonly [string, z.ZodType]> = [
   ["Account", accountSchema],
+  ["Budget", budgetSchema],
+  ["BudgetStatus", budgetStatusSchema],
   ["Category", categorySchema],
   ["ConsentState", consentStateSchema],
+  ["Dashboard", dashboardSchema],
   ["Error", errorSchema],
+  ["Goal", goalSchema],
   ["HouseholdDetail", householdDetailSchema],
   ["HouseholdSummary", householdSummarySchema],
   ["Me", meSchema],
   ["Money", moneySchema],
+  ["MonthlyReport", monthlyReportSchema],
   ["Session", sessionSchema],
+  ["Tag", tagSchema],
   ["Transaction", transactionSchema],
   ["Transfer", transferSchema],
 ];
@@ -92,7 +104,7 @@ function strip(schema: Json): Json {
 const ERROR_DESCRIPTIONS: Readonly<Record<number, string>> = {
   400: "Cerere invalidă (`invalid_request`, cu `fields` pe câmp; mesaje fixe, fără ecoul valorilor).",
   401: "Fără sesiune validă (`unauthenticated`).",
-  403: "Interzis (`forbidden`): mutație cu cookie fără `Origin` corect (CSRF) sau rol insuficient.",
+  403: "Interzis (`forbidden`): mutație cu cookie fără `Origin` corect (CSRF), export CSV cu cookie fără `Sec-Fetch-Site` `same-origin`/`none`, sau rol insuficient.",
   404: "Resursa nu există sau aparține altei gospodării (`not_found`, răspuns uniform).",
   409: "Conflict cu starea curentă (`conflict`, cu `reason`) sau `request_in_progress` (aceeași `Idempotency-Key` e în curs).",
   413: "Corpul depășește 16 KiB (`payload_too_large`).",
@@ -130,7 +142,15 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
 
   const responses: Json = {};
   const success: Json = { description: op.success.description };
-  if (op.success.schema) {
+  if (op.success.csv) {
+    success.content = { "text/csv; charset=utf-8": { schema: { type: "string" } } };
+    success.headers = {
+      "Content-Disposition": {
+        description: '`attachment; filename="…"` cu un nume fix (fără date ale utilizatorului).',
+        schema: { type: "string" },
+      },
+    };
+  } else if (op.success.schema) {
     const schema = refify(strip(responseSchema(op.success.schema)), refs, false);
     success.content = { "application/json": { schema } };
   }
@@ -191,7 +211,7 @@ export function buildOpenApiDocument(): Json {
       title: "FINET API",
       version: "1",
       description:
-        "API-ul REST versionat al FINET (master prompt 6.4). Sumele sunt întregi în unități minore (`amountMinor`) cu `currency`; datele `YYYY-MM-DD`; momentele ISO 8601 UTC. Detalii: docs/API.md, docs/adr/0005-api-v1.md.",
+        "API-ul REST versionat al FINET (master prompt 6.4). Sumele sunt întregi în unități minore (`amountMinor`) cu `currency`; datele `YYYY-MM-DD`; momentele ISO 8601 UTC. Detalii: docs/API.md, docs/adr/0005-api-v1.md, docs/adr/0007-planning-reporting.md.",
     },
     servers: [
       {
@@ -208,6 +228,11 @@ export function buildOpenApiDocument(): Json {
       { name: "categories", description: "Categoriile." },
       { name: "transactions", description: "Tranzacțiile (venituri, cheltuieli)." },
       { name: "transfers", description: "Transferurile între conturi." },
+      { name: "tags", description: "Etichetele (Faza 3)." },
+      { name: "budgets", description: "Bugetele lunare și semaforul (Faza 3)." },
+      { name: "goals", description: "Obiectivele de economisire (Faza 3)." },
+      { name: "reports", description: "Dashboard-ul și raportul lunar (Faza 3)." },
+      { name: "exports", description: "Exporturile CSV (Faza 3)." },
     ],
     paths,
     components: {

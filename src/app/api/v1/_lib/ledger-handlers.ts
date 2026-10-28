@@ -20,7 +20,11 @@ import {
   updateCategory,
 } from "@/modules/categories/categories.service";
 import { getMyHousehold, listMyHouseholds } from "@/modules/households/households.service";
-import { transactionToJson } from "@/modules/transactions/transactions.schema";
+import { transactionTagRefs } from "@/modules/tags/tags.service";
+import {
+  type TransactionView,
+  transactionToJson,
+} from "@/modules/transactions/transactions.schema";
 import {
   createTransaction,
   deleteTransaction,
@@ -37,6 +41,7 @@ import {
 } from "@/modules/transfers/transfers.service";
 
 import {
+  type ApiContext,
   type ApiDeps,
   currentHousehold,
   handle,
@@ -212,27 +217,77 @@ export function setCategoryHiddenHandler(
 
 // --- Tranzacțiile ----------------------------------------------------------------------------
 
-export const TRANSACTION_QUERY = {
+/** Filtrele listei (și ale exportului CSV, F3-B). */
+export const TRANSACTION_FILTER_QUERY = {
   q: "string",
   accountId: "string",
   categoryId: "string",
+  // Faza 3: id-uri de etichete separate prin virgulă (oricare dintre ele) și comerciantul.
+  tagIds: "string",
+  merchant: "string",
   type: "string",
   source: "string",
   dateFrom: "string",
   dateTo: "string",
   amountMinMinor: "int",
   amountMaxMinor: "int",
+} as const;
+
+export const TRANSACTION_QUERY = {
+  ...TRANSACTION_FILTER_QUERY,
   sort: "string",
   cursor: "string",
   limit: "int",
 } as const;
 
+/**
+ * Parametrii din URL → interogarea serviciului. `tagIds` vine ca un singur parametru cu id-uri
+ * separate prin virgulă (un parametru repetat e respins de `readQuery`); validarea (uuid, cel mult
+ * 10, distincte, cel puțin unul) o face schema serviciului.
+ */
+export function transactionQueryOf(
+  query: Record<string, string | number | boolean>,
+): Record<string, unknown> {
+  const { tagIds, ...rest } = query;
+  if (tagIds === undefined) return rest;
+  const list = String(tagIds) === "" ? [] : String(tagIds).split(",");
+  return { ...rest, tagIds: list };
+}
+
+/** Tranzacțiile cu etichetele lor (`tags: [{ id, name, color }]`), dintr-o singură interogare. */
+async function transactionsJson(
+  db: DbOrTx,
+  ctx: ApiContext,
+  householdId: string,
+  views: readonly TransactionView[],
+) {
+  const refs = await transactionTagRefs(
+    deps(db),
+    ctx.actor,
+    householdId,
+    views.filter((v) => v.type !== "transfer").map((v) => v.id),
+  );
+  return views.map((v) => ({ ...transactionToJson(v), tags: refs.get(v.id) ?? [] }));
+}
+
+async function transactionJson(
+  db: DbOrTx,
+  ctx: ApiContext,
+  householdId: string,
+  view: TransactionView,
+) {
+  return (await transactionsJson(db, ctx, householdId, [view]))[0]!;
+}
+
 export function listTransactionsHandler(request: Request, d: ApiDeps): Promise<Response> {
   return handle(request, d, async (ctx) => {
-    const query = readQuery(request, TRANSACTION_QUERY);
+    const query = transactionQueryOf(readQuery(request, TRANSACTION_QUERY));
     const hh = await currentHousehold(ctx);
     const page = await listTransactions(deps(d.db), ctx.actor, hh, query);
-    return json({ data: page.data.map(transactionToJson), nextCursor: page.nextCursor });
+    return json({
+      data: await transactionsJson(d.db, ctx, hh, page.data),
+      nextCursor: page.nextCursor,
+    });
   });
 }
 
@@ -240,9 +295,17 @@ export function createTransactionHandler(request: Request, d: ApiDeps): Promise<
   return handle(request, d, async (ctx) => {
     const body = await readJsonBody(request);
     const hh = await currentHousehold(ctx);
+    // Etichetele se citesc cu `db` primit (tranzacția cheii), ca să vadă legăturile tocmai scrise.
     return idempotentCreate(ctx, hh, body, async (db) => ({
       status: 201,
-      body: { data: transactionToJson(await createTransaction(deps(db), ctx.actor, hh, body)) },
+      body: {
+        data: await transactionJson(
+          db,
+          ctx,
+          hh,
+          await createTransaction(deps(db), ctx.actor, hh, body),
+        ),
+      },
     }));
   });
 }
@@ -251,7 +314,7 @@ export function getTransactionHandler(request: Request, d: ApiDeps, id: string):
   return handle(request, d, async (ctx) => {
     const hh = await currentHousehold(ctx);
     const view = await getTransaction(deps(d.db), ctx.actor, hh, routeId(id));
-    return json({ data: transactionToJson(view) });
+    return json({ data: await transactionJson(d.db, ctx, hh, view) });
   });
 }
 
@@ -265,7 +328,7 @@ export function patchTransactionHandler(
     const body = await readJsonBody(request);
     const hh = await currentHousehold(ctx);
     const view = await updateTransaction(deps(d.db), ctx.actor, hh, transactionId, body);
-    return json({ data: transactionToJson(view) });
+    return json({ data: await transactionJson(d.db, ctx, hh, view) });
   });
 }
 

@@ -54,6 +54,7 @@ export default async function NewTransactionPage({
           initialType={type}
           accounts={options.value.accounts}
           categories={options.value.categories}
+          tags={options.value.tags}
           today={todayIn()}
         />
       )}

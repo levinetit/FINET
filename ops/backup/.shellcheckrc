@@ -1,0 +1,4 @@
+# shellcheck pentru ops/backup/*.sh (job-ul CI backup-restore și ops/backup/test.sh).
+# SC1111: ghilimelele românești „…” din mesaje sunt intenționate.
+# SC2015: `cond && ok … || fail …`: ok/fail doar afișează și nu eșuează, deci forma e sigură.
+disable=SC1111,SC2015

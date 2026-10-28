@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { TRANSACTION_QUERY } from "@/app/api/v1/_lib/ledger-handlers";
+import { TRANSACTION_FILTER_QUERY, TRANSACTION_QUERY } from "@/app/api/v1/_lib/ledger-handlers";
 
-import { apiSearch, appendUnique, hasActiveFilters, parseFilters } from "./transaction-filters";
+import {
+  MAX_FILTER_TAGS,
+  apiSearch,
+  appendUnique,
+  exportSearch,
+  hasActiveFilters,
+  parseFilters,
+  parseTagIds,
+} from "./transaction-filters";
 
 const ACC = "3f2b8c1e-4a5d-4e6f-8a9b-0c1d2e3f4a5b";
+const T1 = "11111111-2222-4333-8444-555555555555";
+const T2 = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
 describe("filtrele tranzacțiilor → interogarea API", () => {
   it("parametrii goi dispar; sumele devin întregi în bani", () => {
@@ -66,5 +76,53 @@ describe("filtrele tranzacțiilor → interogarea API", () => {
   it("sortarea singură nu e un filtru activ", () => {
     expect(hasActiveFilters({ sort: "date_asc" })).toBe(false);
     expect(hasActiveFilters({ q: "x" })).toBe(true);
+  });
+
+  it("etichetele: parametrul repetat al formularului devine un singur `tagIds` cu virgule", () => {
+    const f = parseFilters({ tagIds: [T1, T2.toUpperCase(), "nu-e-id", T1] });
+    expect(f.values.tagIds).toEqual([T1, T2]);
+    expect(f.query.tagIds).toEqual([T1, T2]);
+    const params = new URLSearchParams(apiSearch(f.query).slice(1));
+    expect(params.getAll("tagIds")).toEqual([`${T1},${T2}`]);
+    // Forma API-ului (virgule) e acceptată și în adresa paginii.
+    expect(parseFilters({ tagIds: `${T1},${T2}` }).query.tagIds).toEqual([T1, T2]);
+  });
+
+  it("etichetele: cel mult zece, fără valori goale", () => {
+    const many = Array.from(
+      { length: 12 },
+      (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    );
+    expect(parseTagIds(many)).toHaveLength(MAX_FILTER_TAGS);
+    expect(parseTagIds("")).toEqual([]);
+    expect(parseTagIds(undefined)).toEqual([]);
+    expect(parseFilters({ tagIds: "" }).query).toEqual({});
+  });
+
+  it("comerciantul e un filtru separat de căutare", () => {
+    const f = parseFilters({ merchant: "  Mega Image ", q: "" });
+    expect(f.query).toEqual({ merchant: "Mega Image" });
+    expect(new URLSearchParams(apiSearch(f.query).slice(1)).get("merchant")).toBe("Mega Image");
+    expect(hasActiveFilters(f.query)).toBe(true);
+  });
+
+  it("exportul: aceleași filtre, fără `sort`/`cursor`/`limit`, doar parametri ai rutei de export", () => {
+    const f = parseFilters({
+      q: "x",
+      merchant: "Lidl",
+      tagIds: [T1, T2],
+      accountId: ACC,
+      dateFrom: "2026-10-01",
+      dateTo: "2026-10-31",
+      amountMin: "5",
+      sort: "amount_desc",
+    });
+    const search = exportSearch(f.query);
+    expect(search.sort).toBeUndefined();
+    expect(search.tagIds).toBe(`${T1},${T2}`);
+    expect(search.amountMinMinor).toBe("500");
+    for (const key of Object.keys(search)) {
+      expect(Object.keys(TRANSACTION_FILTER_QUERY)).toContain(key);
+    }
   });
 });

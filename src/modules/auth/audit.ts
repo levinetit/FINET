@@ -30,6 +30,12 @@ export type AuditAction =
   | "category.deleted"
   | "transaction.deleted"
   | "transfer.deleted"
+  // Planificarea (Faza 3): fără nume, sume sau descrieri.
+  | "tag.deleted"
+  | "budget.deleted"
+  | "goal.deleted"
+  // Exporturile CSV (F3-B): doar tipul exportului și numărul de rânduri, fără conținut.
+  | "export.downloaded"
   // Consimțămintele (F2-B, 6.5): doar tipul, în `metadata.kind`.
   | "consent.granted"
   | "consent.revoked";
@@ -44,7 +50,10 @@ export type AuditEvent = Readonly<{
     | "account"
     | "category"
     | "transaction"
-    | "transfer";
+    | "transfer"
+    | "tag"
+    | "budget"
+    | "goal";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;

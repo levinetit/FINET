@@ -3,7 +3,7 @@ import "server-only";
 import { type SQL, and, asc, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 
 import type { Tx } from "@/db";
-import { transactions } from "@/db/schema";
+import { transactionTags, transactions } from "@/db/schema";
 
 import type { Cursor, TransactionSort } from "./transactions.schema";
 
@@ -103,6 +103,8 @@ export type ListFilters = Readonly<{
   q?: string;
   accountId?: string;
   categoryId?: string;
+  tagIds?: readonly string[];
+  merchant?: string;
   type?: TransactionRow["type"];
   source?: TransactionRow["source"];
   dateFrom?: string;
@@ -116,19 +118,24 @@ export type ListFilters = Readonly<{
  * inserări concurente (rândurile existente nu se dublează și nu se pierd între pagini). Se citesc
  * `limit + 1` rânduri, ca apelantul să știe dacă există o pagină următoare.
  */
-export async function selectTransactionPage(
-  tx: Tx,
-  householdId: string,
-  filters: ListFilters,
-  sort: TransactionSort,
-  cursor: Cursor | null,
-  limit: number,
-): Promise<TransactionRow[]> {
+/** Condițiile filtrelor listei (aceleași pentru pagină, numărare și export). */
+function filterConditions(householdId: string, filters: ListFilters): SQL[] {
   const t = transactions;
   const conditions: SQL[] = [eq(t.householdId, householdId)];
   if (filters.accountId) conditions.push(eq(t.accountId, filters.accountId));
   if (filters.categoryId) conditions.push(eq(t.categoryId, filters.categoryId));
   if (filters.type) conditions.push(eq(t.type, filters.type));
+  if (filters.tagIds && filters.tagIds.length > 0) {
+    // EXISTS, nu JOIN: o tranzacție cu două etichete căutate apare o singură dată, deci
+    // paginarea pe cheie rămâne stabilă.
+    conditions.push(sql`exists (select 1 from ${transactionTags} tt
+      where tt.transaction_id = ${t.id} and tt.household_id = ${householdId}
+        and tt.tag_id in (${sql.join(
+          filters.tagIds.map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )}))`);
+  }
+  if (filters.merchant) conditions.push(ilike(t.merchant, `%${escapeLike(filters.merchant)}%`));
   if (filters.source) conditions.push(eq(t.source, filters.source));
   if (filters.dateFrom) conditions.push(gte(t.occurredOn, filters.dateFrom));
   if (filters.dateTo) conditions.push(lte(t.occurredOn, filters.dateTo));
@@ -142,6 +149,32 @@ export async function selectTransactionPage(
       or(ilike(t.description, pattern), ilike(t.merchant, pattern), ilike(t.notes, pattern))!,
     );
   }
+  return conditions;
+}
+
+/** Numărul de tranzacții care corespund filtrelor (plafonul exportului CSV). */
+export async function countTransactions(
+  tx: Tx,
+  householdId: string,
+  filters: ListFilters,
+): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(transactions)
+    .where(and(...filterConditions(householdId, filters)));
+  return Number(row?.n ?? 0);
+}
+
+export async function selectTransactionPage(
+  tx: Tx,
+  householdId: string,
+  filters: ListFilters,
+  sort: TransactionSort,
+  cursor: Cursor | null,
+  limit: number,
+): Promise<TransactionRow[]> {
+  const t = transactions;
+  const conditions = filterConditions(householdId, filters);
 
   const byDate = sort.startsWith("date_");
   const descending = sort.endsWith("_desc");

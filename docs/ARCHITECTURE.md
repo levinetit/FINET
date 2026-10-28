@@ -1,4 +1,4 @@
-# FINET — arhitectura (ce există după Faza 1 și Faza 2)
+# FINET — arhitectura (ce există după Fazele 1–2, F3-A, F3-B și F3-C)
 
 Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
 
@@ -38,14 +38,17 @@ src/
     db-client.ts, db-url.ts     # clientul Postgres comun (TLS cu DATABASE_CA_FILE)
     access.ts                   # verificarea JWT Access, liveness local, HEALTH_TOKEN
     authz.ts                    # requireMember / withMember (stratul 1 de autorizare)
-    money.ts                    # bani în bigint (unități minore), alocare, parsare, formatare RO
+    money.ts                    # bani în bigint (unități minore), alocare, parsare, formatare RO, procente întregi
+    calendar.ts                 # luni calendaristice, data locală / luna curentă în fusul gospodăriei
     storage.ts, storage/        # interfața Storage; driver local; S3 = schelet
     errors.ts, utils.ts
-  db/                           # schema Drizzle, migrațiile (0000_core, 0001_rls, 0002_ledger, 0003_idempotency_purge), runner-ul, RLS
+  db/                           # schema Drizzle, migrațiile (0000_core, 0001_rls, 0002_ledger, 0003_idempotency_purge, 0004_budgets_goals_tags), runner-ul, RLS
   modules/auth, profile, sessions, entitlements
   modules/ledger/               # comun registrului: validarea intrărilor (Zod strict, sume prin money.ts),
                                 #   `inHousehold` (withMember + traducerea erorilor Postgres), fixture de test
   modules/accounts, categories, transactions, transfers  # *.schema.ts, *.repo.ts, *.service.ts (F2-A)
+  modules/tags, budgets, goals  # etichete, bugete (semafor), obiective (F3-A, ADR 0007)
+  modules/dashboard, reports, exports  # agregările lunare, raportul lunar, exportul CSV (F3-A; rute în F3-B)
   modules/households/           # gospodăriile utilizatorului (API)
   modules/idempotency/          # Idempotency-Key (rezervare + răspuns în tranzacția scrierii), curățarea
   modules/usage/                # X-FINET-Client → client_installations, consimțăminte, evenimente (6.5)
@@ -83,11 +86,20 @@ Serviciile din `src/modules/{accounts,categories,transactions,transfers}` primes
 - **Transferuri:** două rânduri `transfer` (`out`/`in`) cu același `transfer_group_id`, scrise în aceeași tranzacție SQL; monede diferite → ambele sume explicit; baza verifică grupul la COMMIT.
 - Integritatea e dublată în bază (cheie compusă cont/gospodărie/monedă, CHECK-uri, triggere `SECURITY INVOKER`); detaliile în ADR 0004.
 
+## Planificare și raportare (F3-A)
+Serviciile din `src/modules/{tags,budgets,goals,dashboard,reports,exports}` urmează modelul registrului (`inHousehold`, Zod strict, filtru explicit pe gospodărie, RLS); cele care depind de „luna curentă” primesc `PlanningDeps` (`db` + ceasul `now`, injectabil). Bugetele: cheltuit = cheltuielile lunii (fără transferuri și venituri), semafor din comparații exacte în `bigint`, procent `floor`. Dashboard-ul și raportul: totaluri separate pe monedă, subcategoriile agregate la părinte. Exportul CSV: `exportTransactionsCsv` e un `AsyncGenerator<string>` (numărare, apoi pagini de cursor), `exportGoalsCsv`/`exportBudgetsCsv` întorc un șir. Detalii: ADR 0007.
+
+### API-ul planificării (F3-B)
+`src/app/api/v1/_lib/planning-handlers.ts` expune etichetele, bugetele (`/budgets/status` cu semafor și `alerts`), obiectivele (contribuții cu `Idempotency-Key` obligatoriu, renunțare), dashboard-ul, raportul lunar și exporturile CSV, peste același `handle()`. Handlerele dau serviciilor ceasul cererii; `?month=` e validat în handler (de la 60 de luni în urmă până la luna curentă a gospodăriei). Răspunsurile de tranzacție au `tags: [{ id, name, color }]` (o interogare pe pagină). Exportul tranzacțiilor e un `ReadableStream` peste generatorul serviciului: primul fragment (validare, numărare, plafon, audit `export.downloaded`) se calculează înaintea răspunsului, ca erorile să iasă ca JSON; exporturile au rate limit propriu (`api_export`, 10/min). Detalii: ADR 0007 („API (F3-B)”), `docs/API.md`.
+
 ## API-ul `/api/v1` (F2-B)
 Handlerele din `src/app/api/v1/_lib/` sunt subțiri: `handle()` verifică sesiunea (cookie sau bearer), CSRF-ul pe mutațiile cu cookie, înregistrează instalarea din `X-FINET-Client` (fără să blocheze), aplică rate limiting pe mutații și mapează erorile de domeniu în `{ error: { code, message, fields?, reason? } }`. Gospodăria vine din bază (`currentHousehold`). Crearea cu `Idempotency-Key` rulează în `runIdempotent`: o tranzacție cu lock consultativ, rezervarea cheii, serviciul într-un savepoint (`DbOrTx`) și răspunsul memorat. Contractul e în `src/openapi/registry.ts`; `docs/openapi.json` se generează din el, iar testele verifică fiecare răspuns real față de schemă. Detalii: `docs/API.md`, ADR 0005.
 
 ## Interfața registrului (F2-C)
 Paginile din `src/app/(app)/` apelează fiecare `requireLedgerPage(<cale>)` (`src/app/_lib/ledger-page.ts`: sesiunea, gospodăria curentă din bază, consimțământul `usage_stats`) și citesc datele direct din servicii, pe server; componentele client primesc forma JSON a API-ului. `load()` dă 404 uniform pentru resursele străine sau inexistente. Mutațiile pleacă din browser doar prin `/api/v1/*` (`api-client.ts`, `use-submit.ts`: blocare sincronă la dublu-clic, `Idempotency-Key` legat de corp), urmate de `router.refresh()`. Sumele: `parseAmount` → `toJson` la intrare, `formatMoney(fromJson(...))` la afișare (`ledger-ui.ts`). Filtrele tranzacțiilor sunt un formular GET, transformat în interogarea API de `transaction-filters.ts`; „Încarcă mai mult” folosește cursorul API-ului. `X-FINET-Client` (`usage-client.ts`) pleacă doar cu acordul activ. Detalii: ADR 0006.
+
+## Interfața planificării (F3-C)
+Paginile `/dashboard`, `/tags`, `/budgets` (+ `new`, `[id]`), `/goals` (+ `new`, `[id]`) și `/reports` urmează regulile din ADR 0006 (citiri pe server prin servicii, mutații prin `/api/v1/*`). Luna (`?month=`) se validează în pagină cu aceeași fereastră ca API-ul (`planning-page.ts` + `pickMonth` din `planning-ui.ts`); o lună invalidă afișează luna curentă cu un mesaj. Graficele și barele de progres sunt SVG randat pe server (`src/components/planning/charts.tsx`), scalat în întregi prin `percentOf`, cu dimensiunile ca atribute (fără `style=`) și tabel text alternativ. Exporturile CSV se descarcă prin `fetch` cu cookie (`download.ts`), mereu cu `dialect=ro`. Filtrele tranzacțiilor au `merchant` și `tagIds` (un singur parametru cu virgule spre API). Detalii: ADR 0008.
 
 ## Storage
 Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath, `O_NOFOLLOW`, scriere atomică). Driverul `s3` aruncă `NotImplementedError` (Faza 6).
@@ -100,4 +112,4 @@ Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` s
 - CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `smoke`, `auth`, `ledger` în `personal` apoi în `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
 
 ## Planificat (nu există încă)
-Bugetele, obiectivele, etichetele (Faza 3), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), Recharts, înregistrarea publică și modul `saas` (Faza 11).
+Backup-ul restic (F3-D), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), înregistrarea publică și modul `saas` (Faza 11). Graficele nu folosesc Recharts (SVG propriu, ADR 0008).

@@ -157,3 +157,50 @@ describe.skipIf(!TEST_ADMIN_URL)("drepturi pe coloane pentru finet_app (M5)", ()
     expect(v!.is_platform_admin).toBe(false);
   });
 });
+
+/** Faza 3 (0004): drepturile `finet_app` pe tabelele planificării, exact (tabel și coloane). */
+describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe tabelele planificării (0004)", () => {
+  let fx: AuthFixture;
+  beforeAll(async () => {
+    fx = await createAuthFixture("finet_it_grants4");
+  });
+  afterAll(async () => {
+    await fx?.close();
+  });
+
+  it("privilegii pe tabel: SELECT/INSERT peste tot, DELETE doar unde e nevoie, fără UPDATE pe tabel", async () => {
+    const rows = await fx.scratch.admin<{ table_name: string; privilege_type: string }[]>`
+      select table_name, privilege_type from information_schema.role_table_grants
+       where table_schema = 'finet' and grantee = 'finet_app'
+         and table_name in ('tags', 'tag_visibility', 'transaction_tags', 'budgets', 'goals')
+       order by table_name, privilege_type`;
+    const by = (t: string) => rows.filter((r) => r.table_name === t).map((r) => r.privilege_type);
+    expect(by("tags")).toEqual(["DELETE", "INSERT", "SELECT"]);
+    expect(by("tag_visibility")).toEqual(["INSERT", "SELECT"]);
+    expect(by("transaction_tags")).toEqual(["DELETE", "INSERT", "SELECT"]);
+    expect(by("budgets")).toEqual(["DELETE", "INSERT", "SELECT"]);
+    expect(by("goals")).toEqual(["DELETE", "INSERT", "SELECT"]);
+  });
+
+  it("UPDATE doar pe coloanele permise", async () => {
+    const rows = await fx.scratch.admin<{ table_name: string; column_name: string }[]>`
+      select table_name, column_name from information_schema.column_privileges
+       where table_schema = 'finet' and grantee = 'finet_app' and privilege_type = 'UPDATE'
+         and table_name in ('tags', 'tag_visibility', 'transaction_tags', 'budgets', 'goals')
+       order by table_name, column_name`;
+    const by = (t: string) => rows.filter((r) => r.table_name === t).map((r) => r.column_name);
+    expect(by("tags")).toEqual(["color", "hidden", "name", "updated_at"]);
+    expect(by("tag_visibility")).toEqual(["hidden", "updated_at"]);
+    expect(by("transaction_tags")).toEqual([]);
+    expect(by("budgets")).toEqual(["amount_minor", "archived_at", "updated_at", "warn_pct"]);
+    expect(by("goals")).toEqual([
+      "account_id",
+      "deadline",
+      "name",
+      "saved_minor",
+      "status",
+      "target_minor",
+      "updated_at",
+    ]);
+  });
+});

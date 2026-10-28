@@ -197,6 +197,8 @@ export const transactions = finet.table(
     updatedAt: updatedAt(),
   },
   (t) => [
+    // Ținta cheii compuse din `transaction_tags` (Faza 3, 0004): aceeași gospodărie.
+    unique("transactions_id_household_key").on(t.id, t.householdId),
     foreignKey({
       name: "transactions_account_fk",
       columns: [t.accountId, t.householdId, t.currency],

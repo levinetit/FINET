@@ -12,6 +12,7 @@ import {
   optionalText,
   positiveMinorSchema,
 } from "@/modules/ledger/input";
+import { tagIdsSchema } from "@/modules/tags/tags.schema";
 
 /** Tranzacțiile (5.1, 5.2, 6.1, 6.4). Zod strict: `householdId`, `currency`, `source` respinse. */
 
@@ -40,6 +41,8 @@ export const transactionCreateSchema = z
     description: optionalText(DESCRIPTION_MAX),
     merchant: optionalText(MERCHANT_MAX),
     notes: optionalText(NOTES_MAX),
+    // Etichetele (Faza 3, 5.4): cel mult 10, din aceeași gospodărie (sau de sistem).
+    tagIds: tagIdsSchema.optional(),
   })
   .refine(notBoth, amountRefine);
 
@@ -54,6 +57,8 @@ export const transactionUpdateSchema = z
     description: optionalText(DESCRIPTION_MAX),
     merchant: optionalText(MERCHANT_MAX),
     notes: optionalText(NOTES_MAX),
+    // Prezent = ÎNLOCUIEȘTE etichetele tranzacției (`[]` le scoate pe toate).
+    tagIds: tagIdsSchema.optional(),
   })
   .refine(notBoth, amountRefine)
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
@@ -72,6 +77,14 @@ export const transactionListSchema = z
       .optional(),
     accountId: idSchema.optional(),
     categoryId: idSchema.optional(),
+    // Faza 3: tranzacțiile care au CEL PUȚIN UNA dintre etichete (OR), fără dubluri de rânduri.
+    tagIds: tagIdsSchema.min(1).optional(),
+    // Faza 3: comerciantul conține textul (fără majuscule); `q` caută și în descriere și note.
+    merchant: z
+      .string()
+      .max(MERCHANT_MAX)
+      .transform((v) => v.trim())
+      .optional(),
     type: z.enum(TRANSACTION_TYPES).optional(),
     source: z.enum(TRANSACTION_SOURCES).optional(),
     dateFrom: dateSchema.optional(),

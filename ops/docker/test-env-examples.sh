@@ -9,6 +9,9 @@
 #  3. Regula pe rol (F1, src/lib/config.ts), verificată pe compose: fiecare serviciu primește
 #     DOAR `_FILE`-ul și secretul (`secrets:`) URL-ului său de bază de date; tokenul de
 #     sănătate și secretul Better Auth sunt doar ale lui finet-web.
+#  4. Backup-ul (F3-D): finet-backup are doar secretele lui (restic, repository, fișierul libpq),
+#     storage-ul doar citire, uid 1000, profilul `backup`; suprapunerile ops/backup/compose.*.yml
+#     și exemplele ops/backup/*.env.example fără secrete în clar.
 # Se uită doar la liniile active (nu la comentarii).
 set -u
 
@@ -36,7 +39,8 @@ SECRETS=$(awk '
 if [ -z "$SECRETS" ]; then
   fail ".env.example nu are nicio variabilă marcată # secret"
 else
-  for required in DATABASE_URL WORKER_DATABASE_URL MIGRATOR_DATABASE_URL HEALTH_TOKEN BETTER_AUTH_SECRET; do
+  for required in DATABASE_URL WORKER_DATABASE_URL MIGRATOR_DATABASE_URL HEALTH_TOKEN BETTER_AUTH_SECRET \
+    RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
     if echo "$SECRETS" | grep -qx "$required"; then ok "$required e marcată secret"; else fail "$required nu e marcată # secret în .env.example"; fi
   done
 fi
@@ -110,6 +114,72 @@ check_role finet-worker WORKER_DATABASE_URL_FILE finet_worker_database_url worke
 check_role finet-migrate MIGRATOR_DATABASE_URL_FILE finet_migrate_database_url migrate
 # CLI-ul de administrare (F1-B): drepturile aplicației (DATABASE_URL, finet_app).
 check_role finet-admin DATABASE_URL_FILE finet_database_url admin
+
+# Backup-ul (F3-D): finet-backup NU primește niciun URL al aplicației, tokenul de sănătate sau
+# secretul Better Auth; are doar secretele lui (parola restic, adresa repository-ului, fișierul
+# de servicii libpq al rolului finet_backup), storage-ul DOAR citire, rulează ca uid 1000.
+block=$(service_block finet-backup)
+if [ -z "$block" ]; then
+  fail "serviciul finet-backup lipsește din compose"
+else
+  for forbidden in DATABASE_URL_FILE WORKER_DATABASE_URL_FILE MIGRATOR_DATABASE_URL_FILE \
+    finet_database_url finet_worker_database_url finet_migrate_database_url \
+    finet_health_token HEALTH_TOKEN_FILE finet_better_auth_secret BETTER_AUTH_SECRET; do
+    if echo "$block" | grep -q "$forbidden"; then fail "finet-backup primește $forbidden"; else ok "finet-backup fără $forbidden"; fi
+  done
+  for own in finet_restic_password finet_backup_repository finet_backup_pg_service; do
+    echo "$block" | grep -Eq "^[[:space:]]+-[[:space:]]+$own[[:space:]]*$" && ok "finet-backup montează $own" || fail "finet-backup nu montează $own"
+  done
+  for var in RESTIC_PASSWORD_FILE RESTIC_REPOSITORY_FILE PGSERVICEFILE; do
+    echo "$block" | grep -Eq "^[[:space:]]+$var:" && ok "finet-backup are $var" || fail "finet-backup nu are $var"
+  done
+  echo "$block" | grep -Eq '^[[:space:]]+user:[[:space:]]*"1000:1000"' && ok "finet-backup rulează ca 1000:1000" || fail "finet-backup nu rulează ca 1000:1000"
+  echo "$block" | grep -Eq '^[[:space:]]+profiles:[[:space:]]*\[backup\]' && ok "finet-backup doar în profilul backup" || fail "finet-backup nu e în profilul backup"
+  echo "$block" | grep -Eq '^[[:space:]]+restart:[[:space:]]*"no"' && ok "finet-backup nu repornește (one-shot)" || fail "finet-backup are restart"
+  echo "$block" | awk '/target: \/data\/storage/ { getline; print }' | grep -q 'read_only: true' &&
+    ok "finet-backup: storage montat doar citire" || fail "finet-backup: storage nu e read_only"
+fi
+for svc in finet-web finet-worker finet-migrate finet-admin; do
+  if service_block "$svc" | grep -Eq "finet_restic_password|finet_backup_|RESTIC_|PGSERVICEFILE"; then
+    fail "$svc primește secrete de backup"
+  else
+    ok "$svc fără secretele de backup"
+  fi
+done
+# Suprapunerile destinației: niciun secret direct în environment, doar `_FILE`.
+# Destinația rclone (Google Drive): configul rclone doar ca secret-fișier, RCLONE_CONFIG spre el,
+# memoria ridicată doar în suprapunere; compose-ul de bază nu știe de rclone.
+RCL="$ROOT/ops/backup/compose.rclone.yml"
+if [ -r "$RCL" ]; then
+  grep -Eq '^[[:space:]]+- source:[[:space:]]*finet_rclone_conf[[:space:]]*$' "$RCL" && ok "compose.rclone.yml montează finet_rclone_conf" || fail "compose.rclone.yml nu montează finet_rclone_conf"
+  grep -Eq '^[[:space:]]+RCLONE_CONFIG:[[:space:]]*/run/secrets/rclone\.conf[[:space:]]*$' "$RCL" && ok "RCLONE_CONFIG = /run/secrets/rclone.conf" || fail "RCLONE_CONFIG nu indică secretul"
+  grep -Eq '^[[:space:]]+mem_limit:[[:space:]]*384m' "$RCL" && ok "compose.rclone.yml: mem_limit 384m" || fail "compose.rclone.yml: mem_limit lipsește"
+  if grep -Ev '^[[:space:]]*#' "$RCL" | grep -Eqi 'token|client_secret'; then
+    fail "compose.rclone.yml conține un token rclone"
+  else
+    ok "compose.rclone.yml fără token rclone"
+  fi
+  service_block finet-backup | grep -q "RCLONE_CONFIG\|finet_rclone_conf" && fail "compose-ul de bază are configul rclone" || ok "compose-ul de bază fără configul rclone"
+else
+  fail "ops/backup/compose.rclone.yml lipsește"
+fi
+for override in "$ROOT"/ops/backup/compose.*.yml; do
+  name=$(basename "$override")
+  found=0
+  for secret in $SECRETS; do
+    if grep -Eq "^[[:space:]]+(-[[:space:]]+)?$secret[[:space:]]*[:=]" "$override"; then
+      fail "$name pune $secret direct (doar ${secret}_FILE e permis)"; found=1
+    fi
+  done
+  [ "$found" -eq 0 ] && ok "$name fără secrete în environment"
+done
+for file in "$ROOT"/ops/backup/*.env.example; do
+  name=$(basename "$file")
+  for secret in $SECRETS; do
+    if grep -Eq "^[[:space:]]*(export[[:space:]]+)?$secret[[:space:]]*=" "$file"; then fail "$name conține secretul $secret"; fi
+  done
+  ok "$name verificat"
+done
 
 # Tokenul de sănătate e doar al serverului web.
 for svc in finet-worker finet-migrate finet-admin; do

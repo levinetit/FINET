@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { type DbOrTx, type Tx, withRlsOn } from "@/db";
 import { CLIENT_HEADER, type ClientInfo, parseClientInfo } from "@/modules/auth/request";
 
-import { hasActiveConsent } from "./consents";
+import { hasActiveConsent, lockUserUsage } from "./consents";
 
 /**
  * Instalările clienților (6.5, ADR 0005): antetul `X-FINET-Client` (forma completă, cu
@@ -34,11 +34,8 @@ function values(userId: string, info: ClientInfo, at: string) {
     ${at}::timestamptz, ${at}::timestamptz)`;
 }
 
+// Apelat cu lacătul `lockUserUsage` deja luat: două instalări noi simultane nu depășesc plafonul.
 async function insertWithCap(tx: Tx, userId: string, info: ClientInfo, at: string) {
-  // Serializat per utilizator: două instalări noi simultane nu depășesc plafonul.
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`finet.installations:${userId}`}, 0))`,
-  );
   await tx.execute(sql`
     delete from finet.client_installations
      where id in (
@@ -63,6 +60,10 @@ export async function upsertInstallation(
   const at = new Date(now).toISOString();
   const before = new Date(now - INSTALLATION_WRITE_INTERVAL_MS).toISOString();
   return withRlsOn(db, { userId }, async (tx) => {
+    // Lacătul ÎNAINTE de verificarea acordului și de citirea rândului existent (LOW-1, INFO din
+    // revizuirea F2): revocarea nu se poate intercala, iar `existing` reflectă o creare concurentă
+    // deja comisă (altfel ramura de inserare ar putea evacua o instalare fără motiv).
+    await lockUserUsage(tx, userId);
     if (!(await hasActiveConsent(tx, userId, "usage_stats"))) return "none";
     const existing = await tx.execute<{ id: string }>(sql`
       select id from finet.client_installations

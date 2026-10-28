@@ -7,6 +7,7 @@ import { type Currency, add, money, sub, zero } from "@/lib/money";
 import { insertAudit } from "@/modules/auth/audit";
 import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
 import { isValidId, parseInput, resolveAmount } from "@/modules/ledger/input";
+import { assertAccountsWithinJsonRange } from "@/modules/ledger/range-guard";
 
 import {
   type AccountRow,
@@ -206,6 +207,7 @@ export async function updateAccount(
       bankCode: patch.bankCode,
       ownerUserId: patch.ownerUserId,
     });
+    if (opening !== undefined) await assertAccountsWithinJsonRange(tx, m.householdId, [id]);
     return loadView(tx, m.householdId, id);
   });
 }

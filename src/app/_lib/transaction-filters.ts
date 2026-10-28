@@ -12,9 +12,15 @@ import { parseAmountInput } from "./ledger-ui";
 export const FILTER_TYPES = ["income", "expense", "transfer"] as const;
 export const FILTER_SORTS = ["date_desc", "date_asc", "amount_desc", "amount_asc"] as const;
 
+/** Cel mult atâtea etichete într-un filtru (ca `MAX_TAGS_PER_TRANSACTION`). */
+export const MAX_FILTER_TAGS = 10;
+
 /** Valorile formularului (text, ca în URL). */
 export type FilterValues = Readonly<{
   q: string;
+  merchant: string;
+  /** Etichetele bifate (parametrul `tagIds` repetat de formularul GET sau unul cu virgule). */
+  tagIds: readonly string[];
   accountId: string;
   categoryId: string;
   type: string;
@@ -29,8 +35,11 @@ export type FilterValues = Readonly<{
 export type TransactionApiQuery = Partial<
   Readonly<{
     q: string;
+    merchant: string;
     accountId: string;
     categoryId: string;
+    /** Serviciul primește lista; API-ul o primește într-un singur parametru, cu virgule. */
+    tagIds: readonly string[];
     type: (typeof FILTER_TYPES)[number];
     dateFrom: string;
     dateTo: string;
@@ -51,6 +60,7 @@ const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const KEYS = [
   "q",
+  "merchant",
   "accountId",
   "categoryId",
   "type",
@@ -69,17 +79,34 @@ function first(value: string | string[] | undefined): string {
 }
 
 /**
+ * Etichetele din URL: parametrul repetat (`tagIds=a&tagIds=b`, scris de formularul GET) sau un
+ * singur parametru cu virgule (`tagIds=a,b`, forma API-ului). Doar uuid-uri, fără duplicate, cel
+ * mult `MAX_FILTER_TAGS` (restul se ignoră).
+ */
+export function parseTagIds(value: string | string[] | undefined): string[] {
+  const list = (Array.isArray(value) ? value : value === undefined ? [] : [value])
+    .flatMap((v) => (typeof v === "string" ? v.split(",") : []))
+    .map((v) => v.trim().toLowerCase())
+    .filter((v) => UUID.test(v));
+  return [...new Set(list)].slice(0, MAX_FILTER_TAGS);
+}
+
+/**
  * Parametrii paginii → valori + interogare. Valorile invalide (id-uri, date, tipuri) se ignoră
  * în tăcere; sumele invalide sau ambigue apar în `errors` (utilizatorul le-a scris).
  */
 export function parseFilters(params: RawParams): ParsedFilters {
-  const values = Object.fromEntries(KEYS.map((k) => [k, first(params[k])])) as Record<
+  const text = Object.fromEntries(KEYS.map((k) => [k, first(params[k])])) as Record<
     (typeof KEYS)[number],
     string
   >;
-  const query: Record<string, string | number> = {};
+  const tagIds = parseTagIds(params.tagIds);
+  const values = { ...text, tagIds };
+  const query: Record<string, string | number | readonly string[]> = {};
   const errors: Record<string, string> = {};
   if (values.q) query.q = values.q;
+  if (values.merchant) query.merchant = values.merchant;
+  if (tagIds.length > 0) query.tagIds = tagIds;
   if (UUID.test(values.accountId)) query.accountId = values.accountId.toLowerCase();
   if (UUID.test(values.categoryId)) query.categoryId = values.categoryId.toLowerCase();
   if ((FILTER_TYPES as readonly string[]).includes(values.type)) query.type = values.type;
@@ -99,16 +126,36 @@ export function parseFilters(params: RawParams): ParsedFilters {
   return { values, query: query as TransactionApiQuery, errors };
 }
 
-/** Interogarea → șirul `?…` al API-ului, cu cursorul paginii următoare (dacă există). */
-export function apiSearch(query: TransactionApiQuery, cursor?: string | null): string {
-  const params = new URLSearchParams();
+/** Interogarea → parametrii API (un singur `tagIds`, cu virgule: `readQuery` refuză repetiția). */
+function apiParams(query: TransactionApiQuery): Record<string, string> {
+  const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === "") continue;
-    params.set(key, String(value));
+    if (Array.isArray(value)) {
+      if (value.length > 0) out[key] = value.join(",");
+      continue;
+    }
+    out[key] = String(value);
   }
+  return out;
+}
+
+/** Interogarea → șirul `?…` al API-ului, cu cursorul paginii următoare (dacă există). */
+export function apiSearch(query: TransactionApiQuery, cursor?: string | null): string {
+  const params = new URLSearchParams(apiParams(query));
   if (cursor) params.set("cursor", cursor);
   const text = params.toString();
   return text ? `?${text}` : "";
+}
+
+/**
+ * Parametrii exportului CSV de tranzacții: aceleași filtre ca lista, FĂRĂ `sort` (exportul e
+ * cronologic; ruta de export refuză `sort`, `cursor`, `limit`).
+ */
+export function exportSearch(query: TransactionApiQuery): Record<string, string> {
+  const params = apiParams(query);
+  delete params.sort;
+  return params;
 }
 
 /** Adaugă rândurile noi fără duplicate (după `id`), păstrând ordinea. */

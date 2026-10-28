@@ -9,7 +9,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
 | 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
 | 2 — Conturi, categorii, tranzacții, transferuri | **parțial** (implementat în repo) | F2-A, F2-B, F2-C gata; rămân migrațiile pe Supabase, prima rulare E2E `ledger` în CI, verificarea în browser și revizuirea de securitate — vezi mai jos și `docs/reports/faza-2.md` |
-| 3 — Dashboard, bugete, obiective, rapoarte, export, backup | neimplementat | |
+| 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C, F3-D în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI), F3-C (UI, E2E `planning`) și F3-D (backup restic, restaurare testată pe Postgres efemer) gata; rămân instalarea backup-ului și restaurarea de probă pe producție (operatorul), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
 | 4 — Stabilizare (rezervată) | neimplementat | |
 | 5 — Recurențe | neimplementat | |
 | 6 — Ingestia bonurilor | neimplementat | |
@@ -98,6 +98,30 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - **LOW-4** — plafoane per gospodărie (număr de conturi, categorii, tranzacții) și rate limit pe citiri: fază viitoare.
 - **NOTE** — `owner_user_id` nu are efect de autorizare (6.1); `finet_migrator` nu are politici pe `categories`/`transactions` (intenționat).
 
+### Faza 3: stare
+**F3-A (date și servicii, fără rute HTTP și UI), gata în repo, verificat local pe PostgreSQL 17 efemer** (ADR 0007):
+- corecțiile revizuirii Fazei 2: LOW-1 (lacătul per utilizator în `setConsents`, `upsertInstallation`, `recordEvents`), INFO (citirea după lacăt), LOW-2 (garda 2^53 − 1 la scriere pe cont, ADR 0004/0005 corectate);
+- migrația `0004_budgets_goals_tags` (generată + partea de mână): `tags` (5 de sistem), `tag_visibility`, `transaction_tags`, `budgets`, `goals`; RLS `ENABLE` + `FORCE`, bugetele personale vizibile doar proprietarului, triggere `SECURITY INVOKER`, drepturi `UPDATE` pe coloane; pe `transactions` doar `UNIQUE (id, household_id)`;
+- serviciile `src/modules/{tags,budgets,goals,dashboard,reports,exports}`: etichete (și `tagIds` pe tranzacții, filtrele `tagIds`/`merchant`), bugete cu semafor în întregi și avertizări, obiective cu contribuții și stare calculată, dashboard pe monedă (comparație, 12 luni, trend zilnic, categorii top N + „Altele”, onboarding), raport lunar, export CSV (BOM, RFC 4180, protecție contra injecției, plafon 50.000);
+- `src/lib/calendar.ts` (luni locale, „luna curentă” în `Europe/Bucharest`), `percentOf` în `money.ts`.
+
+**F3-B (API `/api/v1`, fără UI), gata în repo, verificat local pe PostgreSQL 17 efemer** (ADR 0007, „API (F3-B)”; `docs/API.md`):
+- rutele `tags`, `budgets` (+ `budgets/status` cu semafor și avertizări), `goals` (+ `contributions` cu `Idempotency-Key` obligatoriu, `abandon`), `dashboard`, `reports/monthly`, `exports/{transactions,goals,budgets}.csv` (`?dialect=rfc4180|ro`, implicit `rfc4180`; flux `ReadableStream`; 409 `export_too_large`; rate limit 10/min; audit `export.downloaded` fără conținut);
+- `tags: [{id,name,color}]` în răspunsurile de tranzacție, filtrele `tagIds` (virgulă) și `merchant` în listă; luna validată (ultimele 60 de luni … luna curentă);
+- OpenAPI regenerat (componentele `Tag`, `Budget`, `BudgetStatus`, `Goal`, `Dashboard`, `MonthlyReport`; răspunsurile CSV ca `text/csv`), evenimente de utilizare noi; teste de integrare `src/app/api/v1/planning-api.test.ts`.
+
+**F3-C (interfața, E2E, documentație), gata în repo** (ADR 0008; verificat local: lint, format, typecheck, teste fără DB, `openapi:check`, `test:ops`, `playwright test --list`; build și E2E în browser NOT RUN pe host):
+- `/dashboard` cu selector de lună, totaluri pe monedă cu comparație, grafice SVG fără bibliotecă (cu tabel text), bugete cu semafor și avertizare, obiective, onboarding în 3 pași;
+- `/transactions` cu filtrele `merchant` și etichete, etichetele pe rânduri și în formular, „Export CSV” cu filtrele; `/tags`; `/budgets` (+ `new`, `[id]`); `/goals` (+ `new`, `[id]`, contribuții); `/reports` cu exporturile CSV (`dialect=ro`);
+- navigarea nouă (desktop complet; telefon: Acasă, Tranzacții, Bugete, Rapoarte, „Mai mult”);
+- E2E `e2e/planning.spec.ts` (proiectul `planning`, ambele moduri în CI).
+
+**F3-D (backup restic + restaurare testată), gata în repo** (ADR 0009, `docs/BACKUP.md`; restaurarea testată local pe PostgreSQL 17 efemer, job CI `backup-restore`):
+- imaginea `finet:backup` (restic 0.18, pg_dump 17; ținta `backup` în workflow-ul `images`), serviciul one-shot `finet-backup` (profilul `backup`), destinația S3/SFTP/local prin suprapuneri;
+- `backup.sh` (dump prin `--stdin-from-command`, fișiere, retenție 7/4/12, `check`), `restore.sh`, rolul `finet_backup` (BYPASSRLS, doar citire), `run-backup.sh` pe host cu alertă anti-flood prin `notify.sh`.
+
+**Rămâne în Faza 3:** instalarea backup-ului de către operator (destinația, rolul `finet_backup` pe Supabase, secretele, cron, primul backup și **restaurarea de probă reală**; fără ea nu se introduc date reale), aplicarea `0004` pe Supabase (operatorul), revizuirea `security`. Separatorul CSV: decis de coordonator (`rfc4180` implicit pe API, `ro` din UI).
+
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
 - **L2** — `audit_events` dispar în CASCADE la ștergerea unei gospodării: aplicația nu șterge încă gospodării; se decide odată cu ștergerea (păstrare anonimizată sau `SET NULL`).
@@ -135,7 +159,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
   - Fișierele exemplu de mediu nu mai conțin secrete, iar `pnpm test:ops` verifică asta.
   - Ce rămâne: arhiva săptămânală necriptată a `/home/docker` (existentă și viitoare) conține în continuare **mediul ALTOR containere** de pe host. E un risc preexistent, în afara FINET, iar decizia (excludere/criptare) e a operatorului.
   - Logurile `json-file` rămân în arhivă; aplicația nu scrie secrete în ele.
-  - Backup-ul propriu criptat al FINET vine în Faza 3 (restic).
+  - Backup-ul propriu criptat al FINET: implementat în Faza 3 (F3-D, restic, `docs/BACKUP.md`); instalarea e a operatorului.
 - **F7 (rest) — CA-ul Supabase din cod: închis în T7.**
   - `DATABASE_CA_FILE` + `src/lib/db-client.ts` → `ssl: { ca, rejectUnauthorized: true }` cu `sslmode=verify-full`/`verify-ca`.
   - CA fără sslmode de verificare sau `sslrootcert` în URL → oprire la pornire.

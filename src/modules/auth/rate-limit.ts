@@ -30,7 +30,9 @@ export type RateLimitKind =
   | "password_change"
   // API `/api/v1` (F2-B): mutațiile și evenimentele de utilizare, pe utilizator.
   | "api_mutation"
-  | "app_events";
+  | "app_events"
+  // Exporturile CSV (F3-B), pe utilizator.
+  | "api_export";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

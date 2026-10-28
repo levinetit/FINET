@@ -22,6 +22,8 @@ const UNIQUE_REASONS: Readonly<Record<string, string>> = {
   accounts_household_name_active_key: "account_name_taken",
   categories_household_parent_name_key: "category_name_taken",
   transactions_household_external_ref_key: "external_ref_taken",
+  tags_household_name_key: "tag_name_taken",
+  budgets_active_key: "budget_exists",
 };
 
 export function translateDbError(error: unknown): never {

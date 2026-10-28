@@ -44,12 +44,16 @@ export type ApiLimits = Readonly<{
   mutations: RateLimitRule;
   /** `POST /api/v1/app/events`, pe utilizator (în plus față de `mutations`). */
   events: RateLimitRule;
+  /** Exporturile CSV (`GET /api/v1/exports/*`), pe utilizator: scumpe, deci mai strâns. */
+  exports: RateLimitRule;
 }>;
 
 /** Limitele implicite (decizia mea): generoase pentru un client real, mici pentru un abuz. */
 export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
   mutations: Object.freeze({ max: 120, windowSeconds: 60 }),
   events: Object.freeze({ max: 30, windowSeconds: 60 }),
+  // F3-B (decizia mea): 10 exporturi pe minut per utilizator.
+  exports: Object.freeze({ max: 10, windowSeconds: 60 }),
 });
 
 export type ApiDeps = Readonly<{
@@ -59,6 +63,9 @@ export type ApiDeps = Readonly<{
   /** Ceasul (ms Unix), injectabil în teste. */
   now?: () => number;
   limits?: Partial<ApiLimits>;
+  /** Doar pentru teste: plafonul de rânduri și pagina exportului de tranzacții. */
+  exportMaxRows?: number;
+  exportPageSize?: number;
 }>;
 
 /** Corpul maxim acceptat (octeți). */
@@ -301,7 +308,7 @@ export async function currentHousehold(ctx: ApiContext): Promise<string> {
 
 export async function enforceRateLimit(
   ctx: ApiContext,
-  kind: "api_mutation" | "app_events",
+  kind: "api_mutation" | "app_events" | "api_export",
   rule: RateLimitRule,
 ): Promise<void> {
   const result = await hitRateLimit(

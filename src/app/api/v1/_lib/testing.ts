@@ -4,6 +4,7 @@ import { errorSchema } from "@/openapi/schemas";
 
 import * as L from "./ledger-handlers";
 import * as M from "./me-handlers";
+import * as P from "./planning-handlers";
 
 /**
  * Doar pentru testele de integrare ale API-ului `/api/v1`: construirea cererilor și sesiunile de
@@ -100,13 +101,59 @@ const OPERATION_OF = new Map<unknown, string>([
   [M.getConsentsHandler, "getConsents"],
   [M.putConsentsHandler, "putConsents"],
   [M.appEventsHandler, "postAppEvents"],
+  [P.listTagsHandler, "listTags"],
+  [P.createTagHandler, "createTag"],
+  [P.getTagHandler, "getTag"],
+  [P.patchTagHandler, "patchTag"],
+  [P.deleteTagHandler, "deleteTag"],
+  [P.listBudgetsHandler, "listBudgets"],
+  [P.createBudgetHandler, "createBudget"],
+  [P.budgetStatusHandler, "getBudgetStatus"],
+  [P.getBudgetHandler, "getBudget"],
+  [P.patchBudgetHandler, "patchBudget"],
+  [P.deleteBudgetHandler, "deleteBudget"],
+  [P.listGoalsHandler, "listGoals"],
+  [P.createGoalHandler, "createGoal"],
+  [P.getGoalHandler, "getGoal"],
+  [P.patchGoalHandler, "patchGoal"],
+  [P.deleteGoalHandler, "deleteGoal"],
+  [P.contributeGoalHandler, "contributeGoal"],
+  [P.abandonGoalHandler, "abandonGoal"],
+  [P.dashboardHandler, "getDashboard"],
+  [P.monthlyReportHandler, "getMonthlyReport"],
+  [P.exportTransactionsHandler, "exportTransactionsCsv"],
+  [P.exportGoalsHandler, "exportGoalsCsv"],
+  [P.exportBudgetsHandler, "exportBudgetsCsv"],
 ]);
+
+/** Antetele obligatorii ale unui export CSV (F3-B). */
+function assertCsvHeaders(id: string, response: Response): void {
+  const h = response.headers;
+  const problems = [
+    h.get("content-type") === "text/csv; charset=utf-8" ? null : "content-type",
+    /^attachment; filename="finet-[a-z]+\.csv"$/.test(h.get("content-disposition") ?? "")
+      ? null
+      : "content-disposition",
+    h.get("cache-control") === "no-store" ? null : "cache-control",
+    h.get("x-content-type-options") === "nosniff" ? null : "x-content-type-options",
+  ].filter((x) => x !== null);
+  if (problems.length > 0) throw new Error(`${id}: antete CSV greșite: ${problems.join(", ")}`);
+}
 
 /** Aruncă dacă răspunsul nu respectă contractul operației handlerului. */
 export async function assertContract(handler: unknown, response: Response): Promise<void> {
   const id = OPERATION_OF.get(handler);
   if (!id) throw new Error("handler fără operație în registrul OpenAPI");
   const op = OPERATIONS.find((o) => o.operationId === id)!;
+  if (response.status === op.success.status && op.success.csv) {
+    assertCsvHeaders(id, response);
+    // `Response.text()` elimină BOM-ul: se verifică octeții (EF BB BF).
+    const bytes = new Uint8Array(await response.clone().arrayBuffer());
+    if (bytes[0] !== 0xef || bytes[1] !== 0xbb || bytes[2] !== 0xbf) {
+      throw new Error(`${id}: CSV fără BOM`);
+    }
+    return;
+  }
   const text = await response.clone().text();
   if (response.status === op.success.status) {
     if (op.success.schema === null) {
