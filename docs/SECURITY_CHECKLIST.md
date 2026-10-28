@@ -44,7 +44,12 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Faza 2: drepturi `UPDATE` pe coloane (fără `household_id`, `created_by_user_id`, `source`, `transfer_*`, `kind`, `system_key` etc.); fără drepturi pentru `anon`/`authenticated` | DONE | `0002_ledger.sql`, `ledger-rls.test.ts` | 2026-10-28 · programmer (F2-A) |
 | Revizuire automată F2-A, MEDIUM 1: `owner_user_id` al contului putea indica orice utilizator al platformei | DONE | politica `accounts_household` (`WITH CHECK` membru al aceleiași gospodării), `ledger-rls.test.ts`, `accounts.test.ts` | 2026-10-28 · programmer (F2-A) |
 | Revizuire automată F2-A, MEDIUM 2: `installation_id` unic global (squatting, oracol de existență) | DONE | unic pe `(user_id, installation_id)`; `app_events` doar cu instalarea proprie; `ledger-rls.test.ts` | 2026-10-28 · programmer (F2-A) |
-| Faza 2: curățarea `idempotency_keys` > 24 h (fără context de gospodărie) | TODO | F2-B: funcție dedicată într-o migrație nouă + comandă `finet-admin` (ADR 0004) | — |
+| Faza 2: curățarea `idempotency_keys` > 24 h (fără context de gospodărie) | DONE (local) | `0003_idempotency_purge.sql` (`SECURITY DEFINER`, `search_path = pg_catalog`, fără parametri, EXECUTE doar `finet_app`, politici `TO finet_migrator` limitate la > 24 h), `finet-admin cleanup-idempotency`; `idempotency.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: fiecare endpoint `/api/v1` cere sesiune (401), resursele altei gospodării → 404 (inclusiv prin referințe în corp), `household_id` niciodată din cerere | DONE (local) | `src/app/api/v1/ledger-api.test.ts` (401 pe toate cele 25 de operații ale registrului, izolare A/B pe fiecare) | 2026-10-28 · programmer (F2-B) |
+| F2-B: CSRF pe mutațiile cu cookie (`Origin`), bearer fără `Origin` | DONE (local) | `ledger-api.test.ts`, `usage.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: `Idempotency-Key` — o singură scriere, 422 la reutilizare (inclusiv de alt membru), 409 în desfășurare, 5xx nememorat, expirare 24 h | DONE (local) | `src/app/api/v1/idempotency.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: corpuri doar JSON (415), max. 16 KiB (413), parametri URL în listă permisă, rate limiting pe mutații per utilizator (429) | DONE (local) | `src/app/api/v1/_lib/http.ts`, `ledger-api.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: revizuirea `security` a API-ului | TODO | agentul `security` | — |
 | Faza 2: `0002_ledger` aplicată pe Supabase și verificată acolo | TODO | operatorul, după revizuiri | — |
 | Faza 2: revizuirea `security` a stratului de date F2-A | TODO | agentul `security` | — |
 
@@ -93,6 +98,8 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Audit la ștergerile din registru (`transaction.deleted`, `transfer.deleted`, `account.deleted`, `category.deleted`, arhivare) fără sume sau descrieri | DONE | `src/modules/*/…service.ts`, `transactions.test.ts`, `transfers.test.ts` | 2026-10-28 · programmer (F2-A) |
 | `app_events`: format fix pentru nume/ecran/cod de eroare (fără text liber sau sume) în bază; lista fixă de nume în Zod | PARTIAL | CHECK-uri în `0002_ledger.sql`, test în `ledger-rls.test.ts`; lista Zod în F2-B | 2026-10-28 · programmer (F2-A) |
 | Loguri structurate (pino) | TODO | faza în care apar logurile de business | — |
+| F2-B: evenimentele de utilizare fără date financiare (listă fixă de nume, ecrane, coduri; orice câmp în plus → 400 fără ecoul valorii), stocate doar cu consimțământ `usage_stats` activ | DONE (local) | `src/modules/usage/usage.schema.ts`, `usage.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: `X-FINET-Client` parsat strict (chei fixe, limite = CHECK-urile din bază), invalid → ignorat; cel mult o scriere la 15 min; membrii gospodăriei fără emailuri în API | DONE (local) | `src/modules/auth/request.ts`, `usage.test.ts`, `ledger-api.test.ts` | 2026-10-28 · programmer (F2-B) |
 
 ## 7. CI și lanțul de aprovizionare
 

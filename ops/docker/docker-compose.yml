@@ -277,6 +277,8 @@ services:
     #     (fără --password-stdin: parola se generează și se afișează o singură dată)
     #   docker compose ... --profile admin run --rm -T finet-admin reset-password --email <email> --password-stdin
     #   docker compose ... --profile admin run --rm finet-admin add-member --household <id> --email <email>
+    #   docker compose ... --profile admin run --rm -T finet-admin cleanup-idempotency
+    #     (F2-B: șterge cheile Idempotency-Key > 24 h; scrie doar numărul; de programat de operator)
     # Parola nu se dă niciodată ca argument (ar rămâne în istoric și în `ps`). Detalii: docs/INFRA.md.
     image: ${FINET_TOOLS_IMAGE:-finet:tools}
     build:

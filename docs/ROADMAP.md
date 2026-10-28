@@ -61,7 +61,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - aplicarea migrațiilor pe Supabase de operator (`docs/INFRA.md`, „Faza 1”), apoi verificarea în browser prin Access;
 - revizuirea de securitate a Fazei 1: corecțiile H1, M1–M5, L1, L4, L5 făcute (2026-10-28), de re-verificat de `security`;
 - înregistrarea publică `saas` cu verificarea emailului: Faza 11 (sign-up rămâne închis și în `saas`);
-- OpenAPI (`docs/openapi.json`) pentru `/api/v1`: odată cu primele endpointuri din Faza 2;
+- OpenAPI (`docs/openapi.json`) pentru `/api/v1`: făcut în F2-B (ADR 0005);
 - **TODO:** micșorarea imaginii `finet:tools` (583 MB, include `next`): de exemplu `pnpm deploy --prod` cu doar `postgres`/`drizzle-orm`/`zod` (dependențele externe ale `dist/tools/*.mjs`). Neîncercat: cere un build Docker, nepermis pe hostul cu memorie mică.
 
 ### Faza 2: stare
@@ -71,10 +71,18 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - corecțiile revizuirii automate (MEDIUM 1: proprietarul contului membru al gospodăriei; MEDIUM 2: `installation_id` unic per utilizator);
 - decizii: ADR 0004.
 
+**F2-B (API `/api/v1`, idempotență, OpenAPI, statistici de utilizare), gata în repo, verificat local pe PostgreSQL 17 efemer:**
+- rutele `/api/v1/households`, `accounts` (+ `archive`/`unarchive`), `categories` (+ `hide`/`unhide`, ștergere cu `?reassignToId=`), `transactions` (filtre, căutare, sortare, cursor), `transfers` (`POST`, `GET/PATCH/DELETE /{groupId}`), `me/consents`, `app/events`; stratul HTTP comun (`src/app/api/v1/_lib/http.ts`: 401/403 CSRF/404/409 `reason`/413/415/422/429/500, rate limiting pe mutații per utilizator), folosit și de `/api/v1/me*`;
+- `Idempotency-Key` pe crearea conturilor, categoriilor, tranzacțiilor și transferurilor (aceeași tranzacție cu scrierea, savepoint pentru serviciu, lock consultativ → 409 `request_in_progress`, 422 la reutilizare, 5xx nememorat, expirare 24 h) și migrația `0003_idempotency_purge` (funcția `SECURITY DEFINER` de curățare) + `finet-admin cleanup-idempotency`;
+- `X-FINET-Client` (forma completă `cheie=valoare`, strictă; forma veche păstrată pentru sesiuni) → `client_installations`, cel mult o scriere la 15 minute; `POST /api/v1/app/events` cu lista fixă, respingerea oricărui câmp în plus, consimțământul `usage_stats` verificat pe server; `GET/PUT /api/v1/me/consents` cu audit;
+- OpenAPI 3.1 din schemele Zod (`src/openapi/`, `docs/openapi.json`, `pnpm openapi:generate` / `openapi:check`, pas nou în CI), test rute reale ↔ registru și verificarea fiecărui răspuns din teste față de schemă; `docs/API.md`;
+- decizii: ADR 0005.
+
 **Rămâne pentru Faza 2:**
-- F2-B: rutele `/api/v1/` (conturi, categorii, tranzacții, transferuri, gospodării), `Idempotency-Key` + curățarea cheilor > 24 h (funcție nouă într-o migrație `0003_…`, comandă `finet-admin`), OpenAPI (`docs/openapi.json`), `X-FINET-Client`, `/api/v1/app/events` cu lista fixă și consimțământul `usage_stats`, teste de izolare prin API;
 - F2-C: UI, E2E (adăugarea unei cheltuieli și verificarea soldului), documentația pentru utilizator;
-- aplicarea `0002_ledger` pe Supabase de operator, după revizuirea `security`.
+- aplicarea `0002_ledger` și `0003_idempotency_purge` pe Supabase de operator, după revizuirea `security` (F2-A + F2-B);
+- programarea `finet-admin cleanup-idempotency` (cron pe host sau Portainer, `docs/INFRA.md`), decizia operatorului;
+- revizuirea `security` a API-ului (F2-B).
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
