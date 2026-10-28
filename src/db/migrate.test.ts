@@ -21,13 +21,14 @@ function copyMigrations(): string {
 }
 
 describe("readMigrations (fără bază)", () => {
-  it("citește jurnalul repo-ului: 0000_core … 0003_idempotency_purge, fără CREATE SCHEMA", () => {
+  it("citește jurnalul repo-ului: 0000_core … 0004_budgets_goals_tags, fără CREATE SCHEMA", () => {
     const migrations = readMigrations(MIGRATIONS_DIR);
     expect(migrations.map((m) => m.tag)).toEqual([
       "0000_core",
       "0001_rls",
       "0002_ledger",
       "0003_idempotency_purge",
+      "0004_budgets_goals_tags",
     ]);
     for (const m of migrations) {
       expect(m.hash).toMatch(/^[0-9a-f]{64}$/);
@@ -81,6 +82,38 @@ describe("readMigrations (fără bază)", () => {
     );
     // Nicio funcție nouă SECURITY DEFINER: triggerele rulează cu drepturile apelantului.
     expect(text).not.toMatch(/security\s+definer/i);
+  });
+
+  it("0004_budgets_goals_tags: tabele noi cu RLS ENABLE + FORCE în aceeași migrație, seed înainte de RLS", () => {
+    const planning = readMigrations(MIGRATIONS_DIR).find(
+      (m) => m.tag === "0004_budgets_goals_tags",
+    )!;
+    const text = planning.statements.join("\n");
+    const created = [...text.matchAll(/CREATE TABLE "finet"\."(\w+)"/g)].map((m) => m[1]!);
+    expect(created.sort()).toEqual([
+      "budgets",
+      "goals",
+      "tag_visibility",
+      "tags",
+      "transaction_tags",
+    ]);
+    for (const table of created) {
+      expect(text).toContain(`alter table finet.${table} enable row level security`);
+      expect(text).toContain(`alter table finet.${table} force row level security`);
+    }
+    expect(text.indexOf("insert into finet.tags")).toBeLessThan(
+      text.indexOf("alter table finet.tags enable row level security"),
+    );
+    // Constrângerea unică țintă e creată înaintea cheii străine compuse care o folosește.
+    expect(text.indexOf('"transactions_id_household_key" UNIQUE')).toBeLessThan(
+      text.indexOf('"transaction_tags_transaction_fk" FOREIGN KEY'),
+    );
+    expect(text).not.toMatch(/security\s+definer/i);
+    // Singura atingere a unui tabel existent: constrângerea unică pe transactions (nedistructivă).
+    const code = text.replace(/--.*$/gm, "");
+    expect(code).not.toMatch(/\b(drop|truncate)\b|\bdelete\s+from\b|\bupdate\s+finet\./i);
+    const altered = [...code.matchAll(/alter table "?finet"?\."?(\w+)"?/gi)].map((m) => m[1]!);
+    expect(new Set(altered.filter((t) => !created.includes(t)))).toEqual(new Set(["transactions"]));
   });
 
   it("refuză un director fără jurnal", () => {
@@ -181,7 +214,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       const lines: string[] = [];
       const first = await runMigrations(sql, { folder: MIGRATIONS_DIR, log: (l) => lines.push(l) });
       expect(first).toEqual({
-        applied: ["0000_core", "0001_rls", "0002_ledger", "0003_idempotency_purge"],
+        applied: [
+          "0000_core",
+          "0001_rls",
+          "0002_ledger",
+          "0003_idempotency_purge",
+          "0004_budgets_goals_tags",
+        ],
         alreadyApplied: 0,
       });
       expect(lines).toEqual([
@@ -189,11 +228,38 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
         "aplicată: 0001_rls",
         "aplicată: 0002_ledger",
         "aplicată: 0003_idempotency_purge",
+        "aplicată: 0004_budgets_goals_tags",
       ]);
       const second = await runMigrations(sql, { folder: MIGRATIONS_DIR });
-      expect(second).toEqual({ applied: [], alreadyApplied: 4 });
+      expect(second).toEqual({ applied: [], alreadyApplied: 5 });
     } finally {
       await sql.end({ timeout: 5 });
+    }
+  });
+
+  it("0004 peste o bază cu 0000–0003 deja aplicate (ca producția): se aplică doar ea, apoi nimic", async () => {
+    const fresh = await createScratchDatabase("finet_it_mig4");
+    const dir = copyMigrations();
+    const sql = testClient(fresh.migratorUrl, 1);
+    try {
+      const journalPath = join(dir, "meta", "_journal.json");
+      const journal = JSON.parse(readFileSync(journalPath, "utf8"));
+      const full = JSON.stringify(journal);
+      journal.entries = journal.entries.filter(
+        (e: { tag: string }) => e.tag !== "0004_budgets_goals_tags",
+      );
+      writeFileSync(journalPath, JSON.stringify(journal));
+      expect((await runMigrations(sql, { folder: dir })).applied).toHaveLength(4);
+      writeFileSync(journalPath, full);
+      expect(await runMigrations(sql, { folder: dir })).toEqual({
+        applied: ["0004_budgets_goals_tags"],
+        alreadyApplied: 4,
+      });
+      expect(await runMigrations(sql, { folder: dir })).toEqual({ applied: [], alreadyApplied: 5 });
+    } finally {
+      await sql.end({ timeout: 5 });
+      rmSync(dir, { recursive: true, force: true });
+      await fresh.drop();
     }
   });
 
@@ -206,7 +272,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     ]);
     const [counted] = await db.admin<{ n: number }[]>`
       select count(*)::int as n from finet.__drizzle_migrations`;
-    expect(counted?.n).toBe(4);
+    expect(counted?.n).toBe(5);
     const schemas = await db.admin<{ nspname: string }[]>`
       select nspname from pg_namespace where nspname = 'drizzle'`;
     expect(schemas).toEqual([]);
@@ -226,13 +292,18 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       "auth_sessions",
       "auth_verifications",
       "bootstrap_state",
+      "budgets",
       "categories",
       "category_visibility",
       "client_installations",
       "consents",
+      "goals",
       "household_members",
       "households",
       "idempotency_keys",
+      "tag_visibility",
+      "tags",
+      "transaction_tags",
       "transactions",
       "user_preferences",
       "users",
@@ -296,7 +367,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       expect(rows.length).toBe(0);
       const [counted] = await db.admin<{ n: number }[]>`
         select count(*)::int as n from finet.__drizzle_migrations`;
-      expect(counted?.n).toBe(4);
+      expect(counted?.n).toBe(5);
     } finally {
       await sql.end({ timeout: 5 });
       rmSync(dir, { recursive: true, force: true });
@@ -314,7 +385,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     });
     expect(err).toEqual([]);
     expect(code).toBe(0);
-    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 4"]);
+    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 5"]);
     expect(out.join("\n")).not.toContain("finet_migrator_ci");
   });
 });
