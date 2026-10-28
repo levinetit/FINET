@@ -8,7 +8,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 |---|---|---|
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
 | 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
-| 2 — Conturi, categorii, tranzacții, transferuri | neimplementat | |
+| 2 — Conturi, categorii, tranzacții, transferuri | **parțial** (implementat în repo) | F2-A, F2-B, F2-C gata; rămân migrațiile pe Supabase, prima rulare E2E `ledger` în CI, verificarea în browser și revizuirea de securitate — vezi mai jos și `docs/reports/faza-2.md` |
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | neimplementat | |
 | 4 — Stabilizare (rezervată) | neimplementat | |
 | 5 — Recurențe | neimplementat | |
@@ -61,8 +61,41 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - aplicarea migrațiilor pe Supabase de operator (`docs/INFRA.md`, „Faza 1”), apoi verificarea în browser prin Access;
 - revizuirea de securitate a Fazei 1: corecțiile H1, M1–M5, L1, L4, L5 făcute (2026-10-28), de re-verificat de `security`;
 - înregistrarea publică `saas` cu verificarea emailului: Faza 11 (sign-up rămâne închis și în `saas`);
-- OpenAPI (`docs/openapi.json`) pentru `/api/v1`: odată cu primele endpointuri din Faza 2;
+- OpenAPI (`docs/openapi.json`) pentru `/api/v1`: făcut în F2-B (ADR 0005);
 - **TODO:** micșorarea imaginii `finet:tools` (583 MB, include `next`): de exemplu `pnpm deploy --prod` cu doar `postgres`/`drizzle-orm`/`zod` (dependențele externe ale `dist/tools/*.mjs`). Neîncercat: cere un build Docker, nepermis pe hostul cu memorie mică.
+
+### Faza 2: stare
+**F2-A (stratul de date și serviciile, fără rute HTTP și UI), gata în repo, verificat local pe PostgreSQL 17 efemer:**
+- migrația `0002_ledger` (generată + partea de mână): `accounts`, `categories` (28 de categorii de sistem din 5.4), `category_visibility`, `transactions` (cu `transfer_direction`), `idempotency_keys`, `client_installations`, `app_events`, `app_downloads`; RLS `ENABLE` + `FORCE`, politici pe gospodărie/utilizator, drepturi `UPDATE` pe coloane, triggere `SECURITY INVOKER`, verificarea grupurilor de transfer la COMMIT;
+- serviciile `src/modules/{accounts,categories,transactions,transfers}` (`*.schema.ts`, `*.repo.ts`, `*.service.ts`, comun în `src/modules/ledger/`): sold calculat (`bigint`, `money.ts`, totaluri pe monedă), arhivare și ștergere doar a conturilor goale, categorii de sistem ascunse per gospodărie, ștergerea categoriilor cu reasignare, tranzacții cu căutare/filtre/sortare/paginare cu cursor, transferuri atomice (monede diferite cu ambele sume), audit fără sume la ștergeri;
+- corecțiile revizuirii automate (MEDIUM 1: proprietarul contului membru al gospodăriei; MEDIUM 2: `installation_id` unic per utilizator);
+- decizii: ADR 0004.
+
+**F2-B (API `/api/v1`, idempotență, OpenAPI, statistici de utilizare), gata în repo, verificat local pe PostgreSQL 17 efemer:**
+- rutele `/api/v1/households`, `accounts` (+ `archive`/`unarchive`), `categories` (+ `hide`/`unhide`, ștergere cu `?reassignToId=`), `transactions` (filtre, căutare, sortare, cursor), `transfers` (`POST`, `GET/PATCH/DELETE /{groupId}`), `me/consents`, `app/events`; stratul HTTP comun (`src/app/api/v1/_lib/http.ts`: 401/403 CSRF/404/409 `reason`/413/415/422/429/500, rate limiting pe mutații per utilizator), folosit și de `/api/v1/me*`;
+- `Idempotency-Key` pe crearea conturilor, categoriilor, tranzacțiilor și transferurilor (aceeași tranzacție cu scrierea, savepoint pentru serviciu, lock consultativ → 409 `request_in_progress`, 422 la reutilizare, 5xx nememorat, expirare 24 h) și migrația `0003_idempotency_purge` (funcția `SECURITY DEFINER` de curățare) + `finet-admin cleanup-idempotency`;
+- `X-FINET-Client` (forma completă `cheie=valoare`, strictă; forma veche păstrată pentru sesiuni) → `client_installations`, cel mult o scriere la 15 minute; `POST /api/v1/app/events` cu lista fixă, respingerea oricărui câmp în plus, consimțământul `usage_stats` verificat pe server; `GET/PUT /api/v1/me/consents` cu audit;
+- OpenAPI 3.1 din schemele Zod (`src/openapi/`, `docs/openapi.json`, `pnpm openapi:generate` / `openapi:check`, pas nou în CI), test rute reale ↔ registru și verificarea fiecărui răspuns din teste față de schemă; `docs/API.md`;
+- decizii: ADR 0005.
+
+**F2-C (UI, E2E, documentația), gata în repo, verificat local (fără browser):**
+- paginile `/accounts` (+ `new`, `[id]`), `/transactions` (+ `new`, `[id]`), `/transfers/new`, `/categories`; soldurile și ultimele 5 tranzacții pe `/dashboard`; navigarea cu cele cinci pagini; comutatorul `usage_stats` în `/profile`;
+- mutațiile prin `/api/v1/*` cu `Idempotency-Key` per trimitere și blocare la dublu-clic; banii doar prin `money.ts`; `X-FINET-Client` doar cu acord; fără `style=`;
+- E2E `e2e/ledger.spec.ts` (proiectul `ledger`, ambele moduri în CI; local NOT RUN), teste unitare noi (613 în total);
+- decizii: ADR 0006; raport: `docs/reports/faza-2.md`.
+
+**Rămâne pentru Faza 2:**
+- prima rulare E2E (`ledger`, `auth`, `smoke`) în job-ul `e2e`, după push; verificarea paginilor în browser pe producție;
+- editarea transferurilor din UI, subcategoriile și culorile categoriilor în UI (opțional, API-ul există);
+- aplicarea `0002_ledger` și `0003_idempotency_purge` pe Supabase de operator, după revizuirea `security` (F2-A + F2-B);
+- programarea `finet-admin cleanup-idempotency` (cron pe host sau Portainer, `docs/INFRA.md`), decizia operatorului;
+- revizuirea `security` a API-ului (F2-B) și a interfeței (F2-C): constatările MEDIUM-1..3, LOW-1, LOW-5 corectate (2026-10-28, `docs/SECURITY_CHECKLIST.md` secțiunea 10; ADR 0004/0005/0006); de re-verificat.
+
+**Amânate din revizuirea F2 (cu motiv):**
+- **LOW-2** — retenția `app_events` (13 luni, apoi agregare pe zi/versiune): Faza 9, odată cu pagina „Statistici”; până atunci evenimentele se șterg la revocarea `usage_stats`. Programarea `finet-admin cleanup-idempotency` rămâne decizia operatorului.
+- **LOW-3** — `q` (căutarea în tranzacții) circulă în URL: aplicația nu loghează URL-uri, dar proxy-ul/Traefik/Cloudflare le pot înregistra (`docs/PRIVACY_NOTES.md`); alternativa `POST /api/v1/transactions/search` într-o fază viitoare.
+- **LOW-4** — plafoane per gospodărie (număr de conturi, categorii, tranzacții) și rate limit pe citiri: fază viitoare.
+- **NOTE** — `owner_user_id` nu are efect de autorizare (6.1); `finet_migrator` nu are politici pe `categories`/`transactions` (intenționat).
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:

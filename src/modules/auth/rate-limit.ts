@@ -22,7 +22,15 @@ import type { RateLimitRule } from "@/lib/config";
  */
 
 export type RateLimitKind =
-  "login" | "mobile_login" | "login_email" | "known_ip" | "email" | "password_change";
+  | "login"
+  | "mobile_login"
+  | "login_email"
+  | "known_ip"
+  | "email"
+  | "password_change"
+  // API `/api/v1` (F2-B): mutațiile și evenimentele de utilizare, pe utilizator.
+  | "api_mutation"
+  | "app_events";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

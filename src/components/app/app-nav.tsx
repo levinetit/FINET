@@ -9,24 +9,31 @@ import { cn } from "@/lib/utils";
 import { useHydrated } from "@/app/_lib/use-hydrated";
 import { ro } from "@/messages/ro";
 
-import { HomeIcon, LogoutIcon, UserIcon } from "./icons";
+import { HomeIcon, ListIcon, LogoutIcon, TagIcon, UserIcon, WalletIcon } from "./icons";
 
 const ITEMS = [
   { href: "/dashboard", label: ro.nav.dashboard, icon: HomeIcon },
+  { href: "/transactions", label: ro.nav.transactions, icon: ListIcon },
+  { href: "/accounts", label: ro.nav.accounts, icon: WalletIcon },
+  { href: "/categories", label: ro.nav.categories, icon: TagIcon },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon },
 ] as const;
 
 const itemClass =
-  "flex w-full flex-col items-center gap-0.5 rounded-lg px-1 pt-2 pb-2.5 text-xs text-muted-foreground " +
-  "md:flex-row md:gap-3 md:px-3 md:py-2.5 md:text-[0.95rem] hover:text-foreground";
+  "flex w-full min-w-0 flex-col items-center gap-0.5 rounded-lg px-0.5 pt-2 pb-2.5 text-center " +
+  "text-[0.68rem] leading-tight break-words text-muted-foreground " +
+  "md:flex-row md:gap-3 md:px-3 md:py-2.5 md:text-left md:text-[0.95rem] hover:text-foreground";
 
 /**
  * Navigarea (master prompt 3.4, demo): bară jos pe telefon, meniu lateral pe desktop. Doar
- * paginile care există în Faza 1. Deconectarea e un `POST /api/auth/sign-out` (Better Auth
+ * paginile care există (Faza 2: Acasă, Tranzacții, Conturi, Categorii, Profil); fără pagini
+ * pentru funcții neimplementate. Deconectarea e un `POST /api/auth/sign-out` (Better Auth
  * verifică originea și șterge sesiunea din bază și cookie-ul).
  */
 export function AppNav() {
   const pathname = usePathname();
+  // `/transfers/new` ține de tranzacții.
+  const section = pathname.startsWith("/transfers") ? "/transactions" : pathname;
   const [leaving, setLeaving] = useState(false);
   const [failed, setFailed] = useState(false);
   const hydrated = useHydrated();
@@ -73,9 +80,9 @@ export function AppNav() {
         </Link>
         <p className="mt-1 text-sm text-muted-foreground">{ro.app.tagline}</p>
       </div>
-      <ul className="grid grid-cols-3 md:grid-cols-1 md:gap-0.5">
+      <ul className="grid grid-cols-6 md:grid-cols-1 md:gap-0.5">
         {ITEMS.map(({ href, label, icon: ItemIcon }) => {
-          const current = pathname === href || pathname.startsWith(`${href}/`);
+          const current = section === href || section.startsWith(`${href}/`);
           return (
             <li key={href}>
               <Link

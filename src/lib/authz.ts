@@ -2,7 +2,7 @@ import "server-only";
 
 import { and, eq } from "drizzle-orm";
 
-import { type Db, type Tx, getDb, isUuid, withRlsOn } from "@/db";
+import { type DbOrTx, type Tx, getDb, isUuid, withRlsOn } from "@/db";
 import { HOUSEHOLD_ROLES, householdMembers } from "@/db/schema";
 
 /**
@@ -57,8 +57,11 @@ export class ForbiddenError extends Error {
 }
 
 export type AuthzOptions = Readonly<{
-  /** Clientul bazei (implicit `getDb()`); testele dau unul propriu. */
-  db?: Db;
+  /**
+   * Clientul bazei (implicit `getDb()`); testele dau unul propriu. O tranzacție deschisă e
+   * acceptată (savepoint, vezi `DbOrTx`).
+   */
+  db?: DbOrTx;
 }>;
 
 async function loadMembership(tx: Tx, actor: Actor, householdId: string): Promise<Membership> {

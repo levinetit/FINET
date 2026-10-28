@@ -84,6 +84,10 @@ jobs:
       - name: Formatare
         run: pnpm format:check
 
+      # docs/openapi.json trebuie să fie generat din registrul src/openapi/ (pnpm openapi:generate).
+      - name: OpenAPI la zi
+        run: pnpm openapi:check
+
       - name: Type-check
         run: pnpm typecheck
 
@@ -139,7 +143,7 @@ jobs:
   e2e:
     needs: pg-version
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
 
     services:
       postgres:
@@ -194,15 +198,15 @@ jobs:
           MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_test
         run: node dist/tools/migrate.mjs
 
-      # Câte trei utilizatori pentru fiecare mod (e2e/fixtures.ts); parola din stdin, niciodată
-      # ca argument.
+      # Câte șase utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth` + `ledger`); parola din
+      # stdin, niciodată ca argument.
       - name: Utilizatorii E2E (CLI admin)
         env:
           FINET_ROLE: admin
         run: |
           set -eu
           for mode in personal saas; do
-            for kind in main parola sesiuni; do
+            for kind in main parola sesiuni ledger ledger2 seed; do
               printf '%s\n' "$E2E_PASSWORD" | node dist/tools/admin.mjs create-user \
                 --email "e2e-$kind-$mode@finet.test" --name "E2E $kind" --password-stdin
             done
@@ -214,17 +218,17 @@ jobs:
       - name: Instalează Chromium (Playwright)
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: E2E — modul personal (smoke, auth, access)
+      - name: E2E — modul personal (smoke, auth, ledger, access)
         env:
           E2E_APP_MODE: personal
         run: pnpm test:e2e
 
-      - name: E2E — modul saas (smoke, auth)
+      - name: E2E — modul saas (smoke, auth, ledger)
         env:
           E2E_APP_MODE: saas
           E2E_SERVER: dev
           APP_MODE: saas
-        run: pnpm test:e2e --project=smoke --project=auth
+        run: pnpm test:e2e --project=smoke --project=auth --project=ledger
 
       - name: Raport Playwright (la eșec)
         if: failure()

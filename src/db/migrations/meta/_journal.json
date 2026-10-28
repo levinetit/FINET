@@ -15,6 +15,20 @@
       "when": 1793109826345,
       "tag": "0001_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793169494778,
+      "tag": "0002_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793250000000,
+      "tag": "0003_idempotency_purge",
+      "breakpoints": true
     }
   ]
 }

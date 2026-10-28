@@ -82,5 +82,38 @@ describe.skipIf(!TEST_ADMIN_URL)("rutele /api/auth și /api/v1 (mediul procesulu
       "ana@exemplu.ro",
     );
     expect((await me.GET(new Request(`${APP_URL}/api/v1/me`))).status).toBe(401);
+
+    // Rutele registrului (F2-B): legătura rută → handler, inclusiv parametrii dinamici.
+    const accounts = await import("@/app/api/v1/accounts/route");
+    const account = await import("@/app/api/v1/accounts/[id]/route");
+    const transfer = await import("@/app/api/v1/transfers/[groupId]/route");
+    const auth2 = { authorization: `Bearer ${bearer}` };
+    const created = await accounts.POST(
+      new Request(`${APP_URL}/api/v1/accounts`, {
+        method: "POST",
+        headers: {
+          ...auth2,
+          "content-type": "application/json",
+          "idempotency-key": "ruta-reala-000000001",
+        },
+        body: JSON.stringify({ name: "Ruta", type: "cash", currency: "RON" }),
+      }),
+    );
+    expect(created.status).toBe(201);
+    const id = ((await created.json()) as { data: { id: string } }).data.id;
+    const got = await account.GET(
+      new Request(`${APP_URL}/api/v1/accounts/${id}`, { headers: auth2 }),
+      {
+        params: Promise.resolve({ id }),
+      },
+    );
+    expect(got.status).toBe(200);
+    const list = await accounts.GET(new Request(`${APP_URL}/api/v1/accounts`, { headers: auth2 }));
+    expect(((await list.json()) as { data: unknown[] }).data).toHaveLength(1);
+    const missing = await transfer.GET(
+      new Request(`${APP_URL}/api/v1/transfers/x`, { headers: auth2 }),
+      { params: Promise.resolve({ groupId: "nu-e-uuid" }) },
+    );
+    expect(missing.status).toBe(404);
   });
 });

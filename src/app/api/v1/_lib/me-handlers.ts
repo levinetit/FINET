@@ -1,23 +1,9 @@
 import "server-only";
 
-import { z } from "zod";
-
-import type { Db } from "@/db";
-import { ForbiddenError, NotFoundError } from "@/lib/authz";
-import type { Config } from "@/lib/config";
-import type { FinetAuth } from "@/modules/auth/auth";
-import { jsonError } from "@/modules/auth/handler";
 import { changePasswordSchema } from "@/modules/auth/password.schema";
 import { PasswordChangeError, changePassword } from "@/modules/auth/password.service";
 import { hitRateLimit, rateLimitKey } from "@/modules/auth/rate-limit";
-import { trustedClientIp } from "@/modules/auth/request";
-import {
-  CsrfError,
-  type SessionInfo,
-  UnauthenticatedError,
-  assertSameOrigin,
-  requireSession,
-} from "@/modules/auth/session";
+import { CLIENT_HEADER, parseClientInfo, trustedClientIp } from "@/modules/auth/request";
 import { profilePatchSchema } from "@/modules/profile/profile.schema";
 import { getMe, updateMe } from "@/modules/profile/profile.service";
 import {
@@ -25,116 +11,46 @@ import {
   revokeMyOtherSessions,
   revokeMySession,
 } from "@/modules/sessions/sessions.service";
+import { getConsents, setConsents } from "@/modules/usage/consents";
+import { recordEvents } from "@/modules/usage/events";
+
+import {
+  ApiError,
+  type ApiDeps,
+  enforceRateLimit,
+  handle,
+  json,
+  parseWith,
+  readJsonBody,
+  readOptionalJsonBody,
+} from "./http";
 
 /**
- * Handlerele `/api/v1/me/*` (master prompt 6.4): subțiri peste serviciile din `src/modules`,
- * cu dependențele injectate (rutele Next dau `getAuthRuntime()`, testele o bază de test).
- * Erorile au formatul `{ error: { code, message, fields? } }`; orice eroare neprevăzută dă 500
- * fără detalii. Toate cer o sesiune validă (cookie sau bearer); mutațiile cu cookie cer și
- * `Origin` corect (CSRF).
+ * Handlerele `/api/v1/me/*` (master prompt 6.4) și `/api/v1/app/events` (6.5): subțiri peste
+ * serviciile din `src/modules`, pe stratul comun din `./http` (sesiune cookie sau bearer, CSRF pe
+ * mutațiile cu cookie, `X-FINET-Client`, rate limiting, formatul de eroare
+ * `{ error: { code, message, fields? } }`, 500 fără detalii).
  */
 
-export type ApiDeps = Readonly<{ auth: FinetAuth; db: Db; config: Config; now?: () => number }>;
-
-const MAX_BODY_BYTES = 16 * 1024;
-
-class BadRequestError extends Error {
-  constructor(
-    readonly fields: Record<string, string> | undefined,
-    message = "Cererea nu e validă.",
-  ) {
-    super(message);
-  }
-}
-
-const noStore = { "Cache-Control": "no-store" } as const;
-
-function ok(data: unknown, status = 200): Response {
-  return Response.json(data, { status, headers: noStore });
-}
-
-function fieldsOf(error: z.ZodError): Record<string, string> {
-  // Mesaje fixe (nu cele implicite Zod, care pot repeta valoarea); `custom` = mesajul schemei.
-  const fields: Record<string, string> = {};
-  let root: string | null = null;
-  for (const issue of error.issues) {
-    if (issue.code === "unrecognized_keys") {
-      for (const k of issue.keys) fields[[...issue.path, k].join(".")] = "Câmp nepermis.";
-    } else if (issue.path.length === 0) {
-      root ??= issue.code === "custom" ? issue.message : "Valoare invalidă.";
-    } else {
-      fields[issue.path.join(".")] ??=
-        issue.code === "custom" ? issue.message : "Valoare invalidă.";
-    }
-  }
-  // O problemă la rădăcină (de exemplu „nimic de modificat”) apare doar dacă nu e alta.
-  if (root !== null && Object.keys(fields).length === 0) fields._ = root;
-  return fields;
-}
-
-async function readJson<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
-  const type = request.headers.get("content-type") ?? "";
-  if (!type.toLowerCase().includes("application/json")) {
-    throw new BadRequestError(undefined, "Corpul trebuie să fie JSON.");
-  }
-  const text = await request.text();
-  if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
-    throw new BadRequestError(undefined, "Cererea e prea mare.");
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    throw new BadRequestError(undefined, "JSON invalid.");
-  }
-  const parsed = schema.safeParse(value);
-  if (!parsed.success) throw new BadRequestError(fieldsOf(parsed.error));
-  return parsed.data;
-}
-
-async function handle(
-  request: Request,
-  deps: ApiDeps,
-  fn: (session: SessionInfo) => Promise<Response>,
-): Promise<Response> {
-  try {
-    const session = await requireSession(request, deps);
-    assertSameOrigin(request, session, deps.config);
-    return await fn(session);
-  } catch (error) {
-    if (error instanceof UnauthenticatedError || error instanceof CsrfError) {
-      return jsonError(error.status, error.code, error.message);
-    }
-    if (error instanceof NotFoundError || error instanceof ForbiddenError) {
-      return jsonError(error.status, error.code, error.message);
-    }
-    if (error instanceof BadRequestError) {
-      return jsonError(400, "invalid_request", error.message, {}, error.fields);
-    }
-    if (error instanceof PasswordChangeError) {
-      return jsonError(400, error.code, error.message, {}, { [error.field]: error.message });
-    }
-    console.error("[api] eroare neașteptată");
-    return jsonError(500, "internal_error", "Eroare internă.");
-  }
-}
+export type { ApiDeps } from "./http";
 
 export function getMeHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (s) => ok({ data: await getMe(deps.db, s.userId) }));
+  return handle(request, deps, async (ctx) =>
+    json({ data: await getMe(deps.db, ctx.actor.userId) }),
+  );
 }
 
 export function patchMeHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (s) => {
-    const patch = await readJson(request, profilePatchSchema);
-    return ok({ data: await updateMe(deps.db, s.userId, patch) });
+  return handle(request, deps, async (ctx) => {
+    const patch = parseWith(profilePatchSchema, await readJsonBody(request));
+    return json({ data: await updateMe(deps.db, ctx.actor.userId, patch) });
   });
 }
 
 export function listSessionsHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (s) => {
-    const now = new Date(deps.now?.() ?? Date.now());
-    return ok({ data: await listMySessions(deps.db, s, now) });
-  });
+  return handle(request, deps, async (ctx) =>
+    json({ data: await listMySessions(deps.db, ctx.session, new Date(ctx.now)) }),
+  );
 }
 
 export function deleteSessionHandler(
@@ -142,37 +58,80 @@ export function deleteSessionHandler(
   deps: ApiDeps,
   sessionId: string,
 ): Promise<Response> {
-  return handle(request, deps, async (s) => {
-    await revokeMySession(deps.db, s, sessionId);
-    return new Response(null, { status: 204, headers: noStore });
+  return handle(request, deps, async (ctx) => {
+    await revokeMySession(deps.db, ctx.session, sessionId);
+    return json(null, 204);
   });
 }
 
 export function revokeOthersHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (s) => {
-    const revoked = await revokeMyOtherSessions(deps.db, s);
-    return ok({ data: { revoked } });
+  return handle(request, deps, async (ctx) => {
+    await readOptionalJsonBody(request);
+    const revoked = await revokeMyOtherSessions(deps.db, ctx.session);
+    return json({ data: { revoked } });
   });
 }
 
 export function changePasswordHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (s) => {
+  return handle(request, deps, async (ctx) => {
     const ip = trustedClientIp(request.headers, { accessVerified: deps.config.access.required });
     const limit = await hitRateLimit(
       deps.db,
-      rateLimitKey("password_change", ip, s.userId),
+      rateLimitKey("password_change", ip, ctx.actor.userId),
       deps.config.auth.rateLimits.passwordChange,
-      deps.now?.() ?? Date.now(),
+      ctx.now,
     );
     if (!limit.allowed) {
-      return jsonError(429, "rate_limited", "Prea multe încercări. Încearcă din nou mai târziu.", {
-        "Retry-After": String(limit.retryAfterSeconds),
-      });
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Prea multe încercări. Încearcă din nou mai târziu.",
+        {
+          headers: { "Retry-After": String(limit.retryAfterSeconds) },
+        },
+      );
     }
-    const input = await readJson(request, changePasswordSchema);
-    const result = await changePassword(deps.db, s, input, {
-      hibpEnabled: deps.config.auth.hibpEnabled,
-    });
-    return ok({ data: result });
+    const input = parseWith(changePasswordSchema, await readJsonBody(request));
+    try {
+      const result = await changePassword(deps.db, ctx.session, input, {
+        hibpEnabled: deps.config.auth.hibpEnabled,
+      });
+      return json({ data: result });
+    } catch (error) {
+      if (error instanceof PasswordChangeError) {
+        throw new ApiError(400, error.code, error.message, {
+          fields: { [error.field]: error.message },
+        });
+      }
+      throw error;
+    }
+  });
+}
+
+// --- Consimțămintele (6.5) -------------------------------------------------------------------
+
+export function getConsentsHandler(request: Request, deps: ApiDeps): Promise<Response> {
+  return handle(request, deps, async (ctx) =>
+    json({ data: await getConsents(deps.db, ctx.actor.userId) }),
+  );
+}
+
+export function putConsentsHandler(request: Request, deps: ApiDeps): Promise<Response> {
+  return handle(request, deps, async (ctx) => {
+    const body = await readJsonBody(request);
+    return json({ data: await setConsents(deps.db, ctx.actor.userId, body) });
+  });
+}
+
+// --- Evenimentele de utilizare (6.5) ---------------------------------------------------------
+
+/** Mereu 204 (stocat sau nu, după consimțământ); lot invalid → 400 cu mesaj fix. */
+export function appEventsHandler(request: Request, deps: ApiDeps): Promise<Response> {
+  return handle(request, deps, async (ctx) => {
+    await enforceRateLimit(ctx, "app_events", ctx.limits.events);
+    const body = await readJsonBody(request);
+    const client = parseClientInfo(request.headers.get(CLIENT_HEADER));
+    await recordEvents(deps.db, ctx.actor.userId, body, client, ctx.now);
+    return json(null, 204);
   });
 }

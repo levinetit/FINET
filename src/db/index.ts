@@ -19,7 +19,7 @@ import * as schema from "./schema";
  * autentificare (F1-B) prin `getDb()`.
  */
 
-export type { Db, RlsContext, Tx } from "./rls";
+export type { Db, DbOrTx, RlsContext, Tx } from "./rls";
 export { RlsContextError, isUuid, withRlsOn } from "./rls";
 
 /** Pool implicit (decizia mea): mic, sub limitele planului Supabase (docs/INFRA.md). */

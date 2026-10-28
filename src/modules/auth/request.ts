@@ -22,7 +22,10 @@ export const emailSchema = z.string().max(254).transform(normalizeEmail).pipe(z.
  */
 export const CLIENT_IP_HEADER = "x-finet-client-ip";
 
-/** Antetul clientului (master prompt 6.5): `X-FINET-Client: android/<versiune>`. */
+/**
+ * Antetul clientului (master prompt 6.5): `X-FINET-Client: android/<versiune>` (Faza 1) sau forma
+ * completă `platform=...; installation=...; ...` (F2-B, `parseClientInfo`).
+ */
 export const CLIENT_HEADER = "x-finet-client";
 
 export type TrustPolicy = Readonly<{
@@ -94,12 +97,114 @@ const clientHeaderSchema = z
 
 export type FinetClient = Readonly<{ platform: "android"; version: string }>;
 
-/** Antetul `X-FINET-Client` validat; orice altă formă e ignorată (clientul e tratat ca web). */
+/**
+ * Forma completă a antetului (F2-B, ADR 0005), perechi `cheie=valoare` separate prin `;`:
+ *
+ *   X-FINET-Client: platform=android; version=1.0.2; code=10002;
+ *     installation=<uuid>; os=14; model=Pixel 8; locale=ro-RO
+ *
+ * Reguli (stricte; orice abatere face antetul INVALID, adică ignorat, fără eroare):
+ * - cel mult `CLIENT_INFO_MAX_LENGTH` caractere, doar ASCII tipăribil;
+ * - cheile din lista fixă de mai jos, fiecare cel mult o dată; o cheie necunoscută → invalid;
+ * - `platform` (`android` sau `web`) și `installation` (uuid) sunt obligatorii;
+ * - valorile respectă aceleași limite ca CHECK-urile din `finet.client_installations`.
+ */
+export const CLIENT_INFO_MAX_LENGTH = 400;
+
+export const CLIENT_INFO_KEYS = [
+  "platform",
+  "version",
+  "code",
+  "installation",
+  "os",
+  "model",
+  "locale",
+] as const;
+
+const clientInfoSchema = z.strictObject({
+  platform: z.enum(["android", "web"]),
+  installation: z.uuid().transform((v) => v.toLowerCase()),
+  version: z
+    .string()
+    .regex(/^[0-9A-Za-z.+_-]{1,32}$/)
+    .optional(),
+  code: z
+    .string()
+    .regex(/^[0-9]{1,10}$/)
+    .transform(Number)
+    .refine((n) => n <= 2_100_000_000)
+    .optional(),
+  os: z
+    .string()
+    .regex(/^[0-9A-Za-z .+_()-]{1,64}$/)
+    .optional(),
+  model: z
+    .string()
+    .regex(/^[0-9A-Za-z .+_()-]{1,64}$/)
+    .optional(),
+  locale: z
+    .string()
+    .regex(/^[a-z]{2}(-[A-Z]{2})?$/)
+    .optional(),
+});
+
+export type ClientInfo = Readonly<{
+  platform: "android" | "web";
+  installationId: string;
+  appVersion: string | null;
+  versionCode: number | null;
+  osVersion: string | null;
+  deviceModel: string | null;
+  locale: string | null;
+}>;
+
+/** Antetul complet validat, sau `null` (lipsă, formă veche `android/<v>` sau invalid). */
+export function parseClientInfo(value: string | null | undefined): ClientInfo | null {
+  if (!value || value.length > CLIENT_INFO_MAX_LENGTH) return null;
+  if (!/^[\x20-\x7e]+$/.test(value)) return null;
+  const pairs: Record<string, string> = {};
+  for (const part of value.split(";")) {
+    const item = part.trim();
+    if (item === "") continue;
+    const eq = item.indexOf("=");
+    if (eq <= 0) return null;
+    const key = item.slice(0, eq).trim();
+    const val = item.slice(eq + 1).trim();
+    if (!(CLIENT_INFO_KEYS as readonly string[]).includes(key) || key in pairs || val === "") {
+      return null;
+    }
+    pairs[key] = val;
+  }
+  const parsed = clientInfoSchema.safeParse(pairs);
+  if (!parsed.success) return null;
+  const d = parsed.data;
+  return {
+    platform: d.platform,
+    installationId: d.installation,
+    appVersion: d.version ?? null,
+    versionCode: d.code ?? null,
+    osVersion: d.os ?? null,
+    deviceModel: d.model ?? null,
+    locale: d.locale ?? null,
+  };
+}
+
+/**
+ * Clientul Android din antetul `X-FINET-Client`, în oricare formă: cea veche (`android/<v>`,
+ * Faza 1) sau cea completă cu `platform=android` și `version`. Orice altă formă e ignorată
+ * (clientul e tratat ca web).
+ */
 export function parseClientHeader(value: string | null | undefined): FinetClient | null {
   if (!value) return null;
   const parsed = clientHeaderSchema.safeParse(value.trim());
-  if (!parsed.success) return null;
-  return { platform: "android", version: parsed.data.slice("android/".length) };
+  if (parsed.success) {
+    return { platform: "android", version: parsed.data.slice("android/".length) };
+  }
+  const info = parseClientInfo(value);
+  if (info?.platform === "android" && info.appVersion) {
+    return { platform: "android", version: info.appVersion };
+  }
+  return null;
 }
 
 /**

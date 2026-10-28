@@ -38,6 +38,20 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | CSRF pe mutațiile cu cookie (`Origin` = `APP_URL`) | DONE | `assertSameOrigin`, `me.test.ts`; UI-ul folosește aceleași rute | 2026-10-28 · programmer |
 | Paginile protejate verifică sesiunea pe server, fail closed (eroare → login) | DONE | `src/app/_lib/session.ts`; `next dev`: `/dashboard` fără sesiune → 307 `/login?next=%2Fdashboard` | 2026-10-28 · programmer |
 | Migrațiile aplicate pe Supabase și RLS verificat acolo | TODO | operatorul (`docs/INFRA.md`, „Faza 1”) | — |
+| Faza 2 (F2-A): RLS `ENABLE` + `FORCE` pe cele 8 tabele noi (`accounts`, `categories`, `category_visibility`, `transactions`, `idempotency_keys`, `client_installations`, `app_events`, `app_downloads`); fără context → 0 rânduri; `household_id` străin → 42501 | DONE (local, Postgres 17 efemer) | `0002_ledger.sql`, `src/db/ledger-rls.test.ts`, `migrate.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Faza 2: izolarea între gospodării pentru fiecare serviciu (conturi, categorii, tranzacții, transferuri): A nu vede/modifică/șterge datele lui B → `NotFoundError` | DONE | `src/modules/*/*.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Faza 2: cheile străine simple ignoră RLS → triggere `SECURITY INVOKER` (cont, categorie, părinte, vizibilitate) și cheie compusă cont/gospodărie/monedă | DONE | `0002_ledger.sql`, ADR 0004; teste `23503` în `categories.test.ts`, `transactions.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Faza 2: drepturi `UPDATE` pe coloane (fără `household_id`, `created_by_user_id`, `source`, `transfer_*`, `kind`, `system_key` etc.); fără drepturi pentru `anon`/`authenticated` | DONE | `0002_ledger.sql`, `ledger-rls.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Revizuire automată F2-A, MEDIUM 1: `owner_user_id` al contului putea indica orice utilizator al platformei | DONE | politica `accounts_household` (`WITH CHECK` membru al aceleiași gospodării), `ledger-rls.test.ts`, `accounts.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Revizuire automată F2-A, MEDIUM 2: `installation_id` unic global (squatting, oracol de existență) | DONE | unic pe `(user_id, installation_id)`; `app_events` doar cu instalarea proprie; `ledger-rls.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Faza 2: curățarea `idempotency_keys` > 24 h (fără context de gospodărie) | DONE (local) | `0003_idempotency_purge.sql` (`SECURITY DEFINER`, `search_path = pg_catalog`, fără parametri, EXECUTE doar `finet_app`, politici `TO finet_migrator` limitate la > 24 h), `finet-admin cleanup-idempotency`; `idempotency.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: fiecare endpoint `/api/v1` cere sesiune (401), resursele altei gospodării → 404 (inclusiv prin referințe în corp), `household_id` niciodată din cerere | DONE (local) | `src/app/api/v1/ledger-api.test.ts` (401 pe 28 de cazuri: cele 25 ale registrului + consimțăminte + evenimente; izolare A/B pe fiecare operație a registrului, inclusiv `unarchive`/`unhide`; registrul OpenAPI are 34 de operații, verificate față de rutele reale în `src/openapi/openapi.test.ts`) | 2026-10-28 · programmer (F2-B) |
+| F2-B: CSRF pe mutațiile cu cookie (`Origin`), bearer fără `Origin` | DONE (local) | `ledger-api.test.ts`, `usage.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: `Idempotency-Key` — o singură scriere, 422 la reutilizare (inclusiv de alt membru), 409 în desfășurare, 5xx nememorat, expirare 24 h | DONE (local) | `src/app/api/v1/idempotency.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: corpuri doar JSON (415), max. 16 KiB (413), parametri URL în listă permisă, rate limiting pe mutații per utilizator (429) | DONE (local) | `src/app/api/v1/_lib/http.ts`, `ledger-api.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: revizuirea `security` a API-ului | TODO | agentul `security` | — |
+| Faza 2: `0002_ledger` aplicată pe Supabase și verificată acolo | TODO | operatorul, după revizuiri | — |
+| Faza 2: revizuirea `security` a stratului de date F2-A | TODO | agentul `security` | — |
 
 ## 3. Antete
 
@@ -45,7 +59,8 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 |---|---|---|---|
 | CSP cu nonce per cerere: `default-src 'self'`, `script-src 'self' 'nonce-…'`, `style-src 'self' 'nonce-…'`, `img-src 'self' data:`, `font-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` | DONE | `src/lib/security-headers.ts`, `src/proxy.ts`, `proxy.test.ts`, `security-headers.test.ts`; standalone: `e2e/access.spec.ts` (PASS local) | 2026-10-28 · programmer |
 | Fiecare `<script>` randat poartă nonce-ul; nicio pagină statică | DONE | `next build`: toate rutele `ƒ`; `next dev` `/login`: 21 de scripturi, 0 fără nonce, 0 atribute `style=` | 2026-10-28 · programmer |
-| Fără încălcări CSP în browser | PARTIAL | E2E „antetele de securitate… fără încălcări CSP” (NOT RUN local) | 2026-10-28 · programmer |
+| Fără încălcări CSP în browser | PARTIAL | E2E „antetele de securitate… fără încălcări CSP” și `ledger` (h) pe toate paginile registrului (NOT RUN local) | 2026-10-28 · programmer |
+| Paginile registrului (F2-C): nonce în CSP, fără `style=` | DONE | `next dev` + curl pe 10 pagini: 200, `'nonce-…'`, 0 `style=`; `src/app/ui-rules.test.ts` interzice `style=` în surse | 2026-10-28 · programmer |
 | Antetele și pe răspunsurile 403 ale proxy-ului | DONE | `proxy.test.ts`, `access.spec.ts` (PASS local) | 2026-10-28 · programmer |
 | F8 (rest) — HSTS `max-age=31536000; includeSubDomains` (fără `preload`: decizia operatorului) | DONE | idem | 2026-10-28 · programmer |
 | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()` | DONE | idem; asset-urile statice prin `next.config.ts` (`headers()`, fără CSP) | 2026-10-28 · programmer |
@@ -81,7 +96,11 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Better Auth: doar nivelul și mesajul în log | DONE | `auth.ts` (`logger`) | 2026-10-27 · programmer |
 | Audit fără emailuri, IP-uri, user-agent (doar id-uri și tipuri) | DONE | `audit.ts`, ADR 0003 | 2026-10-27 · programmer |
 | UI: erorile neprevăzute fără detalii (`[ui] sesiunea nu a putut fi verificată`) | DONE | `src/app/_lib/session.ts`, `src/app/error.tsx` | 2026-10-28 · programmer |
+| Audit la ștergerile din registru (`transaction.deleted`, `transfer.deleted`, `account.deleted`, `category.deleted`, arhivare) fără sume sau descrieri | DONE | `src/modules/*/…service.ts`, `transactions.test.ts`, `transfers.test.ts` | 2026-10-28 · programmer (F2-A) |
+| `app_events`: format fix pentru nume/ecran/cod de eroare (fără text liber sau sume) în bază; lista fixă de nume în Zod | PARTIAL | CHECK-uri în `0002_ledger.sql`, test în `ledger-rls.test.ts`; lista Zod în F2-B | 2026-10-28 · programmer (F2-A) |
 | Loguri structurate (pino) | TODO | faza în care apar logurile de business | — |
+| F2-B: evenimentele de utilizare fără date financiare (listă fixă de nume, ecrane, coduri; orice câmp în plus → 400 fără ecoul valorii), stocate doar cu consimțământ `usage_stats` activ | DONE (local) | `src/modules/usage/usage.schema.ts`, `usage.test.ts` | 2026-10-28 · programmer (F2-B) |
+| F2-B: `X-FINET-Client` parsat strict (chei fixe, limite = CHECK-urile din bază), invalid → ignorat; cel mult o scriere la 15 min; membrii gospodăriei fără emailuri în API | DONE (local) | `src/modules/auth/request.ts`, `usage.test.ts`, `ledger-api.test.ts` | 2026-10-28 · programmer (F2-B) |
 
 ## 7. CI și lanțul de aprovizionare
 
@@ -129,3 +148,24 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | **L7** — parola generată de CLI pe stdout | TODO | amânat: comportament documentat (afișată o singură dată, operatorul o copiază); alternativa (fișier 0600 / doar `--password-stdin`) se decide cu operatorul | — |
 | **L8** — `viaBearer` scutește de CSRF și când există și cookie | TODO | amânat: Bearer cere antet explicit (imposibil cross-site fără CORS, închis); de restrâns la „bearer și fără cookie” la prima revizuire a clientului Android | — |
 | Ștergerea contului (GDPR) | TODO | fază viitoare: funcție SECURITY DEFINER care refuză administratorii și gospodăriile cu un singur membru (`finet_app` nu are DELETE pe `users`, M5) | — |
+
+## 10. Interfața registrului (F2-C, 2026-10-28)
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Fiecare pagină protejată verifică sesiunea (`requireLedgerPage` → `requirePageSession`); fără sesiune 307 la `/login?next=` | DONE | `next dev` + curl pe 8 pagini (307); E2E `auth`/`ledger` (NOT RUN local) | 2026-10-28 · programmer |
+| Gospodăria din bază, niciodată din URL sau corp; resursă străină → 404 uniform (pagini și API) | DONE | `ledger-page.ts`, `load()`; curl cu al doilea utilizator: 404 pe `/accounts/<id>`, `/transactions/<id>`, `/api/v1/accounts/<id>`; E2E (g) | 2026-10-28 · programmer |
+| Mutațiile din UI trec prin `/api/v1/*` (CSRF prin `Origin`, rate limiting, audit, validare Zod strictă) | DONE | `api-client.ts`, `use-submit.ts`; fără server actions | 2026-10-28 · programmer |
+| `Idempotency-Key` per trimitere; un dublu-clic nu creează două tranzacții | DONE | `idempotency-key.test.ts`; E2E (d) (NOT RUN local) | 2026-10-28 · programmer |
+| Fără float pe sume în UI | DONE | `ledger-ui.ts` (doar `money.ts`), `ui-rules.test.ts` | 2026-10-28 · programmer |
+| `X-FINET-Client` doar cu consimțământul `usage_stats`; fără sume sau text liber | DONE (client) | `usage-client.test.ts` (forma validă pentru `parseClientInfo`), E2E (i) (NOT RUN local) | 2026-10-28 · programmer |
+| Serverul verifică acordul `usage_stats` și la înregistrarea instalării; revocarea șterge instalările și evenimentele utilizatorului (revizuirea F2, MEDIUM-1) | DONE (local) | `upsertInstallation` (`hasActiveConsent` în aceeași tranzacție), `eraseUsageData` în `consents.ts`, DELETE propriu pe `client_installations`/`app_events` (0002); `usage.test.ts` (fără acord + antet valid → 0; acord → 1; revocare → 0 instalări, 0 evenimente), `ledger-rls.test.ts` (DELETE doar pe rândurile proprii) | 2026-10-28 · programmer (corecții F2) |
+| Plafon de instalări per utilizator (MEDIUM-3) | DONE (local) | `MAX_INSTALLATIONS_PER_USER = 20`; peste plafon se înlocuiește instalarea văzută cel mai demult (lock per utilizator); `usage.test.ts` (100 de uuid-uri → ≤ 20 rânduri) | 2026-10-28 · programmer (corecții F2) |
+| Plafonul sumelor: ≤ 10^13 unități minore pe sumă și pe soldul inițial, CHECK în bază; un sold calculat peste 2^53 → 422 `amount_out_of_range`, nu 500 (MEDIUM-2) | DONE (local) | `input.ts` (`MAX_AMOUNT_MINOR`), `transactions_amount_range`, `accounts_opening_balance_range` (0002), `http.ts`; `ledger-api.test.ts` (400 cu `fields`, 2 × plafon → 200, CHECK ca `finet_app` → 23514, 1000 × plafon → 422), `transactions.test.ts` | 2026-10-28 · programmer (corecții F2) |
+| Mutarea unei tranzacții pe un cont în altă monedă cere suma explicită (LOW-1) | DONE (local) | `updateTransaction` → 409 `currency_change_requires_amount`; `ledger-api.test.ts` | 2026-10-28 · programmer (corecții F2) |
+| Hash-ul `Idempotency-Key` fără recursie nelimitată (adâncime ≤ 20 → altfel 400); CHECK-ul cheii în bază aliniat la 16–128 (LOW-5) | DONE (local) | `exceedsDepth` (iterativ) în `idempotency.ts`, `http.ts`; `idempotency_keys_key_format` (0002); `idempotency.test.ts` (corp cu 2000 de niveluri → 400) | 2026-10-28 · programmer (corecții F2) |
+| Retenția `app_events` (13 luni, apoi agregare) (LOW-2) | TODO | Faza 9 (pagina „Statistici”); azi evenimentele rămân până la revocare sau ștergerea contului. Programarea `cleanup-idempotency`: decizia operatorului (`docs/INFRA.md`, 4c) | — |
+| `q` (căutarea) în URL (LOW-3) | PARTIAL | aplicația nu loghează URL-uri sau query string-uri (logurile `[api]`/`[ui]` au doar mesaje fixe); proxy-ul/Traefik/Cloudflare pot înregistra URL-urile (`docs/PRIVACY_NOTES.md`). Alternativa `POST /api/v1/transactions/search`: fază viitoare | — |
+| Plafoane per gospodărie (conturi, categorii, tranzacții) și rate limit pe citiri (LOW-4) | TODO | fază viitoare; azi: rate limit pe mutații per utilizator, `limit` ≤ 100 pe pagină | — |
+| NOTE: `owner_user_id` al contului nu are efect de autorizare (6.1: toți membrii văd conturile gospodăriei); `finet_migrator` nu are politici pe `categories`/`transactions` (FORCE RLS → îi apar goale; doar `idempotency_keys` are politici de curățare) | INFO | ADR 0004, ADR 0005 | 2026-10-28 · programmer |
+| Mesajele afișate nu repetă valorile introduse; erorile 500 fără detalii | DONE | `apiErrors()` în `ledger-ui.ts`; `load()` loghează doar un mesaj fix | 2026-10-28 · programmer |
