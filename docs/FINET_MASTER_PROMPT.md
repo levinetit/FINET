@@ -40,21 +40,24 @@ Surse, toate publice și fără autentificare: verificările proprii din 2026-10
 | Liste de cumpărături | Bifare la raft, comparație AI listă ↔ bon, detectarea achizițiilor neplanificate | Faza 10 |
 | Rapoarte | Rapoarte personalizate pe orice produs din bonuri, prețuri pe magazin, variația prețurilor în timp, „verdict financiar AI”. **(C)** Pagina „Rapoarte inteligente și micro-cheltuieli”, doar pentru planurile plătite, are trei secțiuni: rapoarte predefinite (Pro), generator pe articole (Ultra), comparator și evoluția prețurilor (Ultra). Perioade: toată arhiva, luna curentă, luna trecută, ultimele 3 luni, anul acesta. Rapoartele predefinite: pungi și sacoșe, garanția SGR, cumpărături din impuls de la casă, produse nealimentare la supermarket (igienă, menaj), cafea și băuturi la bucată, economii din cupoane și carduri de fidelitate. Fiecare arată totalul, numărul de bucăți, prețul mediu, proiecția anuală, un sfat, istoricul achizițiilor și export CSV | Faza 3 (de bază), Faza 10 (micro-cheltuieli și prețuri) |
 | Export | CSV, Excel, PDF pentru tranzacții, bonuri, obiective, bugete | Faza 3 (CSV), Faza 10 (Excel/PDF) |
-| Autentificare | Email și parolă, magic link, Google, Facebook | Faza 1 (email, parolă, magic link); Google în faza `saas` |
+| Autentificare | Email și parolă, magic link, Google, Facebook | Faza 1 (email, parolă, magic link); Google și Facebook în faza `saas` (Faza 11) |
 | Recomandări | Cod unic (`/ref/FIN-XXXXXX`); distribuire prin WhatsApp, Telegram, email și copiere; **(C)** invitatul primește 1 lună Pro, cel care invită +1 lună; contoare „prieteni invitați” și „luni câștigate”. Feedback-ul trimis aduce 14 zile Pro | Faza 12, doar `saas` |
 | Mențiuni legale **(C)** | Footer cu firma care operează serviciul, termeni, confidențialitate (GDPR) și link ANPC / SAL | Faza 11, obligatoriu în `saas` |
 | Administrare | Utilizatori, abonamente, anunțuri (`/api/broadcast`), feedback, raportări de bug-uri | Faza 11, doar `saas` |
-| Limbi | ro, en, es, fr, de, it, pl, tr în cod; **(C)** selectorul arată ro, en, fr, it, es, de | ro de la start; en în faza `saas`; restul doar la cerere |
+| Limbi | ro, en, es, fr, de, it, pl, tr în cod; **(C)** selectorul arată ro, en, fr, it, es, de | ro de la start; en în faza `saas` (Faza 11); es, fr, de, it, pl, tr în Faza 13 |
 
 ### 2.2 Planuri (doar referință pentru `saas`)
 
-| Plan | Preț | Limite raportate |
-|---|---|---|
-| Starter | gratuit | tranzacții manuale nelimitate, 2 bugete, 2 obiective, 1 document AI pe zi (5 MB) |
-| Pro | 19,99 lei (4,99 €) pe lună | 50 de documente pe zi (10 MB), nelimitat, export PDF și Excel, extrase |
-| Family | 34,99 lei (8,99 €) pe lună | 250 de documente pe zi (15 MB), 6 membri, bugete comune, decontări |
+Date din codul public al clientului (analiza REA din 2026-10-28, `docs/research/rea-finpulse-day-20261028/`); aplicarea lor pe server nu a fost testată.
 
-Rapoartele se contrazic pentru Starter: unul spune 1 document pe zi, altul 50 de bonuri pe zi și istoric de 3 luni. Există chei pentru facturare anuală, dar valorile nu sunt cunoscute. Perioada de probă este de 30 de zile Pro. Limitele noastre vor fi decise separat, pe baza costului măsurat (Faza 12).
+| Plan | Preț lunar | Preț anual | Limite raportate |
+|---|---|---|---|
+| Starter | gratuit | gratuit | tranzacții manuale nelimitate, 2 bugete, 2 obiective, 1 document AI pe zi (5 MB), 1 membru, istoric de bonuri 3 luni, fișiere JPEG, PNG și CSV, export CSV |
+| Pro | 19,99 lei (4,99 €) | 189 lei (49 €) | 50 de documente pe zi (10 MB), 2 membri, bugete și obiective nelimitate, coadă prioritară, export CSV, Excel și PDF, extrase, 6 rapoarte predefinite, arhivă permanentă cu căutare OCR |
+| Family | 34,99 lei (8,99 €) | 329 lei (89 €) | 250 de documente pe zi (15 MB), 6 membri, bugete comune și pe membru, împărțirea cheltuielilor și decontări, export contabil, suport prioritar |
+| Ultra | 49,99 lei (11,99 €) | 479 lei (119 €) | 500 de documente pe zi (25 MB), 10 membri, generator de rapoarte pe orice articol, analiză de prețuri și inflație per comerciant, raport AI la cerere în limbaj natural, suport extins |
+
+Perioada de probă este de 30 de zile Pro. Rapoartele anterioare se contraziceau pentru Starter (1 document pe zi față de 50 de bonuri); codul clientului indică 1 document pe zi. Limitele noastre vor fi decise separat, pe baza costului măsurat (Faza 12); planul Ultra și funcțiile lui sunt acoperite în Fazele 10 și 12.
 
 ### 2.3 Tehnic
 
@@ -488,6 +491,7 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 
 ### Faza 4 — Rezervată pentru stabilizare
 - Corectarea problemelor găsite în prima săptămână de folosire reală, accesibilitate de bază și performanță. Fără funcții noi. Se poate sări dacă nu e nevoie.
+- Recuperare automată la eroarea de încărcare a unui fișier JavaScript (după un deploy, un tab deschis cere fișiere vechi): reîncărcare a paginii, cel mult o dată la 8 secunde, fără pierderea formularelor necomise (avertizare înainte). Reperul îl dă produsul de referință.
 - **Acceptare:** lista problemelor găsite în folosirea reală, fiecare rezolvată sau trecută în `docs/ROADMAP.md` cu motivul amânării; niciun test existent nu pică.
 
 ### Faza 5 — Recurențe
@@ -508,6 +512,7 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Ecran de verificare înainte de salvare: liniile, categoriile propuse și nepotrivirile evidențiate. Corecturile actualizează `product_aliases`.
 - Deduplicare: fișier identic (sha256), poză aproape identică (hash perceptual), același bon fotografiat din nou (CUI + număr + dată + total).
 - Căutare în textul OCR. Limite prin `entitlements`, cotă de stocare. Deduplicarea și verificările nu sunt limitate de plan.
+- Coadă pg-boss cu prioritate după plan prin `entitlements` (`queue.priority`), plus tipurile de fișier acceptate pe plan (`documents.file_types`); în `personal` toate documentele au aceeași prioritate și toate tipurile sunt acceptate.
 - Consimțământul pentru AI extern (6.3) și `docs/PRIVACY_NOTES.md` (ce date pleacă, către cine, retenția pozelor prin `RECEIPT_IMAGE_RETENTION_DAYS`).
 - Endpointurile `/api/v1/` pentru încărcare, starea procesării, rezultatul extras, corectarea liniilor și confirmarea bonului.
 - Pagina „Bonuri”: istoric cu data, comerciantul, categoriile (toate, nu doar una per bon), totalul, starea (`queued`, `needs_review`, `done`, `failed`) și acțiunile (vezi bonul, reprocesează, șterge). Căutare după magazin, produs sau sumă (acceptă „45,90” și „45.90”), filtru după categorie, etichetă și stare. Butonul „Scanează” e accesibil de oriunde, iar bonurile „De verificat” apar primele.
@@ -531,11 +536,13 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - Conturi și bugete personale și comune; vizibilitatea per membru documentată.
 - Împărțirea cheltuielilor (egal, procente, sume fixe), solduri reciproce, decontări (inclusiv parțiale).
 - Comutator de gospodărie activă, pentru utilizatorii care aparțin mai multor gospodării (web și `/api/v1/`).
+- Actualizări live între membri (Server-Sent Events sau interogare periodică, fără serviciu extern): o tranzacție, un bon sau o decontare adăugate de un membru apar celorlalți fără reîncărcare. Evenimentul transportă doar tipul și ID-ul, nu sume; datele se citesc apoi prin API, cu RLS.
 - Endpointurile `/api/v1/` pentru membri, invitații, împărțiri și decontări.
 - **Acceptare:** suma părților este egală cu totalul; solduri corecte cu 2 și 3 membri; permisiunile pe roluri sunt testate. Revizuire de securitate.
 
 ### Faza 9 — Hardening, PWA și offline
 - Manifest PWA, iconițe, ghid de instalare pentru iOS și Android.
+- Invitație de instalare a PWA în aplicație, care poate fi închisă și nu reapare (preferința se păstrează local). Ghid de utilizare `/help` în aplicație (și în `personal`), cu pașii principali și întrebările frecvente.
 - Service worker care pune în cache doar asset-urile statice și pagina `/offline` (care trebuie să existe).
 - **Scanare offline:** pozele se păstrează temporar în IndexedDB, se încarcă automat la revenirea conexiunii și se șterg local după confirmarea serverului. Starea „în așteptare” este vizibilă.
 - Audit de accesibilitate (Lighthouse ≥ 90) și de securitate pe `docs/SECURITY_CHECKLIST.md`.
@@ -561,16 +568,19 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
   - Fiecare raport afișează totalul pe perioadă, numărul de bucăți, prețul mediu pe unitate, proiecția anuală (calculată din perioada efectiv acoperită de bonuri și marcată ca estimare), istoricul liniilor potrivite (cu link la bon) și export CSV.
   - Sfaturile sunt texte fixe, verificabile; nu se afișează sume de economie inventate.
 - Export Excel și PDF.
+- **Export pentru contabil** (Excel și CSV): o linie per bon sau document, cu data, numărul, comerciantul, CUI, baza, TVA pe cote, totalul, contul și categoria, pe o perioadă aleasă. Referința are un „export contabil” în planul Family, dar formatul nu se vede în cod; formatul nostru e fix și documentat.
+- **Indicator de inflație personală:** variația procentuală a prețului mediu unitar pe comerciant și pe produs normalizat între două perioade, calculată doar din produsele cumpărate în ambele, afișată peste un prag minim de date.
+- **„Întreabă FINET”** (întrebări în limbaj natural despre propriile cheltuieli): un LLM local transformă întrebarea într-o interogare structurată dintr-un set închis de parametri (perioadă, categorie, comerciant, tip de raport), validată cu Zod; cifrele se calculează în cod din baza de date, LLM-ul nu calculează și nu vede date ale altor gospodării, iar răspunsul arată interogarea folosită. Dacă interogarea nu poate fi construită, răspunsul spune clar că nu a înțeles. În `saas` e legată de plan prin `entitlements`.
 - Endpointurile `/api/v1/` pentru liste, prețuri și rapoarte.
 - **Acceptare:** teste pentru regulile de potrivire pe linii de bon reale din `fixtures/receipts` (de exemplu, „PUNGA RAFIE” intră la pungi, iar „PUNGI MENAJ 35L” nu), pentru proiecția anuală pe perioade scurte și pentru exportul CSV și Excel.
 
 ### Faza 11 — Fundația SaaS (doar `APP_MODE=saas`)
 - Pagini publice randate pe server: prezentare, `/pricing`, `/help` (ghid, întrebări frecvente), `/terms`, `/privacy`, cu texte juridice revizuite de un om.
 - Mențiuni legale pentru consumatori din România, în footer-ul fiecărei pagini: datele firmei care operează serviciul (denumire, CUI, număr de înregistrare la Registrul Comerțului, sediu, contact) și linkurile ANPC SAL și platforma europeană SOL.
-- Turnstile, Google OAuth, traducerea în engleză.
+- Turnstile, Google OAuth și Facebook OAuth (revizuire de confidențialitate înainte de activare), traducerea în engleză.
 - Feedback și raportare de bug-uri din aplicație (fără date financiare), anunțuri de la administrator.
 - Panou de administrare: utilizatori, gospodării, joburi, feedback, statistici de utilizare agregate (6.5). Acțiunile administratorului sunt auditate. Administratorul **nu vede** datele financiare ale utilizatorilor.
-- Monitorizarea erorilor; analytics doar pe paginile publice; verificarea numelui FINET la OSIM și EUIPO înainte de lansare (secțiunea 9).
+- Monitorizarea erorilor; analytics doar pe paginile publice, cu Google Consent Mode v2 (implicit `denied`, activat doar după consimțământ); verificarea numelui FINET la OSIM și EUIPO înainte de lansare (secțiunea 9).
 - Expunerea publică a aplicației: hostname-ul public fără politica Access (doar pentru `saas`), cu WAF, protecție anti-bot și rate limiting Cloudflare, plus rate limiting-ul revizuit din FINET. Verificarea JWT-ului Access rămâne activă doar pe rutele de administrare.
 - **Acceptare:** rutele de admin răspund 404 pentru non-administratori și în modul `personal`; testele E2E de bază trec în ambele moduri.
 
@@ -578,8 +588,15 @@ Fiecare fază se termină cu: lint, type-check, teste și build verzi; `docs/ROA
 - `plans` și `subscriptions`, implementarea `saas` a `entitlements`. **Limitele și prețurile sunt decizia ta**, stabilite după costul pe document măsurat în Faza 6, configurate în date.
 - Stripe Checkout și Customer Portal, lunar și anual, webhook-uri idempotente, perioadă de probă. La expirarea abonamentului, datele rămân accesibile pentru citire și export.
 - Recomandări: cod per utilizator, distribuire (Web Share API, link copiat), recompensă aplicată o singură dată, plafon, protecție împotriva auto-recomandării.
+- Plan suplimentar „Ultra” (a patra treaptă, peste Family) și, pe plan, `entitlements` pentru: tipurile de fișier acceptate, prioritatea cozii, istoricul de bonuri, numărul de membri, rapoartele personalizate și „Întreabă FINET”. Limitele și prețurile rămân configurate în date. Nivelul de suport pe plan e un angajament operațional din ofertă, nu o funcție software.
+- Recompensă pentru feedback (referința oferă 14 zile Pro): aplicată o singură dată pe utilizator, doar pentru feedback validat de administrator, cu plafon.
 - Migrația documentată `personal` → `saas`, cu planul „fondator”.
 - **Acceptare:** fiecare limită de plan e testată pe server; webhook-urile sunt simulate cu Stripe CLI, inclusiv evenimente duplicate; o gospodărie cu abonament expirat își poate exporta datele. Revizuire de securitate.
+
+### Faza 13 — Limbi suplimentare (doar `saas`)
+- Traduceri pentru es, fr, de, it, pl și tr peste mecanismul i18n din Faza 11, cu selector de limbă, `lang` setat pe pagină, formate de dată și sumă după limbă, dar monedele rămân cele ale conturilor (fără conversie).
+- Texte juridice (termeni, confidențialitate) revizuite de un om pentru fiecare piață țintă înainte de activare.
+- **Acceptare:** toate cheile de traducere există în toate limbile (test), fără texte lipsă la randare, E2E pe două limbi noi.
 
 ### Opțional, după validare
 Conversia valutară cu cursul BNR, notificări push, email și Telegram, alte limbi, mai multe bănci, integrare PSD2 doar printr-un agregator licențiat și verificat. Nu prezenta aceste funcții ca implementate până nu sunt construite și testate.
@@ -606,7 +623,7 @@ Conversia valutară cu cursul BNR, notificări push, email și Telegram, alte li
 | LLM-ul citește greșit un bon | Sume greșite în buget | Verificări în cod (total, CUI, TVA), scor de încredere, ecran „De verificat”, nicio sumă decisă de LLM |
 | Formatele extraselor se schimbă | Importul se strică | Un parser per bancă, fișiere de test și alertă la eșecul de parsare |
 | Erori în logica banilor | Grav, mai ales în familie | `bigint` în unități minore, restul cel mai mare, teste dedicate |
-| Funcțiile adăugate prea devreme | Nu se termină nimic | Fazele 10–12 doar după v1.0 personal |
+| Funcțiile adăugate prea devreme | Nu se termină nimic | Fazele 10–13 doar după v1.0 personal |
 | O funcție SaaS ajunsă în modul `personal`, sau invers | Comportament greșit | `entitlements` și testele E2E în ambele moduri |
 | Numele „FINET”: există deja produse cu nume apropiat (de exemplu ERP-ul financiar „FINet”) | Risc juridic în `saas` | Verificare la OSIM și EUIPO (clasele 9, 36, 42) și a domeniilor înainte de lansarea publică; numele vine din `NEXT_PUBLIC_APP_NAME` (implicit `FINET`), ca o eventuală schimbare să nu ceară modificări de cod. Logo-ul nu imită simbolul produsului de referință (linia de puls verde) |
 | Obligații legale în `saas` | Lansare blocată | Termeni și politică de confidențialitate reale, acorduri de prelucrare cu furnizorii, facturare și TVA pentru abonamente |

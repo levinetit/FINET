@@ -19,6 +19,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 10 — Liste de cumpărături și prețuri | neimplementat | |
 | 11 — Fundația SaaS | neimplementat | |
 | 12 — Planuri, plăți, recomandări | neimplementat | |
+| 13 — Limbi suplimentare (`saas`) | neimplementat | adăugată după analiza finpulse.day |
 
 ### Faza 0: ce e gata și ce lipsește
 **Gata în repo (verificat local):** proiectul Next.js 16 + TypeScript strict + Tailwind + ESLint + Prettier + Vitest + Playwright; `lib/config.ts`, `lib/money.ts` (cu teste), `lib/storage.ts` (local + schelet S3), `entitlements` pentru `personal`; protecția Access în `src/proxy.ts` și `/api/health`; `Dockerfile` și `ops/docker/docker-compose.yml`; CI; instrucțiunile pentru Cloudflare, Supabase, notificări; documentația și ADR-urile 0001, 0002.
@@ -172,3 +173,20 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
 | E — Stabilizare și livrare (APK semnat, GitHub Releases) | neimplementat | Faza 9 (pagina de descărcare) |
 
 Telefoanele ajung la FINET prin WARP (`ops/cloudflare/README.md`, pasul 5).
+
+## Paritatea cu produsul de referință finpulse.day (decizie din 2026-10-28)
+
+Operatorul a cerut ca FINET să includă tot ce are produsul de referință, fără să-i copieze defectele. Sursa: `docs/research/rea-finpulse-day-20261028/` (analiza REA și comparația). Funcțiile care lipseau din plan au fost adăugate în `docs/FINET_MASTER_PROMPT.md`:
+
+| Funcție din referință | Faza |
+|---|---|
+| Plan „Ultra”, prețuri anuale, limite Starter (2.2), tipuri de fișier și prioritate de coadă pe plan | 12 (și 6 pentru coadă și tipuri) |
+| Recuperare automată la eroare de încărcare a unui chunk JS | 4 |
+| Actualizări live între membri (SSE sau interogare) | 8 |
+| Invitație de instalare PWA și ghid `/help` în aplicație | 9 |
+| Export pentru contabil (Excel/CSV), indicator de inflație personală, „Întreabă FINET” | 10 |
+| Login Facebook, Google Consent Mode v2 pe paginile publice | 11 |
+| Recompensă pentru feedback, nivel de suport pe plan | 12 |
+| Limbi suplimentare (es, fr, de, it, pl, tr) | 13 |
+
+Nu se preiau defectele referinței (CSP fără `script-src`, categorii suprapuse, duplicate ca funcție plătită, lipsa modului offline, cod de server în bundle-ul de browser): vezi `docs/FINET_MASTER_PROMPT.md` 2.4.
