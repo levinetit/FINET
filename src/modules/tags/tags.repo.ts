@@ -200,3 +200,41 @@ export async function selectTagIdsOf(
   }
   return out;
 }
+
+export type TagRef = Readonly<{ id: string; name: string; color: string | null }>;
+
+/**
+ * Etichetele (id, nume, culoare) ale tranzacțiilor date, într-o singură interogare (fără N+1),
+ * ordonate după nume (fără majuscule) și id. Include și etichetele ascunse și cele de sistem.
+ */
+export async function selectTagRefsOf(
+  tx: Tx,
+  householdId: string,
+  transactionIds: readonly string[],
+): Promise<Map<string, TagRef[]>> {
+  const out = new Map<string, TagRef[]>();
+  if (transactionIds.length === 0) return out;
+  const rows = await tx
+    .select({
+      transactionId: transactionTags.transactionId,
+      id: tags.id,
+      name: tags.name,
+      color: tags.color,
+    })
+    .from(transactionTags)
+    .innerJoin(tags, eq(tags.id, transactionTags.tagId))
+    .where(
+      and(
+        eq(transactionTags.householdId, householdId),
+        inArray(transactionTags.transactionId, [...transactionIds]),
+        visibleTo(householdId),
+      ),
+    )
+    .orderBy(asc(transactionTags.transactionId), asc(sql`lower(${tags.name})`), asc(tags.id));
+  for (const r of rows) {
+    const list = out.get(r.transactionId) ?? [];
+    list.push({ id: r.id, name: r.name, color: r.color });
+    out.set(r.transactionId, list);
+  }
+  return out;
+}

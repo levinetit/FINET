@@ -9,12 +9,14 @@ import { isValidId, parseInput } from "@/modules/ledger/input";
 import { selectTransaction } from "@/modules/transactions/transactions.repo";
 
 import {
+  type TagRef,
   type TagRow,
   deleteTagRow,
   insertTag,
   replaceTransactionTags,
   selectTag,
   selectTagIdsOf,
+  selectTagRefsOf,
   selectTags,
   selectVisibleTagIds,
   tagNameTaken,
@@ -226,3 +228,22 @@ export async function getTransactionTagIds(
     return (await selectTagIdsOf(tx, m.householdId, [id])).get(id) ?? [];
   });
 }
+
+/**
+ * Etichetele (id, nume, culoare) ale mai multor tranzacții ale gospodăriei, pentru răspunsurile
+ * API (F3-B). Rulează pe `deps.db` (deci și în tranzacția unei cereri cu `Idempotency-Key`).
+ * Id-urile străine sau inexistente dau pur și simplu listă goală.
+ */
+export async function transactionTagRefs(
+  deps: LedgerDeps,
+  actor: Actor,
+  householdId: string,
+  transactionIds: readonly string[],
+): Promise<Map<string, TagRef[]>> {
+  if (transactionIds.length === 0) return new Map();
+  return inHousehold(deps, actor, householdId, (tx, m) =>
+    selectTagRefsOf(tx, m.householdId, transactionIds),
+  );
+}
+
+export type { TagRef };
