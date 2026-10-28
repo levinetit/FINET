@@ -7,6 +7,7 @@ import { systemCategoryId } from "@/modules/ledger/testing";
 
 import type { ApiDeps } from "./_lib/http";
 import * as L from "./_lib/ledger-handlers";
+import * as M from "./_lib/me-handlers";
 import {
   type ApiInit,
   type Sessions,
@@ -143,6 +144,9 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
       [L.getTransferHandler, `/api/v1/transfers/${id}`, {}, id],
       [L.patchTransferHandler, `/api/v1/transfers/${id}`, { method: "PATCH", body: {} }, id],
       [L.deleteTransferHandler, `/api/v1/transfers/${id}`, { method: "DELETE" }, id],
+      [M.getConsentsHandler, "/api/v1/me/consents", {}],
+      [M.putConsentsHandler, "/api/v1/me/consents", { method: "PUT", body: { usageStats: true } }],
+      [M.appEventsHandler, "/api/v1/app/events", { body: { events: [] } }],
     ];
     for (const [handler, path, init, ...rest] of cases) {
       const r = await call(handler, path, init, ...rest);
@@ -151,6 +155,112 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
       const forged = await call(handler, path, { ...init, bearer: "inventat" }, ...rest);
       expect(forged.status, path).toBe(401);
     }
+  });
+
+  it("FIECARE mutație: `householdId` în corp → 400 cu `fields`; cookie fără Origin → 403", async () => {
+    const id = "00000000-0000-4000-8000-000000000000";
+    const acc = await newAccount(A, "Validare toate");
+    const tx = await call(L.createTransactionHandler, "/api/v1/transactions", {
+      bearer: A.bearer,
+      body: { accountId: acc, type: "expense", amountMinor: 1, occurredOn: "2026-10-01" },
+    });
+    const txId = (tx.body.data as { id: string }).id;
+    const cat = await call(L.createCategoryHandler, "/api/v1/categories", {
+      bearer: A.bearer,
+      body: { name: "Validare", kind: "expense" },
+    });
+    const catId = (cat.body.data as { id: string }).id;
+    const acc2 = await newAccount(A, "Validare 2");
+    const tr = await call(L.createTransferHandler, "/api/v1/transfers", {
+      bearer: A.bearer,
+      body: { fromAccountId: acc, toAccountId: acc2, amountMinor: 1, occurredOn: "2026-10-01" },
+    });
+    const trId = (tr.body.data as { id: string }).id;
+    const withBody: [Handler, string, string, Record<string, unknown>, ...string[]][] = [
+      [
+        L.createAccountHandler,
+        "POST",
+        "/api/v1/accounts",
+        { name: "x", type: "cash", currency: "RON" },
+      ],
+      [L.patchAccountHandler, "PATCH", "/api/v1/accounts/a", { name: "y" }, acc],
+      [L.createCategoryHandler, "POST", "/api/v1/categories", { name: "x", kind: "expense" }],
+      [L.patchCategoryHandler, "PATCH", "/api/v1/categories/c", { name: "y" }, catId],
+      [
+        L.createTransactionHandler,
+        "POST",
+        "/api/v1/transactions",
+        { accountId: acc, type: "expense", amountMinor: 1, occurredOn: "2026-10-01" },
+      ],
+      [L.patchTransactionHandler, "PATCH", "/api/v1/transactions/t", { amountMinor: 2 }, txId],
+      [
+        L.createTransferHandler,
+        "POST",
+        "/api/v1/transfers",
+        { fromAccountId: acc, toAccountId: acc2, amountMinor: 1, occurredOn: "2026-10-01" },
+      ],
+      [L.patchTransferHandler, "PATCH", "/api/v1/transfers/g", { amountMinor: 2 }, trId],
+      [M.patchMeHandler, "PATCH", "/api/v1/me", { name: "Ana" }],
+      [M.putConsentsHandler, "PUT", "/api/v1/me/consents", { usageStats: true }],
+    ];
+    for (const [handler, method, path, body, ...rest] of withBody) {
+      const r = await call(
+        handler,
+        path,
+        { bearer: A.bearer, method, body: { ...body, householdId: HB } },
+        ...rest,
+      );
+      expect(r.status, path).toBe(400);
+      expect(r.body.error?.fields?.householdId, path).toBe("Câmp nepermis.");
+    }
+    const events = await call(M.appEventsHandler, "/api/v1/app/events", {
+      bearer: A.bearer,
+      body: {
+        events: [{ name: "app_open", occurredAt: new Date(clock).toISOString(), householdId: HB }],
+      },
+    });
+    expect(events.status).toBe(400);
+    expect(events.body.error?.fields?.["events.0.householdId"]).toBe("Câmp nepermis.");
+
+    // CSRF: aceleași mutații (și cele fără corp) cu cookie, dar fără Origin → 403, nimic scris.
+    const mutations: [
+      Handler,
+      string,
+      string,
+      Record<string, unknown> | undefined,
+      ...(string | boolean)[],
+    ][] = [
+      ...withBody.map(
+        ([h, m, p, b, ...r]) =>
+          [h, m, p, b, ...r] as [Handler, string, string, Record<string, unknown>, ...string[]],
+      ),
+      [L.deleteAccountHandler, "DELETE", "/api/v1/accounts/a", undefined, id],
+      [L.archiveAccountHandler, "POST", "/api/v1/accounts/a/archive", undefined, acc, true],
+      [L.archiveAccountHandler, "POST", "/api/v1/accounts/a/unarchive", undefined, acc, false],
+      [L.deleteCategoryHandler, "DELETE", "/api/v1/categories/c", undefined, catId],
+      [L.setCategoryHiddenHandler, "POST", "/api/v1/categories/c/hide", undefined, catId, true],
+      [L.setCategoryHiddenHandler, "POST", "/api/v1/categories/c/unhide", undefined, catId, false],
+      [L.deleteTransactionHandler, "DELETE", "/api/v1/transactions/t", undefined, txId],
+      [L.deleteTransferHandler, "DELETE", "/api/v1/transfers/g", undefined, trId],
+      [
+        M.appEventsHandler,
+        "POST",
+        "/api/v1/app/events",
+        { events: [{ name: "app_open", occurredAt: new Date(clock).toISOString() }] },
+      ],
+      [M.revokeOthersHandler, "POST", "/api/v1/me/sessions/revoke-others", undefined],
+    ];
+    for (const [handler, method, path, body, ...rest] of mutations) {
+      const r = await call(
+        handler,
+        path,
+        { cookie: A.cookie, headers: { origin: "" }, method, body },
+        ...rest,
+      );
+      expect(r.status, `${method} ${path}`).toBe(403);
+    }
+    expect((await call(L.getTransactionHandler, "", { bearer: A.bearer }, txId)).status).toBe(200);
+    expect((await call(L.getTransferHandler, "", { bearer: A.bearer }, trId)).status).toBe(200);
   });
 
   it("gospodăriile: doar ale mele, rolul, membrii fără emailuri; străină → 404", async () => {

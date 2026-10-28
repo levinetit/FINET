@@ -210,6 +210,39 @@ describe.skipIf(!TEST_ADMIN_URL)("Idempotency-Key pe PostgreSQL real", () => {
     expect(await txCount()).toBe(before + 1);
   });
 
+  it("o eroare Postgres în savepoint-ul serviciului (23505 → 409) se memorează; tranzacția exterioară rămâne utilizabilă", async () => {
+    const post = (key: string | null) =>
+      L.createAccountHandler(
+        apiRequest("/api/v1/accounts", {
+          bearer: A.bearer,
+          body: { name: "Dublură", type: "cash", currency: "RON" },
+          headers: key === null ? {} : { "idempotency-key": key },
+        }),
+        env,
+      );
+    expect((await post(null)).status).toBe(201);
+    const count = async () => {
+      const [row] = await fx.scratch.admin<{ n: number }[]>`
+        select count(*)::int as n from finet.accounts where household_id = ${HA}`;
+      return row?.n ?? 0;
+    };
+    const before = await count();
+    const key = "cont-dublat-0000000001";
+    const first = await post(key);
+    expect(first.status).toBe(409);
+    await assertContract(L.createAccountHandler, first);
+    const firstBody = await readJson(first);
+    expect(firstBody.error).toMatchObject({ code: "conflict", reason: "account_name_taken" });
+    const again = await post(key);
+    expect(again.status).toBe(409);
+    expect(again.headers.get("idempotent-replay")).toBe("true");
+    expect(await readJson(again)).toEqual(firstBody);
+    expect(await count()).toBe(before);
+    const rows = await fx.scratch.admin<{ status_code: number }[]>`
+      select status_code from finet.idempotency_keys where key = ${key}`;
+    expect(rows).toEqual([{ status_code: 409 }]);
+  });
+
   it("cerere identică în desfășurare → 409 request_in_progress; cereri concurente → o singură scriere", async () => {
     const key = "in-desfasurare-00001";
     // O altă conexiune ține lock-ul cheii (ca o cerere în curs), într-o tranzacție deschisă.
