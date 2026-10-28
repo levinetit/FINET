@@ -1,5 +1,4 @@
 import sharp from "sharp";
-import { extractImages, extractText, getDocumentProxy } from "unpdf";
 
 import {
   type AcceptedMime,
@@ -7,6 +6,9 @@ import {
   type ImageMime,
   validateHead,
 } from "@/modules/documents/content";
+
+import { PdfScanError, scanPdfImages } from "./pdf-scan";
+import { PdfWorkerError, readPdfIsolated } from "./pdf-worker";
 
 /**
  * Preprocesarea documentelor în WORKER (Faza 6; master prompt 3.6, 6.3; ADR 0013). Rezultatul
@@ -18,10 +20,17 @@ import {
  * latura lungă, normalizarea contrastului, re-encodarea JPEG (re-encodarea elimină orice
  * conținut străin atașat imaginii). Plus dHash pe 64 de biți pentru „poză aproape identică”.
  *
- * PDF (unpdf = pdf.js fără canvas): numărul de pagini (plafon), textul pe pagini; dacă PDF-ul
- * nu are text (scanat), imaginea cea mai mare de pe fiecare pagină e extrasă (fără randare, deci
- * fără `@napi-rs/canvas`) și trece prin același traseu ca o poză. Un PDF fără text și fără
- * imagini (desene vectoriale) e respins cu `pdf_no_content`.
+ * PDF (unpdf = pdf.js fără canvas): ÎNAINTE de orice decodare, dimensiunile imaginilor declarate
+ * se citesc din octeții bruți (`pdf-scan.ts`) și se aplică plafoanele (pe imagine și însumat);
+ * apoi pdf.js rulează într-un fir izolat cu heap plafonat, oprit efectiv la timeout
+ * (`pdf-worker.ts`): numărul de pagini (plafon), textul pe pagini; dacă PDF-ul nu are text
+ * (scanat), imaginea cea mai mare de pe fiecare pagină e extrasă (fără randare, deci fără
+ * `@napi-rs/canvas`) și trece prin același traseu ca o poză. Un PDF fără text și fără imagini
+ * (desene vectoriale) e respins cu `pdf_no_content`.
+ *
+ * Timpul: un termen (`deadline`) pentru tot documentul, verificat între pași; sharp primește
+ * `timeout` (libvips oprește singur procesarea), firul PDF e terminat. Nicio muncă nu rămâne
+ * în fundal după ce funcția a întors eroarea (revizuirea de securitate F6-A, M2).
  *
  * Erorile devin `PreprocessError` cu un cod stabil, fără ecou din conținut.
  */
@@ -38,6 +47,8 @@ export const DEFAULT_PREPROCESS_TIMEOUT_MS = 60_000;
 export const MAX_SIDE_PX = 2048;
 /** Sub atâtea litere/cifre, un PDF e tratat ca scanat. */
 export const MIN_PDF_TEXT_CHARS = 20;
+/** O imagine dintr-un PDF: cel mult 25 MP (o pagină A4 la 600 dpi are ~35 MP; 300 dpi ~9 MP). */
+export const MAX_PDF_IMAGE_PIXELS = 25_000_000;
 const JPEG_QUALITY = 85;
 
 export type PreprocessErrorCode =
@@ -47,6 +58,8 @@ export type PreprocessErrorCode =
   | "pdf_invalid"
   | "pdf_encrypted"
   | "pdf_no_content"
+  | "pdf_image_unverifiable"
+  | "pdf_too_complex"
   | "preprocess_timeout";
 
 export class PreprocessError extends Error {
@@ -76,14 +89,21 @@ sharp.concurrency(1);
 function sharpInput(
   input: Buffer,
   limits: PreprocessLimits,
+  deadline: number,
   raw?: Readonly<{ width: number; height: number; channels: 1 | 2 | 3 | 4 }>,
 ) {
+  const seconds = Math.ceil((deadline - Date.now()) / 1000);
+  if (seconds <= 0) throw new PreprocessError("preprocess_timeout");
   return sharp(input, {
     limitInputPixels: limits.maxImagePixels,
     failOn: "error",
     sequentialRead: true,
     ...(raw ? { raw } : {}),
-  });
+  }).timeout({ seconds });
+}
+
+function checkDeadline(deadline: number): void {
+  if (Date.now() >= deadline) throw new PreprocessError("preprocess_timeout");
 }
 
 /** dHash: 9×8 tonuri de gri, câte un bit pe comparația pixelilor vecini de pe rând. */
@@ -119,13 +139,14 @@ const SHARP_FORMAT: Readonly<Record<ImageMime, string>> = {
   "image/webp": "webp",
 };
 
-async function prepare(pipeline: sharp.Sharp): Promise<PreparedImage> {
+async function prepare(pipeline: sharp.Sharp, deadline: number): Promise<PreparedImage> {
   const { data, info } = await pipeline
     .rotate() // după orientarea EXIF; apoi metadatele nu se mai copiază în ieșire
     .resize({ width: MAX_SIDE_PX, height: MAX_SIDE_PX, fit: "inside", withoutEnlargement: true })
     .normalise()
     .jpeg({ quality: JPEG_QUALITY, chromaSubsampling: "4:2:0" })
     .toBuffer({ resolveWithObject: true });
+  checkDeadline(deadline);
   return { jpeg: data, width: info.width, height: info.height, dhash: await dHash(data) };
 }
 
@@ -134,17 +155,19 @@ export async function preprocessImage(
   input: Buffer,
   mime: ImageMime,
   limits: PreprocessLimits,
+  deadline: number = Date.now() + limits.timeoutMs,
 ): Promise<PreparedImage> {
   let format: string | undefined;
   try {
-    format = (await sharpInput(input, limits).metadata()).format;
+    // `metadata()` citește doar antetul (fără decodare); `limitInputPixels` refuză bombele.
+    format = (await sharpInput(input, limits, deadline).metadata()).format;
   } catch (error) {
     throw mapSharpError(error);
   }
   // Decodorul trebuie să confirme tipul detectat după octeți (apărare contra poligloților).
   if (format !== SHARP_FORMAT[mime]) throw new PreprocessError("mime_mismatch");
   try {
-    return await prepare(sharpInput(input, limits));
+    return await prepare(sharpInput(input, limits, deadline), deadline);
   } catch (error) {
     throw mapSharpError(error);
   }
@@ -155,87 +178,59 @@ function mapSharpError(error: unknown): PreprocessError {
   const message = error instanceof Error ? error.message : "";
   // Mesajul libvips nu se propagă (poate conține detalii); doar codul.
   if (/pixel limit/i.test(message)) return new PreprocessError("image_too_large");
+  if (/timeout/i.test(message)) return new PreprocessError("preprocess_timeout");
   return new PreprocessError("invalid_image");
 }
 
-async function preprocessPdf(input: Buffer, limits: PreprocessLimits): Promise<Preprocessed> {
-  let pdf;
+async function preprocessPdf(
+  input: Buffer,
+  limits: PreprocessLimits,
+  deadline: number,
+): Promise<Preprocessed> {
+  // 1. Dimensiunile imaginilor, fără decodare (bombele sunt refuzate înainte de pdf.js).
+  const perImage = Math.min(limits.maxImagePixels, MAX_PDF_IMAGE_PIXELS);
   try {
-    pdf = await getDocumentProxy(new Uint8Array(input), {
-      // Fără fonturi de sistem, fără evaluare de cod, fără resurse externe.
-      isEvalSupported: false,
-      useSystemFonts: false,
-      disableFontFace: true,
-      stopAtErrors: true,
+    scanPdfImages(input, { maxImagePixels: perImage, maxTotalPixels: 2 * limits.maxImagePixels });
+  } catch (error) {
+    if (error instanceof PdfScanError) throw new PreprocessError(error.code);
+    throw error;
+  }
+  // 2. pdf.js în firul izolat (heap plafonat, terminat la termen).
+  let read;
+  try {
+    read = await readPdfIsolated(input, {
+      maxPages: limits.maxPdfPages,
+      minTextChars: MIN_PDF_TEXT_CHARS,
+      deadline,
     });
   } catch (error) {
-    const name = (error as { name?: unknown } | null)?.name;
-    if (name === "PasswordException") throw new PreprocessError("pdf_encrypted");
-    throw new PreprocessError("pdf_invalid");
+    if (error instanceof PdfWorkerError) throw new PreprocessError(error.code);
+    throw error;
   }
-  try {
-    const pages = pdf.numPages;
-    if (pages < 1) throw new PreprocessError("pdf_invalid");
-    if (pages > limits.maxPdfPages) throw new PreprocessError("too_many_pages");
-    let text: string[];
+  if (read.images === null) return { kind: "text", pages: read.pages, text: read.text };
+
+  // 3. Scanat: imaginile extrase trec prin același traseu ca o poză.
+  const images: PreparedImage[] = [];
+  for (const image of read.images) {
+    if (image.width * image.height > perImage) throw new PreprocessError("image_too_large");
     try {
-      text = (await extractText(pdf, { mergePages: false })).text.map((t) => t.trim());
-    } catch {
-      throw new PreprocessError("pdf_invalid");
+      const raw = Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength);
+      images.push(
+        await prepare(
+          sharpInput(raw, limits, deadline, {
+            width: image.width,
+            height: image.height,
+            channels: image.channels,
+          }),
+          deadline,
+        ),
+      );
+    } catch (error) {
+      throw mapSharpError(error);
     }
-    const significant = text.join("").replace(/[^\p{L}\p{N}]/gu, "").length;
-    if (significant >= MIN_PDF_TEXT_CHARS) return { kind: "text", pages, text };
-
-    // Scanat: imaginea cea mai mare de pe fiecare pagină.
-    const images: PreparedImage[] = [];
-    for (let page = 1; page <= pages; page++) {
-      let extracted;
-      try {
-        extracted = await extractImages(pdf, page);
-      } catch {
-        throw new PreprocessError("pdf_invalid");
-      }
-      const largest = extracted.sort((a, b) => b.width * b.height - a.width * a.height)[0];
-      if (!largest) continue;
-      if (largest.width * largest.height > limits.maxImagePixels) {
-        throw new PreprocessError("image_too_large");
-      }
-      try {
-        images.push(
-          await prepare(
-            sharpInput(
-              Buffer.from(largest.data.buffer, largest.data.byteOffset, largest.data.byteLength),
-              limits,
-              {
-                width: largest.width,
-                height: largest.height,
-                channels: largest.channels,
-              },
-            ),
-          ),
-        );
-      } catch (error) {
-        throw mapSharpError(error);
-      }
-    }
-    if (images.length === 0) throw new PreprocessError("pdf_no_content");
-    return { kind: "images", pages, images };
-  } finally {
-    // Eliberează memoria pdf.js (sarcina de încărcare; `destroy` nu e expus pe proxy în unpdf).
-    const handle = pdf as unknown as {
-      destroy?: () => Promise<void>;
-      loadingTask?: { destroy?: () => Promise<void> };
-    };
-    await Promise.resolve(handle.destroy?.() ?? handle.loadingTask?.destroy?.()).catch(() => {});
   }
-}
-
-function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new PreprocessError("preprocess_timeout")), ms);
-  });
-  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+  if (images.length === 0) throw new PreprocessError("pdf_no_content");
+  return { kind: "images", pages: read.pages, images };
 }
 
 /**
@@ -255,13 +250,8 @@ export async function preprocessDocument(
     throw error;
   }
   if (mime !== detectedMime) throw new PreprocessError("mime_mismatch");
-  const work =
-    mime === "application/pdf"
-      ? preprocessPdf(input, limits)
-      : preprocessImage(input, mime, limits).then((image): Preprocessed => ({
-          kind: "images",
-          pages: 1,
-          images: [image],
-        }));
-  return withTimeout(work, limits.timeoutMs);
+  const deadline = Date.now() + limits.timeoutMs;
+  if (mime === "application/pdf") return preprocessPdf(input, limits, deadline);
+  const image = await preprocessImage(input, mime, limits, deadline);
+  return { kind: "images", pages: 1, images: [image] };
 }

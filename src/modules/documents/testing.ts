@@ -124,6 +124,27 @@ export async function scannedPdf(): Promise<Buffer> {
   ]);
 }
 
+/**
+ * PDF cu o imagine care DECLARĂ dimensiunile date (datele reale sunt câțiva octeți): o bombă de
+ * decompresie simulată. `indirect`: lățimea dată prin referință (`/Width 6 0 R`).
+ */
+export function pdfWithDeclaredImage(width: number, height: number, indirect = false): Buffer {
+  const data = Buffer.from([0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]);
+  return buildPdf([
+    latin1("<< /Type /Catalog /Pages 2 0 R >>"),
+    latin1("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+    latin1(
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /XObject << /Im1 5 0 R >> >> /Contents 4 0 R >>",
+    ),
+    stream("", latin1("q 300 0 0 300 0 0 cm /Im1 Do Q")),
+    stream(
+      `/Type /XObject /Subtype /Image /Width ${indirect ? "6 0 R" : width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode`,
+      data,
+    ),
+    latin1(String(width)),
+  ]);
+}
+
 /** PDF gol (o pagină fără text și fără imagini). */
 export function blankPdf(): Buffer {
   return buildPdf([
