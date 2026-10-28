@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Logo } from "@/app/_components/logo";
 import { cn } from "@/lib/utils";
@@ -49,7 +49,8 @@ const panelItemClass =
  * Navigarea (master prompt 3.4, demo). Pe desktop: meniul lateral cu toate paginile. Pe telefon:
  * bara de jos cu Acasă, Tranzacții, Bugete, Rapoarte și „Mai mult” (în locul lui „Scanează”, care
  * vine în Faza 6), iar „Mai mult” deschide panoul cu celelalte pagini și deconectarea
- * (`aria-expanded`, Escape îl închide). Cele două liste nu sunt vizibile simultan (`md:hidden` /
+ * (`aria-expanded`; la deschidere focusul trece pe primul link, Escape îl închide și întoarce
+ * focusul pe buton). Cele două liste nu sunt vizibile simultan (`md:hidden` /
  * `hidden md:grid`), deci fiecare link apare o singură dată în arborele de accesibilitate.
  * Deconectarea e un `POST /api/auth/sign-out` (Better Auth verifică originea și șterge sesiunea
  * din bază și cookie-ul).
@@ -62,6 +63,22 @@ export function AppNav() {
   const [failed, setFailed] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const hydrated = useHydrated();
+  // Faza 4 (tastatură): la deschidere focusul trece pe primul link din „Mai mult”; la Escape
+  // panoul se închide și focusul revine pe butonul „Mai mult”.
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const morePanel = useRef<HTMLDivElement>(null);
+  const focusFirst = useRef(false);
+  useEffect(() => {
+    if (moreOpen && focusFirst.current) {
+      focusFirst.current = false;
+      morePanel.current?.querySelector<HTMLElement>("a, button")?.focus();
+    }
+  }, [moreOpen]);
+
+  function closeMore(returnFocus: boolean) {
+    setMoreOpen(false);
+    if (returnFocus) moreButton.current?.focus();
+  }
 
   async function logout() {
     setLeaving(true);
@@ -98,7 +115,7 @@ export function AppNav() {
     <nav
       aria-label={ro.nav.label}
       onKeyDown={(e) => {
-        if (e.key === "Escape" && moreOpen) setMoreOpen(false);
+        if (e.key === "Escape" && moreOpen) closeMore(true);
       }}
       className={cn(
         "fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card px-2 pb-[env(safe-area-inset-bottom)]",
@@ -146,6 +163,7 @@ export function AppNav() {
       {/* Telefon: panoul „Mai mult”, deasupra barei. */}
       <div
         id="nav-more"
+        ref={morePanel}
         hidden={!moreOpen}
         className="border-b border-border pt-2 pb-1 md:hidden"
         role="group"
@@ -199,9 +217,13 @@ export function AppNav() {
         <li>
           <button
             type="button"
+            ref={moreButton}
             aria-expanded={moreOpen}
             aria-controls="nav-more"
-            onClick={() => setMoreOpen((open) => !open)}
+            onClick={() => {
+              focusFirst.current = !moreOpen;
+              setMoreOpen((open) => !open);
+            }}
             className={cn(itemClass, moreCurrent && "font-semibold text-primary")}
           >
             <MoreIcon />

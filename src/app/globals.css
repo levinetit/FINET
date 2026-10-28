@@ -198,4 +198,33 @@
   .finet-logo:hover .finet-logo-line {
     animation: none;
   }
+
+  /* Faza 4: fără animații și tranziții (inclusiv cele Tailwind) la mișcare redusă. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* „Sari la conținut” (Faza 4): ascunsă până primește focus de la tastatură. */
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -100%;
+  z-index: 60;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-fg);
+  padding: 0.5rem 0.875rem;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
 }

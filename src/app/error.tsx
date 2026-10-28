@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { isChunkLoadError } from "@/app/_lib/chunk-recovery";
 import { recoverFromChunkError } from "@/components/app/chunk-recovery";
@@ -11,9 +11,10 @@ import { ro } from "@/messages/ro";
 // JavaScript lipsă după un deploy (navigare în aplicație) ajunge AICI, nu la ascultătorii din
 // `window`: aceeași decizie ca în `ChunkRecovery` (reîncărcare cel mult o dată la 8 secunde).
 export default function ErrorPage({ error, reset }: Readonly<{ error: Error; reset: () => void }>) {
-  const [stale, setStale] = useState(false);
+  // Chunk lipsă: mesajul „versiune nouă” (dacă pagina se reîncarcă, oricum dispare).
+  const stale = isChunkLoadError(error);
   useEffect(() => {
-    if (isChunkLoadError(error) && recoverFromChunkError() === "banner") setStale(true);
+    if (isChunkLoadError(error)) recoverFromChunkError();
   }, [error]);
 
   return (
