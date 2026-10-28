@@ -242,6 +242,7 @@ export function listFiltersOf(query: NonNullable<TransactionListQuery>): ListFil
     accountId: query.accountId,
     categoryId: query.categoryId,
     tagIds: query.tagIds,
+    tagMatch: query.tagMatch,
     merchant: query.merchant || undefined,
     type: query.type,
     source: query.source,

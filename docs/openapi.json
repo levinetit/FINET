@@ -2199,10 +2199,23 @@
             "name": "tagIds",
             "in": "query",
             "required": false,
-            "description": "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele.",
+            "description": "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele (sau TOATE, cu `tagMatch=all`).",
             "schema": {
               "type": "string",
               "pattern": "^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36}){0,9}$"
+            }
+          },
+          {
+            "name": "tagMatch",
+            "in": "query",
+            "required": false,
+            "description": "Potrivirea etichetelor: `any` (implicit, oricare) sau `all` (toate). Doar împreună cu `tagIds` (altfel 400 `validation_failed`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "any",
+                "all"
+              ]
             }
           },
           {
@@ -4083,10 +4096,23 @@
             "name": "tagIds",
             "in": "query",
             "required": false,
-            "description": "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele.",
+            "description": "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele (sau TOATE, cu `tagMatch=all`).",
             "schema": {
               "type": "string",
               "pattern": "^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36}){0,9}$"
+            }
+          },
+          {
+            "name": "tagMatch",
+            "in": "query",
+            "required": false,
+            "description": "Potrivirea etichetelor: `any` (implicit, oricare) sau `all` (toate). Doar împreună cu `tagIds` (altfel 400 `validation_failed`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "any",
+                "all"
+              ]
             }
           },
           {

@@ -18,6 +18,7 @@ import {
 import { ro } from "@/messages/ro";
 
 import type { ApiResult } from "./api-client";
+import { formatDate } from "./planning-ui";
 
 // ---------------------------------------------------------------------------------------------
 // Sume
@@ -133,16 +134,10 @@ export function todayIn(timeZone = APP_TIME_ZONE, now: Date = new Date()): strin
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-const dateFormatter = new Intl.DateTimeFormat("ro-RO", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-/** `2026-10-28` → `28 oct. 2026` (data e calendaristică: fără oră, fără fus). */
+/**
+ * `2026-10-28` → `28.10.2026` (master prompt 5.3; Faza 4: același format ca planificarea, din
+ * cifre, fără fus și fără locale). Delegă la `formatDate` din `planning-ui.ts`, sursa unică.
+ */
 export function formatCalendarDate(value: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return value;
-  return dateFormatter.format(new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))));
+  return formatDate(value);
 }

@@ -147,6 +147,14 @@ describe.skipIf(!TEST_ADMIN_URL)("export CSV (Postgres real, finet_app)", () => 
     );
     expect(byTag).toHaveLength(2);
     expect(byTag[1]!.startsWith(`${t1},`)).toBe(true);
+    // Faza 4: `tagMatch=all` trece prin aceleași filtre ca lista.
+    const byAll = lines(
+      await collectCsv(
+        exportTransactionsCsv(deps(), f.A, f.HA, { tagIds: [tagA, tagZ], tagMatch: "all" }),
+      ),
+    );
+    expect(byAll).toHaveLength(2);
+    expect(byAll[1]!.startsWith(`${t1},`)).toBe(true);
     const ro = lines(
       await collectCsv(
         exportTransactionsCsv(deps(), f.A, f.HA, { type: "income" }, { dialect: "ro" }),

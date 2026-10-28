@@ -21,6 +21,8 @@ export type FilterValues = Readonly<{
   merchant: string;
   /** Etichetele bifate (parametrul `tagIds` repetat de formularul GET sau unul cu virgule). */
   tagIds: readonly string[];
+  /** `any` (implicit) sau `all` (Faza 4). */
+  tagMatch: string;
   accountId: string;
   categoryId: string;
   type: string;
@@ -40,6 +42,8 @@ export type TransactionApiQuery = Partial<
     categoryId: string;
     /** Serviciul primește lista; API-ul o primește într-un singur parametru, cu virgule. */
     tagIds: readonly string[];
+    /** Trimis doar ca `all` și doar cu etichete (`any` e implicit în API). */
+    tagMatch: "all";
     type: (typeof FILTER_TYPES)[number];
     dateFrom: string;
     dateTo: string;
@@ -63,6 +67,7 @@ const KEYS = [
   "merchant",
   "accountId",
   "categoryId",
+  "tagMatch",
   "type",
   "dateFrom",
   "dateTo",
@@ -107,6 +112,8 @@ export function parseFilters(params: RawParams): ParsedFilters {
   if (values.q) query.q = values.q;
   if (values.merchant) query.merchant = values.merchant;
   if (tagIds.length > 0) query.tagIds = tagIds;
+  // `tagMatch=all` fără etichete bifate se ignoră: API-ul l-ar refuza (400).
+  if (tagIds.length > 0 && values.tagMatch === "all") query.tagMatch = "all";
   if (UUID.test(values.accountId)) query.accountId = values.accountId.toLowerCase();
   if (UUID.test(values.categoryId)) query.categoryId = values.categoryId.toLowerCase();
   if ((FILTER_TYPES as readonly string[]).includes(values.type)) query.type = values.type;

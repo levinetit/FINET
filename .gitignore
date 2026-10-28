@@ -15,6 +15,7 @@ next-env.d.ts
 coverage/
 playwright-report/
 test-results/
+bundle-size.json
 blob-report/
 playwright/.cache/
 

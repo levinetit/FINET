@@ -36,9 +36,14 @@ const COMMON_TIMEZONES = [
 ];
 
 function formatter(timeZone: string): Intl.DateTimeFormat {
+  // Faza 4: `zz.ll.aaaa, HH:mm` (5.3), ca restul datelor din aplicație.
   return new Intl.DateTimeFormat("ro-RO", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
     timeZone: isValidTimeZone(timeZone) ? timeZone : "Europe/Bucharest",
   });
 }

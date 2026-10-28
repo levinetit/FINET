@@ -214,6 +214,14 @@ export const transactions = finet.table(
       t.occurredOn.desc(),
       t.id.desc(),
     ),
+    // Faza 4 (migrația 0005, ADR 0010): ordinea listei e `occurred_on DESC, id DESC` (NULLS FIRST,
+    // implicitul Postgres); indexul de mai sus e `DESC NULLS LAST`, deci nu poate da ordinea și
+    // lista sorta toată gospodăria. Acesta o dă direct (și, parcurs invers, `date_asc`).
+    index("transactions_household_date_idx").on(
+      t.householdId,
+      t.occurredOn.desc().nullsFirst(),
+      t.id.desc().nullsFirst(),
+    ),
     index("transactions_account_id_idx").on(t.accountId),
     index("transactions_category_id_idx").on(t.categoryId),
     index("transactions_created_by_user_id_idx").on(t.createdByUserId),

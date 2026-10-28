@@ -109,7 +109,13 @@ const TRANSACTION_FILTERS: readonly QueryParam[] = [
     name: "tagIds",
     schema: z.string().regex(/^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36}){0,9}$/),
     description:
-      "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele.",
+      "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele (sau TOATE, cu `tagMatch=all`).",
+  },
+  {
+    name: "tagMatch",
+    schema: z.enum(["any", "all"]),
+    description:
+      "Potrivirea etichetelor: `any` (implicit, oricare) sau `all` (toate). Doar împreună cu `tagIds` (altfel 400 `validation_failed`).",
   },
   {
     name: "merchant",

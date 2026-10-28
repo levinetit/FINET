@@ -273,6 +273,25 @@ export default async function TransactionsPage({
                   ))}
                 </div>
               )}
+              {tagOptions.length > 1 ? (
+                <fieldset className="flex flex-wrap items-center gap-3 text-sm">
+                  <legend className="sr-only">{t.tagMatchLabel}</legend>
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    {t.tagMatchLabel}:
+                  </span>
+                  {(["any", "all"] as const).map((m) => (
+                    <label key={m} className="flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="tagMatch"
+                        value={m}
+                        defaultChecked={(filters.values.tagMatch === "all" ? "all" : "any") === m}
+                      />
+                      {m === "all" ? t.tagMatchAll : t.tagMatchAny}
+                    </label>
+                  ))}
+                </fieldset>
+              ) : null}
               <p id="filter-tags-hint" className="text-xs text-muted-foreground">
                 {t.tagsFilterHint}{" "}
                 <Link href="/tags" className="font-medium text-primary hover:underline">

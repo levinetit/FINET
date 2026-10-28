@@ -388,6 +388,18 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 planificare pe PostgreSQL real", (
       t1Data.id,
     );
     expect((got.body.data as { tags: unknown[] }).tags).toHaveLength(2);
+    // Faza 4: `tagMatch=all` cere TOATE etichetele (t1 le are pe ambele acum).
+    const listIds = async (search: string) => {
+      const r = await call(
+        L.listTransactionsHandler,
+        `/api/v1/transactions?${search}&dateFrom=2026-06-01&dateTo=2026-06-30`,
+        { bearer: A.bearer },
+      );
+      expect(r.status, search).toBe(200);
+      return (r.body.data as { id: string }[]).map((t) => t.id);
+    };
+    expect(await listIds(`tagIds=${vac.id},${gift.id}&tagMatch=all`)).toEqual([t1Data.id]);
+    expect(await listIds(`tagIds=${vac.id}&tagMatch=all`)).toEqual([t1Data.id]);
     const patched = await call(
       L.patchTransactionHandler,
       `/api/v1/transactions/${t1Data.id}`,
@@ -404,6 +416,15 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 planificare pe PostgreSQL real", (
       { bearer: A.bearer },
     );
     expect((byTag.body.data as { id: string }[]).map((t) => t.id)).toEqual([t1Data.id]);
+    // După PATCH t1 are doar `vac`: „oricare” îl găsește, „toate” nu.
+    expect(await listIds(`tagIds=${vac.id},${gift.id}&tagMatch=any`)).toEqual([t1Data.id]);
+    expect(await listIds(`tagIds=${vac.id},${gift.id}&tagMatch=all`)).toEqual([]);
+    for (const bad of ["tagMatch=all", "tagMatch=toate", `tagIds=${vac.id}&tagMatch=`]) {
+      const r = await call(L.listTransactionsHandler, `/api/v1/transactions?${bad}`, {
+        bearer: A.bearer,
+      });
+      expect(r.status, bad).toBe(400);
+    }
     const byMerchant = await call(
       L.listTransactionsHandler,
       "/api/v1/transactions?merchant=soare&dateFrom=2026-06-01&dateTo=2026-06-30",

@@ -302,6 +302,23 @@ Agentul nu a rulat nimic din această secțiune. Interfața Fazei 3 (F3-C) nu ar
 
 **Rollback:** imaginea anterioară a `finet-web` (UI-ul Fazei 2 nu citește tabelele noi). Backup-ul nu schimbă nimic în aplicație: se oprește scoțând linia din crontab. Migrația `0004`: comenzile din antetul fișierului, doar cu backup și decizia explicită a operatorului (distruge datele etichetelor, bugetelor și obiectivelor).
 
+## 4f. Faza 4 pe producție (operatorul, după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune. Ordinea:
+
+1. **Imaginile** din workflow-ul `images` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`), ca la 4b, pasul 0.
+2. **Backup** al schemei `finet` (un `run-backup.sh` manual, dacă F3-D e instalat; altfel 4b, pasul 1). `0005` adaugă doar un index.
+3. **Migrația** `0005_perf_indexes` (rolul `migrate`): prima rulare „aplicate acum 1”, a doua „aplicate acum 0”. `0000`–`0004` nu se schimbă. `CREATE INDEX` blochează scrierile pe `transactions` cât se construiește (sub o secundă la volumul actual). Rollback: `drop index if exists finet.transactions_household_date_idx;` (antetul fișierului).
+4. **Redeploy `finet-web`** cu imaginea nouă. Fără variabile de mediu sau secrete noi.
+5. **Verificări prin Access**, în browser: data în listele de tranzacții e `zz.ll.aaaa`; `Tab` pe orice pagină autentificată afișează „Sari la conținut”; `/transactions` → două etichete bifate + „Toate” → doar tranzacțiile cu ambele. Recuperarea după deploy: cu un tab deschis ÎNAINTE de redeploy, o navigare după redeploy reîncarcă pagina o singură dată (sau, cu un formular început, afișează „Versiune nouă disponibilă. Salvează și reîncarcă.”).
+6. **Programarea curățării cheilor de idempotență** (4c, pasul 2), zilnic, din crontab-ul root. Se editează cu `sudo crontab -e` (NU `crontab -` și NU redirectări: ar suprascrie celelalte joburi root). Linia propusă (04:15, după backup-urile de la 02:30/03:30 și după `dockerai.py` de la 04:00):
+   ```cron
+   15 4 * * *  cd /srv/finet/src && docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile admin run --rm -T finet-admin cleanup-idempotency >> /var/log/finet-cleanup.log 2>&1
+   ```
+   Înainte: `sudo install -m 0600 /dev/null /var/log/finet-cleanup.log` (logul conține doar numărul de chei șterse) și o regulă `logrotate` (săptămânal, 4 rotații). Verificare: a doua zi, `sudo tail -n 2 /var/log/finet-cleanup.log` arată un număr; `sudo crontab -l | wc -l` are cu o linie mai mult decât înainte. Oprire: linia se șterge cu `sudo crontab -e`.
+
+**Rollback:** imaginea anterioară a `finet-web` (aplicația Fazei 3 funcționează și cu indexul nou). Indexul se poate lăsa sau șterge (comanda de la pasul 3); nu atinge datele.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

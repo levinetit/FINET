@@ -315,7 +315,10 @@ export const ro = {
     merchantFilter: "Comerciantul",
     merchantFilterHint: "Doar comerciantul. Textul apare în adresa paginii.",
     tagsFilter: "Etichetele",
-    tagsFilterHint: "Oricare dintre etichetele bifate.",
+    tagsFilterHint: "Alege dacă tranzacția trebuie să aibă oricare sau toate etichetele bifate.",
+    tagMatchLabel: "Potrivirea etichetelor",
+    tagMatchAny: "Oricare",
+    tagMatchAll: "Toate",
     tags: "Etichete",
     tagsHint: (max: number) => `Cel mult ${max} etichete.`,
     tooManyTags: (max: number) => `Poți alege cel mult ${max} etichete.`,
@@ -584,6 +587,12 @@ export const ro = {
     errorTitle: "Ceva nu a mers",
     retry: "Încearcă din nou",
     sessionExpired: "Sesiunea a expirat. Autentifică-te din nou.",
+    // Faza 4: recuperarea după un deploy (fișiere JavaScript vechi).
+    newVersion: "Versiune nouă disponibilă. Salvează și reîncarcă.",
+    reload: "Reîncarcă pagina",
+    dismiss: "Închide",
+    skipToContent: "Sari la conținut",
+    globalErrorTitle: "Eroare",
   },
 } as const;
 

@@ -68,6 +68,9 @@ export const transactionUpdateSchema = z
 export const TRANSACTION_SORTS = ["date_desc", "date_asc", "amount_desc", "amount_asc"] as const;
 export type TransactionSort = (typeof TRANSACTION_SORTS)[number];
 
+export const TAG_MATCHES = ["any", "all"] as const;
+export type TagMatch = (typeof TAG_MATCHES)[number];
+
 export const transactionListSchema = z
   .strictObject({
     q: z
@@ -79,6 +82,8 @@ export const transactionListSchema = z
     categoryId: idSchema.optional(),
     // Faza 3: tranzacțiile care au CEL PUȚIN UNA dintre etichete (OR), fără dubluri de rânduri.
     tagIds: tagIdsSchema.min(1).optional(),
+    // Faza 4: `any` (implicit, OR) sau `all` (tranzacția are TOATE etichetele cerute, AND).
+    tagMatch: z.enum(TAG_MATCHES).optional(),
     // Faza 3: comerciantul conține textul (fără majuscule); `q` caută și în descriere și note.
     merchant: z
       .string()
@@ -97,6 +102,11 @@ export const transactionListSchema = z
   })
   .refine((v) => !v.dateFrom || !v.dateTo || v.dateFrom <= v.dateTo, {
     message: "Intervalul de date e inversat.",
+  })
+  // Decizia mea (Faza 4): `tagMatch` fără `tagIds` e o eroare de validare (400), nu se ignoră în tăcere.
+  .refine((v) => v.tagMatch === undefined || (v.tagIds !== undefined && v.tagIds.length > 0), {
+    message: "tagMatch cere tagIds.",
+    path: ["tagMatch"],
   })
   .refine(
     (v) =>
