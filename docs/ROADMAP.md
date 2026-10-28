@@ -176,3 +176,52 @@ Operatorul a cerut ca FINET să includă tot ce are produsul de referință, fă
 | Limbi suplimentare (es, fr, de, it, pl, tr) | 13 |
 
 Nu se preiau defectele referinței (CSP fără `script-src`, categorii suprapuse, duplicate ca funcție plătită, lipsa modului offline, cod de server în bundle-ul de browser): vezi `docs/FINET_MASTER_PROMPT.md` 2.4.
+
+## Rutele aplicației pe faze (paritate cu finpulse.day)
+
+Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt implementate pe `phase/03-dashboard` și ajung în producție după deploy. Coloana „finpulse” arată ruta echivalentă din produsul de referință (analiza REA, `docs/research/rea-finpulse-day-20261028/`).
+
+### Zona autentificată
+
+| Rută FINET | Echivalent finpulse | Faza | Stare |
+|---|---|---|---|
+| `/login` | `/login` | 1 | producție; Google și Facebook: Faza 11 (`saas`) |
+| `/profile` | `/settings` (parțial) | 1 | producție; setările complete și „Aplicația Android”: Faza 9 |
+| `/accounts`, `/accounts/new`, `/accounts/[id]` | — | 2 | producție |
+| `/transactions`, `/transactions/new`, `/transactions/[id]` | listă de tranzacții din dashboard | 2 | producție |
+| `/transfers/new` | — | 2 | producție |
+| `/categories` | — | 2 | producție |
+| `/dashboard` | `/dashboard` | 2, extins în 3 | producție (simplu); Faza 3 completă pe branch |
+| `/tags` | etichete în dashboard | 3 | branch |
+| `/budgets`, `/budgets/new`, `/budgets/[id]` | bugete în dashboard | 3 | branch |
+| `/goals`, `/goals/new`, `/goals/[id]` | `/goals` | 3 | branch |
+| `/reports` | `/reports` (de bază) | 3; micro-cheltuieli în 10 | branch |
+| exporturi CSV (în `/reports` și `/transactions`) | `/export` (CSV) | 3 | branch; pagină `/export` proprie cu Excel și PDF: Faza 10 |
+| `/recurring` | `/recurring` | 5 | planificat |
+| `/receipts` | `/receipts` | 6 | planificat |
+| `/import` | `/import` | 6 (bonuri), 7 (extrase) | planificat |
+| `/statements/coverage` (nume provizoriu) | „Evidență extrase & acoperire” | 7 | planificat |
+| `/join/[token]` | — | 8 | planificat; invitații în familie |
+| `/family` (nume provizoriu) | membri, bugete comune, decontări | 8 | planificat |
+| `/offline` | — (la finpulse dă 404) | 9 | planificat |
+| `/help` (ghid în aplicație) | `/help` | 9 | planificat |
+| `/admin/statistics` (nume provizoriu) | — | 9 | planificat; statistici de utilizare, doar administrator |
+| `/shopping-lists` | `/shopping-lists` | 10 | planificat |
+| `/prices` (nume provizoriu) | prețuri pe magazin, inflație | 10 | planificat |
+| `/ask` (nume provizoriu) | „raport AI în limbaj natural” | 10 | planificat |
+
+### Zona publică și `saas` (Faza 11 și 12)
+
+| Rută FINET | Echivalent finpulse | Faza | Stare |
+|---|---|---|---|
+| `/` (prezentare randată pe server) | `/` | 11 | planificat, doar `saas`; în `personal` redirecționează la login sau dashboard |
+| `/pricing` | `/pricing` | 11 (pagină), 12 (plăți) | planificat, doar `saas` |
+| `/help` (public) | `/help` | 11 | planificat, doar `saas` |
+| `/terms`, `/privacy` | `/terms`, `/privacy` | 11 | planificat, doar `saas`; texte revizuite de un om |
+| `/register` | înregistrare | 11 | există ca pagină, dezactivată (înregistrarea publică e oprită); se activează doar în `saas` |
+| `/admin` | `/admin` | 11 | planificat, doar `saas`; 404 pentru non-administratori și în `personal` |
+| `/feedback`, `/bug-report` (nume provizorii) | feedback și bug-uri (`/api/feedback`, `/api/bug-reports`) | 11 | planificat, doar `saas`; fără date financiare |
+| `/ref/[code]` | `/ref/FIN-XXXXXX` | 12 | planificat, doar `saas` |
+| selector de limbă (es, fr, de, it, pl, tr) | limbi multiple | 13 | planificat, doar `saas` |
+
+Nume marcate „provizoriu” se fixează în ADR-ul fazei respective. Rutele din lista de mai sus care apar și la finpulse, dar nu sunt de aici, sunt documentate în `docs/research/rea-finpulse-day-20261028/comparatie-finpulse-finet.md`.
