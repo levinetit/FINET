@@ -11,6 +11,10 @@
 #   PGHOST, PGPORT, PGUSER, PGPASSWORD  superuserul Postgres-ului EFEMER (parole fictive)
 #   FINET_BACKUP_BIN_DIR          unde sunt backup.sh/restore.sh (implicit lângă acest fișier;
 #                                 în CI: /opt/finet-backup, adică scripturile din imagine)
+#   FINET_TEST_BACKEND            `local` (implicit: repository într-un director) sau `rclone`
+#                                 (repository `rclone:finettest:<director>` printr-un remote
+#                                 rclone de tip `local`, fără rețea: același drum ca Google Drive,
+#                                 `restic` → `rclone serve restic --stdio`)
 #   FINET_TEST_DB                 baza de test (implicit finet_restore_test; rămâne la final,
 #                                 restaurată, ca CI să ruleze migrate.mjs pe ea)
 #
@@ -69,7 +73,19 @@ service_file "$WORK/svc-restore" finet_restore finet_migrator finet_migrator_ci
 
 # Repository-ul restic local temporar.
 printf '%s\n' "parola-restic-de-test-fictiva-1" > "$WORK/restic.pw"
-printf '%s\n' "$WORK/repo" > "$WORK/restic.repo"
+BACKEND=${FINET_TEST_BACKEND:-local}
+case "$BACKEND" in
+  local) repo_url() { printf '%s\n' "$WORK/$1"; } ;;
+  rclone)
+    command -v rclone > /dev/null || { echo "restore-test: lipsește rclone" >&2; exit 2; }
+    # Config rclone de test, cu permisiunile cerute de lib.sh (0600); remote local, fără rețea.
+    (umask 077 && printf '[finettest]\ntype = local\n' > "$WORK/rclone.conf")
+    export RCLONE_CONFIG="$WORK/rclone.conf"
+    repo_url() { printf 'rclone:finettest:%s\n' "$WORK/$1"; } ;;
+  *) echo "restore-test: FINET_TEST_BACKEND trebuie să fie local sau rclone" >&2; exit 2 ;;
+esac
+echo "backend: $BACKEND"
+repo_url repo > "$WORK/restic.repo"
 mkdir -p "$WORK/storage/docs/2026" "$WORK/home"
 printf 'bon fictiv\n' > "$WORK/storage/docs/2026/bon-1.txt"
 printf 'extras fictiv\n' > "$WORK/storage/extras.csv"
@@ -265,6 +281,9 @@ st_snaps=$(restic_t snapshots --tag finet-storage --json | grep -o '"id"' | wc -
 [ "$db_snaps" = 1 ] && [ "$st_snaps" = 1 ] && ok "instantanee: 1 finet-db, 1 finet-storage (gazda finet)" ||
   fail "instantanee neașteptate: finet-db=$db_snaps finet-storage=$st_snaps"
 restic_t snapshots --host finet --json | grep -q '"hostname":"finet"' && ok "instantaneele au gazda fixă finet" || fail "gazda instantaneelor nu e finet"
+if [ "$BACKEND" = rclone ]; then
+  [ -s "$WORK/repo/config" ] && [ -d "$WORK/repo/data" ] && ok "repository-ul a fost scris prin rclone (remote local)" || fail "repository-ul rclone lipsește"
+fi
 grep -q 'FINET_BACKUP_STAGE=check' "$WORK/backup.log" && grep -q 'backup reușit' "$WORK/backup.log" &&
   ok "backup.sh a parcurs toate etapele (până la check)" || fail "backup.sh nu a ajuns la check"
 # Secretele nu apar în log.
@@ -343,7 +362,7 @@ fi
 section "g) retenția 7 zilnice / 4 săptămânale / 12 lunare"
 # shellcheck source=ops/backup/lib.sh
 . "$BIN/lib.sh"
-printf '%s\n' "$WORK/repo-retention" > "$WORK/restic.repo"
+repo_url repo-retention > "$WORK/restic.repo"
 restic_t init > /dev/null 2>&1
 dates=
 d=1

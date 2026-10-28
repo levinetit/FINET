@@ -73,6 +73,29 @@ check "etapa anunțată pentru run-backup.sh" 0 0 "FINET_BACKUP_STAGE=config" "$
 out=$(clean_env RESTIC_PASSWORD_FILE="$TMP/pw" RESTIC_REPOSITORY_FILE="$TMP/repo" FINET_BACKUP_SFTP_KEY_FILE="$TMP/pw" sh "$DIR/backup.sh" 2>&1)
 check "SFTP fără known_hosts → 2 (nu se acceptă chei de server nefixate)" 2 $? "FINET_BACKUP_SFTP_KNOWN_HOSTS_FILE" "$out"
 
+# --- destinația rclone: (lib.sh check_rclone_config) ----------------------------------------
+printf 'rclone:Gdrive:finet-backup/restic\n' > "$TMP/repo-rclone"
+printf '[Gdrive]\ntype = drive\ntoken = {"access_token":"fictiv-token-secret-xyz"}\n' > "$TMP/rclone.conf"
+chmod 600 "$TMP/rclone.conf"
+out=$(clean_env RESTIC_PASSWORD_FILE="$TMP/pw" RESTIC_REPOSITORY_FILE="$TMP/repo-rclone" sh "$DIR/backup.sh" 2>&1)
+check "repository rclone fără RCLONE_CONFIG → 2" 2 $? "RCLONE_CONFIG nu e setat" "$out"
+chmod 644 "$TMP/rclone.conf"
+out=$(clean_env RESTIC_PASSWORD_FILE="$TMP/pw" RESTIC_REPOSITORY_FILE="$TMP/repo-rclone" RCLONE_CONFIG="$TMP/rclone.conf" sh "$DIR/backup.sh" 2>&1)
+check "config rclone citibil de alții (0644) → 2" 2 $? "poate fi citit de grup/alții" "$out"
+case "$out" in *fictiv-token-secret-xyz*) fail "tokenul rclone apare în ieșire" ;; *) ok "tokenul rclone nu apare în ieșire" ;; esac
+chmod 400 "$TMP/rclone.conf"
+out=$(clean_env RESTIC_PASSWORD_FILE="$TMP/pw" RESTIC_REPOSITORY_FILE="$TMP/repo" RCLONE_CONFIG="$TMP/rclone.conf" sh "$DIR/backup.sh" 2>&1)
+check "RCLONE_CONFIG cu repository non-rclone → 2" 2 $? "repository-ul nu e rclone:" "$out"
+printf 'rclone:Gdrive\n' > "$TMP/repo-rclone-bad"
+out=$(clean_env RESTIC_PASSWORD_FILE="$TMP/pw" RESTIC_REPOSITORY_FILE="$TMP/repo-rclone-bad" RCLONE_CONFIG="$TMP/rclone.conf" sh "$DIR/backup.sh" 2>&1)
+check "repository rclone fără cale → 2" 2 $? "rclone:<remote>:<cale>" "$out"
+if command -v rclone > /dev/null 2>&1; then
+  out=$(clean_env RESTIC_PASSWORD_FILE="$TMP/pw" RESTIC_REPOSITORY_FILE="$TMP/repo-rclone" RCLONE_CONFIG="$TMP/rclone.conf" PGSERVICEFILE="$TMP/svc-insecure" sh "$DIR/backup.sh" 2>&1)
+  check "config rclone 0400 acceptat (oprire abia la TLS-ul bazei)" 2 $? "sslmode=verify-full" "$out"
+else
+  echo "skip: rclone lipsește (configul 0400 valid se verifică în restore-test.sh)"
+fi
+
 # --- restore.sh și entrypoint.sh ---------------------------------------------------------------
 out=$(clean_env sh "$DIR/restore.sh" 2>&1); check "restore.sh fără --yes → 2" 2 $? "cere --yes" "$out"
 out=$(clean_env sh "$DIR/restore.sh" --yes --snapshot 'latest;rm' 2>&1); check "restore.sh cu ID invalid → 2" 2 $? "ID invalid" "$out"
@@ -111,7 +134,7 @@ notes() { wc -l < "$NOTES" | tr -d ' '; }
 
 out=$(rb 1000000 3 FAKE_RC=1 FAKE_STAGE=dump 2>&1); check "eșec → codul backup-ului" 1 $? "etapa dump, cod 1" "$out"
 [ "$(notes)" = 1 ] && grep -q "EȘUAT.*etapa dump, cod 1" "$NOTES" && ok "eșec → o alertă cu etapa" || fail "alerta la eșec ($(notes))"
-printf '%s' "$out" | grep -q -- "-f .*ops/backup/compose.s3.yml" && ok "destinația implicită s3 (compose.s3.yml)" || fail "suprapunerea s3 lipsește din comandă"
+printf '%s' "$out" | grep -q -- "-f .*ops/backup/compose.rclone.yml" && ok "destinația implicită rclone (compose.rclone.yml)" || fail "suprapunerea rclone lipsește din comandă"
 out=$(rb 1001800 3 FAKE_RC=1 FAKE_STAGE=dump 2>&1); check "aceeași eroare după 30 min" 1 $? "alertă suprimată" "$out"
 [ "$(notes)" = 1 ] && ok "anti-flood: fără a doua alertă în aceeași oră" || fail "anti-flood: $(notes) alerte"
 out=$(rb 1002000 3 FAKE_RC=3 FAKE_STAGE=storage 2>&1); check "altă eroare" 3 $? "etapa storage" "$out"
@@ -126,14 +149,14 @@ out=$(rb 1007000 3 FAKE_RC=0 2>&1); check "succes în timpul săptămânii" 0 $?
 [ -s "$STATE/last-success" ] && [ ! -e "$STATE/last-alert" ] && ok "succes: last-success scris, anti-flood resetat" || fail "starea după succes"
 out=$(rb 1008000 7 FAKE_RC=0 2>&1); check "succes duminica" 0 $? "" "$out"
 [ "$(notes)" = 6 ] && grep -q "săptămânal e în regulă" "$NOTES" && ok "succes duminica → mesajul săptămânal" || fail "mesajul săptămânal: $(notes)"
-out=$(rb 1009000 3 FINET_BACKUP_DEST=ftp 2>&1); check "destinație invalidă → 2" 2 $? "s3, sftp sau local" "$out"
+out=$(rb 1009000 3 FINET_BACKUP_DEST=ftp 2>&1); check "destinație invalidă → 2" 2 $? "rclone, s3, sftp sau local" "$out"
 out=$(rb 1009000 3 FINET_BACKUP_DEST=local FAKE_RC=0 2>&1); check "destinația local" 0 $? "compose.local.yml" "$out"
 perm=$(stat -c %a "$STATE" 2> /dev/null || echo necunoscut)
 [ "$perm" = 700 ] && ok "directorul de stare e 700" || fail "directorul de stare are $perm"
 # Lanțul de încredere (LOW-1): o copie a checkout-ului cu un fișier sau un director scriibil de
 # alții → refuz (2), fără să pornească docker.
 mkdir -p "$TMP/co/ops/backup" "$TMP/co/ops/docker" "$TMP/co/ops/notify"
-cp "$DIR/run-backup.sh" "$DIR/compose.s3.yml" "$TMP/co/ops/backup/"
+cp "$DIR/run-backup.sh" "$DIR/compose.rclone.yml" "$TMP/co/ops/backup/"
 cp "$DIR/../docker/docker-compose.yml" "$TMP/co/ops/docker/"
 cp "$DIR/../notify/notify.sh" "$TMP/co/ops/notify/"
 chmod -R go-w "$TMP/co"

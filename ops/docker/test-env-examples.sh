@@ -147,6 +147,22 @@ for svc in finet-web finet-worker finet-migrate finet-admin; do
   fi
 done
 # Suprapunerile destinației: niciun secret direct în environment, doar `_FILE`.
+# Destinația rclone (Google Drive): configul rclone doar ca secret-fișier, RCLONE_CONFIG spre el,
+# memoria ridicată doar în suprapunere; compose-ul de bază nu știe de rclone.
+RCL="$ROOT/ops/backup/compose.rclone.yml"
+if [ -r "$RCL" ]; then
+  grep -Eq '^[[:space:]]+- source:[[:space:]]*finet_rclone_conf[[:space:]]*$' "$RCL" && ok "compose.rclone.yml montează finet_rclone_conf" || fail "compose.rclone.yml nu montează finet_rclone_conf"
+  grep -Eq '^[[:space:]]+RCLONE_CONFIG:[[:space:]]*/run/secrets/rclone\.conf[[:space:]]*$' "$RCL" && ok "RCLONE_CONFIG = /run/secrets/rclone.conf" || fail "RCLONE_CONFIG nu indică secretul"
+  grep -Eq '^[[:space:]]+mem_limit:[[:space:]]*384m' "$RCL" && ok "compose.rclone.yml: mem_limit 384m" || fail "compose.rclone.yml: mem_limit lipsește"
+  if grep -Ev '^[[:space:]]*#' "$RCL" | grep -Eqi 'token|client_secret'; then
+    fail "compose.rclone.yml conține un token rclone"
+  else
+    ok "compose.rclone.yml fără token rclone"
+  fi
+  service_block finet-backup | grep -q "RCLONE_CONFIG\|finet_rclone_conf" && fail "compose-ul de bază are configul rclone" || ok "compose-ul de bază fără configul rclone"
+else
+  fail "ops/backup/compose.rclone.yml lipsește"
+fi
 for override in "$ROOT"/ops/backup/compose.*.yml; do
   name=$(basename "$override")
   found=0
