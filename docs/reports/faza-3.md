@@ -50,7 +50,7 @@ Toate în `node:24` (`scratchpad/dk.sh`), cu `NODE_OPTIONS=--max-old-space-size=
 | `pnpm test:ops` | PASS |
 | `vitest run --maxWorkers=2` (fără `DATABASE_URL`) | PASS: 39 de fișiere, 480 de teste trecute, 263 sărite (testele de integrare cu PostgreSQL, 20 de fișiere) |
 | testele de integrare cu PostgreSQL (`pnpm test` cu `DATABASE_URL`) | NOT RUN în F3-C (memoria hostului; F3-C nu a modificat serviciile, migrațiile sau rutele API; ultima rulare: F3-B) |
-| `playwright test --list --project=planning` | PASS: 8 teste listate |
+| `playwright test --list` | PASS: 43 de teste în 5 fișiere (dintre care 8 în proiectul nou `planning`) |
 | `pnpm test:e2e` (browser) | NOT RUN (fără browsere pe host; job-ul `e2e`) |
 | `pnpm build` | NOT RUN (OOM host: sub 2 GB disponibili; CI) |
 | `pnpm scan:client-secrets` | NOT RUN (cere `.next/static` din build; CI) |
