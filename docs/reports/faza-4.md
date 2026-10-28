@@ -48,6 +48,8 @@ Toate prin `scratchpad/dk.sh` (node:24, uid 1009), Postgres `postgres:17-alpine`
 | `FINET_PERF=1 vitest run src/db/perf.test.ts` (înainte, după, după reluat) | PASS (5) ×3 |
 | `vitest run src/db/migrate.test.ts src/modules/exports/exports.test.ts src/app/api/v1/planning-api.test.ts src/modules/transactions/transactions.test.ts` | prima rulare: FAIL 2 (contoarele de migrații 5 → 6 în `migrate.test.ts`, actualizate pentru `0005`); restul PASS (55) |
 | `vitest run src/db/migrate.test.ts src/db/ledger-rls.test.ts src/db/grants.test.ts` | PASS (51) |
+| `vitest run src/app/api/routes.test.ts src/app/api/v1/ledger-api.test.ts src/modules/dashboard/dashboard.test.ts` (Postgres 17) | PASS (22) |
+| `eslint` + `prettier --check` + `playwright test --list --project=regressions` după corecția spec-ului | PASS (4 teste listate) |
 | `vitest run src/app scripts src/openapi src/lib` (fără DB) | PASS (380, 77 sărite fără DB) |
 | `eslint --max-warnings=0` pe cele 35 de fișiere TS/JS modificate | PASS |
 | `prettier --check --ignore-unknown` pe fișierele modificate | PASS |
