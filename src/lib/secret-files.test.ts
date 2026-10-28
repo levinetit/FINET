@@ -268,6 +268,7 @@ describe("parseConfig cu `*_FILE`", () => {
       const c = parseConfig({
         ...DEV,
         FINET_ROLE: "worker",
+        FINET_ALLOW_INSECURE_DB: "1",
         WORKER_DATABASE_URL_FILE: file("w", URL_WORKER),
       });
       expect(c.database.url).toBe(URL_WORKER);
@@ -275,6 +276,7 @@ describe("parseConfig cu `*_FILE`", () => {
         issuesOf({
           ...DEV,
           FINET_ROLE: "worker",
+          FINET_ALLOW_INSECURE_DB: "1",
           WORKER_DATABASE_URL_FILE: file("w2", URL_WORKER),
           DATABASE_URL_FILE: file("d2", URL_WEB),
         }).map((i) => i.variable),

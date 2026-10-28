@@ -26,6 +26,7 @@ import {
   apiSearch,
   exportSearch,
   FILTER_SORTS,
+  FILTER_SOURCES,
   FILTER_TYPES,
   hasActiveFilters,
   parseFilters,
@@ -203,6 +204,18 @@ export default async function TransactionsPage({
                     {FILTER_TYPES.map((type) => (
                       <option key={type} value={type}>
                         {ro.ledger.types[type]}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <Field id="filter-source" label={t.source}>
+                {(p) => (
+                  <Select id={p.id} name="source" defaultValue={filters.query.source ?? ""}>
+                    <option value="">{t.allSources}</option>
+                    {FILTER_SOURCES.map((source) => (
+                      <option key={source} value={source}>
+                        {t.sources[source]}
                       </option>
                     ))}
                   </Select>

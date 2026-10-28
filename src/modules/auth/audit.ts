@@ -34,6 +34,10 @@ export type AuditAction =
   | "tag.deleted"
   | "budget.deleted"
   | "goal.deleted"
+  // Recurențele (Faza 5): fără sume sau descrieri.
+  | "recurring_rule.deleted"
+  // Generarea la cerere (F5-B): doar contoare în `metadata`, fără sume sau reguli.
+  | "recurring.generated"
   // Exporturile CSV (F3-B): doar tipul exportului și numărul de rânduri, fără conținut.
   | "export.downloaded"
   // Consimțămintele (F2-B, 6.5): doar tipul, în `metadata.kind`.
@@ -53,7 +57,8 @@ export type AuditEvent = Readonly<{
     | "transfer"
     | "tag"
     | "budget"
-    | "goal";
+    | "goal"
+    | "recurring_rule";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;

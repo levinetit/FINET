@@ -10,6 +10,8 @@
 import { parseAmountInput } from "./ledger-ui";
 
 export const FILTER_TYPES = ["income", "expense", "transfer"] as const;
+/** Sursele filtrabile din pagină (Faza 5: `recurring`); bonurile și extrasele vin mai târziu. */
+export const FILTER_SOURCES = ["manual", "recurring"] as const;
 export const FILTER_SORTS = ["date_desc", "date_asc", "amount_desc", "amount_asc"] as const;
 
 /** Cel mult atâtea etichete într-un filtru (ca `MAX_TAGS_PER_TRANSACTION`). */
@@ -26,6 +28,8 @@ export type FilterValues = Readonly<{
   accountId: string;
   categoryId: string;
   type: string;
+  /** `manual` sau `recurring` (Faza 5). */
+  source: string;
   dateFrom: string;
   dateTo: string;
   amountMin: string;
@@ -45,6 +49,7 @@ export type TransactionApiQuery = Partial<
     /** Trimis doar ca `all` și doar cu etichete (`any` e implicit în API). */
     tagMatch: "all";
     type: (typeof FILTER_TYPES)[number];
+    source: (typeof FILTER_SOURCES)[number];
     dateFrom: string;
     dateTo: string;
     amountMinMinor: number;
@@ -69,6 +74,7 @@ const KEYS = [
   "categoryId",
   "tagMatch",
   "type",
+  "source",
   "dateFrom",
   "dateTo",
   "amountMin",
@@ -117,6 +123,7 @@ export function parseFilters(params: RawParams): ParsedFilters {
   if (UUID.test(values.accountId)) query.accountId = values.accountId.toLowerCase();
   if (UUID.test(values.categoryId)) query.categoryId = values.categoryId.toLowerCase();
   if ((FILTER_TYPES as readonly string[]).includes(values.type)) query.type = values.type;
+  if ((FILTER_SOURCES as readonly string[]).includes(values.source)) query.source = values.source;
   if (DATE.test(values.dateFrom)) query.dateFrom = values.dateFrom;
   if (DATE.test(values.dateTo)) query.dateTo = values.dateTo;
   if ((FILTER_SORTS as readonly string[]).includes(values.sort)) query.sort = values.sort;

@@ -6,12 +6,15 @@
 // pe server, iar varianta implicită a pachetului ar arunca la import.
 import { build } from "esbuild";
 
-const EXTERNAL = ["postgres", "drizzle-orm", "zod"];
+// pg-boss (și `pg`, dependența lui) rămân externe: vin din node_modules-ul de producție.
+const EXTERNAL = ["postgres", "drizzle-orm", "zod", "pg-boss", "pg"];
 
 const TOOLS = {
   migrate: "src/db/migrate-entry.ts",
   // CLI-ul de administrare (F1-B): fără better-auth, nodemailer sau next în graful de importuri.
   admin: "src/tools/admin/entry.ts",
+  // Workerul (Faza 5, ADR 0011): pg-boss + serviciile recurențelor, fără next/better-auth.
+  worker: "src/worker/entry.ts",
 };
 
 for (const [name, entry] of Object.entries(TOOLS)) {

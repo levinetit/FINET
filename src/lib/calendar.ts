@@ -102,3 +102,143 @@ export function localDateOf(instant: Date, timeZone: string = DEFAULT_TIME_ZONE)
 export function currentMonth(instant: Date, timeZone: string = DEFAULT_TIME_ZONE): Month {
   return localDateOf(instant, timeZone).slice(0, 7);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Zile calendaristice și recurențe (Faza 5, ADR 0011). Toate calculele sunt pe cifre (zile de la
+// 1970-01-01 prin `Date.UTC`), fără fus orar: o dată `YYYY-MM-DD` nu are oră, deci trecerile la
+// ora de vară/iarnă nu o pot deplasa. Fusul orar contează doar pentru „azi” (`localDateOf`).
+// ---------------------------------------------------------------------------------------------
+
+/** Data calendaristică `YYYY-MM-DD` (1900–2999). */
+export type CalendarDate = string;
+
+export const MIN_DATE: CalendarDate = "1900-01-01";
+export const MAX_DATE: CalendarDate = "2999-12-31";
+
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAY_MS = 86_400_000;
+
+function dateParts(date: CalendarDate): [number, number, number] {
+  const m = DATE_RE.exec(date);
+  if (!m) throw new RangeError("Data trebuie să fie de forma AAAA-LL-ZZ.");
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (mo < 1 || mo > 12 || d < 1 || d > new Date(Date.UTC(y, mo, 0)).getUTCDate()) {
+    throw new RangeError("Data nu există în calendar.");
+  }
+  return [y, mo, d];
+}
+
+function ymd(y: number, mo: number, d: number): CalendarDate {
+  return `${pad(y, 4)}-${pad(mo)}-${pad(d)}`;
+}
+
+/** Numărul zilei (zile de la 1970-01-01). */
+export function dayNumber(date: CalendarDate): number {
+  const [y, mo, d] = dateParts(date);
+  return Date.UTC(y, mo - 1, d) / DAY_MS;
+}
+
+/** Data zilei cu numărul `n`. */
+export function fromDayNumber(n: number): CalendarDate {
+  const t = new Date(n * DAY_MS);
+  return ymd(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+}
+
+/** Data deplasată cu `n` zile. */
+export function addDays(date: CalendarDate, n: number): CalendarDate {
+  return fromDayNumber(dayNumber(date) + n);
+}
+
+/** Ziua `day` din luna `y-mo`, limitată la ultima zi a lunii (31 → 30/29/28). */
+function clampedDay(y: number, mo: number, day: number): CalendarDate {
+  return ymd(y, mo, Math.min(day, new Date(Date.UTC(y, mo, 0)).getUTCDate()));
+}
+
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
+
+/**
+ * Regula de recurență: ancora e `startOn` (ziua pentru zilnic/săptămânal, luna pentru lunar,
+ * luna și anul pentru anual), iar `dayOfMonth` e ziua țintă la lunar/anual. Ziua țintă NU se
+ * deplasează după o lună scurtă: 31 ian → 28/29 feb → 31 mar; 29 feb → 28 feb în anii nebisecți.
+ */
+export type RecurrenceSpec = Readonly<{
+  frequency: RecurrenceFrequency;
+  interval: number;
+  dayOfMonth: number | null;
+  startOn: CalendarDate;
+}>;
+
+/** A `n`-a dată a grilei regulii (n ≥ 0), fără a ține cont de `startOn` ca limită inferioară. */
+export function gridDate(spec: RecurrenceSpec, n: number): CalendarDate {
+  const [y, mo, d] = dateParts(spec.startOn);
+  switch (spec.frequency) {
+    case "daily":
+      return addDays(spec.startOn, n * spec.interval);
+    case "weekly":
+      return addDays(spec.startOn, n * spec.interval * 7);
+    case "monthly": {
+      const index = y * 12 + (mo - 1) + n * spec.interval;
+      return clampedDay(Math.floor(index / 12), (index % 12) + 1, spec.dayOfMonth ?? d);
+    }
+    case "yearly":
+      return clampedDay(y + n * spec.interval, mo, spec.dayOfMonth ?? d);
+  }
+}
+
+/**
+ * Prima scadență a regulii ≥ `from` (și ≥ `startOn`), sau `null` dacă depășește 2999-12-31.
+ * Calculul e direct (estimare + cel mult câțiva pași), nu o parcurgere de la început.
+ */
+export function occurrenceOnOrAfter(spec: RecurrenceSpec, from: CalendarDate): CalendarDate | null {
+  if (!Number.isInteger(spec.interval) || spec.interval < 1) {
+    throw new RangeError("Intervalul trebuie să fie un întreg ≥ 1.");
+  }
+  const target = from > spec.startOn ? from : spec.startOn;
+  if (target > MAX_DATE) return null;
+  let n: number;
+  if (spec.frequency === "daily" || spec.frequency === "weekly") {
+    const step = spec.interval * (spec.frequency === "weekly" ? 7 : 1);
+    n = Math.ceil((dayNumber(target) - dayNumber(spec.startOn)) / step);
+  } else {
+    const [sy, sm] = dateParts(spec.startOn);
+    const [ty, tm] = dateParts(target);
+    const units = spec.frequency === "monthly" ? ty * 12 + tm - (sy * 12 + sm) : ty - sy;
+    n = Math.max(0, Math.floor(units / spec.interval) - 1);
+  }
+  let date = gridDate(spec, n);
+  while (date < target) {
+    n += 1;
+    date = gridDate(spec, n);
+  }
+  return date > MAX_DATE ? null : date;
+}
+
+/** Scadența de după `date` (strict mai târziu), sau `null` după 2999-12-31. */
+export function occurrenceAfter(spec: RecurrenceSpec, date: CalendarDate): CalendarDate | null {
+  if (date >= MAX_DATE) return null;
+  return occurrenceOnOrAfter(spec, addDays(date, 1));
+}
+
+/** Data deplasată cu `n` ani (negativ = în urmă); 29 februarie → 28 în anii nebisecți. */
+export function addYears(date: CalendarDate, n: number): CalendarDate {
+  const [y, mo, d] = dateParts(date);
+  return clampedDay(y + n, mo, d);
+}
+
+/**
+ * Câte scadențe are regula în intervalul [`startOn`, `until`], numărând cel mult `cap + 1`
+ * (suficient ca apelantul să știe că pragul e depășit, fără a parcurge tot intervalul).
+ */
+export function countOccurrencesUntil(
+  spec: RecurrenceSpec,
+  until: CalendarDate,
+  cap: number,
+): number {
+  let n = 0;
+  let d = occurrenceOnOrAfter(spec, spec.startOn);
+  while (d !== null && d <= until && n <= cap) {
+    n += 1;
+    d = occurrenceAfter(spec, d);
+  }
+  return n;
+}

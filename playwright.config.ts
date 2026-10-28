@@ -1,14 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Teste E2E, în șase proiecte, pe două servere:
+ * Teste E2E, în șapte proiecte, pe două servere:
  * - `smoke`, `auth`, `ledger` și `planning` (browser): `pnpm dev` cu Access dezactivat DOAR pentru test
  *   (NODE_ENV=development, CF_ACCESS_REQUIRED=false; `src/lib/config.ts` refuză asta în
  *   producție și nu e slăbit). `auth` cere un Postgres de test migrat (`DATABASE_URL` = rolul
  *   `finet_app`), utilizatorii E2E creați cu CLI-ul admin (`e2e/fixtures.ts`) și `E2E_PASSWORD`;
  *   `ledger` (Faza 2: conturi, tranzacții, transferuri, categorii) și `planning` (Faza 3:
- *   dashboard, bugete, obiective, etichete, rapoarte, export CSV) și `regressions` (Faza 4) au
- *   aceleași cerințe;
+ *   dashboard, bugete, obiective, etichete, rapoarte, export CSV), `regressions` (Faza 4) și
+ *   `recurring` (Faza 5: plăți recurente) au aceleași cerințe;
  *   Modul aplicației: `E2E_APP_MODE=personal|saas` (implicit `personal`); cele două moduri se
  *   rulează unul după altul (două `next dev` în același director s-ar bloca reciproc);
  * - `access` (doar HTTP, fără browser): serverul de producție (`.next/standalone/server.js`,
@@ -131,6 +131,13 @@ export default defineConfig({
       // titluri și `lang`): același server și aceeași bază, utilizatorul `regresii`.
       name: "regressions",
       testMatch: /regressions\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      // Plățile recurente (Faza 5): același server și aceeași bază, utilizatorii `recurring` și
+      // `recurring2` (izolarea).
+      name: "recurring",
+      testMatch: /recurring\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {

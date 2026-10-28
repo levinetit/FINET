@@ -205,5 +205,18 @@ for svc in finet-worker finet-migrate finet-admin; do
   fi
 done
 
+# Workerul (Faza 5, ADR 0011): din imaginea de unelte (pg-boss nu e în ieșirea standalone a
+# Next.js), comanda workerului real, plafonul de memorie ≤ 150m, profilul `worker`.
+WB=$(service_block finet-worker)
+echo "$WB" | grep -Eq '^[[:space:]]+image:[[:space:]]*\$\{FINET_TOOLS_IMAGE' && ok "finet-worker din imaginea de unelte" || fail "finet-worker nu folosește FINET_TOOLS_IMAGE"
+echo "$WB" | grep -Eq 'dist/tools/worker\.mjs' && ok "finet-worker rulează dist/tools/worker.mjs" || fail "finet-worker nu rulează dist/tools/worker.mjs"
+echo "$WB" | grep -Eq '^[[:space:]]+mem_limit:[[:space:]]*(1[0-4][0-9]|150|[0-9]{2})m[[:space:]]*$' && ok "finet-worker: mem_limit ≤ 150m" || fail "finet-worker: mem_limit lipsește sau e prea mare"
+echo "$WB" | grep -Eq '^[[:space:]]+profiles:[[:space:]]*\[worker\]' && ok "finet-worker doar în profilul worker" || fail "finet-worker nu e în profilul worker"
+if echo "$WB" | grep -Eq "finet_database_url|finet_migrate_database_url"; then
+  fail "finet-worker primește URL-ul altui rol"
+else
+  ok "finet-worker doar cu URL-ul lui"
+fi
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "env examples: toate verificările au trecut"; else echo "env examples: $FAILS eșecuri"; exit 1; fi

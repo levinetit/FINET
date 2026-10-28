@@ -17,6 +17,7 @@ import {
   LogoutIcon,
   MoreIcon,
   PieIcon,
+  RepeatIcon,
   TagIcon,
   TargetIcon,
   UserIcon,
@@ -31,6 +32,7 @@ const ITEMS = [
   { href: "/tags", label: ro.nav.tags, icon: TagIcon, mobile: false },
   { href: "/budgets", label: ro.nav.budgets, icon: PieIcon, mobile: true },
   { href: "/goals", label: ro.nav.goals, icon: TargetIcon, mobile: false },
+  { href: "/recurring", label: ro.nav.recurring, icon: RepeatIcon, mobile: false },
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
 ] as const;

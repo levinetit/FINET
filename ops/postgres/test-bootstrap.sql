@@ -77,3 +77,10 @@ alter default privileges for role finet_migrator in schema finet
   revoke all on sequences from anon, authenticated, public;
 alter default privileges for role finet_migrator in schema finet
   revoke all on functions from anon, authenticated, public;
+
+-- Schema cozii pg-boss (Faza 5, ADR 0011), ca ops/supabase/pgboss-schema.sql: deținută de
+-- finet_migrator (migrația 0007_pgboss o populează), fără drepturi pentru PUBLIC/anon/authenticated;
+-- USAGE pentru finet_app îl dă migrația.
+create schema if not exists pgboss authorization finet_migrator;
+revoke all on schema pgboss from public;
+revoke all on schema pgboss from anon, authenticated;

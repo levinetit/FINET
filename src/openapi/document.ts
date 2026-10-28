@@ -231,6 +231,7 @@ export function buildOpenApiDocument(): Json {
       { name: "tags", description: "Etichetele (Faza 3)." },
       { name: "budgets", description: "Bugetele lunare și semaforul (Faza 3)." },
       { name: "goals", description: "Obiectivele de economisire (Faza 3)." },
+      { name: "recurring", description: "Plățile recurente (Faza 5)." },
       { name: "reports", description: "Dashboard-ul și raportul lunar (Faza 3)." },
       { name: "exports", description: "Exporturile CSV (Faza 3)." },
     ],

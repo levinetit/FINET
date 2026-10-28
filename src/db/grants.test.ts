@@ -204,3 +204,152 @@ describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe tabelele planificării
     ]);
   });
 });
+
+/** Faza 5 (0006, 0007): drepturile `finet_app` pe recurențe, pe semnalul workerului și pe pgboss. */
+describe.skipIf(!TEST_ADMIN_URL)(
+  "drepturile finet_app pe recurențe și pe coada pg-boss (0006, 0007)",
+  () => {
+    let fx: AuthFixture;
+    beforeAll(async () => {
+      fx = await createAuthFixture("finet_it_grants6");
+    });
+    afterAll(async () => {
+      await fx?.close();
+    });
+
+    const tablePrivileges = async (
+      schema: string,
+      tables: readonly string[],
+      grantee = "finet_app",
+    ) => {
+      const rows = await fx.scratch.admin<{ table_name: string; privilege_type: string }[]>`
+      select table_name, privilege_type from information_schema.role_table_grants
+       where table_schema = ${schema} and grantee = ${grantee} and table_name = any(${tables as string[]})
+       order by table_name, privilege_type`;
+      return (t: string) => rows.filter((r) => r.table_name === t).map((r) => r.privilege_type);
+    };
+    const updateColumns = async (schema: string, tables: readonly string[]) => {
+      const rows = await fx.scratch.admin<{ table_name: string; column_name: string }[]>`
+      select table_name, column_name from information_schema.column_privileges
+       where table_schema = ${schema} and grantee = 'finet_app' and privilege_type = 'UPDATE'
+         and table_name = any(${tables as string[]})
+       order by table_name, column_name`;
+      return (t: string) => rows.filter((r) => r.table_name === t).map((r) => r.column_name);
+    };
+
+    it("recurențe: SELECT/INSERT, DELETE doar pe reguli, UPDATE doar pe coloanele permise", async () => {
+      const tables = ["recurring_rules", "recurring_occurrences", "service_heartbeats"] as const;
+      const by = await tablePrivileges("finet", tables);
+      expect(by("recurring_rules")).toEqual(["DELETE", "INSERT", "SELECT"]);
+      expect(by("recurring_occurrences")).toEqual(["INSERT", "SELECT"]);
+      expect(by("service_heartbeats")).toEqual(["INSERT", "SELECT"]);
+      const cols = await updateColumns("finet", tables);
+      expect(cols("recurring_rules")).toEqual([
+        "account_id",
+        "amount_minor",
+        "category_id",
+        "currency",
+        "day_of_month",
+        "description",
+        "end_on",
+        "frequency",
+        "interval",
+        "last_error_code",
+        "max_occurrences",
+        "merchant",
+        "next_run_on",
+        "occurrences_count",
+        "retry_after",
+        "status",
+        "updated_at",
+      ]);
+      expect(cols("recurring_occurrences")).toEqual([]);
+      expect(cols("service_heartbeats")).toEqual(["beat_at", "started_at", "stopped_at"]);
+    });
+
+    it("câmpurile fixe ale regulii și ocurențele nu se pot modifica (42501)", async () => {
+      for (const statement of [
+        sql`update finet.recurring_rules set household_id = household_id`,
+        sql`update finet.recurring_rules set type = 'income'`,
+        sql`update finet.recurring_rules set start_on = start_on`,
+        sql`update finet.recurring_rules set created_by_user_id = null`,
+        sql`update finet.recurring_occurrences set transaction_id = null`,
+        sql`delete from finet.recurring_occurrences`,
+        sql`delete from finet.service_heartbeats`,
+      ]) {
+        expect(await sqlState(() => fx.db.execute(statement))).toBe("42501");
+      }
+    });
+
+    it("anon/authenticated/PUBLIC: nimic pe tabelele noi și pe schema pgboss", async () => {
+      const [r] = await fx.scratch.admin<{ n: number }[]>`
+      select count(*)::int as n from information_schema.role_table_grants
+       where grantee in ('anon', 'authenticated', 'PUBLIC')
+         and (table_schema = 'pgboss'
+              or table_name in ('recurring_rules', 'recurring_occurrences', 'service_heartbeats'))`;
+      expect(r?.n).toBe(0);
+      const [s] = await fx.scratch.admin<
+        { anon: boolean; auth: boolean; app: boolean; appCreate: boolean }[]
+      >`
+      select has_schema_privilege('anon', 'pgboss', 'USAGE') as anon,
+             has_schema_privilege('authenticated', 'pgboss', 'USAGE') as auth,
+             has_schema_privilege('finet_app', 'pgboss', 'USAGE') as app,
+             has_schema_privilege('finet_app', 'pgboss', 'CREATE') as "appCreate"`;
+      expect(s).toEqual({ anon: false, auth: false, app: true, appCreate: false });
+      const fns = await fx.scratch.admin<{ proname: string }[]>`
+      select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace,
+             aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+       where n.nspname = 'pgboss' and a.grantee = 0 and a.privilege_type = 'EXECUTE'`;
+      expect(fns).toEqual([]);
+    });
+
+    it("pgboss: DML pe tabelele cozii, doar citire pe version/bam/warning/queue_stats, EXECUTE minim", async () => {
+      const tables = [
+        "job",
+        "job_common",
+        "queue",
+        "schedule",
+        "subscription",
+        "job_dependency",
+        "instance",
+        "version",
+        "bam",
+        "warning",
+        "queue_stats",
+      ] as const;
+      const by = await tablePrivileges("pgboss", tables);
+      for (const t of [
+        "job",
+        "job_common",
+        "queue",
+        "schedule",
+        "subscription",
+        "job_dependency",
+        "instance",
+      ]) {
+        expect(by(t)).toEqual(["DELETE", "INSERT", "SELECT", "UPDATE"]);
+      }
+      for (const t of ["version", "bam", "warning", "queue_stats"])
+        expect(by(t)).toEqual(["SELECT"]);
+      const cols = await updateColumns("pgboss", ["version"]);
+      expect(cols("version")).toEqual([
+        "bam_on",
+        "cron_on",
+        "flow_on",
+        "monitor_backoff_on",
+        "reindex_on",
+      ]);
+      const exec = await fx.scratch.admin<{ proname: string }[]>`
+      select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'pgboss' and has_function_privilege('finet_app', p.oid, 'EXECUTE')
+       order by p.proname`;
+      expect(exec.map((e) => e.proname)).toEqual(["create_queue", "job_now"]);
+      // Nicio altă tabelă din pgboss (de exemplu partițiile zilnice ale queue_stats) nu e accesibilă.
+      const others = await fx.scratch.admin<{ table_name: string }[]>`
+      select distinct table_name from information_schema.role_table_grants
+       where table_schema = 'pgboss' and grantee = 'finet_app'
+         and not (table_name = any(${tables as unknown as string[]}))`;
+      expect(others).toEqual([]);
+    });
+  },
+);

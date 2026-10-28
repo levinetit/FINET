@@ -202,6 +202,19 @@ describe("parseConfig", () => {
 });
 
 describe("parseConfig pe rol (FINET_ROLE)", () => {
+  // Workerul în producție cere sslmode=verify-full și un CA (F5-A); CA FICTIV (doar formă PEM).
+  let roleCaDir: string;
+  let WORKER_CA: string;
+  beforeAll(() => {
+    roleCaDir = mkdtempSync(join(tmpdir(), "finet-role-ca-"));
+    WORKER_CA = join(roleCaDir, "ca.crt");
+    writeFileSync(WORKER_CA, "-----BEGIN CERTIFICATE-----\nMIIfictiv\n-----END CERTIFICATE-----\n");
+  });
+  afterAll(() => {
+    rmSync(roleCaDir, { recursive: true, force: true });
+  });
+  const URL_WORKER_TLS =
+    "postgres://finet_app.ref:p-worker@pooler.exemplu.invalid:5432/postgres?sslmode=verify-full";
   const URL_WEB = "postgres://finet_app.ref:p-web@pooler.exemplu.invalid:6543/postgres";
   const URL_WORKER = "postgres://finet_app.ref:p-worker@pooler.exemplu.invalid:5432/postgres";
   const URL_MIGRATOR = "postgres://finet_migrator.ref:p-mig@pooler.exemplu.invalid:5432/postgres";
@@ -255,15 +268,82 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
   it("worker cere WORKER_DATABASE_URL și respinge celelalte URL-uri", () => {
     const worker = { ...PROD, FINET_ROLE: "worker" };
     expect(issuesOf(worker)).toEqual(["WORKER_DATABASE_URL"]);
-    const c = parseConfig({ ...worker, WORKER_DATABASE_URL: URL_WORKER });
+    // Fără TLS doar cu opțiunea explicită de test (I2), în afara producției.
+    const c = parseConfig({
+      ...DEV,
+      FINET_ROLE: "worker",
+      WORKER_DATABASE_URL: URL_WORKER,
+      FINET_ALLOW_INSECURE_DB: "1",
+    });
     expect(c.role).toBe("worker");
-    expect(c.database).toEqual({ url: URL_WORKER, ca: null });
-    expect(issuesOf({ ...worker, WORKER_DATABASE_URL: URL_WORKER, DATABASE_URL: URL_WEB })).toEqual(
-      ["DATABASE_URL"],
+    expect(c.database).toEqual({ url: URL_WORKER, ca: null, allowInsecure: true });
+    const tls = { ...worker, DATABASE_CA_FILE: WORKER_CA };
+    expect(parseConfig({ ...tls, WORKER_DATABASE_URL: URL_WORKER_TLS }).database.url).toBe(
+      URL_WORKER_TLS,
     );
     expect(
-      issuesOf({ ...worker, WORKER_DATABASE_URL: URL_WORKER, MIGRATOR_DATABASE_URL: URL_MIGRATOR }),
+      issuesOf({ ...tls, WORKER_DATABASE_URL: URL_WORKER_TLS, DATABASE_URL: URL_WEB }),
+    ).toEqual(["DATABASE_URL"]);
+    expect(
+      issuesOf({
+        ...tls,
+        WORKER_DATABASE_URL: URL_WORKER_TLS,
+        MIGRATOR_DATABASE_URL: URL_MIGRATOR,
+      }),
     ).toEqual(["MIGRATOR_DATABASE_URL"]);
+  });
+
+  it("worker în ORICE mediu: fail-closed pe TLS (exact sslmode=verify-full + DATABASE_CA_FILE)", () => {
+    for (const env of [PROD, DEV, { APP_MODE: "personal", NODE_ENV: "test" }]) {
+      expect(issuesOf({ ...env, FINET_ROLE: "worker", WORKER_DATABASE_URL: URL_WORKER })).toEqual(
+        expect.arrayContaining(["WORKER_DATABASE_URL", "DATABASE_CA_FILE"]),
+      );
+      const ok = parseConfig({
+        ...env,
+        FINET_ROLE: "worker",
+        WORKER_DATABASE_URL: URL_WORKER_TLS,
+        DATABASE_CA_FILE: WORKER_CA,
+      });
+      expect(ok.database.allowInsecure).toBe(false);
+    }
+    // Opțiunea de test e refuzată în producție și nu are efect pe celelalte roluri.
+    expect(
+      issuesOf({
+        ...PROD,
+        FINET_ROLE: "worker",
+        WORKER_DATABASE_URL: URL_WORKER,
+        FINET_ALLOW_INSECURE_DB: "1",
+      }),
+    ).toEqual(expect.arrayContaining(["FINET_ALLOW_INSECURE_DB"]));
+    expect(issuesOf({ ...DEV, FINET_ALLOW_INSECURE_DB: "true" })).toEqual([
+      "FINET_ALLOW_INSECURE_DB",
+    ]);
+    expect(parseConfig({ ...DEV, FINET_ALLOW_INSECURE_DB: "1" }).database.allowInsecure).toBe(true);
+    const tls = { ...PROD, FINET_ROLE: "worker", DATABASE_CA_FILE: WORKER_CA };
+    const base = "postgres://finet_app.ref:p-worker@pooler.exemplu.invalid:5432/postgres";
+    for (const query of [
+      "",
+      "?sslmode=disable",
+      "?sslmode=require",
+      "?sslmode=prefer",
+      "?sslmode=verify-ca",
+      "?sslmode=",
+      "?sslmode=VERIFY-FULL",
+      "?SSLMODE=verify-full",
+      "?sslmode=verify-full&sslmode=disable",
+      "?ssl=true",
+      "?sslmode=verify-full&ssl=false",
+      "?sslmode=verify-full&sslrootcert=system",
+      "?sslmode=verify-full&uselibpqcompat=true",
+    ]) {
+      expect(issuesOf({ ...tls, WORKER_DATABASE_URL: base + query })).toContain(
+        "WORKER_DATABASE_URL",
+      );
+    }
+    // Fără CA: refuzat chiar cu verify-full.
+    expect(
+      issuesOf({ ...PROD, FINET_ROLE: "worker", WORKER_DATABASE_URL: URL_WORKER_TLS }),
+    ).toEqual(["DATABASE_CA_FILE"]);
   });
 
   it("migrate cere MIGRATOR_DATABASE_URL și respinge celelalte URL-uri", () => {
@@ -271,7 +351,7 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
     expect(issuesOf(migrate)).toEqual(["MIGRATOR_DATABASE_URL"]);
     const c = parseConfig({ ...migrate, MIGRATOR_DATABASE_URL: URL_MIGRATOR });
     expect(c.role).toBe("migrate");
-    expect(c.database).toEqual({ url: URL_MIGRATOR, ca: null });
+    expect(c.database).toEqual({ url: URL_MIGRATOR, ca: null, allowInsecure: false });
     expect(
       issuesOf({ ...migrate, MIGRATOR_DATABASE_URL: URL_MIGRATOR, DATABASE_URL: URL_WEB }),
     ).toEqual(["DATABASE_URL"]);
@@ -284,7 +364,7 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
     ).toEqual(["WORKER_DATABASE_URL"]);
   });
 
-  it("în producție, doar web cere CF_ACCESS_*; migrate nu cere nici STORAGE_DIR", () => {
+  it("în producție, doar web cere CF_ACCESS_* și STORAGE_DIR (nici worker, nici migrate)", () => {
     const bare = { APP_MODE: "personal", NODE_ENV: "production" };
     expect(issuesOf(bare)).toEqual([
       "CF_ACCESS_TEAM_DOMAIN",
@@ -293,16 +373,14 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
       "APP_URL",
       "STORAGE_DIR",
     ]);
-    expect(issuesOf({ ...bare, FINET_ROLE: "worker", WORKER_DATABASE_URL: URL_WORKER })).toEqual([
-      "STORAGE_DIR",
-    ]);
+    // Workerul nu atinge fișierele (I1): fără STORAGE_DIR, configurația trece.
     const w = parseConfig({
       ...bare,
       FINET_ROLE: "worker",
-      WORKER_DATABASE_URL: URL_WORKER,
-      STORAGE_DIR: "/data/storage",
+      WORKER_DATABASE_URL: URL_WORKER_TLS,
+      DATABASE_CA_FILE: WORKER_CA,
     });
-    expect(w.storage.dir).toBe("/data/storage");
+    expect(w.role).toBe("worker");
     const m = parseConfig({ ...bare, FINET_ROLE: "migrate", MIGRATOR_DATABASE_URL: URL_MIGRATOR });
     expect(m.database.url).toBe(URL_MIGRATOR);
     // CF_ACCESS_REQUIRED=false rămâne refuzat în producție pentru orice rol.
@@ -324,7 +402,9 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
 
   it("Config nu mai expune URL-urile altor roluri", () => {
     const c = parseConfig({ ...DEV, DATABASE_URL: URL_WEB });
-    expect(Object.keys(c.database)).toEqual(["url", "ca"]);
+    // `allowInsecure` e un boolean (opțiunea de test a workerului), nu un URL.
+    expect(Object.keys(c.database)).toEqual(["url", "ca", "allowInsecure"]);
+    expect(c.database.allowInsecure).toBe(false);
   });
 });
 

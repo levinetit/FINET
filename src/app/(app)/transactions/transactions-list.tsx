@@ -112,6 +112,14 @@ export function TransactionsList({
                         {ro.transactions.transferBadge}
                       </span>
                     ) : null}
+                    {r.source === "recurring" ? (
+                      <span
+                        className="rounded bg-accent-soft px-1.5 py-0.5 text-xs font-semibold"
+                        data-testid="recurring-badge"
+                      >
+                        {ro.transactions.recurringBadge}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="text-sm text-muted-foreground">
                     {formatCalendarDate(r.occurredOn)} · {accountName.get(r.accountId) ?? "—"}

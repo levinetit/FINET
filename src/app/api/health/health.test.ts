@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import {
   checkDb,
+  checkQueue,
   checkStorage,
   closeHealthDb,
   overallStatus,
@@ -36,6 +37,17 @@ const s3 = new S3Storage({
   bucket: "b",
   accessKeyId: "id-fictiv",
   secretAccessKey: "secret-fictiv",
+});
+
+describe("checkQueue", () => {
+  it("fără URL → unknown; bază inaccesibilă → unknown (starea bazei o dă checkDb)", async () => {
+    expect(await checkQueue(null)).toBe("unknown");
+    expect(await checkQueue(DEAD_DB)).toBe("unknown");
+  });
+
+  it.skipIf(!REAL_DB)("bază fără migrația 0006 → unknown, nu down", async () => {
+    expect(await checkQueue(REAL_DB!)).toBe("unknown");
+  });
 });
 
 describe("checkDb", () => {
@@ -101,11 +113,16 @@ describe("overallStatus", () => {
     expect(overallStatus({ ...base, db: "ok", storage: "unknown" })).toBe("degraded");
     expect(overallStatus({ ...base, db: "down", storage: "ok" })).toBe("down");
     expect(overallStatus({ db: "ok", storage: "ok", queue: "down", ai: "unknown" })).toBe("down");
+    // Faza 5: coada cu semnal vechi degradează starea, fără 503; coada ok rămâne ok.
+    expect(overallStatus({ db: "ok", storage: "ok", queue: "degraded", ai: "unknown" })).toBe(
+      "degraded",
+    );
+    expect(overallStatus({ db: "ok", storage: "ok", queue: "ok", ai: "unknown" })).toBe("ok");
   });
 });
 
 describe("runHealthChecks", () => {
-  it("coada și AI-ul sunt mereu unknown în Faza 0", async () => {
+  it("fără bază: coada și AI-ul sunt unknown", async () => {
     const r = await runHealthChecks({ databaseUrl: null, storage: null, diskDir: null });
     expect(r).toEqual({
       status: "degraded",

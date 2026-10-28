@@ -2,11 +2,11 @@ import { type Page, expect } from "@playwright/test";
 
 /**
  * Datele testelor E2E de autentificare. Utilizatorii se creează ÎNAINTE de rulare, cu CLI-ul
- * admin (parola din stdin), câte nouă pentru fiecare mod, ca scenariile să nu se încurce (fără IP
+ * admin (parola din stdin), câte unsprezece pentru fiecare mod, ca scenariile să nu se încurce (fără IP
  * de încredere în dezvoltare, rate limiting-ul e pe email; mutațiile API au 120/min per
  * utilizator, de aceea seed-ul de paginare are utilizatorul lui):
  *
- *   for u in main parola sesiuni ledger ledger2 seed planning planning2 regresii; do
+ *   for u in main parola sesiuni ledger ledger2 seed planning planning2 regresii recurring recurring2; do
  *     printf '%s\n' "$E2E_PASSWORD" | FINET_ROLE=admin DATABASE_URL=<finet_app> \
  *       node dist/tools/admin.mjs create-user --email "e2e-$u-<mod>@finet.test" \
  *       --name "E2E $u" --password-stdin
@@ -28,7 +28,7 @@ export function password(): string {
 /**
  * Utilizatorii E2E: `auth` (main, parola, sesiuni), `ledger` (ledger, ledger2, seed) și
  * `planning` (planning, planning2; Faza 3: exporturile au 10/min per utilizator) și `regressions`
- * (regresii; Faza 4).
+ * (regresii; Faza 4) și `recurring` (recurring, recurring2; Faza 5).
  */
 export const USER_KINDS = [
   "main",
@@ -40,6 +40,8 @@ export const USER_KINDS = [
   "planning",
   "planning2",
   "regresii",
+  "recurring",
+  "recurring2",
 ] as const;
 export type UserKind = (typeof USER_KINDS)[number];
 

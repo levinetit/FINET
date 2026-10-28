@@ -179,6 +179,8 @@ export type TransactionView = Readonly<{
   source: (typeof TRANSACTION_SOURCES)[number];
   transferGroupId: string | null;
   transferDirection: (typeof TRANSFER_DIRECTIONS)[number] | null;
+  /** Regula recurentă care a generat tranzacția (Faza 5), dacă `source = recurring`. */
+  recurringRuleId: string | null;
   createdByUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
