@@ -1,7 +1,16 @@
 import { z } from "zod";
 
-import { CATEGORY_KINDS, TRANSACTION_SOURCES, TRANSACTION_TYPES } from "@/db/schema";
+import { CATEGORY_KINDS, GOAL_STATUSES, TRANSACTION_SOURCES, TRANSACTION_TYPES } from "@/db/schema";
 import { accountCreateSchema, accountUpdateSchema } from "@/modules/accounts/accounts.schema";
+import { budgetCreateSchema, budgetUpdateSchema } from "@/modules/budgets/budgets.schema";
+import { MAX_TOP_CATEGORIES } from "@/modules/dashboard/dashboard.schema";
+import { CSV_DIALECTS } from "@/modules/exports/csv";
+import {
+  goalContributionSchema,
+  goalCreateSchema,
+  goalUpdateSchema,
+} from "@/modules/goals/goals.schema";
+import { tagCreateSchema, tagUpdateSchema } from "@/modules/tags/tags.schema";
 import { changePasswordSchema } from "@/modules/auth/password.schema";
 import { categoryCreateSchema, categoryUpdateSchema } from "@/modules/categories/categories.schema";
 import { profilePatchSchema } from "@/modules/profile/profile.schema";
@@ -15,14 +24,20 @@ import { appEventsBatchSchema, consentsPutSchema } from "@/modules/usage/usage.s
 
 import {
   accountSchema,
+  budgetSchema,
+  budgetStatusSchema,
   categorySchema,
   consentStateSchema,
+  dashboardSchema,
   dataOf,
+  goalSchema,
   householdDetailSchema,
   householdSummarySchema,
   meSchema,
   moneySchema,
+  monthlyReportSchema,
   sessionSchema,
+  tagSchema,
   transactionSchema,
   transferSchema,
 } from "./schemas";
@@ -53,8 +68,16 @@ export type Operation = Readonly<{
   query?: readonly QueryParam[];
   /** Corpul JSON (dacă există). `optional`: se poate trimite fără corp și fără Content-Type. */
   body?: Readonly<{ schema: z.ZodType; optional?: boolean }>;
-  /** Răspunsul de succes: status → schemă (`null` = fără corp, 204). */
-  success: Readonly<{ status: number; schema: z.ZodType | null; description: string }>;
+  /**
+   * Răspunsul de succes: status → schemă (`null` = fără corp, 204). `csv`: corpul e `text/csv`
+   * (export), fără schemă JSON.
+   */
+  success: Readonly<{
+    status: number;
+    schema: z.ZodType | null;
+    description: string;
+    csv?: boolean;
+  }>;
   /** Codurile de eroare posibile, în afară de 401/429/500 (comune). */
   errors: readonly number[];
   /** Acceptă `Idempotency-Key`. */
@@ -78,16 +101,31 @@ const transactionPage = z.strictObject({
 const boolParam = z.enum(["true", "false"]);
 const intParam = z.string().regex(/^[0-9]{1,16}$/);
 
-const TRANSACTION_QUERY: readonly QueryParam[] = [
+const TRANSACTION_FILTERS: readonly QueryParam[] = [
   { name: "q", schema: z.string().max(200), description: "Căutare în descriere și comerciant." },
   { name: "accountId", schema: z.uuid(), description: "Doar tranzacțiile contului." },
   { name: "categoryId", schema: z.uuid(), description: "Doar tranzacțiile categoriei." },
+  {
+    name: "tagIds",
+    schema: z.string().regex(/^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36}){0,9}$/),
+    description:
+      "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele.",
+  },
+  {
+    name: "merchant",
+    schema: z.string().max(200),
+    description: "Comerciantul conține textul (fără majuscule).",
+  },
   { name: "type", schema: z.enum(TRANSACTION_TYPES), description: "Tipul." },
   { name: "source", schema: z.enum(TRANSACTION_SOURCES), description: "Sursa." },
   { name: "dateFrom", schema: z.iso.date(), description: "De la data (inclusiv)." },
   { name: "dateTo", schema: z.iso.date(), description: "Până la data (inclusiv)." },
   { name: "amountMinMinor", schema: intParam, description: "Suma minimă (unități minore)." },
   { name: "amountMaxMinor", schema: intParam, description: "Suma maximă (unități minore)." },
+];
+
+const TRANSACTION_QUERY: readonly QueryParam[] = [
+  ...TRANSACTION_FILTERS,
   {
     name: "sort",
     schema: z.enum(TRANSACTION_SORTS),
@@ -100,6 +138,30 @@ const TRANSACTION_QUERY: readonly QueryParam[] = [
   },
   { name: "limit", schema: intParam, description: "Rânduri pe pagină (implicit 50, plafon 100)." },
 ];
+
+const MONTH_PARAM: QueryParam = {
+  name: "month",
+  schema: z.string().regex(/^[0-9]{4}-[0-9]{2}$/),
+  description:
+    "Luna `YYYY-MM` (implicit luna curentă în fusul gospodăriei, `Europe/Bucharest`). Acceptat: de la aceeași lună de acum 5 ani (60 de luni în urmă) până la luna curentă; în afara intervalului → 400.",
+};
+
+const DIALECT_PARAM: QueryParam = {
+  name: "dialect",
+  schema: z.enum(CSV_DIALECTS),
+  description:
+    "`rfc4180` (implicit: virgulă, punct zecimal) sau `ro` (`;`, virgulă zecimală, pentru Excel în română).",
+};
+
+const csvSuccess = (description: string) =>
+  ({
+    status: 200,
+    schema: null,
+    csv: true,
+    description: `${description} UTF-8 cu BOM, CRLF, ghilimele RFC 4180; celulele de text liber care încep cu = + - @ TAB CR primesc un apostrof. Antete: \`Content-Disposition: attachment\` (nume fix), \`Cache-Control: no-store\`, \`X-Content-Type-Options: nosniff\`. Rate limit propriu: 10/min per utilizator.`,
+  }) as const;
+
+const pathOf = (base: string, suffix = "") => `${base}/{id}${suffix}`;
 
 const VALIDATION = 400;
 const FORBIDDEN = 403; // CSRF (cookie fără Origin corect)
@@ -492,6 +554,270 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Șterge ambele rânduri ale transferului.",
     success: { status: 204, schema: null, description: "Șters." },
     errors: [FORBIDDEN, NOT_FOUND, MEDIA],
+  },
+  // --- Etichetele (Faza 3) ------------------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/tags",
+    operationId: "listTags",
+    tag: "tags",
+    summary: "Etichetele de sistem și ale gospodăriei, cu numărul de utilizări.",
+    query: [
+      { name: "includeHidden", schema: boolParam, description: "Include și etichetele ascunse." },
+    ],
+    success: { status: 200, schema: dataOf(z.array(tagSchema)), description: "Etichetele." },
+    errors: [VALIDATION],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/tags",
+    operationId: "createTag",
+    tag: "tags",
+    summary: "Creează o etichetă (nume unic fără majuscule, inclusiv față de cele de sistem).",
+    body: { schema: tagCreateSchema },
+    success: { status: 201, schema: dataOf(tagSchema), description: "Eticheta creată." },
+    errors: [...IDEMPOTENT_ERRORS],
+    idempotent: true,
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/tags"),
+    operationId: "getTag",
+    tag: "tags",
+    summary: "O etichetă.",
+    success: { status: 200, schema: dataOf(tagSchema), description: "Eticheta." },
+    errors: [NOT_FOUND],
+  },
+  {
+    method: "PATCH",
+    path: pathOf("/api/v1/tags"),
+    operationId: "patchTag",
+    tag: "tags",
+    summary: "Modifică o etichetă (cele de sistem: doar `hidden`, altfel 409 `system_tag`).",
+    body: { schema: tagUpdateSchema },
+    success: { status: 200, schema: dataOf(tagSchema), description: "Eticheta." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/tags"),
+    operationId: "deleteTag",
+    tag: "tags",
+    summary: "Șterge o etichetă proprie și legăturile ei; una de sistem → 409 (se poate ascunde).",
+    success: { status: 204, schema: null, description: "Ștearsă." },
+    errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA],
+  },
+  // --- Bugetele ------------------------------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/budgets",
+    operationId: "listBudgets",
+    tag: "budgets",
+    summary: "Bugetele vizibile (ale gospodăriei și cele personale proprii).",
+    query: [
+      { name: "includeArchived", schema: boolParam, description: "Include bugetele arhivate." },
+    ],
+    success: { status: 200, schema: dataOf(z.array(budgetSchema)), description: "Bugetele." },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/budgets",
+    operationId: "createBudget",
+    tag: "budgets",
+    summary: "Creează un buget lunar (general sau pe o categorie de cheltuieli).",
+    description:
+      "Categoria, moneda și domeniul nu se mai pot schimba. `scope: personal` = al utilizatorului curent, vizibil doar lui. Un buget activ identic → 409 `budget_exists`.",
+    body: { schema: budgetCreateSchema },
+    success: { status: 201, schema: dataOf(budgetSchema), description: "Bugetul creat." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "GET",
+    path: "/api/v1/budgets/status",
+    operationId: "getBudgetStatus",
+    tag: "budgets",
+    summary: "Starea bugetelor active într-o lună (semafor) și avertizările.",
+    description:
+      "`alerts` = bugetele galbene și roșii ale lunii (roșii întâi). Cheltuit = cheltuielile lunii în moneda bugetului (subcategoriile incluse; transferurile și veniturile nu contează).",
+    query: [MONTH_PARAM],
+    success: {
+      status: 200,
+      schema: z.strictObject({
+        month: z.string(),
+        data: z.array(budgetStatusSchema),
+        alerts: z.array(z.strictObject({ budgetId: z.uuid(), status: z.enum(["yellow", "red"]) })),
+      }),
+      description: "Stările și avertizările.",
+    },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/budgets"),
+    operationId: "getBudget",
+    tag: "budgets",
+    summary: "Un buget.",
+    success: { status: 200, schema: dataOf(budgetSchema), description: "Bugetul." },
+    errors: [NOT_FOUND],
+  },
+  {
+    method: "PATCH",
+    path: pathOf("/api/v1/budgets"),
+    operationId: "patchBudget",
+    tag: "budgets",
+    summary: "Modifică suma, pragul de avertizare sau arhivarea.",
+    body: { schema: budgetUpdateSchema },
+    success: { status: 200, schema: dataOf(budgetSchema), description: "Bugetul." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/budgets"),
+    operationId: "deleteBudget",
+    tag: "budgets",
+    summary: "Șterge definitiv un buget (confirmarea e a interfeței; auditat fără sume).",
+    success: { status: 204, schema: null, description: "Șters." },
+    errors: [FORBIDDEN, NOT_FOUND, MEDIA],
+  },
+  // --- Obiectivele ---------------------------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/goals",
+    operationId: "listGoals",
+    tag: "goals",
+    summary: "Obiectivele de economisire, cu progresul.",
+    query: [{ name: "status", schema: z.enum(GOAL_STATUSES), description: "Doar o stare." }],
+    success: { status: 200, schema: dataOf(z.array(goalSchema)), description: "Obiectivele." },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/goals",
+    operationId: "createGoal",
+    tag: "goals",
+    summary: "Creează un obiectiv (cont opțional, aceeași monedă).",
+    body: { schema: goalCreateSchema },
+    success: { status: 201, schema: dataOf(goalSchema), description: "Obiectivul creat." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/goals"),
+    operationId: "getGoal",
+    tag: "goals",
+    summary: "Un obiectiv.",
+    success: { status: 200, schema: dataOf(goalSchema), description: "Obiectivul." },
+    errors: [NOT_FOUND, REUSED],
+  },
+  {
+    method: "PATCH",
+    path: pathOf("/api/v1/goals"),
+    operationId: "patchGoal",
+    tag: "goals",
+    summary: "Modifică un obiectiv; `status`: `abandoned` (renunțare) sau `active` (reluare).",
+    description: "`achieved` e calculat (economisit ≥ țintă), nu se trimite.",
+    body: { schema: goalUpdateSchema },
+    success: { status: 200, schema: dataOf(goalSchema), description: "Obiectivul." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/goals"),
+    operationId: "deleteGoal",
+    tag: "goals",
+    summary: "Șterge definitiv un obiectiv (confirmarea e a interfeței; auditat fără sume).",
+    success: { status: 204, schema: null, description: "Șters." },
+    errors: [FORBIDDEN, NOT_FOUND, MEDIA],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/goals", "/contributions"),
+    operationId: "contributeGoal",
+    tag: "goals",
+    summary: "O contribuție (`add`) sau o retragere (`withdraw`); `Idempotency-Key` OBLIGATORIU.",
+    description:
+      "Fără cheie → 400 (o reîncercare fără cheie ar dubla suma). Economisitul nu scade sub 0 (409 `goal_saved_negative`); un obiectiv abandonat refuză contribuțiile (409 `goal_abandoned`). Starea `achieved` se recalculează (reversibil).",
+    body: { schema: goalContributionSchema },
+    success: { status: 200, schema: dataOf(goalSchema), description: "Obiectivul actualizat." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/goals", "/abandon"),
+    operationId: "abandonGoal",
+    tag: "goals",
+    summary: "Renunță la obiectiv (reluarea: `PATCH` cu `status: active`).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 200, schema: dataOf(goalSchema), description: "Obiectivul." },
+    errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE],
+  },
+  // --- Dashboard și raportul lunar -----------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/dashboard",
+    operationId: "getDashboard",
+    tag: "reports",
+    summary: "Dashboard-ul lunar, separat pe monedă (fără conversie).",
+    description:
+      "Totaluri (transferurile excluse), comparația cu luna anterioară (procent `null` când luna anterioară e 0), cheltuielile pe categorii-părinte (top N + „Altele”), ultimele 12 luni, trendul zilnic, onboarding.",
+    query: [
+      MONTH_PARAM,
+      {
+        name: "topCategories",
+        schema: intParam,
+        description: `Câte categorii în top (1–${MAX_TOP_CATEGORIES}, implicit 5).`,
+      },
+    ],
+    success: { status: 200, schema: dataOf(dashboardSchema), description: "Dashboard-ul." },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/reports/monthly",
+    operationId: "getMonthlyReport",
+    tag: "reports",
+    summary:
+      "Raportul lunar (structura de date): totaluri, categorii, comercianți, bugete, obiective.",
+    query: [MONTH_PARAM],
+    success: { status: 200, schema: dataOf(monthlyReportSchema), description: "Raportul." },
+    errors: [VALIDATION, REUSED],
+  },
+  // --- Exporturile CSV -----------------------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/exports/transactions.csv",
+    operationId: "exportTransactionsCsv",
+    tag: "exports",
+    summary: "Exportul CSV al tranzacțiilor (filtrele listei), în flux.",
+    description:
+      "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 50.000 de rânduri; peste → 409 `export_too_large` (JSON, fără conținut parțial).",
+    query: [...TRANSACTION_FILTERS, DIALECT_PARAM],
+    success: csvSuccess("Fișierul `finet-tranzactii.csv`."),
+    errors: [VALIDATION, CONFLICT, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/goals.csv",
+    operationId: "exportGoalsCsv",
+    tag: "exports",
+    summary: "Exportul CSV al obiectivelor (toate stările).",
+    query: [DIALECT_PARAM],
+    success: csvSuccess("Fișierul `finet-obiective.csv`."),
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/budgets.csv",
+    operationId: "exportBudgetsCsv",
+    tag: "exports",
+    summary: "Exportul CSV al bugetelor active vizibile, cu starea într-o lună.",
+    query: [MONTH_PARAM, DIALECT_PARAM],
+    success: csvSuccess("Fișierul `finet-bugete.csv`."),
+    errors: [VALIDATION, REUSED],
   },
 ];
 
