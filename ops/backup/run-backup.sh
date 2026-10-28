@@ -116,10 +116,14 @@ untrusted() { # cale; 0 = nesigur
   set -- "$1" "$(stat -c '%u' "$1")" "$(stat -c '%a' "$1")"
   [ "$2" = 0 ] || [ "$2" = "$ME_UID" ] || return 0
   _mode=$3
-  [ "${#_mode}" -eq 4 ] && _sticky=$(( ${_mode%???} & 1 )) && _mode=${_mode#?} || _sticky=0
-  _go=${_mode#?}
-  _g=${_go%?}
-  _o=${_go#?}
+  # `stat -c %a` nu pune zerouri în față (0007 → "7"): completează la 4 cifre înainte de parsare,
+  # altfel cifrele grupului/altora se citesc greșit și verificarea trece pe nesigur.
+  case $_mode in '' | *[!0-7]*) return 0 ;; esac
+  while [ "${#_mode}" -lt 4 ]; do _mode=0$_mode; done
+  _sticky=$(( ${_mode%???} & 1 ))
+  _g=${_mode#??}
+  _g=${_g%?}
+  _o=${_mode#???}
   if [ $(( _g & 2 )) -ne 0 ] || [ $(( _o & 2 )) -ne 0 ]; then
     [ -d "$1" ] && [ "$_sticky" = 1 ] && return 1
     return 0

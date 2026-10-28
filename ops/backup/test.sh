@@ -150,6 +150,13 @@ chmod o-w "$TMP/co/ops/docker/docker-compose.yml"
 chmod g+w "$TMP/co/ops/backup"
 out=$(rb_co 2>&1); check "director scriibil de grup → refuz" 2 $? "ops/backup/" "$out"
 chmod g-w "$TMP/co/ops/backup"
+# Moduri cu mai puțin de 4 cifre în `stat -c %a` (zerourile din față lipsesc): trebuie refuzate la fel.
+for m in 0002 0020 0007 0070; do
+  chmod "$m" "$TMP/co/ops/docker/docker-compose.yml"
+  out=$(rb_co 2>&1); check "compose cu modul $m → refuz" 2 $? "docker-compose.yml" "$out"
+done
+chmod 0644 "$TMP/co/ops/docker/docker-compose.yml"
+out=$(rb_co 2>&1); check "compose 0644 → rulează din nou" 0 $? "backup reușit" "$out"
 
 if command -v flock > /dev/null 2>&1; then
   out=$( (rb 1010000 3 FAKE_RC=0 FAKE_SLEEP=3 > /dev/null 2>&1 &) ; sleep 1; rb 1010001 3 FAKE_RC=0 2>&1)
