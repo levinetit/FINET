@@ -19,7 +19,7 @@ curl -s https://finet.example/api/auth/sign-in/email \
 
 ## Convenții
 - **Gospodăria** în care lucrează API-ul vine din sesiune (gospodăria curentă: cea mai veche apartenență), niciodată din cerere. Un câmp `householdId` în corp e respins (400).
-- **Sume:** întregi în unități minore, `amountMinor` + `currency` (`RON`, `EUR`, `USD`); niciodată zecimale. Valorile sunt sub 2^53. La creare se acceptă și `amount` ca text românesc (`"1.234,56"`), dar nu ambele.
+- **Sume:** întregi în unități minore, `amountMinor` + `currency` (`RON`, `EUR`, `USD`); niciodată zecimale. O sumă sau un sold inițial are cel mult 10^13 unități minore (în modul), altfel 400. Mutarea unei tranzacții pe un cont în altă monedă cere și suma (altfel 409 `currency_change_requires_amount`). La creare se acceptă și `amount` ca text românesc (`"1.234,56"`), dar nu ambele.
 - **Date:** `YYYY-MM-DD` (calendaristice, fără fus orar); **momente:** ISO 8601 în UTC.
 - **Resurse străine:** o resursă a altei gospodării, inexistentă sau cu id invalid dă același `404 not_found`.
 - Răspunsurile au `Cache-Control: no-store`.
@@ -38,6 +38,7 @@ Format unic: `{ "error": { "code", "message", "fields"?, "reason"? } }`.
 | 413 | `payload_too_large` | corp peste 16 KiB |
 | 415 | `unsupported_media_type` | corp care nu e `application/json` |
 | 422 | `idempotency_key_reused` | aceeași `Idempotency-Key` pentru altă cerere |
+| 422 | `amount_out_of_range` | un sold calculat depășește 2^53 − 1 și nu poate fi transmis exact |
 | 429 | `rate_limited` | prea multe cereri (antet `Retry-After`) |
 | 500 | `internal_error` | eroare neașteptată, fără detalii |
 
@@ -51,7 +52,8 @@ Limite: mutațiile 120/min per utilizator; evenimentele 30/min per utilizator.
 - aceeași cheie + aceeași cerere în 24 h → răspunsul inițial (același status și corp), cu `Idempotent-Replay: true`, fără a doua scriere;
 - aceeași cheie + alt corp (sau alt utilizator) → `422 idempotency_key_reused`;
 - cererea inițială încă în desfășurare → `409 request_in_progress` (reîncearcă puțin mai târziu);
-- un 4xx (de exemplu validare) se memorează; un 5xx nu (aceeași cheie poate fi refolosită după o eroare internă).
+- un 4xx (de exemplu validare) se memorează; un 5xx nu (aceeași cheie poate fi refolosită după o eroare internă);
+- un corp cu mai mult de 20 de niveluri de obiecte/liste → 400.
 
 ```bash
 curl -s https://finet.example/api/v1/transactions \
@@ -61,7 +63,7 @@ curl -s https://finet.example/api/v1/transactions \
 ```
 
 ## Antete
-- `X-FINET-Client` (opțional): `platform=android; version=1.0.2; code=10002; installation=<uuid>; os=14; model=Pixel 8; locale=ro-RO`. Chei fixe; `platform` (`android`/`web`) și `installation` obligatorii. Un antet invalid e ignorat. Serverul actualizează instalarea cel mult o dată la 15 minute. Forma veche `android/<versiune>` e acceptată doar pentru login și eticheta sesiunii.
+- `X-FINET-Client` (opțional): `platform=android; version=1.0.2; code=10002; installation=<uuid>; os=14; model=Pixel 8; locale=ro-RO`. Chei fixe; `platform` (`android`/`web`) și `installation` obligatorii. Un antet invalid e ignorat. Serverul înregistrează instalarea doar cu consimțământul `usageStats` activ, cel mult o dată la 15 minute și cel mult 20 de instalări per utilizator; revocarea consimțământului șterge instalările și evenimentele. Forma veche `android/<versiune>` e acceptată doar pentru login și eticheta sesiunii.
 - `Idempotency-Key`: mai sus.
 
 ## Endpointuri

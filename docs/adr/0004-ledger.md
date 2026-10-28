@@ -66,3 +66,10 @@ Faza 2 aduce conturile, categoriile, tranzacțiile și transferurile, plus tabel
 ## Consecințe
 - Aplicarea pe Supabase: `finet-migrate` (o singură migrație nouă, `0002_ledger`), de operator, după revizuiri.
 - Apărarea în adâncime are un cost: fiecare inserare de tranzacție rulează un trigger BEFORE și unul deferred (două căutări pe index). Acceptabil la volumul unei gospodării.
+
+## Corecțiile revizuirii F2 (2026-10-28), aplicate direct în `0002_ledger`
+`0002_ledger` și `0003_idempotency_purge` nu fuseseră aplicate nicăieri, deci s-au corectat în loc (hash nou; snapshot-ul `0002_snapshot.json` regenerat din schemă, `drizzle-kit generate` → „No schema changes”):
+- `transactions_amount_range`: `amount_minor between 1 and 10^13` (în locul lui `transactions_amount_positive`) și `accounts_opening_balance_range`: `opening_balance_minor between -10^13 and 10^13` (MEDIUM-2; aceleași praguri în Zod, `MAX_AMOUNT_MINOR`). 10^13 unități minore = 100 de miliarde în moneda contului: suficient pentru o gospodărie, și 900 de sume la plafon încă încap sub 2^53.
+- `idempotency_keys_key_format`: 16–128 caractere (ca aplicația; LOW-5).
+- `finet_app`: `DELETE` pe `client_installations` (politica existentă `client_installations_own`) și pe `app_events` (politica nouă `app_events_delete_own`, doar rândurile proprii), pentru revocarea `usage_stats` și plafonul de instalări (MEDIUM-1, MEDIUM-3; ADR 0005).
+

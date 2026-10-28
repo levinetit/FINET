@@ -89,7 +89,13 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - editarea transferurilor din UI, subcategoriile și culorile categoriilor în UI (opțional, API-ul există);
 - aplicarea `0002_ledger` și `0003_idempotency_purge` pe Supabase de operator, după revizuirea `security` (F2-A + F2-B);
 - programarea `finet-admin cleanup-idempotency` (cron pe host sau Portainer, `docs/INFRA.md`), decizia operatorului;
-- revizuirea `security` a API-ului (F2-B) și a interfeței (F2-C), inclusiv dacă serverul trebuie să verifice și el consimțământul la înregistrarea instalării din `X-FINET-Client`.
+- revizuirea `security` a API-ului (F2-B) și a interfeței (F2-C): constatările MEDIUM-1..3, LOW-1, LOW-5 corectate (2026-10-28, `docs/SECURITY_CHECKLIST.md` secțiunea 10; ADR 0004/0005/0006); de re-verificat.
+
+**Amânate din revizuirea F2 (cu motiv):**
+- **LOW-2** — retenția `app_events` (13 luni, apoi agregare pe zi/versiune): Faza 9, odată cu pagina „Statistici”; până atunci evenimentele se șterg la revocarea `usage_stats`. Programarea `finet-admin cleanup-idempotency` rămâne decizia operatorului.
+- **LOW-3** — `q` (căutarea în tranzacții) circulă în URL: aplicația nu loghează URL-uri, dar proxy-ul/Traefik/Cloudflare le pot înregistra (`docs/PRIVACY_NOTES.md`); alternativa `POST /api/v1/transactions/search` într-o fază viitoare.
+- **LOW-4** — plafoane per gospodărie (număr de conturi, categorii, tranzacții) și rate limit pe citiri: fază viitoare.
+- **NOTE** — `owner_user_id` nu are efect de autorizare (6.1); `finet_migrator` nu are politici pe `categories`/`transactions` (intenționat).
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:

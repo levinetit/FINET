@@ -25,7 +25,7 @@ Serviciile (F2-A) și API-ul (F2-B) există. Interfața trebuie să arate soldur
 - `Idempotency-Key` pe crearea conturilor, categoriilor, tranzacțiilor și transferurilor: UUID legat de corpul trimis; se păstrează doar la reîncercarea aceluiași corp după rețea/5xx/409 `request_in_progress`, se aruncă după 2xx sau orice alt 4xx (răspunsul e memorat de server; un corp corectat cu aceeași cheie ar primi 422). Funcții pure în `idempotency-key.ts`, testate.
 
 ### `X-FINET-Client` doar cu consimțământ
-- Serverul înregistrează instalarea ori de câte ori antetul e valid, fără să verifice consimțământul (ADR 0005), deci regula e în client: antetul `platform=web; installation=<uuid>; locale=ro-RO` pleacă doar pe `/api/v1/*` și doar cât `usage_stats` e acordat.
+- Din corecțiile revizuirii F2 (MEDIUM-1), serverul verifică și el consimțământul la înregistrarea instalării și șterge instalările și evenimentele la revocare (ADR 0005); regula rămâne și în client: antetul `platform=web; installation=<uuid>; locale=ro-RO` pleacă doar pe `/api/v1/*` și doar cât `usage_stats` e acordat.
 - Starea vine de la server la fiecare pagină (`PageHeader usageStats` → `UsageSync`), nu din `localStorage` (ar rămâne învechită între utilizatori). Comutatorul din `/profile` (`PUT /api/v1/me/consents`) o schimbă în memorie imediat după succes. Identificatorul instalării (UUID aleator) stă în `localStorage`, cu rezervă în memorie dacă stocarea e blocată.
 - Forma antetului e verificată în teste cu parserul serverului (`parseClientInfo` → `platform: "web"`).
 
