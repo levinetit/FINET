@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { ro } from "@/messages/ro";
 import { isValidId } from "@/modules/ledger/input";
+import { getTransactionTagIds } from "@/modules/tags/tags.service";
 import { transactionToJson } from "@/modules/transactions/transactions.schema";
 import { getTransaction } from "@/modules/transactions/transactions.service";
 import { transferToJson } from "@/modules/transfers/transfers.schema";
@@ -33,15 +34,18 @@ export default async function TransactionPage({
   const { db } = page.session.runtime;
   const result = await load(async () => {
     const tx = transactionToJson(await getTransaction({ db }, page.actor, householdId, id));
+    const tagIds =
+      tx.type === "transfer" ? [] : await getTransactionTagIds({ db }, page.actor, householdId, id);
     const options = await formOptions(db, page.actor, householdId, {
       accountId: tx.accountId,
       categoryId: tx.categoryId,
+      tagIds,
     });
     const transfer =
       tx.type === "transfer" && tx.transferGroupId
         ? transferToJson(await getTransfer({ db }, page.actor, householdId, tx.transferGroupId))
         : null;
-    return { tx, options, transfer };
+    return { tx, options, transfer, tagIds };
   });
   if (!result.ok) {
     return (
@@ -51,7 +55,7 @@ export default async function TransactionPage({
       </>
     );
   }
-  const { tx, options, transfer } = result.value;
+  const { tx, options, transfer, tagIds } = result.value;
   if (transfer) {
     const name = (accountId: string) =>
       options.allAccounts.find((a) => a.id === accountId)?.name ?? "—";
@@ -82,6 +86,8 @@ export default async function TransactionPage({
         initialType={tx.type === "income" ? "income" : "expense"}
         accounts={options.accounts}
         categories={options.categories}
+        tags={options.tags}
+        initialTagIds={tagIds}
         today={todayIn()}
       />
     </>

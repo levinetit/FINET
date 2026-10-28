@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { TagChip } from "@/components/planning/tag-chip";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,6 +16,11 @@ import { type TransactionApiQuery, apiSearch, appendUnique } from "../../_lib/tr
 import { useHydrated } from "../../_lib/use-hydrated";
 
 type Named = Readonly<{ id: string; name: string }>;
+
+/** Un rând al listei: tranzacția în forma API-ului, cu etichetele ei (Faza 3). */
+export type TransactionRow = TransactionJson & {
+  tags: ReadonlyArray<Readonly<{ id: string; name: string; color: string | null }>>;
+};
 
 /**
  * Lista tranzacțiilor: prima pagină vine de la server; „Încarcă mai mult” cere pagina următoare
@@ -29,14 +35,14 @@ export function TransactionsList({
   categories,
   emptyText,
 }: Readonly<{
-  initial: readonly TransactionJson[];
+  initial: readonly TransactionRow[];
   initialCursor: string | null;
   query: TransactionApiQuery;
   accounts: readonly Named[];
   categories: readonly Named[];
   emptyText: string;
 }>) {
-  const [rows, setRows] = useState<TransactionJson[]>([...initial]);
+  const [rows, setRows] = useState<TransactionRow[]>([...initial]);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +54,13 @@ export function TransactionsList({
     if (!cursor || loading) return;
     setLoading(true);
     setError(null);
-    const result = await apiFetch<TransactionJson[]>(
+    const result = await apiFetch<TransactionRow[]>(
       `/api/v1/transactions${apiSearch(query, cursor)}`,
       { method: "GET" },
     );
     setLoading(false);
     if (result.status === 401) return goToLogin();
-    const raw = result.raw as { data?: TransactionJson[]; nextCursor?: string | null } | null;
+    const raw = result.raw as { data?: TransactionRow[]; nextCursor?: string | null } | null;
     if (!result.ok || !raw || !Array.isArray(raw.data)) {
       setError(ro.transactions.loadMoreError);
       return;
@@ -113,6 +119,13 @@ export function TransactionsList({
                       ? ` · ${r.transferDirection === "out" ? ro.transactions.transferOut : ro.transactions.transferIn}`
                       : ` · ${r.categoryId ? (categoryName.get(r.categoryId) ?? "—") : ro.transactions.noCategory}`}
                   </span>
+                  {r.tags && r.tags.length > 0 ? (
+                    <span className="mt-1 flex flex-wrap gap-1" data-testid="transaction-tags">
+                      {r.tags.map((tag) => (
+                        <TagChip key={tag.id} name={tag.name} color={tag.color} />
+                      ))}
+                    </span>
+                  ) : null}
                 </span>
                 <span
                   className={

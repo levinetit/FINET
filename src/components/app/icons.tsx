@@ -80,3 +80,49 @@ export function TagIcon() {
     </Icon>
   );
 }
+
+export function PieIcon() {
+  return (
+    <Icon>
+      <path d="M21 12A9 9 0 1 1 12 3v9z" />
+      <path d="M15 3.5A9 9 0 0 1 20.5 9H15z" />
+    </Icon>
+  );
+}
+
+export function TargetIcon() {
+  return (
+    <Icon>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" />
+    </Icon>
+  );
+}
+
+export function ChartIcon() {
+  return (
+    <Icon>
+      <path d="M3 3v18h18" />
+      <path d="M7 15l4-4 3 3 5-6" />
+    </Icon>
+  );
+}
+
+export function FolderIcon() {
+  return (
+    <Icon>
+      <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </Icon>
+  );
+}
+
+export function MoreIcon() {
+  return (
+    <Icon>
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+    </Icon>
+  );
+}
