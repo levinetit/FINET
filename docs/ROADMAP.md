@@ -9,7 +9,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
 | 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
 | 2 — Conturi, categorii, tranzacții, transferuri | **parțial** (implementat în repo) | F2-A, F2-B, F2-C gata; rămân migrațiile pe Supabase, prima rulare E2E `ledger` în CI, verificarea în browser și revizuirea de securitate — vezi mai jos și `docs/reports/faza-2.md` |
-| 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B în repo) | F3-A (date, servicii, corecțiile Fazei 2) și F3-B (API `/api/v1`, OpenAPI) gata; rămân F3-C (UI, E2E), F3-D (backup restic, restaurare testată), migrația `0004` pe Supabase și revizuirea de securitate — vezi mai jos |
+| 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI) și F3-C (UI, E2E `planning`) gata; rămân F3-D (backup restic, restaurare testată), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
 | 4 — Stabilizare (rezervată) | neimplementat | |
 | 5 — Recurențe | neimplementat | |
 | 6 — Ingestia bonurilor | neimplementat | |
@@ -110,7 +110,13 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - `tags: [{id,name,color}]` în răspunsurile de tranzacție, filtrele `tagIds` (virgulă) și `merchant` în listă; luna validată (ultimele 60 de luni … luna curentă);
 - OpenAPI regenerat (componentele `Tag`, `Budget`, `BudgetStatus`, `Goal`, `Dashboard`, `MonthlyReport`; răspunsurile CSV ca `text/csv`), evenimente de utilizare noi; teste de integrare `src/app/api/v1/planning-api.test.ts`.
 
-**Rămâne în Faza 3:** F3-C (UI, selector de lună, filtre în URL, E2E, documentație), F3-D (backup restic zilnic + restaurare testată efectiv; fără ea nu se introduc date reale), aplicarea `0004` pe Supabase (operatorul), revizuirea `security`. Separatorul CSV: decis de coordonator (`rfc4180` implicit pe API, `ro` din UI).
+**F3-C (interfața, E2E, documentație), gata în repo** (ADR 0008; verificat local: lint, format, typecheck, teste fără DB, `openapi:check`, `test:ops`, `playwright test --list`; build și E2E în browser NOT RUN pe host):
+- `/dashboard` cu selector de lună, totaluri pe monedă cu comparație, grafice SVG fără bibliotecă (cu tabel text), bugete cu semafor și avertizare, obiective, onboarding în 3 pași;
+- `/transactions` cu filtrele `merchant` și etichete, etichetele pe rânduri și în formular, „Export CSV” cu filtrele; `/tags`; `/budgets` (+ `new`, `[id]`); `/goals` (+ `new`, `[id]`, contribuții); `/reports` cu exporturile CSV (`dialect=ro`);
+- navigarea nouă (desktop complet; telefon: Acasă, Tranzacții, Bugete, Rapoarte, „Mai mult”);
+- E2E `e2e/planning.spec.ts` (proiectul `planning`, ambele moduri în CI).
+
+**Rămâne în Faza 3:** F3-D (backup restic zilnic + restaurare testată efectiv; fără ea nu se introduc date reale), aplicarea `0004` pe Supabase (operatorul), revizuirea `security`. Separatorul CSV: decis de coordonator (`rfc4180` implicit pe API, `ro` din UI).
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:

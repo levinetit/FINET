@@ -1,4 +1,4 @@
-# FINET — arhitectura (ce există după Fazele 1–2, F3-A și F3-B)
+# FINET — arhitectura (ce există după Fazele 1–2, F3-A, F3-B și F3-C)
 
 Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
 
@@ -98,6 +98,9 @@ Handlerele din `src/app/api/v1/_lib/` sunt subțiri: `handle()` verifică sesiun
 ## Interfața registrului (F2-C)
 Paginile din `src/app/(app)/` apelează fiecare `requireLedgerPage(<cale>)` (`src/app/_lib/ledger-page.ts`: sesiunea, gospodăria curentă din bază, consimțământul `usage_stats`) și citesc datele direct din servicii, pe server; componentele client primesc forma JSON a API-ului. `load()` dă 404 uniform pentru resursele străine sau inexistente. Mutațiile pleacă din browser doar prin `/api/v1/*` (`api-client.ts`, `use-submit.ts`: blocare sincronă la dublu-clic, `Idempotency-Key` legat de corp), urmate de `router.refresh()`. Sumele: `parseAmount` → `toJson` la intrare, `formatMoney(fromJson(...))` la afișare (`ledger-ui.ts`). Filtrele tranzacțiilor sunt un formular GET, transformat în interogarea API de `transaction-filters.ts`; „Încarcă mai mult” folosește cursorul API-ului. `X-FINET-Client` (`usage-client.ts`) pleacă doar cu acordul activ. Detalii: ADR 0006.
 
+## Interfața planificării (F3-C)
+Paginile `/dashboard`, `/tags`, `/budgets` (+ `new`, `[id]`), `/goals` (+ `new`, `[id]`) și `/reports` urmează regulile din ADR 0006 (citiri pe server prin servicii, mutații prin `/api/v1/*`). Luna (`?month=`) se validează în pagină cu aceeași fereastră ca API-ul (`planning-page.ts` + `pickMonth` din `planning-ui.ts`); o lună invalidă afișează luna curentă cu un mesaj. Graficele și barele de progres sunt SVG randat pe server (`src/components/planning/charts.tsx`), scalat în întregi prin `percentOf`, cu dimensiunile ca atribute (fără `style=`) și tabel text alternativ. Exporturile CSV se descarcă prin `fetch` cu cookie (`download.ts`), mereu cu `dialect=ro`. Filtrele tranzacțiilor au `merchant` și `tagIds` (un singur parametru cu virgule spre API). Detalii: ADR 0008.
+
 ## Storage
 Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath, `O_NOFOLLOW`, scriere atomică). Driverul `s3` aruncă `NotImplementedError` (Faza 6).
 
@@ -109,4 +112,4 @@ Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` s
 - CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `smoke`, `auth`, `ledger` în `personal` apoi în `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
 
 ## Planificat (nu există încă)
-UI-ul pentru bugete, obiective, etichete, dashboard și export (F3-C), backup-ul restic (F3-D), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), Recharts, înregistrarea publică și modul `saas` (Faza 11).
+Backup-ul restic (F3-D), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), înregistrarea publică și modul `saas` (Faza 11). Graficele nu folosesc Recharts (SVG propriu, ADR 0008).

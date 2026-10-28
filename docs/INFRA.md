@@ -287,6 +287,18 @@ Agentul nu a rulat nimic din această secțiune. Ordinea:
 
 **Rollback:** imaginea anterioară a `finet-web` (UI-ul Fazei 1 nu citește tabelele noi). Migrațiile `0002`/`0003`: comenzile din antetele fișierelor, doar cu backup și decizia explicită a operatorului (distrug datele registrului).
 
+## 4e. Faza 3 pe producție (operatorul, după revizuiri și după F3-D)
+
+Agentul nu a rulat nimic din această secțiune. Interfața Fazei 3 (F3-C) nu are pași proprii de deploy: vine în imaginea `finet-web`. Ordinea:
+
+1. **Imaginile** din workflow-ul `images` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`), ca la 4b, pasul 0.
+2. **Backup** al schemei `finet` (4b, pasul 1). `0004` adaugă tabele și o constrângere unică nedistructivă pe `transactions`.
+3. **Migrația** `0004_budgets_goals_tags` (rolul `migrate`): prima rulare „aplicate acum 1”, a doua „aplicate acum 0”. `0000`–`0003` nu se schimbă.
+4. **Redeploy `finet-web`** cu imaginea nouă. Fără variabile de mediu sau secrete noi pentru UI (backup-ul F3-D are pașii lui).
+5. **Verificări prin Access**, în browser: `/dashboard` (selectorul de lună, onboarding-ul), `/budgets/new` → un buget de `100` pe o categorie → o cheltuială de `85` în acea categorie → semafor galben și bannerul „Atenție la bugete”; `/goals/new` → o contribuție; `/tags`; `/transactions` → „Export CSV” (fișier `finet-tranzactii.csv`, separator `;`). Antetele CSP ca la 4d, pasul 5.
+
+**Rollback:** imaginea anterioară a `finet-web` (UI-ul Fazei 2 nu citește tabelele noi). Migrația `0004`: comenzile din antetul fișierului, doar cu backup și decizia explicită a operatorului (distruge datele etichetelor, bugetelor și obiectivelor).
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

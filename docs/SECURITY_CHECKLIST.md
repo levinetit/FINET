@@ -165,7 +165,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Mutarea unei tranzacții pe un cont în altă monedă cere suma explicită (LOW-1) | DONE (local) | `updateTransaction` → 409 `currency_change_requires_amount`; `ledger-api.test.ts` | 2026-10-28 · programmer (corecții F2) |
 | Hash-ul `Idempotency-Key` fără recursie nelimitată (adâncime ≤ 20 → altfel 400); CHECK-ul cheii în bază aliniat la 16–128 (LOW-5) | DONE (local) | `exceedsDepth` (iterativ) în `idempotency.ts`, `http.ts`; `idempotency_keys_key_format` (0002); `idempotency.test.ts` (corp cu 2000 de niveluri → 400) | 2026-10-28 · programmer (corecții F2) |
 | Retenția `app_events` (13 luni, apoi agregare) (LOW-2) | TODO | Faza 9 (pagina „Statistici”); azi evenimentele rămân până la revocare sau ștergerea contului. Programarea `cleanup-idempotency`: decizia operatorului (`docs/INFRA.md`, 4c) | — |
-| `q` (căutarea) în URL (LOW-3) | PARTIAL | aplicația nu loghează URL-uri sau query string-uri (logurile `[api]`/`[ui]` au doar mesaje fixe); proxy-ul/Traefik/Cloudflare pot înregistra URL-urile (`docs/PRIVACY_NOTES.md`). Alternativa `POST /api/v1/transactions/search`: fază viitoare | — |
+| `q` (căutarea) și, din F3-C, `merchant` în URL (LOW-3) | PARTIAL | aplicația nu loghează URL-uri sau query string-uri (logurile `[api]`/`[ui]` au doar mesaje fixe); proxy-ul/Traefik/Cloudflare pot înregistra URL-urile (`docs/PRIVACY_NOTES.md`). Alternativa `POST /api/v1/transactions/search`: fază viitoare | — |
 | Plafoane per gospodărie (conturi, categorii, tranzacții) și rate limit pe citiri (LOW-4) | TODO | fază viitoare; azi: rate limit pe mutații per utilizator, `limit` ≤ 100 pe pagină | — |
 | NOTE: `owner_user_id` al contului nu are efect de autorizare (6.1: toți membrii văd conturile gospodăriei); `finet_migrator` nu are politici pe `categories`/`transactions` (FORCE RLS → îi apar goale; doar `idempotency_keys` are politici de curățare) | INFO | ADR 0004, ADR 0005 | 2026-10-28 · programmer |
 | Mesajele afișate nu repetă valorile introduse; erorile 500 fără detalii | DONE | `apiErrors()` în `ledger-ui.ts`; `load()` loghează doar un mesaj fix | 2026-10-28 · programmer |
@@ -193,3 +193,19 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Totaluri pe gospodărie (mai multe conturi) peste 2^53 − 1 | PARTIAL | nemărginite la scriere (risc rezidual, ADR 0007); la citire `toJson` → 422 `amount_out_of_range`, nu valoare trunchiată | — |
 | Migrația `0004` aplicată pe Supabase și verificată acolo (PostgreSQL ≥ 15 pentru `ON DELETE SET NULL (account_id)`; producția e 17) | TODO | operatorul, după revizuiri | — |
 | Revizuirea `security` a F3-A | TODO | agentul `security` | — |
+
+## 12. Interfața planificării (F3-C, 2026-10-28)
+
+| Control | Stare | Dovadă | Data · cine |
+|---|---|---|---|
+| Paginile noi (`/tags`, `/budgets*`, `/goals*`, `/reports`, `/dashboard`) apelează `requireLedgerPage(<cale>)`; datele din servicii (`withMember` + RLS); id străin/invalid → 404 uniform | DONE (cod; E2E scris) | paginile din `src/app/(app)/`; `e2e/planning.spec.ts` (f) | 2026-10-28 · programmer (F3-C) |
+| Gospodăria nu vine din client: mutațiile UI trimit doar câmpurile schemei stricte (fără `householdId`/`userId`); editarea bugetului trimite doar limita, pragul, arhivarea | DONE | `budget-form.tsx`, `goal-form.tsx`, `tags-manager.tsx`, `transaction-form.tsx` | 2026-10-28 · programmer (F3-C) |
+| CSP cu nonce fără încălcări și fără `style=` pe paginile noi; dimensiunile graficelor și culorile etichetelor ca atribute SVG; fără `dangerouslySetInnerHTML` | DONE (static) / E2E NOT RUN | `ui-rules.test.ts` (PASS); `e2e/planning.spec.ts` (g) | 2026-10-28 · programmer (F3-C) |
+| Descărcarea CSV prin `fetch` cu cookie pe aceeași origine (fără token în URL), mereu `dialect=ro`; numele fișierului din `Content-Disposition` acceptat doar ca nume simplu; 409/429 cu mesaje fixe | DONE | `src/app/_lib/download.ts`, `download.test.ts` (PASS); E2E (e) | 2026-10-28 · programmer (F3-C) |
+| Exportul tranzacțiilor din UI poartă exact filtrele paginii (fără `sort`), deci nu exportă mai mult decât vede utilizatorul; izolarea exportului verificată și cu alt utilizator | DONE (unit) / E2E NOT RUN | `exportSearch` + `transaction-filters.test.ts` (PASS); E2E (e), (f) | 2026-10-28 · programmer (F3-C) |
+| Contribuțiile la obiective trimit mereu `Idempotency-Key` (UUID nou per acțiune, păstrat doar la reîncercarea aceluiași corp) | DONE | `goal-actions.tsx` (`useSubmit` cu `idempotent`); E2E (c) | 2026-10-28 · programmer (F3-C) |
+| Luna din URL validată în pagini cu fereastra API-ului (60 de luni … luna curentă); altă valoare → luna curentă, fără eroare | DONE | `planning-page.ts`, `pickMonth` + `planning-ui.test.ts` (PASS) | 2026-10-28 · programmer (F3-C) |
+| Text liber (`q`, `merchant`) în URL: decizie documentată (vederi salvabile), indiciu la câmp | PARTIAL (acceptat) | ADR 0008; LOW-3 mai sus | 2026-10-28 · programmer (F3-C) |
+| Bani în UI doar prin `money.ts`: scalarea graficelor prin `percentOf` (bigint), valoarea absolută prin `negate` | DONE | `planning-ui.ts`, `ui-rules.test.ts` | 2026-10-28 · programmer (F3-C) |
+| `pnpm build` + `scan:client-secrets` pe codul F3-C | NOT RUN (memoria hostului) | CI | — |
+| Revizuirea `security` a F3-C | TODO | agentul `security` | — |
