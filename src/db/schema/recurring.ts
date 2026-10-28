@@ -108,7 +108,7 @@ export const recurringRules = finet.table(
     check("recurring_rules_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
     check(
       "recurring_rules_description_length",
-      sql`char_length(${t.description}) between 1 and 500 and ${t.description} = btrim(${t.description})`,
+      sql`char_length(${t.description}) >= 1 and char_length(${t.description}) <= 500 and ${t.description} = btrim(${t.description})`,
     ),
     check(
       "recurring_rules_merchant_length",
@@ -126,7 +126,7 @@ export const recurringRules = finet.table(
     ),
     check(
       "recurring_rules_dates_range",
-      sql`${t.startOn} between date '1900-01-01' and date '2999-12-31' and ${t.nextRunOn} between date '1900-01-01' and date '2999-12-31' and (${t.endOn} is null or ${t.endOn} between date '1900-01-01' and date '2999-12-31')`,
+      sql`${t.startOn} >= date '1900-01-01' and ${t.startOn} <= date '2999-12-31' and ${t.nextRunOn} >= date '1900-01-01' and ${t.nextRunOn} <= date '2999-12-31' and (${t.endOn} is null or ${t.endOn} between date '1900-01-01' and date '2999-12-31')`,
     ),
     check(
       "recurring_rules_dates_order",

@@ -3262,7 +3262,7 @@
         },
         "recurring_rules_description_length": {
           "name": "recurring_rules_description_length",
-          "value": "char_length(\"finet\".\"recurring_rules\".\"description\") between 1 and 500 and \"finet\".\"recurring_rules\".\"description\" = btrim(\"finet\".\"recurring_rules\".\"description\")"
+          "value": "char_length(\"finet\".\"recurring_rules\".\"description\") >= 1 and char_length(\"finet\".\"recurring_rules\".\"description\") <= 500 and \"finet\".\"recurring_rules\".\"description\" = btrim(\"finet\".\"recurring_rules\".\"description\")"
         },
         "recurring_rules_merchant_length": {
           "name": "recurring_rules_merchant_length",
@@ -3282,7 +3282,7 @@
         },
         "recurring_rules_dates_range": {
           "name": "recurring_rules_dates_range",
-          "value": "\"finet\".\"recurring_rules\".\"start_on\" between date '1900-01-01' and date '2999-12-31' and \"finet\".\"recurring_rules\".\"next_run_on\" between date '1900-01-01' and date '2999-12-31' and (\"finet\".\"recurring_rules\".\"end_on\" is null or \"finet\".\"recurring_rules\".\"end_on\" between date '1900-01-01' and date '2999-12-31')"
+          "value": "\"finet\".\"recurring_rules\".\"start_on\" >= date '1900-01-01' and \"finet\".\"recurring_rules\".\"start_on\" <= date '2999-12-31' and \"finet\".\"recurring_rules\".\"next_run_on\" >= date '1900-01-01' and \"finet\".\"recurring_rules\".\"next_run_on\" <= date '2999-12-31' and (\"finet\".\"recurring_rules\".\"end_on\" is null or \"finet\".\"recurring_rules\".\"end_on\" between date '1900-01-01' and date '2999-12-31')"
         },
         "recurring_rules_dates_order": {
           "name": "recurring_rules_dates_order",
