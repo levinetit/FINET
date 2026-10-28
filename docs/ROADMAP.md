@@ -11,7 +11,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 2 — Conturi, categorii, tranzacții, transferuri | **parțial** (implementat în repo) | F2-A, F2-B, F2-C gata; rămân migrațiile pe Supabase, prima rulare E2E `ledger` în CI, verificarea în browser și revizuirea de securitate — vezi mai jos și `docs/reports/faza-2.md` |
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C, F3-D în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI), F3-C (UI, E2E `planning`) și F3-D (backup restic, restaurare testată pe Postgres efemer) gata; rămân instalarea backup-ului și restaurarea de probă pe producție (operatorul), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
 | 4 — Stabilizare | **parțial** (implementat în repo) | recuperarea după deploy, `global-error`, date `zz.ll.aaaa`, `tagMatch=all`, accesibilitate de bază, bugetul JS, `0005_perf_indexes`, testele de regresie; rămân prima rulare CI (build, buget, E2E `regressions`), `0005` pe Supabase, cron-ul de curățare și revizuirea `security` — vezi mai jos și `docs/reports/faza-4.md` |
-| 5 — Recurențe | neimplementat | |
+| 5 — Recurențe | **parțial** (F5-A, F5-B în repo) | date, servicii, worker pg-boss (F5-A); API `/api/v1/recurring`, UI `/recurring`, E2E `recurring` (F5-B); rămân migrațiile `0006`/`0007` și workerul pe producție (operatorul), prima rulare CI completă și revizuirea `security` — vezi mai jos și `docs/reports/faza-5.md` |
 | 6 — Ingestia bonurilor | neimplementat | |
 | 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
 | 8 — Familie | neimplementat | |
@@ -151,8 +151,13 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - serviciile `src/modules/recurring/` (CRUD, pauză/reluare fără retroactiv, contoare, generare idempotentă cu recuperare limitată la 12/regulă/rulare, `completed`, garda 2^53, pauză la cont arhivat, fereastra workerului fără înfometare);
 - workerul pg-boss (`src/worker/`, imaginea de unelte): `recurring.generate` orar, `recurring.generate-now` la cerere, reîncercări limitate, oprire grațioasă, loguri fără date financiare, semnal de viață → `/api/health` `queue`; memorie măsurată ~86 MB RSS (limita 150 MB).
 
+**Făcut în repo, F5-B** (ADR 0012):
+- API `/api/v1/recurring` (listă cu contor, rezumat, CRUD, pauză, reluare, `generate` cu `Idempotency-Key` obligatoriu și limită proprie), `recurringRuleId` pe tranzacții, OpenAPI regenerat, `docs/API.md`, evenimentele `recurring_created`/`recurring_generated`, audit `recurring.generated` fără sume;
+- UI `/recurring` (filtre pe stare, contorul „X active · Y reguli scadente · Z total”, „Generează scadentele”), `/recurring/new`, `/recurring/[id]` (pauză/reluare, motivul „cont arhivat”, editare, ștergere cu confirmare); în `/transactions` insigna „recurentă” și filtrul pe sursă; intrarea „Recurențe” în meniu;
+- E2E `e2e/recurring.spec.ts` (proiectul `recurring`, utilizatorii `recurring`, `recurring2`).
+
 **Rămâne:**
-- F5-B: API `/api/v1` pentru reguli și butonul „Generează tranzacțiile scadente”, UI-ul cu filtre pe stare și contorul „X active · Y de generat · Z total”, OpenAPI, E2E;
+- cartea „Plăți recurente” pe dashboard (opțională, amânată: decizia F5-B);
 - operatorul: schema `pgboss`, migrațiile `0006`/`0007`, pornirea workerului (`docs/INFRA.md` 4g);
 - prima rulare CI completă (build, E2E) — local NOT RUN (memoria hostului);
 - amânat (cu motiv): fusul orar al gospodăriei pentru „azi” (azi București), reasignarea creatorului unei reguli (fallback pe proprietar), recurențele de tip transfer, detectarea din extrase (Faza 7), notificările; curățarea cheilor de idempotență mutată din cron în worker (posibilă acum, nefăcută: cron-ul din 4f rămâne).
@@ -256,7 +261,7 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/goals`, `/goals/new`, `/goals/[id]` | `/goals` | 3 | branch |
 | `/reports` | `/reports` (de bază) | 3; micro-cheltuieli în 10 | branch |
 | exporturi CSV (în `/reports` și `/transactions`) | `/export` (CSV) | 3 | branch; pagină `/export` proprie cu Excel și PDF: Faza 10 |
-| `/recurring` | `/recurring` | 5 | planificat |
+| `/recurring`, `/recurring/new`, `/recurring/[id]` | `/recurring` | 5 | branch |
 | `/receipts` | `/receipts` | 6 | planificat |
 | `/import` | `/import` | 6 (bonuri), 7 (extrase) | planificat |
 | `/statements/coverage` (nume provizoriu) | „Evidență extrase & acoperire” | 7 | planificat |

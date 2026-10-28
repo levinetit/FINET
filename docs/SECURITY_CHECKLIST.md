@@ -263,3 +263,8 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Containerul worker: imaginea de unelte, user `node`, `read_only`, `cap_drop: ALL`, doar secretul lui, `mem_limit: 150m` | DONE (`test-env-examples.sh`) | `docker-compose.yml`, `ops/docker/test-env-examples.sh` | 2026-10-28 · programmer (F5-A) |
 | `pg-boss` 12.38.0 (MIT, fără scripturi de instalare); upgrade = migrație nouă (testul pică dacă `0007` nu mai corespunde) | DONE | `package.json`, `scripts/pgboss-plan.test.ts`, ADR 0011 | 2026-10-28 · programmer (F5-A) |
 | Revizuirea `security` a F5-A | TODO | agentul `security` | — |
+| F5-B: rutele `/api/v1/recurring/**`: sesiune, CSRF pe cookie, gospodăria din bază (niciodată din corp), Zod strict (chei necunoscute → 400), resursă străină → 404 uniform | DONE (PG17 efemer) | `recurring-handlers.ts`, `recurring-api.test.ts` | 2026-10-28 · programmer (F5-B) |
+| F5-B: `POST /recurring/generate`: `Idempotency-Key` obligatoriu, „azi” din ceasul serverului (nu din cerere), limită proprie 6/min (429) peste limita mutațiilor, fără pg-boss în web; audit doar cu contoare | DONE (PG17 efemer) | `recurring-api.test.ts` | 2026-10-28 · programmer (F5-B) |
+| F5-B: contractul OpenAPI verificat pe fiecare răspuns (`assertContract`), `recurringRuleId` pe `Transaction` | DONE | `openapi.test.ts`, `ledger-api.test.ts`, `planning-api.test.ts`, `recurring-api.test.ts` | 2026-10-28 · programmer (F5-B) |
+| F5-B: paginile noi fără `style=`, un singur `h1`, câmpuri etichetate, zero încălcări CSP | DONE (static) / NOT RUN local (E2E în CI) | `ui-rules.test.ts`, `a11y-rules.test.ts`, `e2e/recurring.spec.ts` (d) | 2026-10-28 · programmer (F5-B) |
+| Revizuirea `security` a F5-B | TODO | agentul `security` | — |
