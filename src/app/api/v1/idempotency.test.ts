@@ -146,6 +146,19 @@ describe.skipIf(!TEST_ADMIN_URL)("Idempotency-Key pe PostgreSQL real", () => {
     expect(keys[0]?.n).toBe(2);
   });
 
+  it("corp prea adânc cu cheie → 400 înainte de hash (fără recursie nelimitată)", async () => {
+    let deep: unknown = 1;
+    for (let i = 0; i < 2000; i++) deep = [deep];
+    const before = await txCount();
+    const r = await postTx(A, "corp-adanc-00000000001", { ...txBody(9), notes: deep });
+    expect(r.status).toBe(400);
+    expect((await readJson(r)).error?.fields).toEqual({ _: "Cererea are prea multe niveluri." });
+    expect(await txCount()).toBe(before);
+    expect(() => requestHash({ method: "POST", path: "/x", userId: "u", body: deep })).toThrow(
+      RangeError,
+    );
+  });
+
   it("cheie invalidă → 400; fără cheie: fiecare cerere scrie", async () => {
     for (const key of [
       "scurta",

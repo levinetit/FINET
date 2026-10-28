@@ -15,7 +15,8 @@ import { sessionViewSchema } from "@/modules/sessions/sessions.schema";
 /**
  * Schemele RĂSPUNSURILOR API (OpenAPI, ADR 0005). Răspunsurile reale sunt construite de funcțiile
  * `*ToJson` din module; testele de integrare verifică răspunsurile reale cu aceste scheme
- * (`src/app/api/v1/contract.test.ts`), ca documentația să nu se depărteze de cod.
+ * (`assertContract` din `src/app/api/v1/_lib/testing.ts`, apelat la fiecare răspuns din testele
+ * `src/app/api/v1/*.test.ts`), ca documentația să nu se depărteze de cod.
  */
 
 const uuid = z.uuid();

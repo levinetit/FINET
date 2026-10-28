@@ -35,6 +35,26 @@ export function isValidIdempotencyKey(value: string): boolean {
   return KEY_PATTERN.test(value);
 }
 
+/**
+ * Adâncimea maximă a corpului pentru hash (revizuirea F2, LOW-5): `canonicalJson` e recursiv, iar
+ * un corp de 16 KiB cu mii de niveluri ar putea epuiza stiva. Corpurile reale au cel mult 3.
+ */
+export const MAX_JSON_DEPTH = 20;
+
+/** `true` dacă valoarea are mai mult de `max` niveluri de obiecte/liste (iterativ, fără recursie). */
+export function exceedsDepth(value: unknown, max = MAX_JSON_DEPTH): boolean {
+  const stack: [unknown, number][] = [[value, 0]];
+  while (stack.length > 0) {
+    const [node, depth] = stack.pop()!;
+    if (node === null || typeof node !== "object") continue;
+    if (depth + 1 > max) return true;
+    for (const child of Array.isArray(node) ? node : Object.values(node)) {
+      stack.push([child, depth + 1]);
+    }
+  }
+  return false;
+}
+
 /** JSON canonic: cheile obiectelor sortate recursiv; `undefined` dispare ca în `JSON.stringify`. */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
@@ -52,7 +72,9 @@ export type RequestFingerprint = Readonly<{
   body: unknown;
 }>;
 
+/** Hash-ul cererii; aruncă `RangeError` pentru un corp mai adânc de `MAX_JSON_DEPTH`. */
 export function requestHash(f: RequestFingerprint): string {
+  if (exceedsDepth(f.body)) throw new RangeError("corp prea adânc");
   const text = canonicalJson([f.method.toUpperCase(), f.path, f.userId, f.body ?? null]);
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
