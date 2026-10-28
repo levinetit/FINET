@@ -169,6 +169,7 @@ describe("readMigrations (fără bază)", () => {
     const created = [...text.matchAll(/CREATE TABLE "finet"\."(\w+)"/g)].map((m) => m[1]!);
     expect(created.sort()).toEqual([
       "ai_calls",
+      "document_usage_daily",
       "documents",
       "processing_batches",
       "product_aliases",
@@ -518,6 +519,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       "category_visibility",
       "client_installations",
       "consents",
+      "document_usage_daily",
       "documents",
       "goals",
       "household_members",

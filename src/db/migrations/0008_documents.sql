@@ -1,6 +1,6 @@
 -- FINET 0008_documents (Faza 6, F6-A): documentele încărcate (bonuri), loturile de procesare,
 -- bonurile extrase și liniile lor, alias-urile de produse (corecturile utilizatorului) și jurnalul
--- apelurilor AI (fără conținut).
+-- apelurilor AI (fără conținut), plus contorul zilnic al încărcărilor (`document_usage_daily`).
 -- Prima parte e generată de `drizzle-kit generate --name documents` din src/db/schema/documents.ts
 -- (`when` din jurnal fixat de mână la 1793600000000, după 0007). A doua parte (după „PARTEA SCRISĂ
 -- DE MÂNĂ”) e adăugată o singură dată, înainte de prima aplicare: cheile compuse cu
@@ -23,7 +23,7 @@
 -- șterg separat, `households/*/documents/*`):
 --   alter table finet.transactions drop constraint transactions_document_fk;
 --   drop index finet.transactions_document_id_idx;
---   drop table finet.receipt_lines, finet.receipts, finet.ai_calls, finet.product_aliases,
+--   drop table finet.document_usage_daily, finet.receipt_lines, finet.receipts, finet.ai_calls, finet.product_aliases,
 --     finet.documents, finet.processing_batches;
 --   drop function finet.queued_documents(integer, integer), finet.receipt_lines_check_refs(),
 --     finet.product_aliases_check_refs();
@@ -50,6 +50,16 @@ CREATE TABLE "finet"."ai_calls" (
 	CONSTRAINT "ai_calls_cost_shape" CHECK (("finet"."ai_calls"."cost_estimate_minor" is null) = ("finet"."ai_calls"."cost_currency" is null) and ("finet"."ai_calls"."cost_estimate_minor" is null or "finet"."ai_calls"."cost_estimate_minor" between 0 and 10000000000000) and ("finet"."ai_calls"."cost_currency" is null or "finet"."ai_calls"."cost_currency" in ('RON', 'EUR', 'USD'))),
 	CONSTRAINT "ai_calls_duration_range" CHECK ("finet"."ai_calls"."duration_ms" between 0 and 3600000),
 	CONSTRAINT "ai_calls_result_valid" CHECK ("finet"."ai_calls"."result" in ('ok', 'failed_validation', 'timeout', 'fallback', 'error'))
+);
+--> statement-breakpoint
+CREATE TABLE "finet"."document_usage_daily" (
+	"household_id" uuid NOT NULL,
+	"day" date NOT NULL,
+	"count" integer DEFAULT 0 NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "document_usage_daily_pkey" PRIMARY KEY("household_id","day"),
+	CONSTRAINT "document_usage_daily_count_range" CHECK ("finet"."document_usage_daily"."count" between 0 and 1000000),
+	CONSTRAINT "document_usage_daily_day_range" CHECK ("finet"."document_usage_daily"."day" between date '2000-01-01' and date '2999-12-31')
 );
 --> statement-breakpoint
 CREATE TABLE "finet"."documents" (
@@ -189,6 +199,7 @@ CREATE TABLE "finet"."receipts" (
 );
 --> statement-breakpoint
 ALTER TABLE "finet"."ai_calls" ADD CONSTRAINT "ai_calls_household_id_households_id_fk" FOREIGN KEY ("household_id") REFERENCES "finet"."households"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "finet"."document_usage_daily" ADD CONSTRAINT "document_usage_daily_household_id_households_id_fk" FOREIGN KEY ("household_id") REFERENCES "finet"."households"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "finet"."documents" ADD CONSTRAINT "documents_household_id_households_id_fk" FOREIGN KEY ("household_id") REFERENCES "finet"."households"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "finet"."documents" ADD CONSTRAINT "documents_uploaded_by_user_id_users_id_fk" FOREIGN KEY ("uploaded_by_user_id") REFERENCES "finet"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "finet"."processing_batches" ADD CONSTRAINT "processing_batches_household_id_households_id_fk" FOREIGN KEY ("household_id") REFERENCES "finet"."households"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -359,6 +370,10 @@ alter table finet.product_aliases enable row level security;
 --> statement-breakpoint
 alter table finet.product_aliases force row level security;
 --> statement-breakpoint
+alter table finet.document_usage_daily enable row level security;
+--> statement-breakpoint
+alter table finet.document_usage_daily force row level security;
+--> statement-breakpoint
 alter table finet.ai_calls enable row level security;
 --> statement-breakpoint
 alter table finet.ai_calls force row level security;
@@ -399,6 +414,13 @@ create policy product_aliases_household on finet.product_aliases
          and (select finet.member_role(finet.current_household_id())) is not null);
 --> statement-breakpoint
 create policy ai_calls_household on finet.ai_calls
+  for all to finet_app
+  using (household_id = (select finet.current_household_id())
+         and (select finet.member_role(finet.current_household_id())) is not null)
+  with check (household_id = (select finet.current_household_id())
+         and (select finet.member_role(finet.current_household_id())) is not null);
+--> statement-breakpoint
+create policy document_usage_daily_household on finet.document_usage_daily
   for all to finet_app
   using (household_id = (select finet.current_household_id())
          and (select finet.member_role(finet.current_household_id())) is not null)
@@ -460,10 +482,11 @@ grant execute on function finet.queued_documents(integer, integer) to finet_app;
 -- - receipts: nu se schimbă id, household_id, document_id, batch_id, created_at;
 -- - receipt_lines: nu se schimbă id, receipt_id, household_id, created_at;
 -- - product_aliases: doar categoria, etichetele și updated_at;
--- - ai_calls: jurnal, doar SELECT + INSERT (fără UPDATE/DELETE).
+-- - ai_calls: jurnal, doar SELECT + INSERT (fără UPDATE/DELETE);
+-- - document_usage_daily: contor care doar crește (fără DELETE; UPDATE doar pe count/updated_at).
 -- ---------------------------------------------------------------------------------------------
 revoke all on finet.processing_batches, finet.documents, finet.receipts, finet.receipt_lines,
-  finet.product_aliases, finet.ai_calls from public;
+  finet.product_aliases, finet.ai_calls, finet.document_usage_daily from public;
 --> statement-breakpoint
 grant select, insert, delete on finet.processing_batches to finet_app;
 --> statement-breakpoint
@@ -491,3 +514,7 @@ grant select, insert, delete on finet.product_aliases to finet_app;
 grant update (category_id, tag_ids, updated_at) on finet.product_aliases to finet_app;
 --> statement-breakpoint
 grant select, insert on finet.ai_calls to finet_app;
+--> statement-breakpoint
+grant select, insert on finet.document_usage_daily to finet_app;
+--> statement-breakpoint
+grant update (count, updated_at) on finet.document_usage_daily to finet_app;

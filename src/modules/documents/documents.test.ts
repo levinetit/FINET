@@ -80,6 +80,7 @@ describe.skipIf(!TEST_ADMIN_URL)("documente (Postgres real, finet_app)", () => {
     await f.admin`delete from finet.documents`;
     await f.admin`delete from finet.processing_batches`;
     await f.admin`delete from finet.consents`;
+    await f.admin`delete from finet.document_usage_daily`;
     await rm(join(root, "households"), { recursive: true, force: true });
   });
 
@@ -167,6 +168,39 @@ describe.skipIf(!TEST_ADMIN_URL)("documente (Postgres real, finet_app)", () => {
       expect((error as ConflictError).reason).toBe("daily_document_limit");
       expect((await files(f.HA)).length).toBe(1);
       expect(await dailyUsage(deps(limited(1)), f.A, f.HA)).toEqual({ used: 1, limit: 1 });
+    });
+
+    it("ștergerea nu eliberează limita zilnică (contor care doar crește, revizuirea M3)", async () => {
+      const first = await upload(
+        [["files", await receiptLikeImage({ seed: 60 })]],
+        f.A,
+        f.HA,
+        limited(1),
+      );
+      await deleteDocument(deps(), f.A, f.HA, first.documents[0]!.id);
+      const error = await upload(
+        [["files", await receiptLikeImage({ seed: 61 })]],
+        f.A,
+        f.HA,
+        limited(1),
+      ).catch((e: unknown) => e);
+      expect((error as ConflictError).reason).toBe("daily_document_limit");
+      expect(await files(f.HA)).toEqual([]);
+      expect(await dailyUsage(deps(limited(1)), f.A, f.HA)).toEqual({ used: 1, limit: 1 });
+    });
+
+    it("ziua limitei e cea din București (00:30 local = 22:30 UTC în ziua precedentă)", async () => {
+      // 28 oct. 2026, 22:30 UTC = 29 oct., 00:30 la București (EET, UTC+2 după 25 oct.).
+      const now = () => new Date("2026-10-28T22:30:00Z");
+      await upload([["files", await receiptLikeImage({ seed: 62 })]], f.A, f.HA, { now });
+      const rows = await f.admin<{ day: string; count: number }[]>`
+        select day::text as day, count from finet.document_usage_daily where household_id = ${f.HA}`;
+      expect(rows).toEqual([{ day: "2026-10-29", count: 1 }]);
+      // Duplicatul nu crește contorul.
+      await upload([["files", await receiptLikeImage({ seed: 62 })]], f.A, f.HA, { now });
+      const [again] = await f.admin<{ count: number }[]>`
+        select count from finet.document_usage_daily where household_id = ${f.HA}`;
+      expect(again!.count).toBe(1);
     });
 
     it("cota de stocare: peste plafon → storage_quota_exceeded, fișierele șterse", async () => {
@@ -388,6 +422,7 @@ describe.skipIf(!TEST_ADMIN_URL)("documente (Postgres real, finet_app)", () => {
       "receipt_lines",
       "product_aliases",
       "ai_calls",
+      "document_usage_daily",
     ] as const;
 
     it("fără context: 0 rânduri; în contextul lui B: nimic din HA", async () => {
@@ -406,6 +441,7 @@ describe.skipIf(!TEST_ADMIN_URL)("documente (Postgres real, finet_app)", () => {
       await f.admin`insert into finet.ai_calls (household_id, document_id, task, model_alias, provider, duration_ms, result)
         values (${f.HA}, ${doc!.id}, 'receipt_extract', 'finet-vision-external', 'external', 1200, 'ok')`;
       await f.admin`insert into finet.processing_batches (household_id, kind) values (${f.HA}, 'single')`;
+      // Contorul zilei există deja (încărcarea de mai sus l-a creat).
 
       for (const table of TABLES) {
         const all = await f.admin.unsafe(`select count(*)::int as n from finet.${table}`);

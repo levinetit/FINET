@@ -7,6 +7,7 @@ import {
   index,
   integer,
   numeric,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -490,6 +491,31 @@ export const aiCalls = finet.table(
     check(
       "ai_calls_result_valid",
       sql`${t.result} in ('ok', 'failed_validation', 'timeout', 'fallback', 'error')`,
+    ),
+  ],
+);
+
+/**
+ * Contorul zilnic al documentelor încărcate (`AI_DAILY_DOCUMENT_LIMIT`), pe gospodărie și pe zi
+ * locală (`Europe/Bucharest`). Doar crește, în aceeași tranzacție cu încărcarea: ștergerea unui
+ * document NU eliberează limita zilei (revizuirea de securitate F6-A, M3). Fără conținut.
+ */
+export const documentUsageDaily = finet.table(
+  "document_usage_daily",
+  {
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    day: day("day").notNull(),
+    count: integer("count").notNull().default(0),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ name: "document_usage_daily_pkey", columns: [t.householdId, t.day] }),
+    check("document_usage_daily_count_range", sql`${t.count} between 0 and 1000000`),
+    check(
+      "document_usage_daily_day_range",
+      sql`${t.day} between date '2000-01-01' and date '2999-12-31'`,
     ),
   ],
 );

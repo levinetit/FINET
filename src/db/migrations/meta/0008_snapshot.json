@@ -1,5 +1,5 @@
 {
-  "id": "d4943700-d738-4ac2-b0c5-3a1695ce8b4f",
+  "id": "9cf390a5-2e23-41c3-bf0d-33e1d63eb33e",
   "prevId": "327c1a59-71bf-4620-ac3b-de40516a7266",
   "version": "7",
   "dialect": "postgresql",
@@ -663,6 +663,77 @@
         "ai_calls_result_valid": {
           "name": "ai_calls_result_valid",
           "value": "\"finet\".\"ai_calls\".\"result\" in ('ok', 'failed_validation', 'timeout', 'fallback', 'error')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "finet.document_usage_daily": {
+      "name": "document_usage_daily",
+      "schema": "finet",
+      "columns": {
+        "household_id": {
+          "name": "household_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "document_usage_daily_household_id_households_id_fk": {
+          "name": "document_usage_daily_household_id_households_id_fk",
+          "tableFrom": "document_usage_daily",
+          "tableTo": "households",
+          "schemaTo": "finet",
+          "columnsFrom": [
+            "household_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "document_usage_daily_pkey": {
+          "name": "document_usage_daily_pkey",
+          "columns": [
+            "household_id",
+            "day"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "document_usage_daily_count_range": {
+          "name": "document_usage_daily_count_range",
+          "value": "\"finet\".\"document_usage_daily\".\"count\" between 0 and 1000000"
+        },
+        "document_usage_daily_day_range": {
+          "name": "document_usage_daily_day_range",
+          "value": "\"finet\".\"document_usage_daily\".\"day\" between date '2000-01-01' and date '2999-12-31'"
         }
       },
       "isRLSEnabled": false

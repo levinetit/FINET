@@ -371,6 +371,7 @@ describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe documente și bonuri (
     "receipt_lines",
     "product_aliases",
     "ai_calls",
+    "document_usage_daily",
   ];
 
   it("SELECT/INSERT/DELETE pe tabele; ai_calls doar SELECT + INSERT; UPDATE doar pe coloanele permise", async () => {
@@ -379,10 +380,12 @@ describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe documente și bonuri (
        where table_schema = 'finet' and grantee = 'finet_app' and table_name = any(${TABLES})
        order by table_name, privilege_type`;
     const by = (t: string) => rows.filter((r) => r.table_name === t).map((r) => r.privilege_type);
-    for (const t of TABLES.filter((t) => t !== "ai_calls")) {
+    for (const t of TABLES.filter((t) => t !== "ai_calls" && t !== "document_usage_daily")) {
       expect(by(t), t).toEqual(["DELETE", "INSERT", "SELECT"]);
     }
     expect(by("ai_calls")).toEqual(["INSERT", "SELECT"]);
+    // Contorul zilnic doar crește: fără DELETE (revizuirea F6-A, M3).
+    expect(by("document_usage_daily")).toEqual(["INSERT", "SELECT"]);
     const cols = await fx.scratch.admin<{ table_name: string; column_name: string }[]>`
       select table_name, column_name from information_schema.column_privileges
        where table_schema = 'finet' and grantee = 'finet_app' and privilege_type = 'UPDATE'
@@ -409,6 +412,7 @@ describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe documente și bonuri (
     expect(updatable("processing_batches")).toEqual(["status", "updated_at"]);
     expect(updatable("product_aliases")).toEqual(["category_id", "tag_ids", "updated_at"]);
     expect(updatable("ai_calls")).toEqual([]);
+    expect(updatable("document_usage_daily")).toEqual(["count", "updated_at"]);
     expect(updatable("receipts")).not.toContain("household_id");
     expect(updatable("receipts")).not.toContain("document_id");
     expect(updatable("receipt_lines")).not.toContain("receipt_id");
@@ -428,6 +432,9 @@ describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe documente și bonuri (
       sql`update finet.product_aliases set normalized_name = normalized_name`,
       sql`update finet.ai_calls set result = 'ok'`,
       sql`delete from finet.ai_calls`,
+      sql`delete from finet.document_usage_daily`,
+      sql`update finet.document_usage_daily set day = day`,
+      sql`update finet.document_usage_daily set household_id = household_id`,
     ]) {
       expect(await sqlState(() => fx.db.execute(statement))).toBe("42501");
     }

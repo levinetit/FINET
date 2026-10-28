@@ -3,7 +3,7 @@ import "server-only";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { DbOrTx, Tx } from "@/db";
-import { documents, processingBatches } from "@/db/schema";
+import { documentUsageDaily, documents, processingBatches } from "@/db/schema";
 
 /**
  * Accesul la documente (în tranzacția `withMember`, cu RLS și filtru explicit pe gospodărie).
@@ -50,23 +50,29 @@ export async function lockHouseholdDocuments(tx: Tx, householdId: string): Promi
   );
 }
 
-/** Documentele create de la începutul zilei locale `day` (YYYY-MM-DD, în București). */
-export async function countCreatedSince(
-  tx: Tx,
-  householdId: string,
-  day: string,
-  timeZone: string,
-): Promise<number> {
+/**
+ * Documentele încărcate în ziua locală `day` (YYYY-MM-DD, Europe/Bucharest), din contorul
+ * `document_usage_daily`, care doar crește: ștergerea unui document nu eliberează limita.
+ */
+export async function usageOfDay(tx: Tx, householdId: string, day: string): Promise<number> {
   const [row] = await tx
-    .select({ n: sql<number>`count(*)::int` })
-    .from(documents)
-    .where(
-      and(
-        eq(documents.householdId, householdId),
-        sql`${documents.createdAt} >= (${day}::date::timestamp at time zone ${timeZone})`,
-      ),
-    );
+    .select({ n: documentUsageDaily.count })
+    .from(documentUsageDaily)
+    .where(and(eq(documentUsageDaily.householdId, householdId), eq(documentUsageDaily.day, day)))
+    .limit(1);
   return row?.n ?? 0;
+}
+
+/** Adaugă `n` documente la contorul zilei (atomic, în tranzacția încărcării). */
+export async function addUsage(tx: Tx, householdId: string, day: string, n: number): Promise<void> {
+  if (n <= 0) return;
+  await tx
+    .insert(documentUsageDaily)
+    .values({ householdId, day, count: n })
+    .onConflictDoUpdate({
+      target: [documentUsageDaily.householdId, documentUsageDaily.day],
+      set: { count: sql`${documentUsageDaily.count} + ${n}`, updatedAt: new Date() },
+    });
 }
 
 /** Octeții ocupați de fișierele încă stocate ale gospodăriei (cota). */

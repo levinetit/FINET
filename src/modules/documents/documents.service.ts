@@ -14,7 +14,7 @@ import { hasActiveConsent } from "@/modules/usage/consents";
 
 import {
   type DocumentRow,
-  countCreatedSince,
+  addUsage,
   deleteDocumentRow,
   insertBatch,
   insertDocumentRow,
@@ -23,6 +23,7 @@ import {
   selectBySha256,
   selectDocument,
   storedBytes,
+  usageOfDay,
 } from "./documents.repo";
 import {
   type DailyUsage,
@@ -41,7 +42,8 @@ import { type ReceivedUpload, receiveMultipart } from "./multipart";
  * 1. fișierele sunt deja în storage (`receiveMultipart`), validate după conținut;
  * 2. pentru fiecare SHA-256 deja existent în gospodărie se întoarce documentul existent (fără
  *    cotă, fără limită zilnică), iar fișierul nou scris se șterge;
- * 3. abia apoi, sub un lock pe gospodărie: limita zilnică (`ai.dailyDocuments`) și cota
+ * 3. abia apoi, sub un lock pe gospodărie: limita zilnică (`ai.dailyDocuments`, din contorul
+ *    `document_usage_daily`, care doar crește: ștergerea nu eliberează limita) și cota
  *    (`storage.quotaMb`) pentru documentele NOI, apoi inserarea (`ON CONFLICT DO NOTHING` pe
  *    `(household_id, sha256)`: o cursă cu altă cerere devine tot duplicat, nu eroare).
  * Starea inițială: `queued` dacă cel care încarcă are consimțământul `external_ai` activ (în
@@ -182,9 +184,9 @@ export async function registerUpload(
         );
       }
 
+      const today = localDateOf(now, DEFAULT_TIME_ZONE);
       if (fresh.length > 0) {
-        const today = localDateOf(now, DEFAULT_TIME_ZONE);
-        const used = await countCreatedSince(tx, householdId, today, DEFAULT_TIME_ZONE);
+        const used = await usageOfDay(tx, householdId, today);
         if (used + fresh.length > dailyLimit) {
           throw new ConflictError(
             "daily_document_limit",
@@ -241,6 +243,8 @@ export async function registerUpload(
           if (existing) out.push({ ...documentView(existing), duplicate: true });
         }
       }
+      // Contorul zilei crește în aceeași tranzacție (nu scade la ștergere).
+      await addUsage(tx, householdId, today, created);
       if (created > 0) {
         await insertAudit(tx, actor.userId, householdId, {
           action: "document.uploaded",
@@ -309,7 +313,7 @@ export async function dailyUsage(
   const now = (deps.now ?? (() => new Date()))();
   const limit = await entitlementsOf(deps).limit(householdId, "ai.dailyDocuments");
   const used = await inHousehold(deps, actor, householdId, (tx) =>
-    countCreatedSince(tx, householdId, localDateOf(now, DEFAULT_TIME_ZONE), DEFAULT_TIME_ZONE),
+    usageOfDay(tx, householdId, localDateOf(now, DEFAULT_TIME_ZONE)),
   );
   return { used, limit };
 }
