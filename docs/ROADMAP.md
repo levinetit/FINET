@@ -8,7 +8,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 |---|---|---|
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
 | 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
-| 2 — Conturi, categorii, tranzacții, transferuri | neimplementat | |
+| 2 — Conturi, categorii, tranzacții, transferuri | **parțial** | F2-A (date + servicii) gata în repo; urmează F2-B (API, idempotență, OpenAPI, evenimente) și F2-C (UI, E2E) — vezi mai jos |
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | neimplementat | |
 | 4 — Stabilizare (rezervată) | neimplementat | |
 | 5 — Recurențe | neimplementat | |
@@ -63,6 +63,18 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - înregistrarea publică `saas` cu verificarea emailului: Faza 11 (sign-up rămâne închis și în `saas`);
 - OpenAPI (`docs/openapi.json`) pentru `/api/v1`: odată cu primele endpointuri din Faza 2;
 - **TODO:** micșorarea imaginii `finet:tools` (583 MB, include `next`): de exemplu `pnpm deploy --prod` cu doar `postgres`/`drizzle-orm`/`zod` (dependențele externe ale `dist/tools/*.mjs`). Neîncercat: cere un build Docker, nepermis pe hostul cu memorie mică.
+
+### Faza 2: stare
+**F2-A (stratul de date și serviciile, fără rute HTTP și UI), gata în repo, verificat local pe PostgreSQL 17 efemer:**
+- migrația `0002_ledger` (generată + partea de mână): `accounts`, `categories` (28 de categorii de sistem din 5.4), `category_visibility`, `transactions` (cu `transfer_direction`), `idempotency_keys`, `client_installations`, `app_events`, `app_downloads`; RLS `ENABLE` + `FORCE`, politici pe gospodărie/utilizator, drepturi `UPDATE` pe coloane, triggere `SECURITY INVOKER`, verificarea grupurilor de transfer la COMMIT;
+- serviciile `src/modules/{accounts,categories,transactions,transfers}` (`*.schema.ts`, `*.repo.ts`, `*.service.ts`, comun în `src/modules/ledger/`): sold calculat (`bigint`, `money.ts`, totaluri pe monedă), arhivare și ștergere doar a conturilor goale, categorii de sistem ascunse per gospodărie, ștergerea categoriilor cu reasignare, tranzacții cu căutare/filtre/sortare/paginare cu cursor, transferuri atomice (monede diferite cu ambele sume), audit fără sume la ștergeri;
+- corecțiile revizuirii automate (MEDIUM 1: proprietarul contului membru al gospodăriei; MEDIUM 2: `installation_id` unic per utilizator);
+- decizii: ADR 0004.
+
+**Rămâne pentru Faza 2:**
+- F2-B: rutele `/api/v1/` (conturi, categorii, tranzacții, transferuri, gospodării), `Idempotency-Key` + curățarea cheilor > 24 h (funcție nouă într-o migrație `0003_…`, comandă `finet-admin`), OpenAPI (`docs/openapi.json`), `X-FINET-Client`, `/api/v1/app/events` cu lista fixă și consimțământul `usage_stats`, teste de izolare prin API;
+- F2-C: UI, E2E (adăugarea unei cheltuieli și verificarea soldului), documentația pentru utilizator;
+- aplicarea `0002_ledger` pe Supabase de operator, după revizuirea `security`.
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:

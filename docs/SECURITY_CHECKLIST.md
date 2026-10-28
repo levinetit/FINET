@@ -38,6 +38,15 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | CSRF pe mutațiile cu cookie (`Origin` = `APP_URL`) | DONE | `assertSameOrigin`, `me.test.ts`; UI-ul folosește aceleași rute | 2026-10-28 · programmer |
 | Paginile protejate verifică sesiunea pe server, fail closed (eroare → login) | DONE | `src/app/_lib/session.ts`; `next dev`: `/dashboard` fără sesiune → 307 `/login?next=%2Fdashboard` | 2026-10-28 · programmer |
 | Migrațiile aplicate pe Supabase și RLS verificat acolo | TODO | operatorul (`docs/INFRA.md`, „Faza 1”) | — |
+| Faza 2 (F2-A): RLS `ENABLE` + `FORCE` pe cele 8 tabele noi (`accounts`, `categories`, `category_visibility`, `transactions`, `idempotency_keys`, `client_installations`, `app_events`, `app_downloads`); fără context → 0 rânduri; `household_id` străin → 42501 | DONE (local, Postgres 17 efemer) | `0002_ledger.sql`, `src/db/ledger-rls.test.ts`, `migrate.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Faza 2: izolarea între gospodării pentru fiecare serviciu (conturi, categorii, tranzacții, transferuri): A nu vede/modifică/șterge datele lui B → `NotFoundError` | DONE | `src/modules/*/*.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Faza 2: cheile străine simple ignoră RLS → triggere `SECURITY INVOKER` (cont, categorie, părinte, vizibilitate) și cheie compusă cont/gospodărie/monedă | DONE | `0002_ledger.sql`, ADR 0004; teste `23503` în `categories.test.ts`, `transactions.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Faza 2: drepturi `UPDATE` pe coloane (fără `household_id`, `created_by_user_id`, `source`, `transfer_*`, `kind`, `system_key` etc.); fără drepturi pentru `anon`/`authenticated` | DONE | `0002_ledger.sql`, `ledger-rls.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Revizuire automată F2-A, MEDIUM 1: `owner_user_id` al contului putea indica orice utilizator al platformei | DONE | politica `accounts_household` (`WITH CHECK` membru al aceleiași gospodării), `ledger-rls.test.ts`, `accounts.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Revizuire automată F2-A, MEDIUM 2: `installation_id` unic global (squatting, oracol de existență) | DONE | unic pe `(user_id, installation_id)`; `app_events` doar cu instalarea proprie; `ledger-rls.test.ts` | 2026-10-28 · programmer (F2-A) |
+| Faza 2: curățarea `idempotency_keys` > 24 h (fără context de gospodărie) | TODO | F2-B: funcție dedicată într-o migrație nouă + comandă `finet-admin` (ADR 0004) | — |
+| Faza 2: `0002_ledger` aplicată pe Supabase și verificată acolo | TODO | operatorul, după revizuiri | — |
+| Faza 2: revizuirea `security` a stratului de date F2-A | TODO | agentul `security` | — |
 
 ## 3. Antete
 
@@ -81,6 +90,8 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Better Auth: doar nivelul și mesajul în log | DONE | `auth.ts` (`logger`) | 2026-10-27 · programmer |
 | Audit fără emailuri, IP-uri, user-agent (doar id-uri și tipuri) | DONE | `audit.ts`, ADR 0003 | 2026-10-27 · programmer |
 | UI: erorile neprevăzute fără detalii (`[ui] sesiunea nu a putut fi verificată`) | DONE | `src/app/_lib/session.ts`, `src/app/error.tsx` | 2026-10-28 · programmer |
+| Audit la ștergerile din registru (`transaction.deleted`, `transfer.deleted`, `account.deleted`, `category.deleted`, arhivare) fără sume sau descrieri | DONE | `src/modules/*/…service.ts`, `transactions.test.ts`, `transfers.test.ts` | 2026-10-28 · programmer (F2-A) |
+| `app_events`: format fix pentru nume/ecran/cod de eroare (fără text liber sau sume) în bază; lista fixă de nume în Zod | PARTIAL | CHECK-uri în `0002_ledger.sql`, test în `ledger-rls.test.ts`; lista Zod în F2-B | 2026-10-28 · programmer (F2-A) |
 | Loguri structurate (pino) | TODO | faza în care apar logurile de business | — |
 
 ## 7. CI și lanțul de aprovizionare

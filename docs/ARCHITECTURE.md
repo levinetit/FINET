@@ -1,9 +1,9 @@
-# FINET — arhitectura (ce există în Faza 1, după F1-C)
+# FINET — arhitectura (ce există după Faza 1 și F2-A)
 
 Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
 
 ## Pe scurt
-Monolit Next.js 16 (App Router, TypeScript strict), rulat ca server Node `standalone` într-un container Docker. Din Faza 1: schema Drizzle `finet` cu RLS, Better Auth (parole Argon2id, sesiuni în bază, `bearer`), API-ul `/api/v1/me*`, CLI-ul admin și interfața web de autentificare și profil (F1-C). Nu există încă module financiare sau worker real. Detaliile deciziilor Fazei 1: ADR 0003.
+Monolit Next.js 16 (App Router, TypeScript strict), rulat ca server Node `standalone` într-un container Docker. Din Faza 1: schema Drizzle `finet` cu RLS, Better Auth (parole Argon2id, sesiuni în bază, `bearer`), API-ul `/api/v1/me*`, CLI-ul admin și interfața web de autentificare și profil (F1-C). Din F2-A: registrul financiar (conturi, categorii, tranzacții, transferuri) ca servicii server-side, fără rute HTTP sau UI încă. Nu există încă worker real. Deciziile: ADR 0003 (Faza 1), ADR 0004 (registrul).
 
 ## Structura existentă
 
@@ -38,8 +38,11 @@ src/
     money.ts                    # bani în bigint (unități minore), alocare, parsare, formatare RO
     storage.ts, storage/        # interfața Storage; driver local; S3 = schelet
     errors.ts, utils.ts
-  db/                           # schema Drizzle, migrațiile (0000_core, 0001_rls), runner-ul, RLS
+  db/                           # schema Drizzle, migrațiile (0000_core, 0001_rls, 0002_ledger), runner-ul, RLS
   modules/auth, profile, sessions, entitlements
+  modules/ledger/               # comun registrului: validarea intrărilor (Zod strict, sume prin money.ts),
+                                #   `inHousehold` (withMember + traducerea erorilor Postgres), fixture de test
+  modules/accounts, categories, transactions, transfers  # *.schema.ts, *.repo.ts, *.service.ts (F2-A)
   tools/admin/                  # CLI-ul admin (dist/tools/admin.mjs)
 scripts/scan-client-secrets.mjs # caută secrete în .next/static (CI)
 e2e/                            # Playwright: smoke, auth (browser, next dev), access (HTTP, standalone)
@@ -64,6 +67,14 @@ ops/                            # docker, cloudflare, supabase, notify, postgres
 ## Bani
 `src/lib/money.ts`: sume `bigint` în unități minore, monedă obligatorie, fără `Number` pentru sume; alocare cu metoda restului cel mai mare; parsare și formatare românească. Acoperit de `src/lib/money.test.ts`.
 
+## Registrul financiar (F2-A)
+Serviciile din `src/modules/{accounts,categories,transactions,transfers}` primesc `(deps: { db }, actor, householdId, input: unknown)`: `actor.userId` vine din sesiune, `householdId` din sesiune sau din ruta validată, iar `input` se validează cu Zod strict (cheile necunoscute, de exemplu `householdId`, sunt respinse). Fiecare operație rulează în `withMember` (apartenența și accesul la date în aceeași tranzacție, contextul RLS setat), iar fiecare query filtrează explicit pe `household_id`. Resursele străine sau inexistente dau `NotFoundError`; regulile de stare dau `ConflictError` (409, cu `reason`), intrările invalide `ValidationError` (400).
+- **Conturi:** soldul se calculează la citire (sold inițial + venituri − cheltuieli + transferuri intrate − ieșite), în `bigint`; totalurile pe monedă, fără conversie; arhivare; ștergere doar a conturilor goale.
+- **Categorii:** 28 de categorii de sistem (5.4, `system_key` stabil), ascunse per gospodărie prin `category_visibility`; personalizate pe un singur nivel; ștergerea unei categorii folosite cere reasignarea.
+- **Tranzacții:** venituri și cheltuieli în moneda contului; căutare (`ILIKE` escapat), filtre, sortare pe dată sau sumă, paginare keyset cu cursor opac (`{ data, nextCursor }`, `limit` ≤ 100); ștergere definitivă cu audit fără sume.
+- **Transferuri:** două rânduri `transfer` (`out`/`in`) cu același `transfer_group_id`, scrise în aceeași tranzacție SQL; monede diferite → ambele sume explicit; baza verifică grupul la COMMIT.
+- Integritatea e dublată în bază (cheie compusă cont/gospodărie/monedă, CHECK-uri, triggere `SECURITY INVOKER`); detaliile în ADR 0004.
+
 ## Storage
 Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath, `O_NOFOLLOW`, scriere atomică). Driverul `s3` aruncă `NotImplementedError` (Faza 6).
 
@@ -75,4 +86,4 @@ Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` s
 - CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `personal` apoi `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
 
 ## Planificat (nu există încă)
-Modulele de business (`accounts`, `transactions` etc., Faza 2+), restul API-ului `/api/v1/` + OpenAPI (Faza 2+), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), Recharts, înregistrarea publică și modul `saas` (Faza 11).
+Rutele `/api/v1/` ale registrului, idempotența HTTP, OpenAPI și evenimentele de utilizare (F2-B), UI-ul registrului (F2-C), bugetele, obiectivele, etichetele (Faza 3), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), Recharts, înregistrarea publică și modul `saas` (Faza 11).
