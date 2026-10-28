@@ -587,6 +587,12 @@ export const ro = {
     errorTitle: "Ceva nu a mers",
     retry: "Încearcă din nou",
     sessionExpired: "Sesiunea a expirat. Autentifică-te din nou.",
+    // Faza 4: recuperarea după un deploy (fișiere JavaScript vechi).
+    newVersion: "Versiune nouă disponibilă. Salvează și reîncarcă.",
+    reload: "Reîncarcă pagina",
+    dismiss: "Închide",
+    skipToContent: "Sari la conținut",
+    globalErrorTitle: "Eroare",
   },
 } as const;
 

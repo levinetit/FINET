@@ -66,7 +66,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()` | DONE | idem; asset-urile statice prin `next.config.ts` (`headers()`, fără CSP) | 2026-10-28 · programmer |
 | CORS închis (niciun `Access-Control-Allow-*`) | DONE | `proxy.test.ts`, `access.spec.ts` (preflight → 403 fără antete CORS) | 2026-10-28 · programmer |
 | `'unsafe-eval'` / `'unsafe-inline'` doar în dezvoltare | DONE | `buildCsp`, testele pe ambele moduri | 2026-10-28 · programmer |
-| Pagina `global-error` implicită Next (stiluri inline) | TODO | apare doar la o eroare în layout-ul rădăcină; înlocuită în Faza 9 | — |
+| Pagina `global-error` proprie (fără stiluri inline, în română, fără detalii tehnice) | DONE | `src/app/global-error.tsx` (Faza 4); `ui-rules.test.ts` (fără `style=`); randarea în browser NOT RUN local | 2026-10-28 · programmer (F4) |
 
 ## 4. Secrete
 

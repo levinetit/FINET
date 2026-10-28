@@ -152,7 +152,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
   - hash-ul în `packageManager` (`pnpm@12.15.0+sha512...`), verificat de corepack;
   - `pnpm audit --prod` blocant de la severitatea HIGH (acum non-blocant);
   - scanare de secrete în istoric și în PR-uri (gitleaks) în CI.
-- **F8 (rest) — antetele de securitate: închis în F1-C** (CSP cu nonce, HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`; `docs/SECURITY_CHECKLIST.md`). Rămân pentru Faza 9: `preload` la HSTS (decizia operatorului), pagina `global-error` proprie.
+- **F8 (rest) — antetele de securitate: închis în F1-C** (CSP cu nonce, HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`; `docs/SECURITY_CHECKLIST.md`). Rămâne pentru Faza 9: `preload` la HSTS (decizia operatorului). Pagina `global-error` proprie: făcută în Faza 4.
 - **F9 — storage local (Faza 6, odată cu ingestia):** curățarea fișierelor temporare orfane `*.tmp-*` rămase după o scriere întreruptă; limită de dimensiune la `put` (pe lângă cota totală).
 - **F2 (rest) / N1 — secretele în data-root-ul Docker: închis tehnic în T7.**
   - Ce s-a făcut: URL-urile bazei și `HEALTH_TOKEN` intră în containere ca fișiere (`secrets:` → `/run/secrets/`, citite prin `*_FILE`, `src/lib/secret-files.ts`), deci nu mai ajung în `config.v2.json`.

@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 
+import { ChunkRecovery } from "@/components/app/chunk-recovery";
+
 import { THEME_COOKIE, forcedTheme } from "./_lib/theme";
 import { fontDisplay, fontMono, fontSans } from "./fonts";
 import "./globals.css";
@@ -33,7 +35,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       data-theme={theme}
       className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <ChunkRecovery />
+        {children}
+      </body>
     </html>
   );
 }
