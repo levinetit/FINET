@@ -202,20 +202,15 @@ services:
       DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
       NODE_ENV: production
       APP_MODE: personal
-      STORAGE_DRIVER: local
-      STORAGE_DIR: /data/storage
       # Măsurat (F5-A, Postgres efemer): RSS de vârf ~86 MB, cgroup ~97 MB.
       NODE_OPTIONS: --max-old-space-size=96
     command: ["node", "dist/tools/worker.mjs"]
     # SIGTERM: pg-boss termină jobul curent (cel mult 25 s), apoi oprirea; 35 s înainte de SIGKILL.
     stop_grace_period: 35s
+    # Fără storage (revizuirea F5, I1): workerul recurențelor nu atinge fișierele; doar CA-ul.
+    # Documentele (Faza 6) îl vor monta din nou, cu motivul notat.
     volumes:
       - *ca-volume
-      - type: bind
-        source: ${FINET_DATA_DIR:-/srv/finet}/storage
-        target: /data/storage
-        bind:
-          create_host_path: false
     tmpfs:
       - /tmp:size=32m,mode=1777
     mem_limit: 150m
