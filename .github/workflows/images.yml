@@ -26,8 +26,14 @@ jobs:
         include:
           - name: web
             target: runner
+            file: Dockerfile
           - name: tools
             target: tools
+            file: Dockerfile
+          # Imaginea de backup (F3-D): restic + clientul PostgreSQL 17, ops/backup/Dockerfile.
+          - name: backup
+            target: backup
+            file: ops/backup/Dockerfile
     steps:
       - uses: actions/checkout@v7
         with:
@@ -39,7 +45,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
+          file: ${{ matrix.file }}
           target: ${{ matrix.target }}
           load: true
           push: false

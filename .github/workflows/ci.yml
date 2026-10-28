@@ -136,6 +136,78 @@ jobs:
         continue-on-error: true
         run: pnpm audit --prod
 
+  # Backup + restaurare testată (F3-D, docs/BACKUP.md): imaginea de backup REALĂ (construită aici,
+  # pe runner, nu pe host), scripturile ei (backup.sh, restore.sh) pe un PostgreSQL efemer cu
+  # rolurile de producție (finet_migrator, finet_app NOBYPASSRLS, finet_backup BYPASSRLS):
+  # backup → drop schema → restore → amprenta identică, plus negativele (dump ca migrator/app,
+  # parole greșite) și retenția 7/4/12. La final, runner-ul de migrații pe baza restaurată
+  # trebuie să găsească „aplicate acum 0”.
+  backup-restore:
+    needs: pg-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:${{ needs.pg-version.outputs.major }}-alpine
+        env:
+          POSTGRES_USER: finet
+          POSTGRES_PASSWORD: finet_ci
+          POSTGRES_DB: finet_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U finet -d finet_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: shellcheck (ops/backup)
+        run: |
+          shellcheck --version
+          shellcheck -s sh -x ops/backup/*.sh
+
+      - name: Construiește imaginea de backup
+        run: docker build -f ops/backup/Dockerfile --target backup -t finet-backup:ci .
+
+      # Parole FICTIVE (Postgres-ul serviciului, doar pentru job). Limita de memorie a
+      # serviciului compose (256m) se aplică și aici.
+      - name: Backup și restaurare (restore-test.sh în imaginea de backup)
+        run: >-
+          docker run --rm --network host --memory=256m --memory-swap=256m
+          -e FINET_RESTORE_TEST=1 -e PGHOST=localhost -e PGPORT=5432
+          -e PGUSER=finet -e PGPASSWORD=finet_ci
+          -e FINET_BACKUP_BIN_DIR=/opt/finet-backup
+          -v "$PWD:/work:ro" --entrypoint sh finet-backup:ci /work/ops/backup/restore-test.sh
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Activează pnpm (corepack)
+        run: corepack enable
+
+      - name: Instalează dependențele
+        run: pnpm install --frozen-lockfile
+
+      - name: Împachetează uneltele (runner-ul de migrații)
+        run: pnpm build:tools
+
+      - name: Migrații pe baza restaurată (aplicate acum 0)
+        env:
+          FINET_ROLE: migrate
+          APP_MODE: personal
+          DATABASE_URL: ""
+          MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_restore_test
+        run: |
+          set -o pipefail
+          node dist/tools/migrate.mjs | tee migrate-restored.log
+          grep -q "aplicate acum 0" migrate-restored.log
+
   # E2E Playwright (Faza 1): login, logout, sesiuni, parolă, rate limiting, antete, `next`, în
   # AMBELE moduri (`personal`, apoi `saas`, secvențial: două `next dev` în același director s-ar
   # bloca), plus proiectul `access` pe serverul de producție. Serverul de dezvoltare rulează cu
