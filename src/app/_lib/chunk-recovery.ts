@@ -14,6 +14,13 @@ export const RELOAD_INTERVAL_MS = 8_000;
 /** Cheia din `sessionStorage` cu momentul ultimei reîncărcări automate (ms epoch, text). */
 export const RELOAD_STORAGE_KEY = "finet:chunk-reload-at";
 
+/** Fereastra și plafonul reîncărcărilor automate (revizuirea Fazei 4, LOW-1): cel mult 3 în 5 minute. */
+export const RELOAD_WINDOW_MS = 5 * 60_000;
+export const MAX_RELOADS_PER_WINDOW = 3;
+
+/** Cheia cu momentele reîncărcărilor automate recente (listă JSON de ms epoch). */
+export const RELOAD_LOG_KEY = "finet:chunk-reload-log";
+
 /** Atributul formularelor cu modificări necomise (pus automat la `input`, scos la `submit`). */
 export const DIRTY_ATTRIBUTE = "data-dirty";
 
@@ -66,10 +73,32 @@ export function readLastReload(storage: StorageLike | null): number | null | "un
   }
 }
 
-/** Scrie marcajul; `false` dacă stocarea refuză (atunci nu se reîncarcă). */
+/** Momentele reîncărcărilor automate din ultimele `RELOAD_WINDOW_MS` (listă goală dacă lipsesc). */
+export function recentReloads(storage: StorageLike | null, now: number): number[] {
+  if (!storage) return [];
+  try {
+    const raw = storage.getItem(RELOAD_LOG_KEY);
+    if (raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (t): t is number =>
+        typeof t === "number" &&
+        Number.isSafeInteger(t) &&
+        now - t >= 0 &&
+        now - t < RELOAD_WINDOW_MS,
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Scrie marcajul (și jurnalul recent); `false` dacă stocarea refuză (atunci nu se reîncarcă). */
 export function markReload(storage: StorageLike | null, now: number): boolean {
   if (!storage) return false;
   try {
+    const log = [...recentReloads(storage, now), now].slice(-MAX_RELOADS_PER_WINDOW - 1);
+    storage.setItem(RELOAD_LOG_KEY, JSON.stringify(log));
     storage.setItem(RELOAD_STORAGE_KEY, String(now));
     return storage.getItem(RELOAD_STORAGE_KEY) === String(now);
   } catch {
@@ -85,9 +114,19 @@ export type RecoveryDecision = "reload" | "banner";
  * reîncărcare: nu intrăm în buclă); altfel `reload`.
  */
 export function decideRecovery(
-  input: Readonly<{ now: number; lastReloadAt: number | null | "unavailable"; dirty: boolean }>,
+  input: Readonly<{
+    now: number;
+    lastReloadAt: number | null | "unavailable";
+    dirty: boolean;
+    /** Câte reîncărcări automate au avut loc în ultimele 5 minute (implicit 0). */
+    recentCount?: number;
+    /** `navigator.onLine`: offline, fișierul lipsește din cauza rețelei, nu a unui deploy. */
+    online?: boolean;
+  }>,
 ): RecoveryDecision {
   if (input.dirty) return "banner";
+  if (input.online === false) return "banner";
+  if ((input.recentCount ?? 0) >= MAX_RELOADS_PER_WINDOW) return "banner";
   if (input.lastReloadAt === "unavailable") return "banner";
   if (input.lastReloadAt !== null) {
     const elapsed = input.now - input.lastReloadAt;

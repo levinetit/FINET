@@ -11,6 +11,7 @@ import {
   isStaticAssetUrl,
   markReload,
   readLastReload,
+  recentReloads,
 } from "@/app/_lib/chunk-recovery";
 import { ro } from "@/messages/ro";
 
@@ -41,6 +42,8 @@ export function recoverFromChunkError(): RecoveryDecision {
     now,
     lastReloadAt: readLastReload(storage),
     dirty: hasDirtyForm(),
+    recentCount: recentReloads(storage, now).length,
+    online: typeof navigator === "undefined" ? true : navigator.onLine,
   });
   if (decision === "reload" && markReload(storage, now)) {
     window.location.reload();

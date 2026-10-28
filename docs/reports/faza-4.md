@@ -82,3 +82,12 @@ Testele modificate (nu slăbite): `ledger-ui.test.ts` (formatul nou cerut), `mig
 ## 7. Următorii pași
 
 Push și CI (coordonatorul), calibrarea pragurilor JS, revizuirea `security` a Fazei 4, aplicarea `0005` și instalarea cron-ului (operatorul), apoi Faza 5 (recurențe).
+
+## Revizuirea `security` a Fazei 4 (2026-10-28): PASS_WITH_FINDINGS
+
+Fără High sau Medium. Rezolvare:
+
+- **LOW-1 (buclă lentă de reîncărcare): reparat.** Cel mult 3 reîncărcări automate în 5 minute (jurnal în `sessionStorage`, `finet:chunk-reload-log`), apoi doar bannerul; offline (`navigator.onLine === false`) duce la banner, nu la reîncărcare. Teste în `chunk-recovery.test.ts`.
+- **LOW-2 (dirty-tracking doar pe `<form>`): acceptat.** Câmpurile care pot pierde date stau în formulare (`transaction-form`, `tags-manager`, etc.); filtrele `method="get"` sunt excluse intenționat. Dacă apare un câmp liber în afara unui `<form>`, se acoperă la acel moment.
+- **INFO-3 (marcaj doar în `/accounts`): amânat.** Testul de regresie rămâne valabil pentru proprietatea de securitate (nicio dată fără sesiune); un marcaj și pe tranzacții, etichete, bugete și obiective se adaugă în Faza 9, odată cu auditul de securitate cu dovezi.
+- INFO-4, INFO-5: convenție veche a workflow-ului și scaner de secrete, fără acțiune.
