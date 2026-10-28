@@ -164,7 +164,7 @@ const csvSuccess = (description: string) =>
 const pathOf = (base: string, suffix = "") => `${base}/{id}${suffix}`;
 
 const VALIDATION = 400;
-const FORBIDDEN = 403; // CSRF (cookie fără Origin corect)
+const FORBIDDEN = 403; // CSRF (cookie fără Origin corect; la exporturi: `Sec-Fetch-Site`)
 const NOT_FOUND = 404;
 const CONFLICT = 409;
 const TOO_LARGE = 413;
@@ -794,10 +794,10 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "exports",
     summary: "Exportul CSV al tranzacțiilor (filtrele listei), în flux.",
     description:
-      "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 50.000 de rânduri; peste → 409 `export_too_large` (JSON, fără conținut parțial).",
+      "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 50.000 de rânduri; peste → 409 `export_too_large` (JSON, fără conținut parțial). Cu sesiune prin cookie, ca toate exporturile, cere `Sec-Fetch-Site` = `same-origin` sau `none` (altfel 403 `forbidden`); cu bearer, antetul nu contează.",
     query: [...TRANSACTION_FILTERS, DIALECT_PARAM],
     success: csvSuccess("Fișierul `finet-tranzactii.csv`."),
-    errors: [VALIDATION, CONFLICT, REUSED],
+    errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
   },
   {
     method: "GET",
@@ -807,7 +807,7 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Exportul CSV al obiectivelor (toate stările).",
     query: [DIALECT_PARAM],
     success: csvSuccess("Fișierul `finet-obiective.csv`."),
-    errors: [VALIDATION, REUSED],
+    errors: [VALIDATION, FORBIDDEN, REUSED],
   },
   {
     method: "GET",
@@ -817,7 +817,7 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Exportul CSV al bugetelor active vizibile, cu starea într-o lună.",
     query: [MONTH_PARAM, DIALECT_PARAM],
     success: csvSuccess("Fișierul `finet-bugete.csv`."),
-    errors: [VALIDATION, REUSED],
+    errors: [VALIDATION, FORBIDDEN, REUSED],
   },
 ];
 

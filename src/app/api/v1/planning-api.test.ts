@@ -1177,6 +1177,36 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 planificare pe PostgreSQL real", (
     expect(dash.status).toBe(200);
   });
 
+  it("export cu cookie: doar `Sec-Fetch-Site` same-origin/none; cross-site, same-site, lipsă → 403; bearer permis", async () => {
+    const exports: [Handler, string][] = [
+      [P.exportTransactionsHandler, "/api/v1/exports/transactions.csv"],
+      [P.exportGoalsHandler, "/api/v1/exports/goals.csv"],
+      [P.exportBudgetsHandler, "/api/v1/exports/budgets.csv"],
+    ];
+    for (const [handler, path] of exports) {
+      // Refuzurile vin înaintea rate limit-ului și a oricărei citiri de date.
+      for (const site of ["cross-site", "same-site", ""]) {
+        const r = await call(handler, path, {
+          cookie: D.cookie,
+          headers: { "sec-fetch-site": site },
+        });
+        expect(r.status, `${path} ${site || "lipsă"}`).toBe(403);
+        expect(r.body.error?.code, path).toBe("forbidden");
+        expect(r.res.headers.get("content-type"), path).not.toContain("text/csv");
+      }
+      for (const site of ["same-origin", "none"]) {
+        const r = await call(handler, path, {
+          cookie: D.cookie,
+          headers: { "sec-fetch-site": site },
+        });
+        expect(r.status, `${path} ${site}`).toBe(200);
+      }
+      // Bearer (aplicația mobilă, clienți non-browser): fără antet → permis.
+      const bearer = await call(handler, path, { bearer: D.bearer });
+      expect(bearer.status, `${path} bearer`).toBe(200);
+    }
+  });
+
   it("rate limit pe mutațiile noi (429) și plafonul sumelor: peste 10^13 → 400; total peste 2^53 → 422", async () => {
     const strict = {
       ...env,

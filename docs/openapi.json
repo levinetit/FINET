@@ -2074,6 +2074,9 @@
           "401": {
             "$ref": "#/components/responses/E401"
           },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
           "422": {
             "$ref": "#/components/responses/E422"
           },
@@ -2136,6 +2139,9 @@
           "401": {
             "$ref": "#/components/responses/E401"
           },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
           "422": {
             "$ref": "#/components/responses/E422"
           },
@@ -2155,7 +2161,7 @@
           "exports"
         ],
         "summary": "Exportul CSV al tranzacțiilor (filtrele listei), în flux.",
-        "description": "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 50.000 de rânduri; peste → 409 `export_too_large` (JSON, fără conținut parțial).",
+        "description": "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 50.000 de rânduri; peste → 409 `export_too_large` (JSON, fără conținut parțial). Cu sesiune prin cookie, ca toate exporturile, cere `Sec-Fetch-Site` = `same-origin` sau `none` (altfel 403 `forbidden`); cu bearer, antetul nu contează.",
         "parameters": [
           {
             "name": "q",
@@ -2321,6 +2327,9 @@
           },
           "401": {
             "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
           },
           "409": {
             "$ref": "#/components/responses/E409"
@@ -5126,7 +5135,7 @@
         }
       },
       "E403": {
-        "description": "Interzis (`forbidden`): mutație cu cookie fără `Origin` corect (CSRF) sau rol insuficient.",
+        "description": "Interzis (`forbidden`): mutație cu cookie fără `Origin` corect (CSRF), export CSV cu cookie fără `Sec-Fetch-Site` `same-origin`/`none`, sau rol insuficient.",
         "content": {
           "application/json": {
             "schema": {

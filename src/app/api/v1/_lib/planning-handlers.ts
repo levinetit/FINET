@@ -390,7 +390,24 @@ function streamCsv(
 
 const DIALECT_QUERY = { dialect: "string" } as const;
 
+/**
+ * Exporturile sunt GET, deci fără verificarea CSRF a mutațiilor; cu sesiune prin cookie, o pagină
+ * străină le-ar putea declanșa prin navigare (LOW-2, revizuirea Fazei 3). Regula (decizia mea):
+ * - bearer: permis (nu există cookie de folosit cross-site);
+ * - cookie: doar `Sec-Fetch-Site` = `same-origin` (descărcarea din UI, `fetch`) sau `none`
+ *   (adresa scrisă de utilizator); `same-site`, `cross-site` și antetul LIPSĂ → 403. Browserele
+ *   actuale trimit antetul mereu; un client fără el folosește bearer.
+ */
+function assertExportFetchSite(ctx: ApiContext): void {
+  if (ctx.session.viaBearer) return;
+  const site = ctx.request.headers.get("sec-fetch-site");
+  if (site !== "same-origin" && site !== "none") {
+    throw new ApiError(403, "forbidden", "Cerere refuzată.");
+  }
+}
+
 async function exportGuard(ctx: ApiContext): Promise<string> {
+  assertExportFetchSite(ctx);
   // Exportul e scump (citește toate tranzacțiile filtrate): limită proprie, înaintea oricărei
   // interogări a datelor.
   await enforceRateLimit(ctx, "api_export", ctx.limits.exports);

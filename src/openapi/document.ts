@@ -104,7 +104,7 @@ function strip(schema: Json): Json {
 const ERROR_DESCRIPTIONS: Readonly<Record<number, string>> = {
   400: "Cerere invalidă (`invalid_request`, cu `fields` pe câmp; mesaje fixe, fără ecoul valorilor).",
   401: "Fără sesiune validă (`unauthenticated`).",
-  403: "Interzis (`forbidden`): mutație cu cookie fără `Origin` corect (CSRF) sau rol insuficient.",
+  403: "Interzis (`forbidden`): mutație cu cookie fără `Origin` corect (CSRF), export CSV cu cookie fără `Sec-Fetch-Site` `same-origin`/`none`, sau rol insuficient.",
   404: "Resursa nu există sau aparține altei gospodării (`not_found`, răspuns uniform).",
   409: "Conflict cu starea curentă (`conflict`, cu `reason`) sau `request_in_progress` (aceeași `Idempotency-Key` e în curs).",
   413: "Corpul depășește 16 KiB (`payload_too_large`).",

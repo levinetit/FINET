@@ -119,6 +119,7 @@ curl -s https://finet.example/api/v1/app/events \
 - `?dialect=rfc4180` (**implicit pe API**: virgulă, punct zecimal) sau `?dialect=ro` (`;`, virgulă zecimală — butoanele din interfață îl folosesc, se deschide corect în Excel românesc). Alt dialect → 400.
 - Răspuns: `Content-Type: text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="finet-tranzactii.csv"` (respectiv `finet-obiective.csv`, `finet-bugete.csv`; nume fixe, fără date ale utilizatorului), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. UTF-8 cu BOM, CRLF, ghilimele RFC 4180; o celulă de text liber care începe cu `=`, `+`, `-`, `@`, TAB sau CR primește un apostrof în față (protecție contra formula injection).
 - Plafon: 50.000 de rânduri de tranzacții; peste → `409 export_too_large` (JSON, fără conținut parțial). Exportul tranzacțiilor e trimis în flux (pagini de 1.000), deci un export lung nu e un instantaneu.
+- **Navigare cross-site (revizuirea Fazei 3, LOW-2):** cu sesiune prin **cookie**, exporturile cer `Sec-Fetch-Site` = `same-origin` (descărcarea din UI, `fetch`) sau `none` (adresa scrisă de utilizator); `same-site`, `cross-site` sau antetul lipsă → `403 forbidden`, înaintea rate limit-ului și a oricărei citiri. Cu **bearer** antetul nu contează (aplicația mobilă, scripturi, `curl`).
 - Limită: 10 exporturi/min per utilizator (429). Fiecare export acceptat se auditează (`export.downloaded`) doar cu tipul și numărul de rânduri.
 
 ```bash

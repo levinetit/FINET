@@ -370,8 +370,11 @@ test.describe(`planificarea (${MODE})`, () => {
       await expect(other.locator("h1")).toBeVisible();
       await expect(other.getByText(secret)).toHaveCount(0);
     }
+    // `APIRequestContext` nu trimite antetele `Sec-Fetch-*` ale browserului; exportul cu cookie
+    // le cere (LOW-2), deci se pune cel al unei descărcări din UI.
     const csv = await other.request.get(
       `/api/v1/exports/transactions.csv?merchant=${encodeURIComponent(secret)}&dialect=ro`,
+      { headers: { "sec-fetch-site": "same-origin" } },
     );
     expect(csv.status()).toBe(200);
     const text = (await csv.body()).subarray(3).toString("utf8");

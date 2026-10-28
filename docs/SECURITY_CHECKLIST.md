@@ -209,6 +209,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Bani în UI doar prin `money.ts`: scalarea graficelor prin `percentOf` (bigint), valoarea absolută prin `negate` | DONE | `planning-ui.ts`, `ui-rules.test.ts` | 2026-10-28 · programmer (F3-C) |
 | `pnpm build` + `scan:client-secrets` pe codul F3-C | NOT RUN (memoria hostului) | CI | — |
 | Revizuirea `security` a F3-C | TODO | agentul `security` | — |
+| Revizuirea Fazei 3, LOW-2: exporturile CSV cu cookie refuză navigarea cross-site (`Sec-Fetch-Site` doar `same-origin`/`none`; lipsă → 403); bearer permis | DONE (cod + test) / teste NOT RUN local | `planning-handlers.ts` `assertExportFetchSite`; `planning-api.test.ts`; OpenAPI (403 pe exporturi); ADR 0007 | 2026-10-28 · programmer (F3-D) |
 
 ## 13. Backup restic (F3-D, 2026-10-28)
 
