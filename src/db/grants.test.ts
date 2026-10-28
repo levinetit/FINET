@@ -353,3 +353,107 @@ describe.skipIf(!TEST_ADMIN_URL)(
     });
   },
 );
+
+/** Faza 6 (0008): drepturile `finet_app` pe documente, bonuri, alias-uri și jurnalul AI. */
+describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe documente și bonuri (0008)", () => {
+  let fx: AuthFixture;
+  beforeAll(async () => {
+    fx = await createAuthFixture("finet_it_grants8");
+  });
+  afterAll(async () => {
+    await fx?.close();
+  });
+
+  const TABLES = [
+    "documents",
+    "processing_batches",
+    "receipts",
+    "receipt_lines",
+    "product_aliases",
+    "ai_calls",
+  ];
+
+  it("SELECT/INSERT/DELETE pe tabele; ai_calls doar SELECT + INSERT; UPDATE doar pe coloanele permise", async () => {
+    const rows = await fx.scratch.admin<{ table_name: string; privilege_type: string }[]>`
+      select table_name, privilege_type from information_schema.role_table_grants
+       where table_schema = 'finet' and grantee = 'finet_app' and table_name = any(${TABLES})
+       order by table_name, privilege_type`;
+    const by = (t: string) => rows.filter((r) => r.table_name === t).map((r) => r.privilege_type);
+    for (const t of TABLES.filter((t) => t !== "ai_calls")) {
+      expect(by(t), t).toEqual(["DELETE", "INSERT", "SELECT"]);
+    }
+    expect(by("ai_calls")).toEqual(["INSERT", "SELECT"]);
+    const cols = await fx.scratch.admin<{ table_name: string; column_name: string }[]>`
+      select table_name, column_name from information_schema.column_privileges
+       where table_schema = 'finet' and grantee = 'finet_app' and privilege_type = 'UPDATE'
+         and table_name = any(${TABLES})
+       order by table_name, column_name`;
+    const updatable = (t: string) =>
+      cols.filter((r) => r.table_name === t).map((r) => r.column_name);
+    expect(updatable("documents")).toEqual([
+      "attempts",
+      "batch_id",
+      "document_order",
+      "error_code",
+      "expires_at",
+      "file_deleted_at",
+      "kind",
+      "pages",
+      "perceptual_hash",
+      "possible_duplicate_of_id",
+      "processing_started_at",
+      "status",
+      "storage_key",
+      "updated_at",
+    ]);
+    expect(updatable("processing_batches")).toEqual(["status", "updated_at"]);
+    expect(updatable("product_aliases")).toEqual(["category_id", "tag_ids", "updated_at"]);
+    expect(updatable("ai_calls")).toEqual([]);
+    expect(updatable("receipts")).not.toContain("household_id");
+    expect(updatable("receipts")).not.toContain("document_id");
+    expect(updatable("receipt_lines")).not.toContain("receipt_id");
+    expect(updatable("receipt_lines")).not.toContain("household_id");
+  });
+
+  it("câmpurile fixe și jurnalul AI nu se pot modifica (42501)", async () => {
+    for (const statement of [
+      sql`update finet.documents set household_id = household_id`,
+      sql`update finet.documents set sha256 = sha256`,
+      sql`update finet.documents set size_bytes = size_bytes`,
+      sql`update finet.documents set detected_mime = detected_mime`,
+      sql`update finet.documents set uploaded_by_user_id = null`,
+      sql`update finet.receipts set household_id = household_id`,
+      sql`update finet.receipts set document_id = document_id`,
+      sql`update finet.receipt_lines set receipt_id = receipt_id`,
+      sql`update finet.product_aliases set normalized_name = normalized_name`,
+      sql`update finet.ai_calls set result = 'ok'`,
+      sql`delete from finet.ai_calls`,
+    ]) {
+      expect(await sqlState(() => fx.db.execute(statement))).toBe("42501");
+    }
+  });
+
+  it("anon/authenticated/PUBLIC: nimic; queued_documents doar pentru finet_app", async () => {
+    const [r] = await fx.scratch.admin<{ n: number }[]>`
+      select count(*)::int as n from information_schema.role_table_grants
+       where grantee in ('anon', 'authenticated', 'PUBLIC') and table_name = any(${TABLES})`;
+    expect(r?.n).toBe(0);
+    const [f] = await fx.scratch.admin<
+      { app: boolean; anon: boolean; auth: boolean; pub: boolean }[]
+    >`
+      select has_function_privilege('finet_app', 'finet.queued_documents(integer, integer)', 'EXECUTE') as app,
+             has_function_privilege('anon', 'finet.queued_documents(integer, integer)', 'EXECUTE') as anon,
+             has_function_privilege('authenticated', 'finet.queued_documents(integer, integer)', 'EXECUTE') as auth,
+             exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                      where p.proname = 'queued_documents' and a.grantee = 0) as pub`;
+    expect(f).toEqual({ app: true, anon: false, auth: false, pub: false });
+    const [owner] = await fx.scratch.admin<{ owner: string; definer: boolean; config: string[] }[]>`
+      select pg_get_userbyid(proowner) as owner, prosecdef as definer, proconfig as config
+        from pg_proc where proname = 'queued_documents'`;
+    expect(owner).toEqual({
+      owner: "finet_migrator",
+      definer: true,
+      config: ["search_path=pg_catalog"],
+    });
+  });
+});
