@@ -71,7 +71,8 @@ export class LocalStorage implements Storage {
       try {
         return await realpath(this.baseDir);
       } catch (error) {
-        if (errorCode(error) === "ENOENT") throw new StorageError("Directorul de storage lipsește.");
+        if (errorCode(error) === "ENOENT")
+          throw new StorageError("Directorul de storage lipsește.");
         throw error;
       }
     })();
@@ -140,7 +141,8 @@ export class LocalStorage implements Storage {
 
   private static maxBytesOf(options: PutOptions): number {
     const max = options.maxBytes ?? Number.MAX_SAFE_INTEGER;
-    if (!Number.isSafeInteger(max) || max < 0) throw new StorageError("Plafon de dimensiune invalid.");
+    if (!Number.isSafeInteger(max) || max < 0)
+      throw new StorageError("Plafon de dimensiune invalid.");
     return max;
   }
 

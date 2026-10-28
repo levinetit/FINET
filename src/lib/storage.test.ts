@@ -229,9 +229,7 @@ describe("LocalStorage — documentele gospodăriilor (Faza 6)", () => {
   it("refuză un director intermediar care e symlink spre exterior", async () => {
     await mkdir(join(base, "households"), { recursive: true });
     await symlink(outside, join(base, "households", HH));
-    await expect(storage.put(bytes("x"), { householdId: HH })).rejects.toBeInstanceOf(
-      StorageError,
-    );
+    await expect(storage.put(bytes("x"), { householdId: HH })).rejects.toBeInstanceOf(StorageError);
     const key = `households/${HH}/documents/${UUID}` as StorageKey;
     await expect(storage.get(key)).rejects.toBeInstanceOf(StorageError);
     expect(await readdir(outside)).toEqual([UUID]);

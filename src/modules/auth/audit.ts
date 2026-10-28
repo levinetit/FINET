@@ -41,6 +41,9 @@ export type AuditAction =
   // Exporturile CSV (F3-B): doar tipul exportului și numărul de rânduri, fără conținut.
   | "export.downloaded"
   // Consimțămintele (F2-B, 6.5): doar tipul, în `metadata.kind`.
+  // Documentele (Faza 6): doar contoare și id-ul documentului, fără nume de fișier sau conținut.
+  | "document.uploaded"
+  | "document.deleted"
   | "consent.granted"
   | "consent.revoked";
 
@@ -58,7 +61,8 @@ export type AuditEvent = Readonly<{
     | "tag"
     | "budget"
     | "goal"
-    | "recurring_rule";
+    | "recurring_rule"
+    | "document";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;

@@ -573,7 +573,10 @@ export function parseConfig(
     ? Number.parseInt(e.MAX_IMAGE_PIXELS, 10)
     : DEFAULTS.maxImagePixels;
   if (maxImagePixels < 1_000_000 || maxImagePixels > 200_000_000) {
-    issues.push({ variable: "MAX_IMAGE_PIXELS", problem: "în afara intervalului 1000000–200000000" });
+    issues.push({
+      variable: "MAX_IMAGE_PIXELS",
+      problem: "în afara intervalului 1000000–200000000",
+    });
   }
 
   if (issues.length > 0 || monthlyBudget === null) throw new ConfigError(issues);
