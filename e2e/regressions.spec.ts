@@ -103,11 +103,17 @@ test("(b) prefetch RSC fără sesiune nu întoarce date, pe toate rutele private
 
   // Cu sesiune, marcajul apare în cererea RSC completă (navigare, fără `Next-Router-Prefetch`:
   // prefetch-ul unei rute dinamice se oprește la granița de încărcare) a listei de conturi.
+  // Redirecționările se urmăresc (maxim 3): serverul poate normaliza adresa (307 către aceeași
+  // rută); proprietatea verificată e că, ȘI cu sesiune, conținutul ajunge în răspunsul RSC. Fără
+  // sesiune (mai jos) redirecționările NU se urmăresc.
   const withSession = await page.request.get(`/accounts?_rsc=${randomUUID().slice(0, 5)}`, {
     headers: { RSC: "1" },
-    maxRedirects: 0,
+    maxRedirects: 3,
   });
-  expect(withSession.status()).toBe(200);
+  expect(
+    withSession.status(),
+    `${withSession.url()} (location: ${withSession.headers()["location"] ?? "-"})`,
+  ).toBe(200);
   expect(await withSession.text()).toContain(MARKER);
   await page.context().close();
 
