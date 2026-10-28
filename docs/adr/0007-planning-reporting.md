@@ -1,0 +1,69 @@
+# ADR 0007 — Planificare și raportare: etichete, bugete, obiective, dashboard, raport lunar, export CSV (Faza 3, F3-A)
+
+- **Stare:** propus (F3-A: migrația `0004_budgets_goals_tags`, serviciile și testele). API-ul `/api/v1` și OpenAPI: F3-B. UI și E2E: F3-C. Backup restic: F3-D.
+- **Legături:** master prompt 5.1–5.4, 5.6, 6.1 (budgets, goals, tags), 6.2, 6.4, Faza 3; ADR 0004 (registrul), ADR 0005 (API, plafonul sumelor).
+
+## Context
+Faza 3 adaugă planificarea (bugete, obiective), a doua dimensiune de clasificare (etichete) și citirile agregate (dashboard, raport lunar, export CSV). Constrângerile rămân cele din ADR 0003/0004: schema `finet` a lui `finet_migrator`, aplicația ca `finet_app` (`NOBYPASSRLS`), RLS `ENABLE` + `FORCE` din migrația care creează tabelul, migrațiile `0000`–`0003` aplicate pe producție și neatinse, bani în `bigint` fără float.
+
+## Decizii
+
+### Migrația `0004_budgets_goals_tags.sql`
+- Prima parte e generată de `drizzle-kit generate --name budgets_goals_tags` din `src/db/schema/planning.ts`; a doua rulare raportează „No schema changes”. Partea scrisă de mână: etichetele de sistem, cheia compusă `goals_account_fk`, triggerele, RLS, politicile și drepturile.
+- `when` din jurnal e pus de mână după `0003` (`0003` are un `when` din viitor; altfel runner-ul ar refuza ordinea).
+- Singura atingere a unui tabel existent: `UNIQUE (id, household_id)` pe `finet.transactions` (`transactions_id_household_key`), ținta cheii compuse din `transaction_tags`. Nedistructivă (construiește un index; `id` e deja cheie primară). drizzle-kit o pune la sfârșit; e mutată de mână **înaintea** cheilor străine (Postgres cere constrângerea unică întâi). Testat în `migrate.test.ts`.
+- Testată: de la zero (toate cinci, apoi a doua rulare 0 aplicate) și peste o bază cu `0000`–`0003` deja aplicate (doar `0004`, apoi nimic).
+- Rollback: în antetul migrației (manual, de operator, cu backup; distruge datele tabelelor noi).
+
+### Etichete (5.4)
+- `tags`: `household_id` NULL = etichetă de sistem (cu `system_key`; CHECK `tags_system_shape`), altfel a gospodăriei. Seed: Personal, Familie, Copii, Deductibil, Cadou (înainte de activarea RLS). „Vacanța 2027” din 5.4 nu e de sistem (e datată).
+- Ascunderea celor de sistem e per gospodărie, în `tag_visibility` (ca `category_visibility`); cele proprii au `hidden`. O etichetă ascunsă rămâne utilizabilă pe tranzacții (decizia mea: „ascuns” = nu o propune UI-ul).
+- Numele e unic fără majuscule: index `(coalesce(household_id, 0…0), lower(name))`, plus verificarea din serviciu și față de numele etichetelor de sistem (decizia mea: „Cadou” propriu lângă „Cadou” de sistem ar fi ambiguu).
+- `transaction_tags(transaction_id, tag_id, household_id)`: cheie primară pe pereche, cheie compusă `(transaction_id, household_id) → transactions(id, household_id)` cu `ON DELETE CASCADE`, iar eticheta e verificată de triggerul `transaction_tags_check_tag` (de sistem sau a aceleiași gospodării; cheia străină simplă ignoră RLS). Ștergerea etichetei șterge legăturile (cascadă) și se auditează doar cu `usageCount`.
+- Tranzacțiile acceptă `tagIds` (cel mult 10, distincte) la creare și la modificare (prezent = înlocuiește). Transferurile nu au etichete (409). `receipt_line_tags` vine în Faza 6.
+- Filtrul `tagIds` din listă înseamnă **oricare** dintre etichete (OR) și e un `EXISTS` (nu JOIN): o tranzacție apare o singură dată, deci paginarea pe cheie rămâne stabilă. Filtrul nou `merchant` caută în comerciant (`ILIKE` cu escapare). `q`, contul, categoria, tipul, sursa, intervalul și sumele rămân ca în Faza 2.
+- Schema corpului `POST/PATCH /transactions` a primit `tagIds`, deci `docs/openapi.json` e regenerat (doar acest câmp). Răspunsul tranzacției nu conține încă etichetele: F3-B decide (serviciul expune `getTransactionTagIds`/`setTransactionTags`).
+
+### Bugete și semafor
+- `budgets`: lunare (`period = 'monthly'`), generale (`category_id` NULL) sau pe o categorie de **cheltuieli** (trigger `budgets_check_category`), `amount_minor` 1..10^13, `warn_pct` 1..100 (implicit 80), `scope` `household|personal`, `user_id` obligatoriu doar pentru `personal` (CHECK). Unic între bugetele active pe `(gospodărie, categorie, domeniu, utilizator, monedă)`; arhivarea (`archived_at`) eliberează locul.
+- Categoria, moneda și domeniul nu se modifică (fără drept `UPDATE` pe ele): alt buget = buget nou. Ștergerea unei categorii personalizate șterge bugetele ei (`ON DELETE CASCADE`, decizia mea: bugetul unei categorii inexistente nu are sens; categoriile de sistem nu se șterg).
+- **Bugetele personale** sunt vizibile doar proprietarului: politica `budgets_household` cere `scope = 'household' or user_id = app.user_id` atât la citire, cât și la scriere (un membru nu poate crea un buget personal pentru altcineva).
+- **Cheltuit** = Σ `amount_minor` al rândurilor `type = 'expense'` din luna calendaristică, în moneda bugetului; bugetul pe categorie include subcategoriile (`coalesce(parent_id, category_id)`), cel general include și cheltuielile fără categorie; transferurile și veniturile nu contează niciodată. **Bugetul personal numără doar cheltuielile introduse de proprietar** (`created_by_user_id`) — decizia mea (alternativa „conturile proprietarului” ar da 0 pentru cine nu are conturi personale).
+- **Semaforul** se decide pe comparații exacte în `bigint`: verde dacă `spent × 100 < warn_pct × amount`; galben dacă nu e verde și `spent ≤ amount` (inclusiv exact 100%); roșu dacă `spent > amount`.
+- **Procentul** afișat e `floor(spent × 100 / amount)` (trunchiere spre zero, `percentOf` din `money.ts`, doar `bigint`), limitat la 1.000.000. 100,01% se afișează 100, dar e roșu (statusul nu vine din procentul rotunjit). `remainingMinor = amount − spent` poate fi negativ.
+- „Avertizările în aplicație” = bugetele galbene și roșii ale lunii curente (roșii întâi), `getBudgetAlerts`.
+
+### Obiective
+- `goals`: `target_minor` 1..10^13, `saved_minor` 0..10^13, `deadline` opțional, `status` `active|achieved|abandoned`, cont opțional prin cheia compusă `(account_id, household_id, currency) → accounts` (aceeași gospodărie și monedă) cu `ON DELETE SET NULL (account_id)` (PostgreSQL 15+; doar `account_id` devine NULL). Schimbarea monedei unui cont legat de un obiectiv e refuzată (cheia, 409).
+- `achieved` ⇔ `saved ≥ target` (CHECK `goals_status_progress`, în afară de `abandoned`); serviciul îl calculează la fiecare contribuție sau țintă nouă, deci e **reversibil**. `abandoned` e doar manual și blochează contribuțiile (409 `goal_abandoned`); `status: "active"` îl reia și recalculează.
+- Contribuțiile: `add`/`withdraw` cu o sumă pozitivă; sub 0 → 409 `goal_saved_negative` (nu se taie tacit), peste 10^13 → 400. `progressPct = floor(saved × 100 / target)`, poate trece de 100.
+- Ștergerea e definitivă, auditată fără sume; confirmarea o cere API-ul (F3-B).
+
+### Timp și luni (5.2)
+- `occurred_on` e o dată locală, deci limitele lunii sunt calendaristice: `YYYY-MM-01` … ultima zi (28/29/30/31), calculate cu `Date.UTC` pe cifre (`src/lib/calendar.ts`), fără fus orar și fără DST.
+- Fusul orar contează doar pentru **luna curentă** (implicită când clientul nu trimite `month`): momentul curent (ceas injectabil, `PlanningDeps.now`) → data locală în `households.timezone` (implicit `Europe/Bucharest`, fus invalid → implicit) cu `Intl`. Testat la 31 dec / 1 ian, 29 februarie, ultima duminică din martie și din octombrie.
+
+### Dashboard și raport lunar
+- Totalurile sunt **separate pe monedă**, fără conversie; transferurile nu sunt venituri, cheltuieli sau tranzacții numărate (`transactionCount` = venituri + cheltuieli, decizia mea).
+- Comparația cu luna anterioară: diferența absolută și procentul `diff / |anterior|`, rotunjit la cel mai apropiat întreg cu 0,5 departe de zero; `null` când luna anterioară e 0.
+- Cheltuielile pe categorii agregă subcategoriile la părinte; top N (implicit 5, maxim 20) plus o felie „Altele”; cheltuielile fără categorie au felia lor. Procentele feliilor sunt informative (rotunjite, suma poate fi ≠ 100).
+- Evoluția: ultimele 12 luni (inclusiv cea aleasă), cu luni goale = 0. Trendul zilnic: toate zilele lunii, zilele fără tranzacții = 0.
+- Onboarding: `hasAccount`, `hasTransaction`, `hasBudget`, `hasGoal`; pașii `import` (făcut când există o tranzacție, decizia mea), `budget`, `goal`.
+- Raportul lunar (structură de date; PDF/Excel în Faza 10): totaluri, toate categoriile cu defalcarea pe subcategorii, top 10 comercianți (grupați după `lower(btrim(merchant))`), bugetele vizibile actorului cu starea lunii, obiectivele active și atinse. O singură tranzacție SQL.
+
+### Export CSV
+- Tranzacții (cu filtrele listei, fără `cursor`/`limit`/`sort`; ordine cronologică), obiective, bugete (starea unei luni). Coduri de coloană stabile, ASCII, `snake_case` (`TRANSACTION_COLUMNS`, `GOAL_COLUMNS`, `BUDGET_COLUMNS`); fiecare sumă apare ca `*_minor` (întreg), `currency` și zecimal exact (`toDecimalString`, fără float); date `YYYY-MM-DD`, momente ISO 8601 UTC; etichetele unite cu `|`.
+- UTF-8 cu BOM, CRLF, ghilimele RFC 4180 (dublate în interior).
+- **Separatorul (decizia mea, de confirmat):** brief-ul F3-A cere virgulă (RFC 4180), iar master prompt 5.3 cere `;` și zecimale cu virgulă. Implicit: dialectul `rfc4180` (virgulă, punct zecimal); disponibil și dialectul `ro` (`;`, virgulă zecimală), cu aceleași coloane. API-ul (F3-B) poate expune alegerea.
+- **CSV/formula injection:** celulele de **text liber** (nume de cont/categorie/etichetă/obiectiv, comerciant, descriere, note) care încep cu `=`, `+`, `-`, `@`, TAB sau CR primesc un apostrof în față. Valorile generate (id-uri, enumerări, date, sume) nu se prefixează, deci o sumă negativă rămâne număr.
+- Plafon: **50.000** de rânduri de tranzacții (`MAX_EXPORT_ROWS`). Se numără întâi (peste plafon → 409 `export_too_large`, fără conținut parțial); apoi se generează pe pagini de cursor de 1.000 (`AsyncGenerator<string>`, câte o tranzacție SQL pe pagină). Un export lung nu e un instantaneu (rândurile adăugate între pagini pot apărea sau nu). Obiectivele și bugetele sunt mici: un singur șir.
+- Izolat pe gospodărie: `withMember` + RLS + filtru explicit; testat cu datele altei gospodării prezente în bază.
+
+### Corecții din revizuirea Fazei 2
+- **LOW-1:** lacătul tranzacțional per utilizator (`lockUserUsage`, aceeași cheie ca plafonul de instalări) e luat în `setConsents`, în `upsertInstallation` (înaintea verificării acordului) și în `recordEvents`. O scriere care a verificat acordul înaintea revocării nu mai supraviețuiește revocării (test cu două tranzacții intercalate, `consents-lock.test.ts`).
+- **INFO:** în `upsertInstallation`, rândul existent se citește după lacăt.
+- **LOW-2:** ADR 0004 și 0005 corectate (~901 sume legitime de 10^13 pe același cont ajung la 2^53). Garda la scriere `assertAccountsWithinJsonRange` (`src/modules/ledger/range-guard.ts`): |sold inițial| + Σ `amount_minor` al fiecărui cont atins ≤ 2^53 − 1, altfel `MoneyOverflowError` → 422 `amount_out_of_range`. Conturile se blochează `FOR NO KEY UPDATE`, în ordinea id-ului. Risc rezidual: totalurile pe gospodărie (mai multe conturi) pot depăși la citire → tot 422.
+
+## Consecințe
+- F3-B expune serviciile în `/api/v1` (dashboard, bugete, obiective, etichete, raport, export) și decide: etichetele în răspunsul tranzacției, parametrul `tagIds` în query, dialectul CSV, streamingul răspunsului.
+- Interogările de agregare citesc toate tranzacțiile lunii (sau ale celor 12 luni) ale gospodăriei; indexul `(household_id, occurred_on desc, id desc)` le acoperă. Pentru volume mari (Faza 7, extrase) se pot adăuga agregate materializate.

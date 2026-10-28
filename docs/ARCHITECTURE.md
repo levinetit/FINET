@@ -1,4 +1,4 @@
-# FINET — arhitectura (ce există după Faza 1 și Faza 2)
+# FINET — arhitectura (ce există după Fazele 1–2 și F3-A)
 
 Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
 
@@ -38,14 +38,17 @@ src/
     db-client.ts, db-url.ts     # clientul Postgres comun (TLS cu DATABASE_CA_FILE)
     access.ts                   # verificarea JWT Access, liveness local, HEALTH_TOKEN
     authz.ts                    # requireMember / withMember (stratul 1 de autorizare)
-    money.ts                    # bani în bigint (unități minore), alocare, parsare, formatare RO
+    money.ts                    # bani în bigint (unități minore), alocare, parsare, formatare RO, procente întregi
+    calendar.ts                 # luni calendaristice, data locală / luna curentă în fusul gospodăriei
     storage.ts, storage/        # interfața Storage; driver local; S3 = schelet
     errors.ts, utils.ts
-  db/                           # schema Drizzle, migrațiile (0000_core, 0001_rls, 0002_ledger, 0003_idempotency_purge), runner-ul, RLS
+  db/                           # schema Drizzle, migrațiile (0000_core, 0001_rls, 0002_ledger, 0003_idempotency_purge, 0004_budgets_goals_tags), runner-ul, RLS
   modules/auth, profile, sessions, entitlements
   modules/ledger/               # comun registrului: validarea intrărilor (Zod strict, sume prin money.ts),
                                 #   `inHousehold` (withMember + traducerea erorilor Postgres), fixture de test
   modules/accounts, categories, transactions, transfers  # *.schema.ts, *.repo.ts, *.service.ts (F2-A)
+  modules/tags, budgets, goals  # etichete, bugete (semafor), obiective (F3-A, ADR 0007)
+  modules/dashboard, reports, exports  # agregările lunare, raportul lunar, exportul CSV (F3-A)
   modules/households/           # gospodăriile utilizatorului (API)
   modules/idempotency/          # Idempotency-Key (rezervare + răspuns în tranzacția scrierii), curățarea
   modules/usage/                # X-FINET-Client → client_installations, consimțăminte, evenimente (6.5)
@@ -83,6 +86,9 @@ Serviciile din `src/modules/{accounts,categories,transactions,transfers}` primes
 - **Transferuri:** două rânduri `transfer` (`out`/`in`) cu același `transfer_group_id`, scrise în aceeași tranzacție SQL; monede diferite → ambele sume explicit; baza verifică grupul la COMMIT.
 - Integritatea e dublată în bază (cheie compusă cont/gospodărie/monedă, CHECK-uri, triggere `SECURITY INVOKER`); detaliile în ADR 0004.
 
+## Planificare și raportare (F3-A)
+Serviciile din `src/modules/{tags,budgets,goals,dashboard,reports,exports}` urmează modelul registrului (`inHousehold`, Zod strict, filtru explicit pe gospodărie, RLS); cele care depind de „luna curentă” primesc `PlanningDeps` (`db` + ceasul `now`, injectabil). Bugetele: cheltuit = cheltuielile lunii (fără transferuri și venituri), semafor din comparații exacte în `bigint`, procent `floor`. Dashboard-ul și raportul: totaluri separate pe monedă, subcategoriile agregate la părinte. Exportul CSV: `exportTransactionsCsv` e un `AsyncGenerator<string>` (numărare, apoi pagini de cursor), `exportGoalsCsv`/`exportBudgetsCsv` întorc un șir. Detalii: ADR 0007. Rutele HTTP vin în F3-B.
+
 ## API-ul `/api/v1` (F2-B)
 Handlerele din `src/app/api/v1/_lib/` sunt subțiri: `handle()` verifică sesiunea (cookie sau bearer), CSRF-ul pe mutațiile cu cookie, înregistrează instalarea din `X-FINET-Client` (fără să blocheze), aplică rate limiting pe mutații și mapează erorile de domeniu în `{ error: { code, message, fields?, reason? } }`. Gospodăria vine din bază (`currentHousehold`). Crearea cu `Idempotency-Key` rulează în `runIdempotent`: o tranzacție cu lock consultativ, rezervarea cheii, serviciul într-un savepoint (`DbOrTx`) și răspunsul memorat. Contractul e în `src/openapi/registry.ts`; `docs/openapi.json` se generează din el, iar testele verifică fiecare răspuns real față de schemă. Detalii: `docs/API.md`, ADR 0005.
 
@@ -100,4 +106,4 @@ Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` s
 - CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `smoke`, `auth`, `ledger` în `personal` apoi în `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
 
 ## Planificat (nu există încă)
-Bugetele, obiectivele, etichetele (Faza 3), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), Recharts, înregistrarea publică și modul `saas` (Faza 11).
+Rutele și UI-ul pentru bugete, obiective, etichete, dashboard și export (F3-B, F3-C), backup-ul restic (F3-D), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), Recharts, înregistrarea publică și modul `saas` (Faza 11).

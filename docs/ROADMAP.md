@@ -9,7 +9,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
 | 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
 | 2 — Conturi, categorii, tranzacții, transferuri | **parțial** (implementat în repo) | F2-A, F2-B, F2-C gata; rămân migrațiile pe Supabase, prima rulare E2E `ledger` în CI, verificarea în browser și revizuirea de securitate — vezi mai jos și `docs/reports/faza-2.md` |
-| 3 — Dashboard, bugete, obiective, rapoarte, export, backup | neimplementat | |
+| 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A în repo) | F3-A gata (date, servicii, corecțiile Fazei 2); rămân F3-B (API), F3-C (UI, E2E), F3-D (backup restic, restaurare testată), migrația `0004` pe Supabase și revizuirea de securitate — vezi mai jos |
 | 4 — Stabilizare (rezervată) | neimplementat | |
 | 5 — Recurențe | neimplementat | |
 | 6 — Ingestia bonurilor | neimplementat | |
@@ -96,6 +96,15 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - **LOW-3** — `q` (căutarea în tranzacții) circulă în URL: aplicația nu loghează URL-uri, dar proxy-ul/Traefik/Cloudflare le pot înregistra (`docs/PRIVACY_NOTES.md`); alternativa `POST /api/v1/transactions/search` într-o fază viitoare.
 - **LOW-4** — plafoane per gospodărie (număr de conturi, categorii, tranzacții) și rate limit pe citiri: fază viitoare.
 - **NOTE** — `owner_user_id` nu are efect de autorizare (6.1); `finet_migrator` nu are politici pe `categories`/`transactions` (intenționat).
+
+### Faza 3: stare
+**F3-A (date și servicii, fără rute HTTP și UI), gata în repo, verificat local pe PostgreSQL 17 efemer** (ADR 0007):
+- corecțiile revizuirii Fazei 2: LOW-1 (lacătul per utilizator în `setConsents`, `upsertInstallation`, `recordEvents`), INFO (citirea după lacăt), LOW-2 (garda 2^53 − 1 la scriere pe cont, ADR 0004/0005 corectate);
+- migrația `0004_budgets_goals_tags` (generată + partea de mână): `tags` (5 de sistem), `tag_visibility`, `transaction_tags`, `budgets`, `goals`; RLS `ENABLE` + `FORCE`, bugetele personale vizibile doar proprietarului, triggere `SECURITY INVOKER`, drepturi `UPDATE` pe coloane; pe `transactions` doar `UNIQUE (id, household_id)`;
+- serviciile `src/modules/{tags,budgets,goals,dashboard,reports,exports}`: etichete (și `tagIds` pe tranzacții, filtrele `tagIds`/`merchant`), bugete cu semafor în întregi și avertizări, obiective cu contribuții și stare calculată, dashboard pe monedă (comparație, 12 luni, trend zilnic, categorii top N + „Altele”, onboarding), raport lunar, export CSV (BOM, RFC 4180, protecție contra injecției, plafon 50.000);
+- `src/lib/calendar.ts` (luni locale, „luna curentă” în `Europe/Bucharest`), `percentOf` în `money.ts`.
+
+**Rămâne în Faza 3:** F3-B (`/api/v1` pentru dashboard, bugete, obiective, etichete, raport, export; OpenAPI), F3-C (UI, selector de lună, filtre în URL, E2E, documentație), F3-D (backup restic zilnic + restaurare testată efectiv; fără ea nu se introduc date reale), aplicarea `0004` pe Supabase (operatorul), revizuirea `security`. De confirmat de operator: separatorul CSV implicit (virgulă din brief vs. `;` din master prompt 5.3; ambele implementate).
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
