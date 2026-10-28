@@ -21,6 +21,13 @@ import type * as schema from "./schema";
 export type Db = PostgresJsDatabase<typeof schema>;
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
+/**
+ * Un client SAU o tranzacție deschisă. `withRlsOn` pe o tranzacție deschide un SAVEPOINT (Drizzle:
+ * `tx.transaction`): așa API-ul (F2-B) poate rula un serviciu în aceeași tranzacție cu
+ * înregistrarea cheii `Idempotency-Key`. O eroare din serviciu anulează doar savepoint-ul.
+ */
+export type DbOrTx = Db | Tx;
+
 export type RlsContext = Readonly<{
   /** Utilizatorul autentificat; `null` doar pentru operații fără utilizator (nu vede nimic). */
   userId: string | null;
@@ -51,7 +58,7 @@ function checkId(value: string | null | undefined, field: "userId" | "householdI
 
 /** Rulează `fn` într-o tranzacție cu contextul RLS dat, pe clientul `db`. */
 export async function withRlsOn<T>(
-  db: Db,
+  db: DbOrTx,
   context: RlsContext,
   fn: (tx: Tx) => Promise<T>,
 ): Promise<T> {

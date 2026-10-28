@@ -12,6 +12,7 @@ import {
   createUserWithHousehold,
   resetPasswordByEmail,
 } from "@/modules/auth/users.service";
+import { purgeIdempotencyKeys } from "@/modules/idempotency/idempotency";
 
 /**
  * CLI-ul de administrare (master prompt 3.3, Faza 1), împachetat în `dist/tools/admin.mjs`
@@ -20,6 +21,11 @@ import {
  *   admin.mjs create-user --email <email> --name <nume> [--password-stdin]
  *   admin.mjs reset-password --email <email> [--password-stdin]
  *   admin.mjs add-member --household <id> --email <email> [--role member|owner]
+ *   admin.mjs cleanup-idempotency
+ *
+ * `cleanup-idempotency` (F2-B, ADR 0005) șterge cheile `Idempotency-Key` mai vechi de 24 de ore
+ * prin `finet.purge_idempotency_keys()` și scrie DOAR numărul de rânduri șterse (o linie), ca să
+ * poată fi rulată din cron/Portainer și citită de un script. Idempotentă (a doua rulare: `0`).
  *
  * Reguli: parola NU se dă niciodată ca argument (ar rămâne în istoricul shell-ului și în `ps`):
  * se citește din stdin (`--password-stdin`, prima linie) sau se generează și se afișează O
@@ -43,6 +49,7 @@ const USAGE = [
   "  admin create-user --email <email> --name <nume> [--password-stdin]",
   "  admin reset-password --email <email> [--password-stdin]",
   "  admin add-member --household <id> --email <email> [--role member|owner]",
+  "  admin cleanup-idempotency",
   "Parola se citește din stdin cu --password-stdin; altfel se generează și se afișează o dată.",
 ].join("\n");
 
@@ -54,6 +61,7 @@ const COMMANDS: Readonly<Record<string, readonly string[]>> = {
   "create-user": ["email", "name", "password-stdin"],
   "reset-password": ["email", "password-stdin"],
   "add-member": ["household", "email", "role"],
+  "cleanup-idempotency": [],
 };
 const BOOLEAN_FLAGS = new Set(["password-stdin"]);
 
@@ -198,6 +206,11 @@ export async function main(io: AdminIo): Promise<number> {
         `finet-admin: parola utilizatorului ${result.userId} a fost schimbată; sesiuni revocate: ${result.revokedSessions}`,
       );
       if (generated) io.out(`finet-admin: parola generată (afișată o singură dată): ${password}`);
+      return 0;
+    }
+
+    if (command === "cleanup-idempotency") {
+      io.out(String(await purgeIdempotencyKeys(db)));
       return 0;
     }
 

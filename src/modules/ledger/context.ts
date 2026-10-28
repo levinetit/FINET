@@ -1,6 +1,6 @@
 import "server-only";
 
-import { type Db, type Tx } from "@/db";
+import { type DbOrTx, type Tx } from "@/db";
 import { pgErrorInfo } from "@/db/pg-errors";
 import { type Actor, type Membership, NotFoundError, withMember } from "@/lib/authz";
 import { ConflictError, ValidationError } from "@/lib/errors";
@@ -14,7 +14,8 @@ import { ConflictError, ValidationError } from "@/lib/errors";
  * `householdId` vine din sesiune sau din ruta validată, niciodată din body (6.2).
  */
 
-export type LedgerDeps = Readonly<{ db: Db }>;
+/** `db` poate fi și o tranzacție deschisă (API-ul cu `Idempotency-Key`, ADR 0005). */
+export type LedgerDeps = Readonly<{ db: DbOrTx }>;
 
 /** Numele constrângerilor unice → motivul conflictului. */
 const UNIQUE_REASONS: Readonly<Record<string, string>> = {

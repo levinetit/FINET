@@ -21,9 +21,14 @@ function copyMigrations(): string {
 }
 
 describe("readMigrations (fără bază)", () => {
-  it("citește jurnalul repo-ului: 0000_core, 0001_rls, 0002_ledger, fără CREATE SCHEMA", () => {
+  it("citește jurnalul repo-ului: 0000_core … 0003_idempotency_purge, fără CREATE SCHEMA", () => {
     const migrations = readMigrations(MIGRATIONS_DIR);
-    expect(migrations.map((m) => m.tag)).toEqual(["0000_core", "0001_rls", "0002_ledger"]);
+    expect(migrations.map((m) => m.tag)).toEqual([
+      "0000_core",
+      "0001_rls",
+      "0002_ledger",
+      "0003_idempotency_purge",
+    ]);
     for (const m of migrations) {
       expect(m.hash).toMatch(/^[0-9a-f]{64}$/);
       expect(m.statements.length).toBeGreaterThan(0);
@@ -176,12 +181,17 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       const lines: string[] = [];
       const first = await runMigrations(sql, { folder: MIGRATIONS_DIR, log: (l) => lines.push(l) });
       expect(first).toEqual({
-        applied: ["0000_core", "0001_rls", "0002_ledger"],
+        applied: ["0000_core", "0001_rls", "0002_ledger", "0003_idempotency_purge"],
         alreadyApplied: 0,
       });
-      expect(lines).toEqual(["aplicată: 0000_core", "aplicată: 0001_rls", "aplicată: 0002_ledger"]);
+      expect(lines).toEqual([
+        "aplicată: 0000_core",
+        "aplicată: 0001_rls",
+        "aplicată: 0002_ledger",
+        "aplicată: 0003_idempotency_purge",
+      ]);
       const second = await runMigrations(sql, { folder: MIGRATIONS_DIR });
-      expect(second).toEqual({ applied: [], alreadyApplied: 3 });
+      expect(second).toEqual({ applied: [], alreadyApplied: 4 });
     } finally {
       await sql.end({ timeout: 5 });
     }
@@ -196,7 +206,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     ]);
     const [counted] = await db.admin<{ n: number }[]>`
       select count(*)::int as n from finet.__drizzle_migrations`;
-    expect(counted?.n).toBe(3);
+    expect(counted?.n).toBe(4);
     const schemas = await db.admin<{ nspname: string }[]>`
       select nspname from pg_namespace where nspname = 'drizzle'`;
     expect(schemas).toEqual([]);
@@ -286,7 +296,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       expect(rows.length).toBe(0);
       const [counted] = await db.admin<{ n: number }[]>`
         select count(*)::int as n from finet.__drizzle_migrations`;
-      expect(counted?.n).toBe(3);
+      expect(counted?.n).toBe(4);
     } finally {
       await sql.end({ timeout: 5 });
       rmSync(dir, { recursive: true, force: true });
@@ -304,7 +314,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     });
     expect(err).toEqual([]);
     expect(code).toBe(0);
-    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 3"]);
+    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 4"]);
     expect(out.join("\n")).not.toContain("finet_migrator_ci");
   });
 });
