@@ -55,6 +55,7 @@ export function toView(row: TransactionRow): TransactionView {
     source: row.source,
     transferGroupId: row.transferGroupId,
     transferDirection: row.transferDirection,
+    recurringRuleId: row.recurringRuleId,
     createdByUserId: row.createdByUserId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

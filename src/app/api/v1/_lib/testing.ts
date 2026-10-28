@@ -5,6 +5,7 @@ import { errorSchema } from "@/openapi/schemas";
 import * as L from "./ledger-handlers";
 import * as M from "./me-handlers";
 import * as P from "./planning-handlers";
+import * as R from "./recurring-handlers";
 
 /**
  * Doar pentru testele de integrare ale API-ului `/api/v1`: construirea cererilor și sesiunile de
@@ -124,6 +125,15 @@ const OPERATION_OF = new Map<unknown, string>([
   [P.exportTransactionsHandler, "exportTransactionsCsv"],
   [P.exportGoalsHandler, "exportGoalsCsv"],
   [P.exportBudgetsHandler, "exportBudgetsCsv"],
+  [R.listRecurringHandler, "listRecurring"],
+  [R.createRecurringHandler, "createRecurring"],
+  [R.recurringSummaryHandler, "getRecurringSummary"],
+  [R.generateRecurringHandler, "generateRecurring"],
+  [R.getRecurringHandler, "getRecurring"],
+  [R.patchRecurringHandler, "patchRecurring"],
+  [R.deleteRecurringHandler, "deleteRecurring"],
+  [R.pauseRecurringHandler, "pauseRecurring"],
+  [R.resumeRecurringHandler, "resumeRecurring"],
 ]);
 
 /** Antetele obligatorii ale unui export CSV (F3-B). */

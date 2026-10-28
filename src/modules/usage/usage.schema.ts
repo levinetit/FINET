@@ -48,6 +48,9 @@ export const APP_EVENT_NAMES = [
   "goal_contribution_added",
   "tag_created",
   "export_downloaded",
+  // Faza 5 (F5-B): doar numele.
+  "recurring_created",
+  "recurring_generated",
 ] as const;
 
 /** Ecranele (doar numele, pentru `screen_view` și ca context al unei erori). */
@@ -66,6 +69,7 @@ export const APP_SCREENS = [
   "statements",
   "budgets",
   "goals",
+  "recurring",
   "reports",
   "settings",
   "profile",

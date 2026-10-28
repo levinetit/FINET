@@ -32,7 +32,9 @@ export type RateLimitKind =
   | "api_mutation"
   | "app_events"
   // Exporturile CSV (F3-B), pe utilizator.
-  | "api_export";
+  | "api_export"
+  // Generarea la cerere a scadențelor recurente (F5-B), pe utilizator.
+  | "api_recurring_generate";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

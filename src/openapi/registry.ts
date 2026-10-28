@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-import { CATEGORY_KINDS, GOAL_STATUSES, TRANSACTION_SOURCES, TRANSACTION_TYPES } from "@/db/schema";
+import {
+  CATEGORY_KINDS,
+  GOAL_STATUSES,
+  RECURRING_STATUSES,
+  TRANSACTION_SOURCES,
+  TRANSACTION_TYPES,
+} from "@/db/schema";
 import { accountCreateSchema, accountUpdateSchema } from "@/modules/accounts/accounts.schema";
 import { budgetCreateSchema, budgetUpdateSchema } from "@/modules/budgets/budgets.schema";
 import { MAX_TOP_CATEGORIES } from "@/modules/dashboard/dashboard.schema";
@@ -14,6 +20,7 @@ import { tagCreateSchema, tagUpdateSchema } from "@/modules/tags/tags.schema";
 import { changePasswordSchema } from "@/modules/auth/password.schema";
 import { categoryCreateSchema, categoryUpdateSchema } from "@/modules/categories/categories.schema";
 import { profilePatchSchema } from "@/modules/profile/profile.schema";
+import { recurringCreateSchema, recurringUpdateSchema } from "@/modules/recurring/recurring.schema";
 import {
   TRANSACTION_SORTS,
   transactionCreateSchema,
@@ -36,6 +43,9 @@ import {
   meSchema,
   moneySchema,
   monthlyReportSchema,
+  recurringCountsSchema,
+  recurringGenerateResultSchema,
+  recurringRuleSchema,
   sessionSchema,
   tagSchema,
   transactionSchema,
@@ -760,6 +770,122 @@ export const OPERATIONS: readonly Operation[] = [
     body: { schema: z.strictObject({}), optional: true },
     success: { status: 200, schema: dataOf(goalSchema), description: "Obiectivul." },
     errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE],
+  },
+  // --- Plățile recurente (Faza 5) ------------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/recurring",
+    operationId: "listRecurring",
+    tag: "recurring",
+    summary: "Regulile recurente ale gospodăriei și contorul „active · scadente · total”.",
+    description:
+      "`counts` se calculează pe TOATE regulile (filtrul `status` nu îl schimbă). `due` = reguli scadente (active, cu o scadență negenerată ≤ azi, data din București).",
+    query: [{ name: "status", schema: z.enum(RECURRING_STATUSES), description: "Doar o stare." }],
+    success: {
+      status: 200,
+      schema: z.strictObject({
+        data: z.array(recurringRuleSchema),
+        counts: recurringCountsSchema,
+      }),
+      description: "Regulile și contorul.",
+    },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/recurring",
+    operationId: "createRecurring",
+    tag: "recurring",
+    summary: "Creează o regulă recurentă (venit sau cheltuială; fără transferuri în Faza 5).",
+    description:
+      "Moneda = a contului (contul nearhivat). `dayOfMonth` doar la `monthly`/`yearly` (implicit ziua din `startOn`; 29–31 → ultima zi în lunile scurte, fără deplasarea zilei țintă). `interval` 1–100, `maxOccurrences` 1–1200, `description` obligatorie. Prima scadență = prima dată ≥ `startOn`; o regulă cu start în trecut are scadențele trecute „de generat” (recuperare limitată la 12 pe regulă pe rulare).",
+    body: { schema: recurringCreateSchema },
+    success: { status: 201, schema: dataOf(recurringRuleSchema), description: "Regula creată." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "GET",
+    path: "/api/v1/recurring/summary",
+    operationId: "getRecurringSummary",
+    tag: "recurring",
+    summary: "Doar contorul: reguli active · reguli scadente · total.",
+    success: {
+      status: 200,
+      schema: dataOf(recurringCountsSchema),
+      description: "Contorul.",
+    },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/recurring/generate",
+    operationId: "generateRecurring",
+    tag: "recurring",
+    summary:
+      "Generează acum tranzacțiile scadente ale gospodăriei curente; `Idempotency-Key` OBLIGATORIU.",
+    description:
+      "Rulează direct în serverul web, ca utilizatorul curent (RLS), nu prin coada workerului. Fără cheie → 400. Idempotent pe ocurență (`(rule_id, occurrence_date)`): o a doua generare creează 0 tranzacții; aceeași cheie întoarce același răspuns (`Idempotent-Replay: true`). Cel mult 12 scadențe ratate pe regulă la o rulare. Limită proprie, mai strânsă (429). Tranzacțiile au `source: recurring` și `recurringRuleId`.",
+    body: { schema: z.strictObject({}), optional: true },
+    success: {
+      status: 200,
+      schema: dataOf(recurringGenerateResultSchema),
+      description: "Contoarele generării (fără sume).",
+    },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/recurring"),
+    operationId: "getRecurring",
+    tag: "recurring",
+    summary: "O regulă recurentă.",
+    success: { status: 200, schema: dataOf(recurringRuleSchema), description: "Regula." },
+    errors: [NOT_FOUND, REUSED],
+  },
+  {
+    method: "PATCH",
+    path: pathOf("/api/v1/recurring"),
+    operationId: "patchRecurring",
+    tag: "recurring",
+    summary: "Modifică o regulă (tipul, `startOn` și starea nu se schimbă de aici).",
+    description:
+      "O schimbare de calendar recalculează scadența de la max(azi, ultima ocurență + 1 zi): nimic retroactiv, nimic dublat. Un cont în altă monedă cere și suma (409 `currency_change_requires_amount`); contul arhivat → 409 `account_archived`.",
+    body: { schema: recurringUpdateSchema },
+    success: { status: 200, schema: dataOf(recurringRuleSchema), description: "Regula." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT, REUSED],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/recurring"),
+    operationId: "deleteRecurring",
+    tag: "recurring",
+    summary: "Șterge definitiv o regulă (auditat fără sume); tranzacțiile generate rămân.",
+    success: { status: 204, schema: null, description: "Ștearsă." },
+    errors: [FORBIDDEN, NOT_FOUND, MEDIA, TOO_LARGE],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/recurring", "/pause"),
+    operationId: "pauseRecurring",
+    tag: "recurring",
+    summary: "Pune regula pe pauză (una completată → 409 `recurring_completed`).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 200, schema: dataOf(recurringRuleSchema), description: "Regula." },
+    errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE, REUSED],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/recurring", "/resume"),
+    operationId: "resumeRecurring",
+    tag: "recurring",
+    summary: "Reia regula, FĂRĂ generarea retroactivă a scadențelor sărite.",
+    description:
+      "Scadența devine prima ≥ max(azi, scadența veche, ultima ocurență + 1 zi); fără scadențe rămase → `completed`. Contul arhivat → 409 `account_archived` (dezarhivează contul sau mută regula pe alt cont).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 200, schema: dataOf(recurringRuleSchema), description: "Regula." },
+    errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE, REUSED],
   },
   // --- Dashboard și raportul lunar -----------------------------------------------------------
   {

@@ -8,6 +8,9 @@ import {
   DB_CURRENCIES,
   GOAL_STATUSES,
   HOUSEHOLD_ROLES,
+  RECURRING_FREQUENCIES,
+  RECURRING_STATUSES,
+  RECURRING_TYPES,
   THEMES,
   TRANSACTION_SOURCES,
   TRANSACTION_TYPES,
@@ -94,6 +97,9 @@ export const transactionSchema = z
     source: z.enum(TRANSACTION_SOURCES),
     transferGroupId: uuid.nullable(),
     transferDirection: z.enum(TRANSFER_DIRECTIONS).nullable(),
+    recurringRuleId: uuid
+      .nullable()
+      .meta({ description: "Regula recurentă care a generat-o (`source: recurring`, Faza 5)." }),
     createdByUserId: uuid.nullable(),
     createdAt: instant,
     updatedAt: instant,
@@ -344,4 +350,59 @@ export const monthlyReportSchema = z
   .meta({ title: "MonthlyReport" });
 
 /** `{ data }` */
+export const recurringRuleSchema = z
+  .strictObject({
+    id: uuid,
+    accountId: uuid,
+    categoryId: uuid.nullable(),
+    type: z.enum(RECURRING_TYPES),
+    amountMinor: minor,
+    currency,
+    description: z.string(),
+    merchant: z.string().nullable(),
+    frequency: z.enum(RECURRING_FREQUENCIES),
+    interval: int.min(1),
+    dayOfMonth: int.min(1).max(31).nullable(),
+    startOn: date,
+    nextRunOn: date.meta({ description: "Următoarea scadență negenerată." }),
+    endOn: date.nullable(),
+    maxOccurrences: int.nullable(),
+    occurrencesCount: int,
+    status: z.enum(RECURRING_STATUSES),
+    due: z
+      .boolean()
+      .meta({ description: "Regula e activă și are o scadență negenerată ≤ azi (București)." }),
+    lastErrorCode: z.string().nullable().meta({
+      description:
+        "Codul ultimei generări eșuate (fără detalii); `account_archived` = pusă pe pauză automat pentru că are contul arhivat.",
+    }),
+    createdAt: instant,
+    updatedAt: instant,
+  })
+  .meta({ title: "RecurringRule" });
+
+export const recurringCountsSchema = z
+  .strictObject({
+    active: int.meta({ description: "Reguli active." }),
+    due: int.meta({
+      description:
+        "Reguli SCADENTE: active, cu o scadență negenerată ≤ azi (nu numărul de ocurențe în așteptare).",
+    }),
+    total: int.meta({ description: "Toate regulile (orice stare)." }),
+  })
+  .meta({ title: "RecurringCounts" });
+
+export const recurringGenerateResultSchema = z
+  .strictObject({
+    today: date.meta({ description: "„Azi” folosit (data locală din București)." }),
+    rules: int.meta({ description: "Reguli scadente procesate." }),
+    generated: int.meta({ description: "Tranzacții create acum (0 la o a doua rulare)." }),
+    failed: int.meta({ description: "Reguli la care generarea a eșuat (reîncercate mai târziu)." }),
+    skipped: int.meta({
+      description:
+        "Reguli sărite (blocate de o generare paralelă, puse pe pauză din cauza contului arhivat etc.).",
+    }),
+  })
+  .meta({ title: "RecurringGenerateResult" });
+
 export const dataOf = <T extends z.ZodType>(schema: T) => z.strictObject({ data: schema });
