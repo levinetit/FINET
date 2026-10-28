@@ -25,11 +25,14 @@
     "test:e2e": "playwright test",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "scan:client-secrets": "node scripts/scan-client-secrets.mjs .next/static",
+    "openapi:generate": "node scripts/openapi.mjs",
+    "openapi:check": "node scripts/openapi.mjs --check",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "pnpm build:tools && node dist/tools/migrate.mjs",
     "admin:create-user": "pnpm build:tools && node dist/tools/admin.mjs create-user",
     "admin:reset-password": "pnpm build:tools && node dist/tools/admin.mjs reset-password",
-    "admin:add-member": "pnpm build:tools && node dist/tools/admin.mjs add-member"
+    "admin:add-member": "pnpm build:tools && node dist/tools/admin.mjs add-member",
+    "admin:cleanup-idempotency": "pnpm build:tools && node dist/tools/admin.mjs cleanup-idempotency"
   },
   "dependencies": {
     "better-auth": "1.7.13",
