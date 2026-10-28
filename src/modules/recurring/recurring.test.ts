@@ -388,7 +388,7 @@ describe.skipIf(!TEST_ADMIN_URL)("recurențe (Postgres real, finet_app)", () => 
   it("due_recurring_rules: doar id-uri, doar active și scadente, cu actorul membru; plafoane", async () => {
     const owner = await rule({ description: "Due A", startOn: "2026-01-04", dayOfMonth: 4 });
     const byC = await rule({ description: "Due C", startOn: "2026-01-04", dayOfMonth: 4 }, f.C);
-    const future = await rule({ description: "Viitor", startOn: "2026-12-01", dayOfMonth: 1 });
+    const future = await rule({ description: "Viitor", startOn: "2998-01-01", dayOfMonth: 1 });
     const paused = await rule({ description: "Pauza", startOn: "2026-01-04", dayOfMonth: 4 });
     await pauseRecurringRule(f.deps, f.A, f.HA, paused.id);
 
