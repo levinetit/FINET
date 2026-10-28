@@ -9,6 +9,7 @@ import { selectCategory } from "@/modules/categories/categories.repo";
 import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
 import { isValidId, parseInput, resolvePositiveAmount } from "@/modules/ledger/input";
 import { assertAccountsWithinJsonRange } from "@/modules/ledger/range-guard";
+import { applyTransactionTags } from "@/modules/tags/tags.service";
 
 import {
   type TransactionRow,
@@ -109,6 +110,9 @@ export async function createTransaction(
       source: "manual",
     });
     await assertAccountsWithinJsonRange(tx, m.householdId, [row.accountId]);
+    if (input.tagIds && input.tagIds.length > 0) {
+      await applyTransactionTags(tx, m.householdId, row.id, input.tagIds);
+    }
     return toView(row);
   });
 }
@@ -190,6 +194,7 @@ export async function updateTransaction(
     if (amountMinor !== undefined || accountId !== current.accountId) {
       await assertAccountsWithinJsonRange(tx, m.householdId, [row.accountId]);
     }
+    if (patch.tagIds !== undefined) await applyTransactionTags(tx, m.householdId, id, patch.tagIds);
     return toView(row);
   });
 }
@@ -250,6 +255,8 @@ export async function listTransactions(
         q: query.q || undefined,
         accountId: query.accountId,
         categoryId: query.categoryId,
+        tagIds: query.tagIds,
+        merchant: query.merchant || undefined,
         type: query.type,
         source: query.source,
         dateFrom: query.dateFrom,

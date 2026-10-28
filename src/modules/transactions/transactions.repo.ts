@@ -3,7 +3,7 @@ import "server-only";
 import { type SQL, and, asc, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 
 import type { Tx } from "@/db";
-import { transactions } from "@/db/schema";
+import { transactionTags, transactions } from "@/db/schema";
 
 import type { Cursor, TransactionSort } from "./transactions.schema";
 
@@ -103,6 +103,8 @@ export type ListFilters = Readonly<{
   q?: string;
   accountId?: string;
   categoryId?: string;
+  tagIds?: readonly string[];
+  merchant?: string;
   type?: TransactionRow["type"];
   source?: TransactionRow["source"];
   dateFrom?: string;
@@ -129,6 +131,17 @@ export async function selectTransactionPage(
   if (filters.accountId) conditions.push(eq(t.accountId, filters.accountId));
   if (filters.categoryId) conditions.push(eq(t.categoryId, filters.categoryId));
   if (filters.type) conditions.push(eq(t.type, filters.type));
+  if (filters.tagIds && filters.tagIds.length > 0) {
+    // EXISTS, nu JOIN: o tranzacție cu două etichete căutate apare o singură dată, deci
+    // paginarea pe cheie rămâne stabilă.
+    conditions.push(sql`exists (select 1 from ${transactionTags} tt
+      where tt.transaction_id = ${t.id} and tt.household_id = ${householdId}
+        and tt.tag_id in (${sql.join(
+          filters.tagIds.map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )}))`);
+  }
+  if (filters.merchant) conditions.push(ilike(t.merchant, `%${escapeLike(filters.merchant)}%`));
   if (filters.source) conditions.push(eq(t.source, filters.source));
   if (filters.dateFrom) conditions.push(gte(t.occurredOn, filters.dateFrom));
   if (filters.dateTo) conditions.push(lte(t.occurredOn, filters.dateTo));
