@@ -71,6 +71,11 @@ Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; 
 - **L6** — tokenul de resetare a parolei e stocat în clar (Better Auth nu are `storeToken: "hashed"` pentru resetare): de revăzut la actualizarea Better Auth; azi 30 de minute, unică folosință.
 - **L7** — parola generată de CLI apare pe stdout (o singură dată): de decis cu operatorul (fișier 0600 sau doar `--password-stdin`).
 - **L8** — `viaBearer` scutește de CSRF și când cererea are și cookie: de restrâns la prima revizuire a clientului Android.
+- **Observații din re-verificarea de securitate a Fazei 1 (Low/Info):**
+  - N1: `cleanupExpired` din `rate-limit.ts` șterge cel mult 500 de rânduri/min/tip și filtrează cu `left(key, n) = prefix` (fără index); un flood cu emailuri unice depășește rata de ștergere. De trecut la `key like prefix || '%'` cu index `text_pattern_ops` sau la un job periodic cu lot mai mare și `FOR UPDATE SKIP LOCKED`.
+  - N2: `releaseRateLimit` după rularea ferestrei decrementează contorul ferestrei noi (câștig de cel mult 1 încercare pe fereastră; neglijabil).
+  - N3: cât timp nu există un administrator, un proces `finet_app` compromis își poate promova un utilizator; după primul bootstrap e închis. Un `finet_app` compromis poate rescrie `auth_accounts` (inerent unei aplicații care resetează parole).
+  - N4: cheia `/reset-password` are subiect fix per IP; fără IP de încredere (doar dezvoltare) toți împart un bucket global.
 - **Ștergerea contului (GDPR)**: fază viitoare, printr-o funcție SECURITY DEFINER care refuză administratorii și gospodăriile cu un singur membru; `finet_app` nu are `DELETE` pe `users` (M5).
 - **Înregistrarea `saas`** va avea nevoie de o funcție de creare a utilizatorilor (Better Auth nu mai creează utilizatori; `finet_app` nu poate insera `status`/`is_platform_admin`).
 - Un rol Postgres separat pentru CLI (ar închide și fereastra de bootstrap a `promote_first_admin`): opțional, cere un secret nou.

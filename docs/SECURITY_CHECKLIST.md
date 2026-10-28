@@ -4,7 +4,7 @@ Creată în Faza 1 (F1-C) și completată la fiecare revizuire de securitate. Re
 
 Identificatorii F1–F9 și N1–N5 sunt constatările revizuirii de securitate din Faza 0 (`docs/ROADMAP.md`, `docs/reports/faza-0.md`).
 
-Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizuire independentă); `security` = revizuirea dedicată (T5 în Faza 0, F1-A în Faza 1). Revizuirea de securitate a Fazei 1 complete (F1-B + F1-C) **nu a avut loc încă**.
+Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizuire independentă); `security` = revizuirea dedicată (T5 în Faza 0, F1-A în Faza 1). Revizuirea de securitate a Fazei 1 complete a avut loc: verdict **BLOCKED** (H1 open redirect, M1–M5, L1–L8), corecții aplicate, **re-verificare independentă: PASS_WITH_FINDINGS** (fără blocante; observații N1–N4 de mai jos și în `docs/ROADMAP.md`). Regulă pentru paginile viitoare: verificarea sesiunii se face pe server, în fiecare pagină, prin `requirePageSession` (`src/app/_lib/session.ts`); `(app)/layout.tsx` NU o face în locul paginilor.
 
 ## 1. Autentificare
 
@@ -129,4 +129,3 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | **L7** — parola generată de CLI pe stdout | TODO | amânat: comportament documentat (afișată o singură dată, operatorul o copiază); alternativa (fișier 0600 / doar `--password-stdin`) se decide cu operatorul | — |
 | **L8** — `viaBearer` scutește de CSRF și când există și cookie | TODO | amânat: Bearer cere antet explicit (imposibil cross-site fără CORS, închis); de restrâns la „bearer și fără cookie” la prima revizuire a clientului Android | — |
 | Ștergerea contului (GDPR) | TODO | fază viitoare: funcție SECURITY DEFINER care refuză administratorii și gospodăriile cu un singur membru (`finet_app` nu are DELETE pe `users`, M5) | — |
-

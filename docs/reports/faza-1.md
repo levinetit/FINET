@@ -24,7 +24,7 @@
 **Parțial sau neimplementat:**
 - E2E în browser (`smoke`, `auth`): **NOT RUN** local. Browserele nu se instalează pe hostul agentului (memorie mică). Prima rulare e în job-ul `e2e`, după push.
 - Migrațiile pe Supabase, primul utilizator în producție, verificarea prin Access în browser: operatorul (`docs/INFRA.md`, secțiunea 4b).
-- Revizuirea de securitate a F1-B + F1-C: neefectuată.
+- Revizuirea de securitate a Fazei 1: efectuată (BLOCKED → corecții → re-verificare PASS_WITH_FINDINGS, fără blocante); detalii în `docs/SECURITY_CHECKLIST.md` secțiunea 9. Observațiile minore N1–N4 sunt în `docs/ROADMAP.md`.
 - Înregistrarea publică `saas` cu verificarea emailului: Faza 11. Sign-up rămâne închis în ambele moduri.
 - OpenAPI pentru `/api/v1`: odată cu Faza 2.
 - Micșorarea imaginii `finet:tools`: TODO în ROADMAP (cere un build Docker).
@@ -139,4 +139,3 @@ Amânate (ROADMAP, checklist): L2, L3, L6, L7, L8, ștergerea contului, funcția
 | `pnpm test:ops` | PASS |
 | `pnpm exec playwright test --list` | PASS: 26 de teste în 3 fișiere (+1: H1) |
 | E2E în browser | NOT RUN (fără browsere pe host; job-ul `e2e` din CI) |
-
