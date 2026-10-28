@@ -19,3 +19,6 @@ Comenzi (Node 24, pnpm prin corepack):
 - `pnpm check` (lint + typecheck + teste), `pnpm format:check` (rulat și de CI)
 - `pnpm test`, `pnpm test:coverage`, `pnpm test:e2e`, `pnpm test:ops`, `pnpm scan:client-secrets`
 - `docker compose -f ops/docker/docker-compose.yml --env-file <compose.env> config` (validare; `up` doar operatorul)
+- `pnpm build:tools` (migrații + CLI admin în `dist/tools/`), `pnpm admin:create-user --email <e> --name <n> --password-stdin` (`FINET_ROLE=admin`)
+- E2E: `pnpm test:e2e` (`smoke`, `auth`, `access`); `auth` cere Postgres migrat, utilizatorii din `e2e/fixtures.ts`, `E2E_PASSWORD`, `E2E_APP_MODE=personal|saas`; `E2E_SERVER=prod pnpm test:e2e --project=access` merge fără browser (după `pnpm build`)
+- Securitate: `docs/SECURITY_CHECKLIST.md` (actualizată la fiecare revizuire); antetele și CSP-ul cu nonce în `src/lib/security-headers.ts` (fără atribute `style=` în markup)

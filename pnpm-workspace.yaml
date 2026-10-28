@@ -1,5 +1,8 @@
 # Scripturile de instalare ale dependențelor sunt blocate implicit de pnpm; aici se decide explicit.
 # unrs-resolver: postinstall-ul doar descarcă o variantă WASM de rezervă; binarul nativ vine
 # deja ca dependență opțională, deci scriptul nu e necesar.
+# esbuild (direct și prin drizzle-kit/tsx): postinstall-ul doar verifică/optimizează binarul;
+# binarul nativ vine ca dependență opțională (@esbuild/<platformă>), deci nu e necesar.
 allowBuilds:
   unrs-resolver: false
+  esbuild: false

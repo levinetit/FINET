@@ -2,6 +2,9 @@ pnpm-lock.yaml
 .next/
 out/
 build/
+dist/
+# generate de drizzle-kit (jurnalul și instantaneele schemei)
+src/db/migrations/meta/
 coverage/
 playwright-report/
 test-results/

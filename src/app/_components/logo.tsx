@@ -40,7 +40,7 @@ export function Logo({ className }: LogoProps) {
         />
         <circle cx="16.5" cy="3.5" r="1.9" fill="var(--marker)" />
       </svg>
-      <span aria-hidden="true" className="font-semibold tracking-[-0.02em] text-muted">
+      <span aria-hidden="true" className="font-semibold tracking-[-0.02em] text-muted-foreground">
         t
       </span>
     </span>

@@ -1,11 +1,16 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Teste E2E, în două proiecte cu servere separate:
- * - `smoke` (browser): `pnpm dev` cu Access dezactivat (NODE_ENV=development,
- *   CF_ACCESS_REQUIRED=false), ca pagina să poată fi verificată fără JWT;
+ * Teste E2E, în trei proiecte, pe două servere:
+ * - `smoke` și `auth` (browser): `pnpm dev` cu Access dezactivat DOAR pentru test
+ *   (NODE_ENV=development, CF_ACCESS_REQUIRED=false; `src/lib/config.ts` refuză asta în
+ *   producție și nu e slăbit). `auth` cere un Postgres de test migrat (`DATABASE_URL` = rolul
+ *   `finet_app`), utilizatorii E2E creați cu CLI-ul admin (`e2e/fixtures.ts`) și `E2E_PASSWORD`.
+ *   Modul aplicației: `E2E_APP_MODE=personal|saas` (implicit `personal`); cele două moduri se
+ *   rulează unul după altul (două `next dev` în același director s-ar bloca reciproc);
  * - `access` (doar HTTP, fără browser): serverul de producție (`.next/standalone/server.js`,
- *   după `pnpm build`) cu CF_ACCESS_REQUIRED=true, ca să dovedească refuzul fără JWT.
+ *   după `pnpm build`) cu CF_ACCESS_REQUIRED=true, ca să dovedească refuzul fără JWT și
+ *   antetele de securitate de producție (CSP fără `unsafe-*`).
  *
  * `E2E_SERVER=dev|prod` pornește doar serverul necesar (de exemplu `E2E_SERVER=prod
  * pnpm test:e2e --project=access`). Cu `E2E_BASE_URL` se testează o instanță deja pornită
@@ -13,6 +18,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 
 const devPort = Number(process.env.E2E_DEV_PORT ?? 3000);
+const appMode = process.env.E2E_APP_MODE === "saas" ? "saas" : "personal";
 const prodPort = Number(process.env.E2E_PROD_PORT ?? 3001);
 const devURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${devPort}`;
 const prodURL = `http://127.0.0.1:${prodPort}`;
@@ -30,8 +36,13 @@ const devEnv: Record<string, string> = {
   ...(process.env as Record<string, string>),
   ...webRole,
   NODE_ENV: "development",
-  APP_MODE: "personal",
+  APP_MODE: appMode,
   CF_ACCESS_REQUIRED: "false",
+  // Originea exactă a serverului: Better Auth (`trustedOrigins`) și CSRF-ul din `/api/v1`
+  // compară `Origin` cu `APP_URL`.
+  APP_URL: `http://127.0.0.1:${devPort}`,
+  // Secret FICTIV, doar pentru serverul de test (fără cuvintele refuzate de `config.ts`).
+  BETTER_AUTH_SECRET: "e2e-local-0123456789abcdefghijklmnopqrstuv",
 };
 const prodEnv: Record<string, string> = {
   ...(process.env as Record<string, string>),
@@ -43,12 +54,16 @@ const prodEnv: Record<string, string> = {
   CF_ACCESS_TEAM_DOMAIN: "echipa-e2e.invalid",
   CF_ACCESS_AUD: "e2e-aud",
   STORAGE_DIR: ".data/e2e-storage",
+  // Rolul `web` de producție cere APP_URL https și secretul Better Auth (valori FICTIVE);
+  // fără ele serverul s-ar opri la pornire (`src/instrumentation.ts`).
+  APP_URL: "https://finet-e2e.invalid",
+  BETTER_AUTH_SECRET: "e2e-local-0123456789abcdefghijklmnopqrstuv",
   PORT: String(prodPort),
   HOSTNAME: "127.0.0.1",
 };
 
 const devServer = {
-  command: `pnpm dev --port ${devPort}`,
+  command: `pnpm dev --port ${devPort} --hostname 127.0.0.1`,
   url: devURL,
   env: devEnv,
   reuseExistingServer: !process.env.CI,
@@ -72,7 +87,13 @@ const webServer = process.env.E2E_BASE_URL
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  // Secvențial (decizia mea): scenariile de autentificare împart utilizatori și contoare de rate
+  // limiting; paralelismul ar face rezultatele dependente de ordine.
+  fullyParallel: false,
+  workers: 1,
+  // `next dev` compilează paginile la prima cerere.
+  timeout: 90_000,
+  expect: { timeout: 15_000 },
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
@@ -83,6 +104,11 @@ export default defineConfig({
     {
       name: "smoke",
       testMatch: /smoke\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      name: "auth",
+      testMatch: /auth\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {

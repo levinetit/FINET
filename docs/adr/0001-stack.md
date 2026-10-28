@@ -12,7 +12,7 @@ Stack-ul din master prompt 3.2 rămâne neschimbat, cu o singură abatere de inf
 
 | Componentă | Versiune | Notă |
 |---|---|---|
-| Node.js | 24 (`.nvmrc`; imaginea Docker `node:24.22.1-bookworm-slim`) | `engines: >=24 <25` |
+| Node.js | 24 (`.nvmrc`; imaginea Docker `node:24.22.1-bookworm-slim`) | `engines: >=24.7 <25` (F1-B: `crypto.argon2`, ADR 0003) |
 | pnpm | 12.15.0 (prin corepack, `packageManager`) | `allowBuilds: unrs-resolver: false` în `pnpm-workspace.yaml` |
 | Next.js | 16.4.3 | App Router, `output: "standalone"`; `middleware.ts` → `src/proxy.ts` (redenumit în Next 16) |
 | React / React DOM | 19.3.1 | |

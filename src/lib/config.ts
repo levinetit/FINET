@@ -34,11 +34,13 @@ export type AppMode = "personal" | "saas";
  * Rolul procesului (`FINET_ROLE`), care decide ce URL de bază de date primește:
  * - `web` (implicit): serverul Next.js, doar `DATABASE_URL`;
  * - `worker`: procesul de fundal (Faza 5/6), doar `WORKER_DATABASE_URL`;
- * - `migrate`: rularea migrațiilor (Faza 1+), doar `MIGRATOR_DATABASE_URL`.
+ * - `migrate`: rularea migrațiilor (Faza 1+), doar `MIGRATOR_DATABASE_URL`;
+ * - `admin`: CLI-ul de administrare (`dist/tools/admin.mjs`, F1-B), cu drepturile aplicației
+ *   (`DATABASE_URL`, rolul Postgres `finet_app`), fără server HTTP (decizia mea, ADR 0003).
  * URL-urile celorlalte roluri, dacă apar în mediu, opresc pornirea: un proces compromis nu
  * trebuie să aibă la îndemână drepturile altui rol (de exemplu proprietarul schemei).
  */
-export type Role = "web" | "worker" | "migrate";
+export type Role = "web" | "worker" | "migrate" | "admin";
 export type NodeEnv = "development" | "production" | "test";
 
 export type S3Config = Readonly<{
@@ -67,6 +69,33 @@ export type AccessConfig = Readonly<{
   aud: string | null;
 }>;
 
+export type RateLimitRule = Readonly<{ max: number; windowSeconds: number }>;
+
+export type AuthConfig = Readonly<{
+  /**
+   * Secretul Better Auth (`BETTER_AUTH_SECRET`, minimum 32 de caractere): semnează cookie-urile
+   * și tokenurile bearer. `null` doar în afara producției (atunci autentificarea nu pornește).
+   */
+  secret: string | null;
+  /** Verificarea parolelor compromise prin HIBP (k-anonymity). Implicit oprită. */
+  hibpEnabled: boolean;
+  rateLimits: Readonly<{
+    /** Login-ul web (parolă), pe IP + email normalizat. */
+    login: RateLimitRule;
+    /** Login-ul din aplicația mobilă (`X-FINET-Client: android/...`), limite proprii. */
+    mobileLogin: RateLimitRule;
+    /**
+     * Plafonul pe email SINGUR (fără IP), aplicat în plus față de `login`/`mobileLogin` (M2):
+     * oprește încercările distribuite pe multe IP-uri.
+     */
+    loginEmail: RateLimitRule;
+    /** Emailurile trimise (magic link, resetarea parolei), pe IP + email. */
+    email: RateLimitRule;
+    /** Schimbarea parolei (cere parola curentă), pe utilizator + IP. */
+    passwordChange: RateLimitRule;
+  }>;
+}>;
+
 export type Config = Readonly<{
   nodeEnv: NodeEnv;
   role: Role;
@@ -91,6 +120,7 @@ export type Config = Readonly<{
   access: AccessConfig;
   /** Token intern opțional pentru `/api/health` detaliat fără JWT Access (monitorizare). */
   healthToken: string | null;
+  auth: AuthConfig;
   ai: Readonly<{
     /** Documente procesate cu AI pe zi, per gospodărie. */
     dailyDocumentLimit: number;
@@ -138,10 +168,14 @@ const nonNegativeInt = z
   .string()
   .regex(/^\d{1,9}$/)
   .optional();
+const positiveInt = z
+  .string()
+  .regex(/^[1-9]\d{0,8}$/)
+  .optional();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).optional(),
-  FINET_ROLE: z.enum(["web", "worker", "migrate"]).optional(),
+  FINET_ROLE: z.enum(["web", "worker", "migrate", "admin"]).optional(),
   APP_MODE: z.enum(["personal", "saas"]),
   APP_URL: z.url({ protocol: /^https?$/ }).optional(),
   NEXT_PUBLIC_APP_NAME: z.string().min(1).max(40).optional(),
@@ -168,6 +202,19 @@ const envSchema = z.object({
     .regex(/^[A-Za-z0-9_-]{1,256}$/)
     .optional(),
   HEALTH_TOKEN: z.string().min(32).max(512).optional(),
+
+  BETTER_AUTH_SECRET: z.string().min(32).max(512).optional(),
+  AUTH_HIBP_ENABLED: boolString,
+  AUTH_LOGIN_MAX_ATTEMPTS: positiveInt,
+  AUTH_LOGIN_WINDOW_SECONDS: positiveInt,
+  AUTH_MOBILE_LOGIN_MAX_ATTEMPTS: positiveInt,
+  AUTH_MOBILE_LOGIN_WINDOW_SECONDS: positiveInt,
+  AUTH_EMAIL_MAX_REQUESTS: positiveInt,
+  AUTH_EMAIL_WINDOW_SECONDS: positiveInt,
+  AUTH_PASSWORD_CHANGE_MAX_ATTEMPTS: positiveInt,
+  AUTH_PASSWORD_CHANGE_WINDOW_SECONDS: positiveInt,
+  AUTH_LOGIN_EMAIL_MAX_ATTEMPTS: positiveInt,
+  AUTH_LOGIN_EMAIL_WINDOW_SECONDS: positiveInt,
 
   AI_DAILY_DOCUMENT_LIMIT: nonNegativeInt,
   AI_MONTHLY_BUDGET: z.string().max(40).optional(),
@@ -198,6 +245,7 @@ const ROLE_DATABASE_VARIABLE: Readonly<Record<Role, DatabaseVariable>> = {
   web: "DATABASE_URL",
   worker: "WORKER_DATABASE_URL",
   migrate: "MIGRATOR_DATABASE_URL",
+  admin: "DATABASE_URL",
 };
 const DATABASE_VARIABLES: readonly DatabaseVariable[] = [
   "DATABASE_URL",
@@ -215,7 +263,24 @@ const DEFAULTS = {
   aiMonthlyBudget: "0",
   aiMonthlyBudgetCurrency: "USD",
   smtpPort: 587,
+  // Limitele de autentificare (decizia mea, ADR 0003): încercări pe fereastră.
+  loginMax: 5,
+  loginWindowSeconds: 15 * 60,
+  mobileLoginMax: 10,
+  mobileLoginWindowSeconds: 15 * 60,
+  emailMax: 3,
+  emailWindowSeconds: 60 * 60,
+  passwordChangeMax: 5,
+  passwordChangeWindowSeconds: 15 * 60,
+  loginEmailMax: 20,
+  loginEmailWindowSeconds: 60 * 60,
 } as const;
+
+/**
+ * Valorile de exemplu din `.env.example` (intenționat invalide) nu trec drept secret real.
+ * Verificarea e pe forme cunoscute, nu pe entropie.
+ */
+const PLACEHOLDER_SECRET = /^invalid|inlocuieste|schimba|exemplu|changeme|placeholder/i;
 
 // Probleme descrise fără valoare (Zod poate include valoarea în mesajele implicite).
 function describeIssue(issue: z.core.$ZodIssue): string {
@@ -244,7 +309,7 @@ export type ParseOptions = Readonly<{
   readSecret?: (path: string) => string;
 }>;
 
-const ROLES: readonly Role[] = ["web", "worker", "migrate"];
+const ROLES: readonly Role[] = ["web", "worker", "migrate", "admin"];
 const isRole = (value: string): value is Role => (ROLES as readonly string[]).includes(value);
 
 /**
@@ -363,9 +428,27 @@ export function parseConfig(
     need("CF_ACCESS_AUD", "când CF_ACCESS_REQUIRED=true");
   }
 
-  // Storage (migrarea nu atinge fișierele, deci nu are nevoie de STORAGE_DIR).
+  // Autentificarea (F1-B): serverul web de producție cere secretul Better Auth și adresa publică
+  // HTTPS (cookie-urile `Secure`, `trustedOrigins`). Celelalte roluri nu primesc secretul.
+  if (e.BETTER_AUTH_SECRET !== undefined && PLACEHOLDER_SECRET.test(e.BETTER_AUTH_SECRET)) {
+    issues.push({
+      variable: secrets.fromFile.has("BETTER_AUTH_SECRET")
+        ? "BETTER_AUTH_SECRET_FILE"
+        : "BETTER_AUTH_SECRET",
+      problem: "e valoarea de exemplu; generează una: openssl rand -base64 32",
+    });
+  }
+  if (isProduction && role === "web") {
+    need("BETTER_AUTH_SECRET", "în producție");
+    need("APP_URL", "în producție");
+    if (e.APP_URL !== undefined && !e.APP_URL.startsWith("https://")) {
+      issues.push({ variable: "APP_URL", problem: "trebuie să fie https:// în producție" });
+    }
+  }
+
+  // Storage (migrarea și CLI-ul de administrare nu ating fișierele, deci nu cer STORAGE_DIR).
   const driver = e.STORAGE_DRIVER ?? "local";
-  if (isProduction && role !== "migrate") need("STORAGE_DIR", "în producție");
+  if (isProduction && role !== "migrate" && role !== "admin") need("STORAGE_DIR", "în producție");
   if (driver === "s3") {
     for (const v of [
       "STORAGE_S3_ENDPOINT",
@@ -433,6 +516,35 @@ export function parseConfig(
       aud: e.CF_ACCESS_AUD ?? null,
     }),
     healthToken: e.HEALTH_TOKEN ?? null,
+    auth: Object.freeze({
+      secret: e.BETTER_AUTH_SECRET ?? null,
+      hibpEnabled: e.AUTH_HIBP_ENABLED === "true",
+      rateLimits: Object.freeze({
+        login: Object.freeze({
+          max: int(e.AUTH_LOGIN_MAX_ATTEMPTS, DEFAULTS.loginMax),
+          windowSeconds: int(e.AUTH_LOGIN_WINDOW_SECONDS, DEFAULTS.loginWindowSeconds),
+        }),
+        mobileLogin: Object.freeze({
+          max: int(e.AUTH_MOBILE_LOGIN_MAX_ATTEMPTS, DEFAULTS.mobileLoginMax),
+          windowSeconds: int(e.AUTH_MOBILE_LOGIN_WINDOW_SECONDS, DEFAULTS.mobileLoginWindowSeconds),
+        }),
+        email: Object.freeze({
+          max: int(e.AUTH_EMAIL_MAX_REQUESTS, DEFAULTS.emailMax),
+          windowSeconds: int(e.AUTH_EMAIL_WINDOW_SECONDS, DEFAULTS.emailWindowSeconds),
+        }),
+        loginEmail: Object.freeze({
+          max: int(e.AUTH_LOGIN_EMAIL_MAX_ATTEMPTS, DEFAULTS.loginEmailMax),
+          windowSeconds: int(e.AUTH_LOGIN_EMAIL_WINDOW_SECONDS, DEFAULTS.loginEmailWindowSeconds),
+        }),
+        passwordChange: Object.freeze({
+          max: int(e.AUTH_PASSWORD_CHANGE_MAX_ATTEMPTS, DEFAULTS.passwordChangeMax),
+          windowSeconds: int(
+            e.AUTH_PASSWORD_CHANGE_WINDOW_SECONDS,
+            DEFAULTS.passwordChangeWindowSeconds,
+          ),
+        }),
+      }),
+    }),
     ai: Object.freeze({
       dailyDocumentLimit: int(e.AI_DAILY_DOCUMENT_LIMIT, DEFAULTS.aiDailyDocumentLimit),
       monthlyBudget,
