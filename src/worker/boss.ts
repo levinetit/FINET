@@ -12,11 +12,11 @@ import { isTlsUrlParam } from "@/lib/db-url";
  * - exact un `sslmode`, scris exact (`verify-full`, `verify-ca`, `require`, `disable`); orice alt
  *   parametru TLS (`ssl`, `sslrootcert`, `SSLMODE`, `uselibpqcompat` …), o valoare goală,
  *   necunoscută, altă grafie sau un duplicat → `PgTlsConfigError`;
- * - `verify-full` / `verify-ca` → `{ ca?, rejectUnauthorized: true }`; în producție CA-ul e
- *   obligatoriu (config.ts cere și el `verify-full` + DATABASE_CA_FILE pentru worker);
- * - `require` (TLS fără verificarea lanțului) și `disable` / lipsă (fără TLS): DOAR în afara
- *   producției (dezvoltare, CI); în producție → eroare. `prefer`/`allow` (pot cădea pe text
- *   clar) → eroare oriunde.
+ * - implicit (ORICE mediu, revizuirea F5, I2): doar `verify-full` + CA → `{ ca,
+ *   rejectUnauthorized: true }`; orice altceva → eroare (config.ts cere același lucru);
+ * - cu `allowInsecure` (`FINET_ALLOW_INSECURE_DB=1`, doar teste/CI, refuzat de config.ts în
+ *   producție): și `verify-ca`/`verify-full` fără CA (trust store), `require` (TLS fără lanț),
+ *   `disable` / lipsă (fără TLS). `prefer`/`allow` (pot cădea pe text clar) → eroare oriunde.
  */
 
 export const PGBOSS_SCHEMA = "pgboss";
@@ -34,8 +34,8 @@ export type PgTls = false | { rejectUnauthorized: boolean; ca?: string };
 export type PgConnection = Readonly<{ connectionString: string; ssl: PgTls }>;
 
 export type PgTlsOptions = Readonly<{
-  /** `NODE_ENV=production` (`config.nodeEnv`): doar TLS verificat cu CA. */
-  production: boolean;
+  /** `config.database.allowInsecure` (`FINET_ALLOW_INSECURE_DB=1`, doar teste/CI). */
+  allowInsecure: boolean;
 }>;
 
 export function pgConnectionOptions(
@@ -59,22 +59,23 @@ export function pgConnectionOptions(
   parsed.searchParams.delete("sslmode");
   const connectionString = parsed.toString();
 
+  if (!options.allowInsecure) {
+    if (mode !== "verify-full" || !ca) {
+      throw new PgTlsConfigError("cere sslmode=verify-full și CA-ul (DATABASE_CA_FILE)");
+    }
+    return { connectionString, ssl: { ca, rejectUnauthorized: true } };
+  }
   switch (mode) {
     case "verify-full":
     case "verify-ca":
-      if (options.production && !ca) {
-        throw new PgTlsConfigError("în producție cere CA-ul (DATABASE_CA_FILE)");
-      }
       return {
         connectionString,
         ssl: ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: true },
       };
     case "require":
-      if (options.production) throw new PgTlsConfigError("în producție cere sslmode=verify-full");
       return { connectionString, ssl: { rejectUnauthorized: false } };
     case "disable":
     case null:
-      if (options.production) throw new PgTlsConfigError("în producție cere sslmode=verify-full");
       return { connectionString, ssl: false };
     default:
       throw new PgTlsConfigError("valoare sslmode nepermisă");

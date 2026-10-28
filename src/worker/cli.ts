@@ -37,7 +37,7 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
     const worker = await startWorker({
       databaseUrl: config.database.url,
       databaseCa: config.database.ca,
-      production: config.nodeEnv === "production",
+      allowInsecure: config.database.allowInsecure,
       log,
     });
     io.onSignal(worker.stop);

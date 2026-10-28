@@ -115,6 +115,11 @@ export type Config = Readonly<{
      * `src/lib/db-client.ts` cu `sslmode=verify-full`.
      */
     ca: string | null;
+    /**
+     * `FINET_ALLOW_INSECURE_DB=1` (doar dezvoltare/teste, refuzat în producție): workerul acceptă
+     * o conexiune fără `sslmode=verify-full` + CA (Postgres-ul efemer din CI). Altfel `false`.
+     */
+    allowInsecure: boolean;
   }>;
   storage: StorageConfig;
   access: AccessConfig;
@@ -196,6 +201,8 @@ const envSchema = z.object({
   STORAGE_S3_SECRET_ACCESS_KEY: optionalString,
 
   CF_ACCESS_REQUIRED: boolString,
+  // Doar dezvoltare/teste: workerul fără TLS verificat (refuzat în producție; ADR 0011).
+  FINET_ALLOW_INSECURE_DB: z.enum(["1"]).optional(),
   CF_ACCESS_TEAM_DOMAIN: z.string().regex(HOSTNAME).optional(),
   CF_ACCESS_AUD: z
     .string()
@@ -413,11 +420,16 @@ export function parseConfig(
     }
   }
 
-  // Workerul în producție (Faza 5, ADR 0011): TLS cu verificare OBLIGATORIU, fail-closed. Driverul
-  // `pg` al pg-boss tratează `sslmode` altfel decât postgres.js, deci se cere forma unică
-  // `sslmode=verify-full` (o singură dată, exact așa scrisă) plus CA-ul din DATABASE_CA_FILE;
-  // orice altă formă (lipsă, `disable`, `require`, grafie diferită, duplicat) oprește pornirea.
-  if (isProduction && role === "worker" && databaseUrl) {
+  // Workerul (Faza 5, ADR 0011; revizuirea `security` F5, I2): TLS cu verificare OBLIGATORIU în
+  // ORICE mediu, fail-closed. Driverul `pg` al pg-boss tratează `sslmode` altfel decât
+  // postgres.js, deci se cere forma unică `sslmode=verify-full` (o singură dată, exact așa
+  // scrisă, fără alți parametri TLS) plus CA-ul din DATABASE_CA_FILE. Singura excepție:
+  // `FINET_ALLOW_INSECURE_DB=1`, explicit, pentru teste/CI, refuzată în producție.
+  const allowInsecure = e.FINET_ALLOW_INSECURE_DB === "1";
+  if (allowInsecure && isProduction) {
+    issues.push({ variable: "FINET_ALLOW_INSECURE_DB", problem: "nu e permisă în producție" });
+  }
+  if (role === "worker" && databaseUrl && !allowInsecure) {
     let modes: string[] = [];
     let otherTlsParams = false;
     try {
@@ -428,12 +440,9 @@ export function parseConfig(
       modes = [];
     }
     if (modes.length !== 1 || modes[0] !== "verify-full" || otherTlsParams) {
-      issues.push({
-        variable: urlVariable,
-        problem: "în producție cere exact sslmode=verify-full",
-      });
+      issues.push({ variable: urlVariable, problem: "cere exact sslmode=verify-full" });
     }
-    need("DATABASE_CA_FILE", "în producție pentru FINET_ROLE=worker");
+    need("DATABASE_CA_FILE", "pentru FINET_ROLE=worker (sau FINET_ALLOW_INSECURE_DB=1 în teste)");
   }
 
   // Cloudflare Access: implicit obligatoriu în producție; dezactivarea în producție e refuzată.
@@ -471,7 +480,8 @@ export function parseConfig(
 
   // Storage (migrarea și CLI-ul de administrare nu ating fișierele, deci nu cer STORAGE_DIR).
   const driver = e.STORAGE_DRIVER ?? "local";
-  if (isProduction && role !== "migrate" && role !== "admin") need("STORAGE_DIR", "în producție");
+  // Workerul (Faza 5) nu atinge fișierele (revizuirea F5, I1); documentele (Faza 6) vor cere din nou.
+  if (isProduction && role === "web") need("STORAGE_DIR", "în producție");
   if (driver === "s3") {
     for (const v of [
       "STORAGE_S3_ENDPOINT",
@@ -517,7 +527,11 @@ export function parseConfig(
     appMode: e.APP_MODE,
     appName: e.NEXT_PUBLIC_APP_NAME ?? DEFAULTS.appName,
     appUrl: e.APP_URL ?? null,
-    database: Object.freeze({ url: databaseUrl, ca: databaseCa }),
+    database: Object.freeze({
+      url: databaseUrl,
+      ca: databaseCa,
+      allowInsecure: allowInsecure && !isProduction,
+    }),
     storage: Object.freeze({
       driver,
       dir: e.STORAGE_DIR ?? DEFAULTS.storageDir,
