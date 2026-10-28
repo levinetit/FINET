@@ -274,6 +274,19 @@ Agentul nu a rulat nimic din această secțiune.
    ```
    Idempotentă (a doua rulare scrie `0`); exit ≠ 0 la eroare. Programarea e decizia operatorului: de exemplu o dată pe zi, din `sudo crontab -e` (nu `crontab -`) sau dintr-un job Portainer. Fără curățare nu se strică nimic (o cheie expirată se înlocuiește la refolosire), doar tabelul crește. Din Faza 3+ o va prelua workerul.
 
+## 4d. Faza 2 pe producție (operatorul, după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune. Ordinea:
+
+1. **Imaginile** din workflow-ul `images` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`), ca la 4b, pasul 0.
+2. **Backup** al schemei `finet` (4b, pasul 1). Faza 2 adaugă tabele, nu modifică datele Fazei 1.
+3. **Migrațiile** `0002_ledger` + `0003_idempotency_purge` (4c, pasul 1): prima rulare „aplicate acum 2”, a doua „aplicate acum 0”. `0000`/`0001` nu se schimbă.
+4. **Redeploy `finet-web`** cu imaginea nouă. Fără variabile de mediu sau secrete noi.
+5. **Verificări prin Access**, în browser: `/accounts` → „Adaugă cont” (sold inițial `1.000,00`) → `/transactions` → „Adaugă cheltuială” (`25,50`) → soldul `974,50 lei` pe `/accounts` și pe `/dashboard`; un transfer între două conturi; `/categories`. Antetele: `curl -sD- -o /dev/null https://finet.<domeniu>/accounts` (cu cookie-ul Access și al sesiunii) conține `content-security-policy` cu `nonce-`. Fără sesiune, paginile dau 307 la `/login?next=…`.
+6. **Programarea** `finet-admin cleanup-idempotency` (4c, pasul 2), decizia operatorului.
+
+**Rollback:** imaginea anterioară a `finet-web` (UI-ul Fazei 1 nu citește tabelele noi). Migrațiile `0002`/`0003`: comenzile din antetele fișierelor, doar cu backup și decizia explicită a operatorului (distrug datele registrului).
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

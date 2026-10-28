@@ -59,7 +59,8 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 |---|---|---|---|
 | CSP cu nonce per cerere: `default-src 'self'`, `script-src 'self' 'nonce-…'`, `style-src 'self' 'nonce-…'`, `img-src 'self' data:`, `font-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` | DONE | `src/lib/security-headers.ts`, `src/proxy.ts`, `proxy.test.ts`, `security-headers.test.ts`; standalone: `e2e/access.spec.ts` (PASS local) | 2026-10-28 · programmer |
 | Fiecare `<script>` randat poartă nonce-ul; nicio pagină statică | DONE | `next build`: toate rutele `ƒ`; `next dev` `/login`: 21 de scripturi, 0 fără nonce, 0 atribute `style=` | 2026-10-28 · programmer |
-| Fără încălcări CSP în browser | PARTIAL | E2E „antetele de securitate… fără încălcări CSP” (NOT RUN local) | 2026-10-28 · programmer |
+| Fără încălcări CSP în browser | PARTIAL | E2E „antetele de securitate… fără încălcări CSP” și `ledger` (h) pe toate paginile registrului (NOT RUN local) | 2026-10-28 · programmer |
+| Paginile registrului (F2-C): nonce în CSP, fără `style=` | DONE | `next dev` + curl pe 10 pagini: 200, `'nonce-…'`, 0 `style=`; `src/app/ui-rules.test.ts` interzice `style=` în surse | 2026-10-28 · programmer |
 | Antetele și pe răspunsurile 403 ale proxy-ului | DONE | `proxy.test.ts`, `access.spec.ts` (PASS local) | 2026-10-28 · programmer |
 | F8 (rest) — HSTS `max-age=31536000; includeSubDomains` (fără `preload`: decizia operatorului) | DONE | idem | 2026-10-28 · programmer |
 | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()` | DONE | idem; asset-urile statice prin `next.config.ts` (`headers()`, fără CSP) | 2026-10-28 · programmer |
@@ -147,3 +148,16 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | **L7** — parola generată de CLI pe stdout | TODO | amânat: comportament documentat (afișată o singură dată, operatorul o copiază); alternativa (fișier 0600 / doar `--password-stdin`) se decide cu operatorul | — |
 | **L8** — `viaBearer` scutește de CSRF și când există și cookie | TODO | amânat: Bearer cere antet explicit (imposibil cross-site fără CORS, închis); de restrâns la „bearer și fără cookie” la prima revizuire a clientului Android | — |
 | Ștergerea contului (GDPR) | TODO | fază viitoare: funcție SECURITY DEFINER care refuză administratorii și gospodăriile cu un singur membru (`finet_app` nu are DELETE pe `users`, M5) | — |
+
+## 10. Interfața registrului (F2-C, 2026-10-28)
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Fiecare pagină protejată verifică sesiunea (`requireLedgerPage` → `requirePageSession`); fără sesiune 307 la `/login?next=` | DONE | `next dev` + curl pe 8 pagini (307); E2E `auth`/`ledger` (NOT RUN local) | 2026-10-28 · programmer |
+| Gospodăria din bază, niciodată din URL sau corp; resursă străină → 404 uniform (pagini și API) | DONE | `ledger-page.ts`, `load()`; curl cu al doilea utilizator: 404 pe `/accounts/<id>`, `/transactions/<id>`, `/api/v1/accounts/<id>`; E2E (g) | 2026-10-28 · programmer |
+| Mutațiile din UI trec prin `/api/v1/*` (CSRF prin `Origin`, rate limiting, audit, validare Zod strictă) | DONE | `api-client.ts`, `use-submit.ts`; fără server actions | 2026-10-28 · programmer |
+| `Idempotency-Key` per trimitere; un dublu-clic nu creează două tranzacții | DONE | `idempotency-key.test.ts`; E2E (d) (NOT RUN local) | 2026-10-28 · programmer |
+| Fără float pe sume în UI | DONE | `ledger-ui.ts` (doar `money.ts`), `ui-rules.test.ts` | 2026-10-28 · programmer |
+| `X-FINET-Client` doar cu consimțământul `usage_stats`; fără sume sau text liber | DONE (client) | `usage-client.test.ts` (forma validă pentru `parseClientInfo`), E2E (i) (NOT RUN local) | 2026-10-28 · programmer |
+| Serverul nu verifică acordul la înregistrarea instalării (doar la evenimente) | OPEN | de decis la revizuirea `security` (ADR 0006) | — |
+| Mesajele afișate nu repetă valorile introduse; erorile 500 fără detalii | DONE | `apiErrors()` în `ledger-ui.ts`; `load()` loghează doar un mesaj fix | 2026-10-28 · programmer |

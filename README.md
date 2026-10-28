@@ -2,14 +2,15 @@
 
 Aplicație de finanțe personale și de familie pentru România: bonuri fiscale citite automat, extrase bancare, bugete, recurențe și decontări în familie.
 
-**Stare:** Faza 1 (autentificare, profil, gospodărie) **implementată în repo, parțial închisă**: Better Auth cu parole Argon2id, sesiuni și `bearer`, RLS, API `/api/v1/me*`, CLI admin, paginile `/login`, `/dashboard` (placeholder), `/profile`, antetele de securitate cu CSP cu nonce, E2E în CI. Rămân aplicarea migrațiilor pe Supabase (operatorul), prima rulare E2E pe GitHub și revizuirea de securitate. Nicio funcție financiară încă. Detalii: [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/reports/faza-1.md`](docs/reports/faza-1.md).
+**Stare:** Faza 1 (autentificare, profil, gospodărie) e pe producție. Faza 2 (conturi, categorii, tranzacții, transferuri) e **implementată în repo, parțial închisă**: servicii cu RLS, API `/api/v1` cu `Idempotency-Key` și OpenAPI, paginile `/accounts`, `/transactions`, `/transfers/new`, `/categories`, soldurile pe `/dashboard`, E2E `ledger`. Rămân migrațiile `0002`/`0003` pe Supabase (operatorul), prima rulare E2E pe GitHub și revizuirea de securitate. Detalii: [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/reports/faza-2.md`](docs/reports/faza-2.md).
 
 ## Documentație
 - Specificația: [`docs/FINET_MASTER_PROMPT.md`](docs/FINET_MASTER_PROMPT.md) · Android: [`docs/FINET_ANDROID_MASTER_PROMPT.md`](docs/FINET_ANDROID_MASTER_PROMPT.md)
 - Ghidul operatorului: [`docs/GHID_CONSTRUIRE.md`](docs/GHID_CONSTRUIRE.md) (pentru deploy, [`docs/INFRA.md`](docs/INFRA.md) are prioritate: Docker pe VPS, [ADR 0002](docs/adr/0002-deploy-docker-pe-vps.md))
 - Arhitectura existentă: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · Stack și versiuni: [ADR 0001](docs/adr/0001-stack.md)
 - Confidențialitate: [`docs/PRIVACY_NOTES.md`](docs/PRIVACY_NOTES.md) · Securitate: [`docs/SECURITY_CHECKLIST.md`](docs/SECURITY_CHECKLIST.md) · Autentificare: [ADR 0003](docs/adr/0003-auth.md)
-- Rapoarte: [Faza 0](docs/reports/faza-0.md) · [Faza 1](docs/reports/faza-1.md)
+- Rapoarte: [Faza 0](docs/reports/faza-0.md) · [Faza 1](docs/reports/faza-1.md) · [Faza 2](docs/reports/faza-2.md)
+- API: [`docs/API.md`](docs/API.md), [`docs/openapi.json`](docs/openapi.json) · Registrul: [ADR 0004](docs/adr/0004-ledger.md), [ADR 0005](docs/adr/0005-api-v1.md), [ADR 0006](docs/adr/0006-ledger-ui.md)
 - Demo interactiv (date fictive): [`docs/demo/finet-demo.html`](docs/demo/finet-demo.html)
 
 ## Rulare locală
@@ -48,7 +49,7 @@ pnpm dev                     # http://localhost:3000/login
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm format` | calitate |
 | `pnpm test` | Vitest (unit + integrare; cu `DATABASE_URL` setat, și verificarea bazei) |
 | `pnpm test:coverage` | Vitest cu acoperire (v8), fără prag |
-| `pnpm test:e2e` | Playwright: `smoke` și `auth` (browser, `pnpm dev`; `auth` cere bază migrată, utilizatorii E2E și `E2E_PASSWORD`, `E2E_APP_MODE=personal|saas`) și `access` (HTTP, server de producție, după `pnpm build`); `E2E_SERVER=dev|prod` pornește doar unul |
+| `pnpm test:e2e` | Playwright: `smoke`, `auth` și `ledger` (browser, `pnpm dev`; `auth` și `ledger` cer bază migrată, utilizatorii E2E și `E2E_PASSWORD`, `E2E_APP_MODE=personal|saas`) și `access` (HTTP, server de producție, după `pnpm build`); `E2E_SERVER=dev|prod` pornește doar unul |
 | `pnpm build:tools`, `pnpm db:migrate`, `pnpm admin:*` | unelte: migrații și CLI-ul admin (`create-user`, `reset-password`, `add-member`) |
 | `pnpm test:ops` | testele `ops/notify/notify.sh` (fără rețea) |
 | `pnpm scan:client-secrets` | caută secrete în `.next/static` (după build) |

@@ -8,7 +8,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 |---|---|---|
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
 | 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
-| 2 — Conturi, categorii, tranzacții, transferuri | **parțial** | F2-A (date + servicii) gata în repo; urmează F2-B (API, idempotență, OpenAPI, evenimente) și F2-C (UI, E2E) — vezi mai jos |
+| 2 — Conturi, categorii, tranzacții, transferuri | **parțial** (implementat în repo) | F2-A, F2-B, F2-C gata; rămân migrațiile pe Supabase, prima rulare E2E `ledger` în CI, verificarea în browser și revizuirea de securitate — vezi mai jos și `docs/reports/faza-2.md` |
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | neimplementat | |
 | 4 — Stabilizare (rezervată) | neimplementat | |
 | 5 — Recurențe | neimplementat | |
@@ -78,11 +78,18 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - OpenAPI 3.1 din schemele Zod (`src/openapi/`, `docs/openapi.json`, `pnpm openapi:generate` / `openapi:check`, pas nou în CI), test rute reale ↔ registru și verificarea fiecărui răspuns din teste față de schemă; `docs/API.md`;
 - decizii: ADR 0005.
 
+**F2-C (UI, E2E, documentația), gata în repo, verificat local (fără browser):**
+- paginile `/accounts` (+ `new`, `[id]`), `/transactions` (+ `new`, `[id]`), `/transfers/new`, `/categories`; soldurile și ultimele 5 tranzacții pe `/dashboard`; navigarea cu cele cinci pagini; comutatorul `usage_stats` în `/profile`;
+- mutațiile prin `/api/v1/*` cu `Idempotency-Key` per trimitere și blocare la dublu-clic; banii doar prin `money.ts`; `X-FINET-Client` doar cu acord; fără `style=`;
+- E2E `e2e/ledger.spec.ts` (proiectul `ledger`, ambele moduri în CI; local NOT RUN), teste unitare noi (613 în total);
+- decizii: ADR 0006; raport: `docs/reports/faza-2.md`.
+
 **Rămâne pentru Faza 2:**
-- F2-C: UI, E2E (adăugarea unei cheltuieli și verificarea soldului), documentația pentru utilizator;
+- prima rulare E2E (`ledger`, `auth`, `smoke`) în job-ul `e2e`, după push; verificarea paginilor în browser pe producție;
+- editarea transferurilor din UI, subcategoriile și culorile categoriilor în UI (opțional, API-ul există);
 - aplicarea `0002_ledger` și `0003_idempotency_purge` pe Supabase de operator, după revizuirea `security` (F2-A + F2-B);
 - programarea `finet-admin cleanup-idempotency` (cron pe host sau Portainer, `docs/INFRA.md`), decizia operatorului;
-- revizuirea `security` a API-ului (F2-B).
+- revizuirea `security` a API-ului (F2-B) și a interfeței (F2-C), inclusiv dacă serverul trebuie să verifice și el consimțământul la înregistrarea instalării din `X-FINET-Client`.
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:

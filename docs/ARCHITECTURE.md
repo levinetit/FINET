@@ -1,9 +1,9 @@
-# FINET — arhitectura (ce există după Faza 1, F2-A și F2-B)
+# FINET — arhitectura (ce există după Faza 1 și Faza 2)
 
 Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
 
 ## Pe scurt
-Monolit Next.js 16 (App Router, TypeScript strict), rulat ca server Node `standalone` într-un container Docker. Din Faza 1: schema Drizzle `finet` cu RLS, Better Auth (parole Argon2id, sesiuni în bază, `bearer`), API-ul `/api/v1/me*`, CLI-ul admin și interfața web de autentificare și profil (F1-C). Din F2-A: registrul financiar (conturi, categorii, tranzacții, transferuri) ca servicii server-side; din F2-B: API-ul `/api/v1` peste ele (cu `Idempotency-Key`), OpenAPI generat și statisticile de utilizare (instalări, evenimente, consimțăminte). Fără UI pentru registru încă. Nu există încă worker real. Deciziile: ADR 0003 (Faza 1), ADR 0004 (registrul), ADR 0005 (API-ul).
+Monolit Next.js 16 (App Router, TypeScript strict), rulat ca server Node `standalone` într-un container Docker. Din Faza 1: schema Drizzle `finet` cu RLS, Better Auth (parole Argon2id, sesiuni în bază, `bearer`), API-ul `/api/v1/me*`, CLI-ul admin și interfața web de autentificare și profil (F1-C). Din F2-A: registrul financiar (conturi, categorii, tranzacții, transferuri) ca servicii server-side; din F2-B: API-ul `/api/v1` peste ele (cu `Idempotency-Key`), OpenAPI generat și statisticile de utilizare (instalări, evenimente, consimțăminte). Din F2-C: interfața registrului (conturi, tranzacții, transferuri, categorii, soldurile pe dashboard). Nu există încă worker real. Deciziile: ADR 0003 (Faza 1), ADR 0004 (registrul), ADR 0005 (API-ul), ADR 0006 (interfața registrului).
 
 ## Structura existentă
 
@@ -86,6 +86,9 @@ Serviciile din `src/modules/{accounts,categories,transactions,transfers}` primes
 ## API-ul `/api/v1` (F2-B)
 Handlerele din `src/app/api/v1/_lib/` sunt subțiri: `handle()` verifică sesiunea (cookie sau bearer), CSRF-ul pe mutațiile cu cookie, înregistrează instalarea din `X-FINET-Client` (fără să blocheze), aplică rate limiting pe mutații și mapează erorile de domeniu în `{ error: { code, message, fields?, reason? } }`. Gospodăria vine din bază (`currentHousehold`). Crearea cu `Idempotency-Key` rulează în `runIdempotent`: o tranzacție cu lock consultativ, rezervarea cheii, serviciul într-un savepoint (`DbOrTx`) și răspunsul memorat. Contractul e în `src/openapi/registry.ts`; `docs/openapi.json` se generează din el, iar testele verifică fiecare răspuns real față de schemă. Detalii: `docs/API.md`, ADR 0005.
 
+## Interfața registrului (F2-C)
+Paginile din `src/app/(app)/` apelează fiecare `requireLedgerPage(<cale>)` (`src/app/_lib/ledger-page.ts`: sesiunea, gospodăria curentă din bază, consimțământul `usage_stats`) și citesc datele direct din servicii, pe server; componentele client primesc forma JSON a API-ului. `load()` dă 404 uniform pentru resursele străine sau inexistente. Mutațiile pleacă din browser doar prin `/api/v1/*` (`api-client.ts`, `use-submit.ts`: blocare sincronă la dublu-clic, `Idempotency-Key` legat de corp), urmate de `router.refresh()`. Sumele: `parseAmount` → `toJson` la intrare, `formatMoney(fromJson(...))` la afișare (`ledger-ui.ts`). Filtrele tranzacțiilor sunt un formular GET, transformat în interogarea API de `transaction-filters.ts`; „Încarcă mai mult” folosește cursorul API-ului. `X-FINET-Client` (`usage-client.ts`) pleacă doar cu acordul activ. Detalii: ADR 0006.
+
 ## Storage
 Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath, `O_NOFOLLOW`, scriere atomică). Driverul `s3` aruncă `NotImplementedError` (Faza 6).
 
@@ -94,7 +97,7 @@ Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` s
 
 ## Deploy și CI
 - Imaginea: `Dockerfile` (multi-stage, user non-root, healthcheck). Compose: `ops/docker/docker-compose.yml` (`finet-web`, `finet-worker` și `finet-migrate`, fiecare cu `FINET_ROLE` fixat, propriul `env_file` nesecret din `/srv/finet/env/`, doar secretele rolului său ca fișiere `secrets:` din `/srv/finet/secrets/` și CA-ul Supabase montat read-only).
-- CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `personal` apoi `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
+- CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `smoke`, `auth`, `ledger` în `personal` apoi în `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
 
 ## Planificat (nu există încă)
-UI-ul registrului (F2-C), bugetele, obiectivele, etichetele (Faza 3), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), Recharts, înregistrarea publică și modul `saas` (Faza 11).
+Bugetele, obiectivele, etichetele (Faza 3), pg-boss și workerul real (Faza 5/6), driverul S3, `lib/ai/`, sharp (Faza 6), Recharts, înregistrarea publică și modul `saas` (Faza 11).
