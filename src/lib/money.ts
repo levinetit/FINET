@@ -479,3 +479,41 @@ export function fromJson(value: unknown): Money {
   }
   return money(BigInt(amountMinor), assertCurrency(currency));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Procente întregi (bugete, comparații; Faza 3, ADR 0007)
+// ---------------------------------------------------------------------------------------------
+
+/** Plafonul unui procent întors ca `number` (de exemplu o cheltuială de 10^6 ori bugetul). */
+export const MAX_PERCENT = 1_000_000;
+
+/** Rotunjirea unui procent: `floor` (spre zero) sau `half_away` (0,5 → departe de zero). */
+export type PercentRounding = "floor" | "half_away";
+
+/**
+ * `part / whole × 100` ca întreg, calculat DOAR cu `bigint` (fără float pe sume). `null` dacă
+ * `whole` e zero (împărțire la 0). Semnul urmează `part` (și `whole`). `floor` trunchiază spre zero
+ * (100,9% → 100); `half_away` rotunjește la cel mai apropiat întreg, cu 0,5 departe de zero
+ * (12,5% → 13, −12,5% → −13). Rezultatul e limitat la ±`MAX_PERCENT`, ca să rămână un întreg JSON
+ * sigur; deciziile (de exemplu semaforul bugetului) NU se iau pe procentul rotunjit, ci pe
+ * comparații exacte între sume.
+ */
+export function percentOf(
+  part: bigint,
+  whole: bigint,
+  rounding: PercentRounding = "floor",
+): number | null {
+  if (typeof part !== "bigint" || typeof whole !== "bigint") {
+    throw new MoneyError("Procentul se calculează din bigint.");
+  }
+  if (whole === 0n) return null;
+  const negative = part < 0n !== whole < 0n && part !== 0n;
+  const p = part < 0n ? -part : part;
+  const w = whole < 0n ? -whole : whole;
+  let q = (p * 100n) / w;
+  if (rounding === "half_away" && ((p * 100n) % w) * 2n >= w) q += 1n;
+  const capped = q > BigInt(MAX_PERCENT) ? BigInt(MAX_PERCENT) : q;
+  // Conversie exactă: |capped| ≤ MAX_PERCENT.
+  const n = Number(capped);
+  return negative ? -n : n;
+}
