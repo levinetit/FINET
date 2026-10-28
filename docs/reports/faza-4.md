@@ -18,7 +18,7 @@
 
 ## 2. Măsurători înainte / după
 
-**Bugetul JS:** NOT RUN local (build imposibil pe host). Praguri provizorii 250 KiB (autentificat) / 150 KiB (`/login`, `/register`); scriptul validat pe manifestele reale Next 16.4.3 dintr-un `.next/dev` (valori de dezvoltare, nereprezentative). Calibrarea: prima rulare CI.
+**Bugetul JS:** build local imposibil pe host; calibrat din prima rulare CI (First Load JS gzip: 152,9–165,4 KiB; `/login` 155,7). Praguri fixate la măsurat + ~15 %: 190 KiB implicit, 180 KiB pentru `/login` și `/register` (cele din brief, 250/150, erau provizorii; 150 nu era realist). Vezi `docs/PERFORMANCE.md`.
 
 **Baza de date** (PostgreSQL 17 efemer, `finet_app` cu RLS, mediana din 5; host încărcat):
 

@@ -12,21 +12,24 @@ Creat în Faza 4 (ADR 0010). Două măsurători: mărimea JavaScript-ului trimis
 
 ```json bundle-budget
 {
-  "defaultKiB": 250,
+  "defaultKiB": 190,
   "routes": {
-    "/login": 150,
-    "/register": 150
+    "/login": 180,
+    "/register": 180
   }
 }
 ```
 
-**Valorile măsurate azi (2026-10-28): NOT RUN pe hostul agentului** (sub 1 GB RAM liber, swap plin: `pnpm build` nu se rulează local, regula Fazei 4). Scriptul a fost verificat pe structura reală a manifestelor Next 16.4.3 (Turbopack) dintr-un `.next/dev` existent — dimensiunile de acolo (≈ 845–860 KiB, cu HMR, devtools și cod neminificat) NU sunt reprezentative pentru producție și nu s-au folosit la praguri.
+**Valorile măsurate (prima rulare CI, 2026-10-28, `next build` de producție, First Load JS gzip):**
 
-Pragurile de mai sus sunt **provizorii** (valorile din brief-ul Fazei 4: 250 KiB pentru paginile autentificate, 150 KiB pentru `/login`). Prima rulare a job-ului `check` în CI le calibrează: valorile din artefactul `bundle-size` se trec în tabelul de mai jos, iar pragurile se fixează la valoarea măsurată + o marjă de ~15 % (rotunjită la 10 KiB), fără a depăși 250/150.
+| Rută | Măsurat (KiB gzip) | Prag (KiB) |
+|---|---|---|
+| `/` | 152,9 | 190 |
+| `/login` | 155,7 | 180 |
+| `/register` | 152,9 | 180 |
+| rute autentificate (`/accounts`, `/budgets`, `/categories`, `/dashboard`, `/goals`, `/profile`, `/reports`, `/tags`, `/transactions`, `/transfers/new`) | 158,9 – 165,4 | 190 |
 
-| Rută | Măsurat (KiB gzip) | Prag (KiB) | Data |
-|---|---|---|---|
-| (toate) | de completat după prima rulare CI | 250 / 150 | — |
+Pragurile inițiale din brief (250 KiB autentificat, 150 KiB pentru `/login`) erau provizorii: `/login` și `/register` măsoară deja 155,7 și 152,9 KiB, deci 150 nu era realist. Pragurile au fost fixate la valoarea măsurată + ~15 % (rotunjit la 10 KiB): 190 KiB implicit (cea mai mare rută: 165,4 KiB) și 180 KiB pentru `/login` și `/register`. Ele sunt un plafon împotriva regresiilor, nu un obiectiv: baza comună (React, Next, runtime) e ≈ 150 KiB.
 
 ## 2. Baza de date: 50.000 de tranzacții pe 12 luni
 

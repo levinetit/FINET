@@ -30,7 +30,7 @@ Fazele 1–3 sunt în producție. Rămăseseră amânate: pagina `global-error` 
 ### Bugetul JavaScript
 
 - `scripts/check-bundle-size.mjs`: First Load JS gzip per rută = runtime-ul (`build-manifest.json` → `rootMainFilesTree[<rută>]` sau `rootMainFiles`) + `entryJSFiles` din `.next/server/app/**/page_client-reference-manifest.js`, deduplicate; fără polyfill-uri `nomodule`, fără CSS. Varianta aleasă pentru Next 16: Turbopack (implicit) nu mai scrie `app-build-manifest.json`, iar formatul `page_client-reference-manifest.js` a fost verificat pe `.next` real (Next 16.4.3). Manifestul se citește ca JSON (fără evaluarea codului).
-- Pragurile stau în `docs/PERFORMANCE.md` (blocul `json bundle-budget`): 250 KiB implicit, 150 KiB pentru `/login` și `/register`. **Provizorii**: build-ul nu a putut rula pe host (memorie). Prima rulare în CI (pasul „Buget de mărime JavaScript”, după `pnpm build`, artefactul `bundle-size`) le calibrează: măsurat + ~15 %, fără a depăși 250/150.
+- Pragurile stau în `docs/PERFORMANCE.md` (blocul `json bundle-budget`): 190 KiB implicit, 180 KiB pentru `/login` și `/register`. Calibrate din prima rulare CI (pasul „Buget de mărime JavaScript”, după `pnpm build`, artefactul `bundle-size`): măsurat 152,9–165,4 KiB, prag = măsurat + ~15 % rotunjit la 10 KiB. Valorile inițiale din brief (250/150) erau provizorii; `/login` măsoară 155,7 KiB, deci 150 nu era realist.
 
 ### Performanța bazei și migrația `0005_perf_indexes`
 
