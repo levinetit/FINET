@@ -85,6 +85,7 @@ export async function setConsents(
           )
           .returning({ id: consents.id });
         changed = rows.length > 0;
+        if (kind === "usage_stats") await eraseUsageData(tx, userId);
       }
       if (changed && householdId) {
         await insertAudit(tx, userId, householdId, {
@@ -97,6 +98,16 @@ export async function setConsents(
     }
     return readStates(tx, userId);
   });
+}
+
+/**
+ * Revocarea `usage_stats` (MEDIUM-1, ADR 0005) șterge instalările și evenimentele utilizatorului
+ * (RLS: doar rândurile proprii). Se face la fiecare `usageStats: false`, deci și pentru date
+ * rămase dintr-o versiune anterioară. Statisticile agregate (Faza 9) nu sunt afectate.
+ */
+export async function eraseUsageData(tx: Tx, userId: string): Promise<void> {
+  await tx.execute(sql`delete from finet.app_events where user_id = ${userId}`);
+  await tx.execute(sql`delete from finet.client_installations where user_id = ${userId}`);
 }
 
 /** `true` dacă utilizatorul are un consimțământ ACTIV de tipul dat. */

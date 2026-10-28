@@ -115,7 +115,47 @@ describe.skipIf(!TEST_ADMIN_URL)("statistici de utilizare pe PostgreSQL real", (
     await fx?.close();
   });
 
-  it("client_installations: inserare, apoi cel mult o scriere la 15 minute (ceas controlat)", async () => {
+  it("consimțăminte: GET implicit fără acord; PUT acordă/revocă, cu audit; validare strictă", async () => {
+    const initial = await M.getConsentsHandler(
+      apiRequest("/api/v1/me/consents", { cookie: A.cookie }),
+      env,
+    );
+    expect(initial.status).toBe(200);
+    expect((await readJson(initial)).data).toEqual([
+      { kind: "usageStats", granted: false, grantedAt: null, revokedAt: null },
+      { kind: "externalAi", granted: false, grantedAt: null, revokedAt: null },
+      { kind: "externalAiStatements", granted: false, grantedAt: null, revokedAt: null },
+    ]);
+    const put = (body: unknown) =>
+      M.putConsentsHandler(
+        apiRequest("/api/v1/me/consents", { method: "PUT", cookie: A.cookie, body }),
+        env,
+      );
+    expect((await put({ usage_stats: true })).status).toBe(400);
+    expect((await put({})).status).toBe(400);
+    const granted = await put({ usageStats: true });
+    expect(granted.status).toBe(200);
+    expect((await readJson(granted)).data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "usageStats", granted: true })]),
+    );
+    // A doua acordare nu dublează rândul și nu se auditează din nou.
+    await put({ usageStats: true });
+    const audits = await fx.scratch.admin<{ action: string; metadata: { kind: string } }[]>`
+      select action, metadata from finet.audit_events where actor_user_id = ${anaId} and action like 'consent.%'`;
+    expect(audits).toEqual([{ action: "consent.granted", metadata: { kind: "usage_stats" } }]);
+    const noCsrf = await M.putConsentsHandler(
+      apiRequest("/api/v1/me/consents", {
+        method: "PUT",
+        cookie: A.cookie,
+        headers: { origin: "" },
+        body: { usageStats: false },
+      }),
+      env,
+    );
+    expect(noCsrf.status).toBe(403);
+  });
+
+  it("client_installations (cu acord): inserare, apoi cel mult o scriere la 15 minute (ceas controlat)", async () => {
     const get = (headers: Record<string, string>) =>
       L.listAccountsHandler(apiRequest("/api/v1/accounts", { bearer: A.bearer, headers }), env);
     const row = async () => {
@@ -157,54 +197,16 @@ describe.skipIf(!TEST_ADMIN_URL)("statistici de utilizare pe PostgreSQL real", (
       select count(*)::int as n from finet.client_installations`) as unknown as [{ n: number }];
     expect(n).toBe(1);
 
-    // Același id de instalare la alt utilizator: rând separat (unic per utilizator).
-    await L.listAccountsHandler(
+    // Același id de instalare la alt utilizator FĂRĂ consimțământ (Bogdan): antet valid, dar
+    // nimic scris (MEDIUM-1). Cu acord, ar fi un rând separat (unic per utilizator).
+    const bogdan = await L.listAccountsHandler(
       apiRequest("/api/v1/accounts", { bearer: B.bearer, headers: { "x-finet-client": HEADER } }),
       env,
     );
+    expect(bogdan.status).toBe(200);
     const both = await fx.scratch
-      .admin`select 1 from finet.client_installations where installation_id = ${INSTALL}`;
-    expect(both).toHaveLength(2);
-  });
-
-  it("consimțăminte: GET implicit fără acord; PUT acordă/revocă, cu audit; validare strictă", async () => {
-    const initial = await M.getConsentsHandler(
-      apiRequest("/api/v1/me/consents", { cookie: A.cookie }),
-      env,
-    );
-    expect(initial.status).toBe(200);
-    expect((await readJson(initial)).data).toEqual([
-      { kind: "usageStats", granted: false, grantedAt: null, revokedAt: null },
-      { kind: "externalAi", granted: false, grantedAt: null, revokedAt: null },
-      { kind: "externalAiStatements", granted: false, grantedAt: null, revokedAt: null },
-    ]);
-    const put = (body: unknown) =>
-      M.putConsentsHandler(
-        apiRequest("/api/v1/me/consents", { method: "PUT", cookie: A.cookie, body }),
-        env,
-      );
-    expect((await put({ usage_stats: true })).status).toBe(400);
-    expect((await put({})).status).toBe(400);
-    const granted = await put({ usageStats: true });
-    expect(granted.status).toBe(200);
-    expect((await readJson(granted)).data).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: "usageStats", granted: true })]),
-    );
-    // A doua acordare nu dublează rândul și nu se auditează din nou.
-    await put({ usageStats: true });
-    const audits = await fx.scratch.admin<{ action: string; metadata: { kind: string } }[]>`
-      select action, metadata from finet.audit_events where actor_user_id = ${anaId} and action like 'consent.%'`;
-    expect(audits).toEqual([{ action: "consent.granted", metadata: { kind: "usage_stats" } }]);
-    const noCsrf = await M.putConsentsHandler(
-      apiRequest("/api/v1/me/consents", {
-        method: "PUT",
-        cookie: A.cookie,
-        headers: { origin: "" },
-        body: { usageStats: false },
-      }),
-      env,
-    );
-    expect(noCsrf.status).toBe(403);
+      .admin`select user_id from finet.client_installations where installation_id = ${INSTALL}`;
+    expect(both.map((r) => r.user_id)).toEqual([anaId]);
   });
 
   it("evenimente: cu consimțământ se stochează (cu instalarea și versiunea din antet)", async () => {
@@ -281,9 +283,12 @@ describe.skipIf(!TEST_ADMIN_URL)("statistici de utilizare pe PostgreSQL real", (
       }),
       env,
     );
+    // Revocarea a șters și evenimentele existente ale Anei (MEDIUM-1); unul nou nu se mai stochează.
+    expect(before).toBeGreaterThan(0);
+    expect(await eventRows(anaId)).toHaveLength(0);
     const after = await events(A, { events: [{ name: "logout", occurredAt: iso(clock) }] });
     expect(after.status).toBe(204);
-    expect((await eventRows(anaId)).length).toBe(before);
+    expect(await eventRows(anaId)).toHaveLength(0);
     const states = (
       await readJson(
         await M.getConsentsHandler(apiRequest("/api/v1/me/consents", { bearer: A.bearer }), env),
@@ -319,5 +324,77 @@ describe.skipIf(!TEST_ADMIN_URL)("statistici de utilizare pe PostgreSQL real", (
       );
     expect((await send()).status).toBe(204);
     expect((await send()).status).toBe(429);
+  });
+
+  it("fără acord → 0 instalări; plafon de 20 de instalări; revocarea șterge instalările și evenimentele", async () => {
+    const cristi = await createUserWithHousehold(fx.db, {
+      email: "cristi@exemplu.ro",
+      name: "Cristi",
+      password: PASS,
+      firstUserBecomesAdmin: false,
+      emailVerified: true,
+    });
+    const C = await sessionsFor(env, "cristi@exemplu.ro", PASS);
+    const header = (id: string) => ({
+      "x-finet-client": `platform=android; version=2.0; installation=${id}`,
+    });
+    const get = (id: string) =>
+      L.listAccountsHandler(
+        apiRequest("/api/v1/accounts", { bearer: C.bearer, headers: header(id) }),
+        env,
+      );
+    const counts = async () => {
+      const [row] = await fx.scratch.admin<{ i: number; e: number }[]>`
+        select (select count(*)::int from finet.client_installations where user_id = ${cristi.userId}) as i,
+               (select count(*)::int from finet.app_events where user_id = ${cristi.userId}) as e`;
+      return row;
+    };
+    const ids = Array.from({ length: 100 }, () => crypto.randomUUID());
+    expect((await get(ids[0]!)).status).toBe(200);
+    expect(await counts()).toEqual({ i: 0, e: 0 });
+
+    const put = (usageStats: boolean) =>
+      M.putConsentsHandler(
+        apiRequest("/api/v1/me/consents", {
+          method: "PUT",
+          bearer: C.bearer,
+          body: { usageStats },
+        }),
+        env,
+      );
+    expect((await put(true)).status).toBe(200);
+    expect((await get(ids[0]!)).status).toBe(200);
+    expect(await counts()).toEqual({ i: 1, e: 0 });
+
+    // 100 de instalări diferite: cel mult 20 de rânduri; ultima văzută e păstrată.
+    for (const [n, id] of ids.entries()) {
+      clock += 1000;
+      expect((await get(id)).status, String(n)).toBe(200);
+    }
+    const rows = await fx.scratch.admin<{ installation_id: string }[]>`
+      select installation_id from finet.client_installations where user_id = ${cristi.userId}`;
+    expect(rows.length).toBeLessThanOrEqual(20);
+    expect(rows.map((r) => r.installation_id)).toContain(ids[99]);
+    expect(rows.map((r) => r.installation_id)).not.toContain(ids[0]);
+
+    const ev = await M.appEventsHandler(
+      apiRequest("/api/v1/app/events", {
+        bearer: C.bearer,
+        headers: header(ids[99]!),
+        body: { events: [{ name: "app_open", occurredAt: iso(clock) }] },
+      }),
+      env,
+    );
+    expect(ev.status).toBe(204);
+    expect((await counts())!.e).toBe(1);
+
+    // Revocarea: instalările și evenimentele lui Cristi dispar; ale Anei rămân.
+    const anaBefore = (await eventRows(anaId)).length;
+    expect((await put(false)).status).toBe(200);
+    expect(await counts()).toEqual({ i: 0, e: 0 });
+    expect((await eventRows(anaId)).length).toBe(anaBefore);
+    // Fără acord, un antet valid nu mai scrie nimic.
+    await get(ids[5]!);
+    expect(await counts()).toEqual({ i: 0, e: 0 });
   });
 });

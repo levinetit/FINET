@@ -1,7 +1,8 @@
 /**
  * Antetul `X-FINET-Client` al clientului web (6.5, ADR 0005): trimis DOAR după ce utilizatorul a
- * acordat `usage_stats` (comutatorul din `/profile`). Serverul înregistrează instalarea ori de
- * câte ori antetul e valid, fără să verifice consimțământul, deci regula e aplicată aici.
+ * acordat `usage_stats` (comutatorul din `/profile`). Serverul verifică și el consimțământul
+ * (nu înregistrează instalarea fără acord, iar la revocare șterge instalările și evenimentele),
+ * deci regula e aplicată în ambele locuri.
  *
  * - Starea consimțământului vine de la server la fiecare pagină protejată (`UsageSync`), nu din
  *   `localStorage` (ar rămâne învechită între utilizatori sau dispozitive); comutatorul o schimbă
