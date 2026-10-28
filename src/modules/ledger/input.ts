@@ -62,8 +62,9 @@ export const dateSchema = z
 /**
  * Plafonul unei sume și al unui sold inițial (revizuirea F2, MEDIUM-2; ADR 0004): 10^13 unități
  * minore (100 de miliarde de lei). Același prag e CHECK în bază (`transactions_amount_range`,
- * `accounts_opening_balance_range`). Soldurile calculate pot depăși totuși 2^53 după foarte multe
- * sume la plafon: atunci API-ul răspunde 422 `amount_out_of_range`, nu 500.
+ * `accounts_opening_balance_range`). Plafonul nu mărginește soldul (~901 sume la plafon ajung la
+ * 2^53): garda la scriere din `range-guard.ts` respinge depășirea pe cont, iar la citire o depășire
+ * rămasă dă 422 `amount_out_of_range`, nu 500.
  */
 export const MAX_AMOUNT_MINOR = 10_000_000_000_000;
 const MAX_AMOUNT_MINOR_BIG = BigInt(MAX_AMOUNT_MINOR);

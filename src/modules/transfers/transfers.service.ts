@@ -9,6 +9,7 @@ import type { Currency } from "@/lib/money";
 import { insertAudit } from "@/modules/auth/audit";
 import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
 import { isValidId, parseInput, resolvePositiveAmount } from "@/modules/ledger/input";
+import { assertAccountsWithinJsonRange } from "@/modules/ledger/range-guard";
 import {
   type TransactionRow,
   deleteTransactionRows,
@@ -128,6 +129,7 @@ export async function createTransfer(
       amountMinor: amounts.to,
       transferDirection: "in",
     });
+    await assertAccountsWithinJsonRange(tx, m.householdId, [from.id, to.id]);
     return toView([out, inn]);
   });
 }
@@ -184,6 +186,12 @@ export async function updateTransfer(
       ...common,
       amountMinor: amounts?.to,
     });
+    if (amounts) {
+      await assertAccountsWithinJsonRange(tx, m.householdId, [
+        current.from.accountId,
+        current.to.accountId,
+      ]);
+    }
     return toView(await loadGroup(tx, m.householdId, groupId));
   });
 }

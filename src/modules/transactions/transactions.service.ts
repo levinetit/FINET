@@ -8,6 +8,7 @@ import { selectAccount } from "@/modules/accounts/accounts.repo";
 import { selectCategory } from "@/modules/categories/categories.repo";
 import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
 import { isValidId, parseInput, resolvePositiveAmount } from "@/modules/ledger/input";
+import { assertAccountsWithinJsonRange } from "@/modules/ledger/range-guard";
 
 import {
   type TransactionRow,
@@ -107,6 +108,7 @@ export async function createTransaction(
       notes: input.notes ?? null,
       source: "manual",
     });
+    await assertAccountsWithinJsonRange(tx, m.householdId, [row.accountId]);
     return toView(row);
   });
 }
@@ -184,6 +186,10 @@ export async function updateTransaction(
       notes: patch.notes,
     });
     if (!row) throw new NotFoundError();
+    // Doar contul care primește (sau păstrează) rândul poate crește; cel vechi doar scade.
+    if (amountMinor !== undefined || accountId !== current.accountId) {
+      await assertAccountsWithinJsonRange(tx, m.householdId, [row.accountId]);
+    }
     return toView(row);
   });
 }
