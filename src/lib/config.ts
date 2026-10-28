@@ -60,6 +60,22 @@ export type StorageConfig = Readonly<{
   s3: S3Config | null;
 }>;
 
+/** Limitele documentelor încărcate (Faza 6, master prompt 6.3; ADR 0013). */
+export type DocumentsConfig = Readonly<{
+  /** Dimensiunea maximă a unui fișier (`MAX_UPLOAD_MB`, implicit 10), în octeți. */
+  maxUploadBytes: number;
+  /** Fișiere pe cerere (fix: 4, cât un bon lung). */
+  maxFilesPerRequest: number;
+  /** Pagini maxime pe PDF (`MAX_PDF_PAGES`, implicit 6). */
+  maxPdfPages: number;
+  /** Pixeli maximi pe imagine (`MAX_IMAGE_PIXELS`): apărarea contra „bombelor” de decompresie. */
+  maxImagePixels: number;
+  /** Zile până la ștergerea fișierului original (`RECEIPT_IMAGE_RETENTION_DAYS`; 0 = niciodată). */
+  retentionDays: number;
+  /** Distanța Hamming maximă între dHash-uri pentru „posibil duplicat” (0..32). */
+  duplicateMaxDistance: number;
+}>;
+
 export type AccessConfig = Readonly<{
   /** Dacă `true`, orice cerere fără JWT Cloudflare Access valid primește 403. */
   required: boolean;
@@ -122,6 +138,7 @@ export type Config = Readonly<{
     allowInsecure: boolean;
   }>;
   storage: StorageConfig;
+  documents: DocumentsConfig;
   access: AccessConfig;
   /** Token intern opțional pentru `/api/health` detaliat fără JWT Access (monitorizare). */
   healthToken: string | null;
@@ -223,6 +240,24 @@ const envSchema = z.object({
   AUTH_LOGIN_EMAIL_MAX_ATTEMPTS: positiveInt,
   AUTH_LOGIN_EMAIL_WINDOW_SECONDS: positiveInt,
 
+  MAX_UPLOAD_MB: z
+    .string()
+    .regex(/^[1-9]\d{0,2}$/)
+    .optional(),
+  MAX_PDF_PAGES: z
+    .string()
+    .regex(/^[1-9]\d{0,1}$/)
+    .optional(),
+  MAX_IMAGE_PIXELS: positiveInt,
+  RECEIPT_IMAGE_RETENTION_DAYS: z
+    .string()
+    .regex(/^\d{1,5}$/)
+    .optional(),
+  DOCUMENT_DUPLICATE_MAX_DISTANCE: z
+    .string()
+    .regex(/^\d{1,2}$/)
+    .optional(),
+
   AI_DAILY_DOCUMENT_LIMIT: nonNegativeInt,
   AI_MONTHLY_BUDGET: z.string().max(40).optional(),
   AI_MONTHLY_BUDGET_CURRENCY: z.enum(CURRENCIES).optional(),
@@ -266,6 +301,14 @@ const DEFAULTS = {
   storageDir: "./.data/storage",
   storageQuotaMb: 5000,
   aiDailyDocumentLimit: 50,
+  // Documentele (Faza 6; decizia mea, ADR 0013).
+  maxUploadMb: 10,
+  maxFilesPerRequest: 4,
+  maxPdfPages: 6,
+  // 50 MP: peste orice cameră de telefon obișnuită (48 MP), sub o „bombă” de decompresie.
+  maxImagePixels: 50_000_000,
+  retentionDays: 180,
+  duplicateMaxDistance: 6,
   // 0 = fără furnizori AI externi până când operatorul alege altfel (Faza 6).
   aiMonthlyBudget: "0",
   aiMonthlyBudgetCurrency: "USD",
@@ -480,8 +523,8 @@ export function parseConfig(
 
   // Storage (migrarea și CLI-ul de administrare nu ating fișierele, deci nu cer STORAGE_DIR).
   const driver = e.STORAGE_DRIVER ?? "local";
-  // Workerul (Faza 5) nu atinge fișierele (revizuirea F5, I1); documentele (Faza 6) vor cere din nou.
-  if (isProduction && role === "web") need("STORAGE_DIR", "în producție");
+  // Workerul citește documentele încărcate (Faza 6; ADR 0013), doar citire.
+  if (isProduction && (role === "web" || role === "worker")) need("STORAGE_DIR", "în producție");
   if (driver === "s3") {
     for (const v of [
       "STORAGE_S3_ENDPOINT",
@@ -516,6 +559,23 @@ export function parseConfig(
     issues.push({ variable: "SMTP_PORT", problem: "în afara intervalului 1–65535" });
   }
 
+  const maxPdfPages = e.MAX_PDF_PAGES ? Number.parseInt(e.MAX_PDF_PAGES, 10) : DEFAULTS.maxPdfPages;
+  if (maxPdfPages > 50) issues.push({ variable: "MAX_PDF_PAGES", problem: "maximum 50" });
+  const maxUploadMb = e.MAX_UPLOAD_MB ? Number.parseInt(e.MAX_UPLOAD_MB, 10) : DEFAULTS.maxUploadMb;
+  if (maxUploadMb > 50) issues.push({ variable: "MAX_UPLOAD_MB", problem: "maximum 50" });
+  const duplicateMaxDistance = e.DOCUMENT_DUPLICATE_MAX_DISTANCE
+    ? Number.parseInt(e.DOCUMENT_DUPLICATE_MAX_DISTANCE, 10)
+    : DEFAULTS.duplicateMaxDistance;
+  if (duplicateMaxDistance > 32) {
+    issues.push({ variable: "DOCUMENT_DUPLICATE_MAX_DISTANCE", problem: "maximum 32" });
+  }
+  const maxImagePixels = e.MAX_IMAGE_PIXELS
+    ? Number.parseInt(e.MAX_IMAGE_PIXELS, 10)
+    : DEFAULTS.maxImagePixels;
+  if (maxImagePixels < 1_000_000 || maxImagePixels > 200_000_000) {
+    issues.push({ variable: "MAX_IMAGE_PIXELS", problem: "în afara intervalului 1000000–200000000" });
+  }
+
   if (issues.length > 0 || monthlyBudget === null) throw new ConfigError(issues);
 
   const int = (v: string | undefined, fallback: number): number =>
@@ -546,6 +606,14 @@ export function parseConfig(
               secretAccessKey: e.STORAGE_S3_SECRET_ACCESS_KEY!,
             })
           : null,
+    }),
+    documents: Object.freeze({
+      maxUploadBytes: maxUploadMb * 1024 * 1024,
+      maxFilesPerRequest: DEFAULTS.maxFilesPerRequest,
+      maxPdfPages,
+      maxImagePixels,
+      retentionDays: int(e.RECEIPT_IMAGE_RETENTION_DAYS, DEFAULTS.retentionDays),
+      duplicateMaxDistance,
     }),
     access: Object.freeze({
       required: accessRequired,

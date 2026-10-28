@@ -32,6 +32,51 @@ function issuesOf(env: Record<string, string | undefined>): string[] {
   throw new Error("parseConfig trebuia să arunce");
 }
 
+describe("parseConfig — limitele documentelor (Faza 6)", () => {
+  it("valorile implicite: 10 MB, 4 fișiere, 6 pagini, 50 MP, 180 de zile, distanța 6", () => {
+    expect(parseConfig(DEV).documents).toEqual({
+      maxUploadBytes: 10 * 1024 * 1024,
+      maxFilesPerRequest: 4,
+      maxPdfPages: 6,
+      maxImagePixels: 50_000_000,
+      retentionDays: 180,
+      duplicateMaxDistance: 6,
+    });
+  });
+
+  it("acceptă valori configurate în intervale", () => {
+    const c = parseConfig({
+      ...DEV,
+      MAX_UPLOAD_MB: "20",
+      MAX_PDF_PAGES: "3",
+      MAX_IMAGE_PIXELS: "20000000",
+      RECEIPT_IMAGE_RETENTION_DAYS: "0",
+      DOCUMENT_DUPLICATE_MAX_DISTANCE: "10",
+    });
+    expect(c.documents).toMatchObject({
+      maxUploadBytes: 20 * 1024 * 1024,
+      maxPdfPages: 3,
+      maxImagePixels: 20_000_000,
+      retentionDays: 0,
+      duplicateMaxDistance: 10,
+    });
+  });
+
+  it.each([
+    ["MAX_UPLOAD_MB", "0"],
+    ["MAX_UPLOAD_MB", "51"],
+    ["MAX_UPLOAD_MB", "1.5"],
+    ["MAX_PDF_PAGES", "0"],
+    ["MAX_PDF_PAGES", "51"],
+    ["MAX_IMAGE_PIXELS", "999"],
+    ["MAX_IMAGE_PIXELS", "300000000"],
+    ["RECEIPT_IMAGE_RETENTION_DAYS", "-1"],
+    ["DOCUMENT_DUPLICATE_MAX_DISTANCE", "33"],
+  ])("%s=%s → eroare", (variable, value) => {
+    expect(issuesOf({ ...DEV, [variable]: value })).toEqual([variable]);
+  });
+});
+
 describe("parseConfig", () => {
   it("acceptă mediul minim de dezvoltare și aplică valorile implicite", () => {
     const c = parseConfig(DEV);
@@ -364,7 +409,7 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
     ).toEqual(["WORKER_DATABASE_URL"]);
   });
 
-  it("în producție, doar web cere CF_ACCESS_* și STORAGE_DIR (nici worker, nici migrate)", () => {
+  it("în producție, doar web cere CF_ACCESS_*; STORAGE_DIR îl cer web și worker (nu migrate)", () => {
     const bare = { APP_MODE: "personal", NODE_ENV: "production" };
     expect(issuesOf(bare)).toEqual([
       "CF_ACCESS_TEAM_DOMAIN",
@@ -373,13 +418,15 @@ describe("parseConfig pe rol (FINET_ROLE)", () => {
       "APP_URL",
       "STORAGE_DIR",
     ]);
-    // Workerul nu atinge fișierele (I1): fără STORAGE_DIR, configurația trece.
-    const w = parseConfig({
+    // Faza 6 (ADR 0013): workerul citește documentele încărcate, deci cere din nou STORAGE_DIR.
+    const workerEnv = {
       ...bare,
       FINET_ROLE: "worker",
       WORKER_DATABASE_URL: URL_WORKER_TLS,
       DATABASE_CA_FILE: WORKER_CA,
-    });
+    };
+    expect(issuesOf(workerEnv)).toEqual(["STORAGE_DIR"]);
+    const w = parseConfig({ ...workerEnv, STORAGE_DIR: "/data/storage" });
     expect(w.role).toBe("worker");
     const m = parseConfig({ ...bare, FINET_ROLE: "migrate", MIGRATOR_DATABASE_URL: URL_MIGRATOR });
     expect(m.database.url).toBe(URL_MIGRATOR);
