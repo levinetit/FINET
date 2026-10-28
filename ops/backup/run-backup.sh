@@ -52,7 +52,7 @@ load_host_env() {
 }
 load_host_env "$HOST_ENV"
 
-DEST=${FINET_BACKUP_DEST:-s3}
+DEST=${FINET_BACKUP_DEST:-rclone}
 COMPOSE_ENV=${FINET_COMPOSE_ENV:-/srv/finet/compose/compose.env}
 NOTIFY_ENV=${FINET_NOTIFY_ENV:-/srv/finet/env/notify.env}
 STATE_DIR=${FINET_BACKUP_STATE_DIR:-/srv/finet/backup-state}
@@ -68,7 +68,7 @@ HOSTNAME_V=$(hostname 2> /dev/null || echo necunoscut)
 
 log() { printf '%s %s: %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$PROG" "$*"; }
 
-case "$DEST" in s3|sftp|local) ;; *) log "FINET_BACKUP_DEST trebuie să fie s3, sftp sau local"; exit 2 ;; esac
+case "$DEST" in rclone|s3|sftp|local) ;; *) log "FINET_BACKUP_DEST trebuie să fie rclone, s3, sftp sau local"; exit 2 ;; esac
 for v in "$ALERT_INTERVAL" "$NOW"; do
   printf '%s' "$v" | grep -Eq '^[0-9]+$' || { log "FINET_BACKUP_ALERT_INTERVAL/NOW invalid"; exit 2; }
 done

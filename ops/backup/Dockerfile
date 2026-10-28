@@ -20,9 +20,11 @@ ARG ALPINE_IMAGE=alpine:3.22.7@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4c
 FROM ${ALPINE_IMAGE} AS backup
 # uid 1000 = proprietarul /srv/finet/storage (utilizatorul `node` din imaginile FINET); ssh cere
 # o intrare în /etc/passwd pentru uid-ul curent.
-RUN apk add --no-cache "restic~0.18" "postgresql17-client~17" openssh-client-default tzdata ca-certificates \
+# rclone (destinația `rclone:` = Google Drive, ADR 0009): Alpine 3.22 are 1.69.x; config-ul de pe
+# host (1.74) e compatibil pentru remote-urile `drive`.
+RUN apk add --no-cache "restic~0.18" "postgresql17-client~17" "rclone~1.69" openssh-client-default tzdata ca-certificates \
   && addgroup -g 1000 finet && adduser -D -u 1000 -G finet -h /tmp/home -s /sbin/nologin finet \
-  && restic version && pg_dump --version
+  && restic version && pg_dump --version && rclone version
 
 COPY --chmod=0555 ops/backup/lib.sh ops/backup/backup.sh ops/backup/restore.sh ops/backup/entrypoint.sh /opt/finet-backup/
 

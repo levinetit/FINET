@@ -1,6 +1,6 @@
 # Suprapunerea pentru RESTAURARE (docs/BACKUP.md, „Restaurare”). Se adaugă după suprapunerea
 # destinației:
-#   docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.s3.yml \
+#   docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.rclone.yml \
 #     -f ops/backup/compose.restore.yml --env-file /srv/finet/compose/compose.env \
 #     --profile backup run --rm -T finet-backup restore --yes [--storage-target /restore]
 # finet_restore_pg_service: fișier de servicii libpq cu secțiunea [finet_restore], rolul

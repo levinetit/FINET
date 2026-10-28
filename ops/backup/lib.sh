@@ -77,6 +77,7 @@ load_restic_config() {
   if [ -z "${RESTIC_REPOSITORY-}" ]; then
     require_file RESTIC_REPOSITORY_FILE "${RESTIC_REPOSITORY_FILE-}"
   fi
+  check_rclone_config
 
   # S3: cheile din fișiere, ambele sau niciuna.
   if [ -n "${AWS_ACCESS_KEY_ID-}" ] || [ -n "${AWS_SECRET_ACCESS_KEY-}" ]; then
@@ -104,6 +105,34 @@ load_restic_config() {
       echo "  ServerAliveInterval 60"
     } > "$HOME/.ssh/config"
   fi
+}
+
+# Destinația `rclone:<remote>:<cale>` (Google Drive pe acest VPS, docs/BACKUP.md): restic pornește
+# `rclone serve restic --stdio` cu configurația din RCLONE_CONFIG. Fișierul conține tokenul OAuth
+# al remote-ului: trebuie să existe, să nu fie gol și să NU poată fi citit de grup/alții (0400 sau
+# 0600). Conținutul nu se afișează. RCLONE_CONFIG fără repository rclone e refuzat (configurație
+# amestecată din greșeală).
+check_rclone_config() {
+  _repo=${RESTIC_REPOSITORY-}
+  if [ -z "$_repo" ] && [ -n "${RESTIC_REPOSITORY_FILE-}" ]; then
+    _repo=$(head -n 1 "$RESTIC_REPOSITORY_FILE" | tr -d '\r')
+  fi
+  case "$_repo" in
+    rclone:*)
+      printf '%s' "$_repo" | grep -Eq '^rclone:[A-Za-z0-9_-][A-Za-z0-9_. -]*:[^[:space:]]*$' ||
+        die 2 "repository-ul rclone trebuie să fie rclone:<remote>:<cale>"
+      require_file RCLONE_CONFIG "${RCLONE_CONFIG-}"
+      _mode=$(stat -L -c '%a' "$RCLONE_CONFIG")
+      _mode=$(printf '%04d' "$_mode")
+      _go=${_mode#??}
+      [ "$_go" = 00 ] || die 2 "RCLONE_CONFIG: fișierul poate fi citit de grup/alții (mod $_mode; cere 0400 sau 0600)"
+      command -v rclone > /dev/null 2>&1 || die 2 "rclone lipsește din imagine"
+      ;;
+    *)
+      [ -z "${RCLONE_CONFIG-}" ] || die 2 "RCLONE_CONFIG e setat, dar repository-ul nu e rclone:"
+      ;;
+  esac
+  unset _repo _mode _go
 }
 
 # Configurația libpq pentru o secțiune dintr-un fișier de servicii: verifică fișierul și, în

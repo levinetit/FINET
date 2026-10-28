@@ -333,7 +333,7 @@ services:
     # din storage, criptate cu restic. Imaginea separată (ops/backup/Dockerfile, ținta `backup`,
     # construită de workflow-ul `images`). One-shot, NU container permanent: îl pornește
     # ops/backup/run-backup.sh din cron-ul root, cu suprapunerea destinației:
-    #   docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.s3.yml \
+    #   docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.rclone.yml \
     #     --env-file /srv/finet/compose/compose.env --profile backup run --rm -T finet-backup backup
     # Alte comenzi: init (o dată), snapshots, check [--read-data], restore --yes (cu
     # ops/backup/compose.restore.yml). Fără apps și fără IP static (ca finet-migrate): ieșire doar

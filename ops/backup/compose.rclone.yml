@@ -1,0 +1,24 @@
+# Suprapunerea pentru destinația rclone (DECIZIA OPERATORULUI pentru acest VPS: Google Drive,
+# docs/BACKUP.md „Destinația”, ADR 0009). Se folosește DUPĂ ops/docker/docker-compose.yml:
+#   docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.rclone.yml \
+#     --env-file /srv/finet/compose/compose.env --profile backup run --rm -T finet-backup <comandă>
+# finet_backup_repository conține: rclone:Gdrive:finet-backup/restic
+# finet_rclone_conf: DOAR secțiunea [Gdrive] din config-ul rclone al root-ului (uid 1000, mod
+# 0400). Conține tokenul OAuth cu scope `drive` COMPLET: e la fel de sensibil ca tot Drive-ul.
+# Montat read-only: dacă rclone reîmprospătează tokenul de acces (valabil ~1 h), îl ține în
+# memorie pe durata rulării și nu-l poate rescrie (avertisment în log, acceptat; tokenul de
+# reîmprospătare nu se schimbă).
+secrets:
+  finet_rclone_conf:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_rclone_conf
+
+services:
+  finet-backup:
+    secrets:
+      - source: finet_rclone_conf
+        target: /run/secrets/rclone.conf
+    environment:
+      RCLONE_CONFIG: /run/secrets/rclone.conf
+    # restic + `rclone serve restic --stdio` în același container: 256m e prea strâns.
+    mem_limit: 384m
+    memswap_limit: 384m
