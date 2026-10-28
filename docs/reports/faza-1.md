@@ -139,3 +139,12 @@ Amânate (ROADMAP, checklist): L2, L3, L6, L7, L8, ștergerea contului, funcția
 | `pnpm test:ops` | PASS |
 | `pnpm exec playwright test --list` | PASS: 26 de teste în 3 fișiere (+1: H1) |
 | E2E în browser | NOT RUN (fără browsere pe host; job-ul `e2e` din CI) |
+
+## 9. Actualizare 2026-10-28: Faza 1 pe producție (făcută de coordonator, la cererea operatorului)
+
+- **Imaginile** nu s-au putut construi pe host (build-ul local a fost oprit de sistem din lipsă de memorie). Au fost construite de workflow-ul `images` (push pe `phase/01-auth`, commit `10c41ea`) și trase cu `ops/deploy/pull-images.sh` (rulare `push` de încredere, același repository, sha256 și etichetă din manifest verificate). `finet:local` 273 MB, `finet:tools` 592 MB.
+- **Migrațiile** `0000_core` și `0001_rls` aplicate pe Supabase cu `finet-migrate`: prima rulare „aplicate acum 2”, a doua „aplicate acum 0”. Verificat prin Management API: 12 tabele în `finet`, `ENABLE`+`FORCE RLS` pe `audit_events`, `consents`, `household_members`, `households`, `user_preferences`; `anon` și `authenticated` fără `USAGE` pe `finet`; Data API cu cheia `anon` și `Accept-Profile: finet` → `406 PGRST106` (schemă neexpusă).
+- **Primul utilizator** creat cu `finet-admin create-user` (administrator al platformei, gospodărie personală creată). Parola generată stă într-un fișier root-only din directorul de secrete al hostului, nu în repo sau în chat; se schimbă din pagina de profil.
+- **Redeploy `finet-web`** cu imaginea Fazei 1: healthy, ~57 MiB. Verificat: `/api/health` cu token → `{"status":"ok","checks":{"db":"ok","storage":"ok","queue":"unknown","ai":"unknown"}}`; antetele de securitate prezente (CSP cu nonce, HSTS, `x-frame-options: DENY`, `x-content-type-options`, `referrer-policy`, `permissions-policy`); din exterior `/`, `/login`, `/api/auth/get-session` și `/api/v1/me` răspund 302 spre Cloudflare Access. Imaginea Fazei 0 e păstrată ca `finet:rollback-faza0`.
+- **Incident:** prima pornire a intrat în restart loop (`BETTER_AUTH_SECRET_FILE: prea scurtă`): fișierul secret fusese creat greșit (conținut de 29 de octeți, nu secretul generat). Recreat corect (45 de octeți, mod 0400, uid 1000); aplicația a pornit. Nicio valoare nu a apărut în loguri.
+- **NOT RUN:** login-ul efectiv în browser prin Access (cere codul trimis pe email și parola din fișier), CSP-ul strict de producție verificat în browser (consolă fără încălcări), conexiune la bază refuzată de pe alt IP.
