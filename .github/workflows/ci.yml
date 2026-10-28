@@ -84,6 +84,10 @@ jobs:
       - name: Formatare
         run: pnpm format:check
 
+      # docs/openapi.json trebuie să fie generat din registrul src/openapi/ (pnpm openapi:generate).
+      - name: OpenAPI la zi
+        run: pnpm openapi:check
+
       - name: Type-check
         run: pnpm typecheck
 
