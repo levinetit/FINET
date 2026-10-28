@@ -55,7 +55,7 @@ export function deriveStatus(
   return savedMinor >= targetMinor ? "achieved" : "active";
 }
 
-function view(row: GoalRow): GoalView {
+export function goalView(row: GoalRow): GoalView {
   return {
     id: row.id,
     name: row.name,
@@ -101,7 +101,7 @@ export async function listGoals(
 ): Promise<GoalView[]> {
   const options = parseInput(goalListSchema, rawOptions) ?? {};
   return inHousehold(deps, actor, householdId, async (tx, m) =>
-    (await selectGoals(tx, m.householdId, options.status)).map(view),
+    (await selectGoals(tx, m.householdId, options.status)).map(goalView),
   );
 }
 
@@ -115,7 +115,7 @@ export async function getGoal(
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     const row = await selectGoal(tx, m.householdId, goalId.toLowerCase());
     if (!row) throw new NotFoundError();
-    return view(row);
+    return goalView(row);
   });
 }
 
@@ -139,7 +139,7 @@ export async function createGoal(
       status: "active",
       accountId: input.accountId ?? null,
     });
-    return view(row);
+    return goalView(row);
   });
 }
 
@@ -179,7 +179,7 @@ export async function updateGoal(
       status,
     });
     if (!row) throw new NotFoundError();
-    return view(row);
+    return goalView(row);
   });
 }
 
@@ -215,7 +215,7 @@ export async function contributeToGoal(
       status: deriveStatus(current.status, next.amountMinor, current.targetMinor),
     });
     if (!row) throw new NotFoundError();
-    return view(row);
+    return goalView(row);
   });
 }
 
