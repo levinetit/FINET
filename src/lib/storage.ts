@@ -1,14 +1,19 @@
 import "server-only";
 
 import { getConfig, type StorageConfig } from "@/lib/config";
-import { LocalStorage } from "@/lib/storage/local";
+import { LocalStorage, type LocalStorageOptions } from "@/lib/storage/local";
 import { S3Storage } from "@/lib/storage/s3";
 import {
   assertStorageKey,
+  householdDocumentKey,
   InvalidStorageKeyError,
+  isStorageHouseholdId,
   isStorageKey,
   StorageError,
+  StorageLimitError,
   StorageNotFoundError,
+  StorageReadOnlyError,
+  storageKeyName,
   type PutOptions,
   type Storage,
   type StorageKey,
@@ -26,29 +31,43 @@ import {
 
 export {
   assertStorageKey,
+  householdDocumentKey,
   InvalidStorageKeyError,
+  isStorageHouseholdId,
   isStorageKey,
   LocalStorage,
   S3Storage,
   StorageError,
+  StorageLimitError,
   StorageNotFoundError,
+  StorageReadOnlyError,
+  storageKeyName,
 };
-export type { PutOptions, Storage, StorageKey, StoragePrefix };
+export type { LocalStorageOptions, PutOptions, Storage, StorageKey, StoragePrefix };
 
-/** Construiește driverul pentru o configurație dată. */
-export function createStorage(config: StorageConfig): Storage {
+/**
+ * Construiește driverul pentru o configurație dată. `readOnly` (workerul, Faza 6): fără scrieri,
+ * fără crearea directorului de bază.
+ */
+export function createStorage(config: StorageConfig, options: LocalStorageOptions = {}): Storage {
   if (config.driver === "s3") {
     if (!config.s3) throw new StorageError("Configurația S3 lipsește.");
     return new S3Storage(config.s3);
   }
-  return new LocalStorage(config.dir);
+  return new LocalStorage(config.dir, options);
 }
 
 let cached: { config: StorageConfig; storage: Storage } | null = null;
 
-/** Driverul de storage al procesului curent (din configurație; memorat per configurație). */
+/**
+ * Driverul de storage al procesului curent (din configurație; memorat per configurație).
+ * Workerul (`FINET_ROLE=worker`) primește storage-ul doar pentru citire (ADR 0013).
+ */
 export function getStorage(): Storage {
-  const config = getConfig().storage;
-  if (cached?.config !== config) cached = { config, storage: createStorage(config) };
+  const full = getConfig();
+  const config = full.storage;
+  if (cached?.config !== config) {
+    cached = { config, storage: createStorage(config, { readOnly: full.role === "worker" }) };
+  }
   return cached.storage;
 }
