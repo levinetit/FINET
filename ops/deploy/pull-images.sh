@@ -1,10 +1,12 @@
 #!/bin/sh
 # Descarcă din GitHub imaginile FINET construite de workflow-ul `images` pentru un commit și le
-# încarcă în Docker, sub numele pe care le așteaptă compose-ul (finet:local, finet:tools).
+# încarcă în Docker, sub numele pe care le așteaptă compose-ul (finet:local, finet:tools,
+# finet:backup).
 #
 # Rulează pe host, ca root (citește tokenul GitHub, care nu e al utilizatorului obișnuit):
-#   sudo sh ops/deploy/pull-images.sh <sha-commit>            # ambele imagini
+#   sudo sh ops/deploy/pull-images.sh <sha-commit>            # toate imaginile (web, tools, backup)
 #   sudo sh ops/deploy/pull-images.sh <sha-commit> web        # doar web
+#   sudo sh ops/deploy/pull-images.sh <sha-commit> backup     # doar imaginea de backup (F3-D)
 # Variabile: GITHUB_REPO (implicit levinetit/FINET), GITHUB_TOKEN_FILE (token cu Actions: read).
 # Proveniență: se acceptă doar artefacte din rularea `push` reușită a workflow-ului images, din același
 # repository, pe exact commit-ul cerut (vezi trusted_run_id); tarball-ul trebuie să conțină exact
@@ -17,10 +19,10 @@ REPO="${GITHUB_REPO:-levinetit/FINET}"
 TOKEN_FILE="${GITHUB_TOKEN_FILE:-/home/docker-apps/secrete/github-finet.token}"
 
 case "$SHA" in
-  *[!0-9a-f]* | "") echo "Folosire: $0 <sha-commit-complet-de-40-caractere> [web|tools|all]" >&2; exit 2 ;;
+  *[!0-9a-f]* | "") echo "Folosire: $0 <sha-commit-complet-de-40-caractere> [web|tools|backup|all]" >&2; exit 2 ;;
 esac
 [ "${#SHA}" -eq 40 ] || { echo "SHA-ul trebuie să aibă 40 de caractere (git rev-parse HEAD)." >&2; exit 2; }
-case "$WHICH" in web | tools | all) ;; *) echo "Al doilea argument: web, tools sau all." >&2; exit 2 ;; esac
+case "$WHICH" in web | tools | backup | all) ;; *) echo "Al doilea argument: web, tools, backup sau all." >&2; exit 2 ;; esac
 [ -r "$TOKEN_FILE" ] || { echo "Nu pot citi tokenul GitHub ($TOKEN_FILE); rulează cu sudo." >&2; exit 1; }
 
 WORK="$(mktemp -d)"
@@ -56,7 +58,7 @@ for r in json.load(sys.stdin).get("workflow_runs", []):
 '
 }
 
-fetch_one() { # $1 = web | tools
+fetch_one() { # $1 = web | tools | backup
   _n="$1"
   _name="finet-${_n}-${SHA}"
   _expected="finet:${_n}-${SHA}"
@@ -82,7 +84,7 @@ assert len(m) == 1 and tags == [sys.argv[2]], (len(m), tags)
     || { echo "Tarball-ul nu conține exact imaginea ${_expected}; refuz." >&2; return 1; }
   _loaded="$(docker load -i "$WORK/${_n}/image.tar" | sed -n 's/^Loaded image: //p')"
   [ "$_loaded" = "$_expected" ] || { echo "docker load a raportat '${_loaded}', așteptam ${_expected}." >&2; return 1; }
-  case "$_n" in web) _tag="finet:local" ;; tools) _tag="finet:tools" ;; esac
+  case "$_n" in web) _tag="finet:local" ;; tools) _tag="finet:tools" ;; backup) _tag="finet:backup" ;; esac
   docker tag "$_loaded" "$_tag"
   echo "   încărcată ${_loaded} → ${_tag}"
 }
@@ -90,6 +92,7 @@ assert len(m) == 1 and tags == [sys.argv[2]], (len(m), tags)
 case "$WHICH" in
   web) fetch_one web ;;
   tools) fetch_one tools ;;
-  all) fetch_one web; fetch_one tools ;;
+  backup) fetch_one backup ;;
+  all) fetch_one web; fetch_one tools; fetch_one backup ;;
 esac
 docker images finet --format '{{.Repository}}:{{.Tag}} {{.Size}} {{.CreatedSince}}'

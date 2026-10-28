@@ -1,0 +1,26 @@
+# Suprapunerea pentru RESTAURARE (docs/BACKUP.md, „Restaurare”). Se adaugă după suprapunerea
+# destinației:
+#   docker compose -f ops/docker/docker-compose.yml -f ops/backup/compose.s3.yml \
+#     -f ops/backup/compose.restore.yml --env-file /srv/finet/compose/compose.env \
+#     --profile backup run --rm -T finet-backup restore --yes [--storage-target /restore]
+# finet_restore_pg_service: fișier de servicii libpq cu secțiunea [finet_restore], rolul
+# finet_migrator al bazei ȚINTĂ (sslmode=verify-full). Fișierele se restaurează în
+# ${FINET_RESTORE_DIR} (implicit /srv/finet/restore, creat de operator, uid 1000, mod 700), nu
+# peste storage-ul viu; mutarea lor e un pas manual al operatorului.
+secrets:
+  finet_restore_pg_service:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_restore_pg_service
+
+services:
+  finet-backup:
+    secrets:
+      - finet_restore_pg_service
+    environment:
+      FINET_RESTORE_PGSERVICEFILE: /run/secrets/finet_restore_pg_service
+      FINET_RESTORE_PGSERVICE: finet_restore
+    volumes:
+      - type: bind
+        source: ${FINET_RESTORE_DIR:-/srv/finet/restore}
+        target: /restore
+        bind:
+          create_host_path: false

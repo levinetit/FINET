@@ -1,0 +1,20 @@
+# Suprapunerea pentru o destinație SFTP (alt server, un storage box). Se folosește DUPĂ
+# ops/docker/docker-compose.yml (vezi compose.s3.yml pentru comandă).
+# finet_backup_repository: `sftp:utilizator@gazdă:/cale/finet-restic` (sau `sftp://utilizator@gazdă:port//cale`).
+# Cheia privată SSH dedicată (fără parolă, uid 1000, mod 400) și cheia publică a serverului,
+# fixată (`ssh-keyscan -p <port> <gazdă>` VERIFICAT cu amprenta dată de furnizor). lib.sh scrie
+# o configurație ssh cu StrictHostKeyChecking=yes; o cheie de server schimbată oprește backup-ul.
+secrets:
+  finet_backup_sftp_key:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_backup_sftp_key
+  finet_backup_sftp_known_hosts:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_backup_sftp_known_hosts
+
+services:
+  finet-backup:
+    secrets:
+      - finet_backup_sftp_key
+      - finet_backup_sftp_known_hosts
+    environment:
+      FINET_BACKUP_SFTP_KEY_FILE: /run/secrets/finet_backup_sftp_key
+      FINET_BACKUP_SFTP_KNOWN_HOSTS_FILE: /run/secrets/finet_backup_sftp_known_hosts

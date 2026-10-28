@@ -1,0 +1,15 @@
+# Suprapunerea pentru un repository restic într-un director LOCAL. ATENȚIE: pe același VPS asta
+# NU e un backup în afara serverului (o pierdere a discului sau a VPS-ului ia și backup-ul). E
+# doar pentru test sau ca soluție temporară până alege operatorul o destinație externă (S3/SFTP);
+# docs/BACKUP.md, „Destinația”.
+# finet_backup_repository conține exact: /backup/repo
+# Directorul trebuie creat înainte (în afara /home, ca să nu ajungă în backup-ul de pe Drive):
+#   install -d -o 1000 -g 1000 -m 700 /srv/finet/backup-repo
+services:
+  finet-backup:
+    volumes:
+      - type: bind
+        source: ${FINET_BACKUP_LOCAL_DIR:-/srv/finet/backup-repo}
+        target: /backup/repo
+        bind:
+          create_host_path: false
