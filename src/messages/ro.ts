@@ -266,7 +266,10 @@ export const ro = {
         budget_exists: "Există deja un buget activ pentru această categorie, monedă și domeniu.",
         goal_abandoned: "Obiectivul e abandonat: reia-l înainte de a adăuga contribuții.",
         goal_saved_negative: "Nu poți scoate mai mult decât ai economisit.",
-        recurring_completed: "Regula e completată: nu mai are scadențe.",
+        recurring_completed:
+          "Regula e completată: nu mai are scadențe. Mută data de sfârșit sau mărește numărul de rate, apoi reia-o.",
+        recurring_limit_reached:
+          "Gospodăria are deja numărul maxim de reguli recurente (200). Șterge regulile de care nu mai ai nevoie.",
         currency_change_requires_amount:
           "Contul ales are altă monedă: completează și suma în moneda lui.",
         export_too_large:

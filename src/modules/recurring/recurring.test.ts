@@ -246,6 +246,78 @@ describe.skipIf(!TEST_ADMIN_URL)("recurențe (Postgres real, finet_app)", () => 
       "2026-03-09",
       "2026-03-16",
     ]);
+
+    // Completată → reluată doar dacă mai are scadențe după modificarea endOn/maxOccurrences.
+    await expect(
+      resumeRecurringRule(f.deps, f.A, f.HA, ended.id, "2026-06-01"),
+    ).rejects.toMatchObject({ reason: "recurring_completed" });
+    await updateRecurringRule(f.deps, f.A, f.HA, ended.id, { endOn: "2026-12-31" }, "2026-06-01");
+    const back = await resumeRecurringRule(f.deps, f.A, f.HA, ended.id, "2026-06-01");
+    // Fără retroactiv: prima scadență ≥ azi pe grila săptămânală din 2 martie (luni).
+    expect(back).toMatchObject({ status: "active", nextRunOn: "2026-06-01" });
+    await updateRecurringRule(f.deps, f.A, f.HA, rate.id, { maxOccurrences: 5 }, "2026-12-31");
+    expect(await resumeRecurringRule(f.deps, f.A, f.HA, rate.id, "2026-12-31")).toMatchObject({
+      status: "active",
+    });
+  });
+
+  it("plafoane anti-abuz: 200 de reguli pe gospodărie (199 → 200 ok, 201 → 409)", async () => {
+    // 199 de reguli inserate direct (ca superuser), în gospodăria B.
+    await f.admin`
+      insert into finet.recurring_rules (household_id, account_id, type, amount_minor, currency,
+        description, frequency, day_of_month, start_on, next_run_on, created_by_user_id)
+      select ${f.HB}, ${accB}, 'expense', 100, 'RON', 'R' || g, 'monthly', 1, date '2026-01-01',
+             date '2026-01-01', ${f.B.userId}
+        from generate_series(1, 199) g`;
+    const input = { accountId: accB, description: "A 200-a" };
+    const r200 = await rule(input, f.B, f.HB);
+    await expect(rule({ ...input, description: "A 201-a" }, f.B, f.HB)).rejects.toMatchObject({
+      reason: "recurring_limit_reached",
+    });
+    // Ștergerea uneia eliberează un loc.
+    await deleteRecurringRule(f.deps, f.B, f.HB, r200.id);
+    await rule({ ...input, description: "Din nou a 200-a" }, f.B, f.HB);
+    await f.admin`delete from finet.recurring_rules where household_id = ${f.HB}`;
+  });
+
+  it("plafoane anti-abuz: startOn cel mult 5 ani în urmă; restanța inițială ≤ 1200 fără maxOccurrences", async () => {
+    const create = (input: Record<string, unknown>) =>
+      createRecurringRule(
+        f.deps,
+        f.A,
+        f.HA,
+        {
+          accountId: ron,
+          type: "expense",
+          amountMinor: 100,
+          description: "Plafon",
+          frequency: "monthly",
+          ...input,
+        },
+        "2026-10-28",
+      );
+    const exact = await create({ startOn: "2021-10-28" });
+    await expect(create({ startOn: "2021-10-27" })).rejects.toBeInstanceOf(ValidationError);
+    // Zilnic din 2023-07-17: exact 1200 de scadențe până la 2026-10-28 inclusiv → acceptat.
+    const at1200 = await create({ frequency: "daily", startOn: "2023-07-17" });
+    // O zi mai devreme: 1201 → refuzat, cu un mesaj pe `startOn`.
+    await expect(create({ frequency: "daily", startOn: "2023-07-16" })).rejects.toMatchObject({
+      fields: { startOn: expect.stringContaining("1200") },
+    });
+    // Cu număr de rate sau cu `endOn` aproape, aceeași dată e acceptată.
+    const withMax = await create({
+      frequency: "daily",
+      startOn: "2023-07-16",
+      maxOccurrences: 1200,
+    });
+    const withEnd = await create({
+      frequency: "daily",
+      startOn: "2023-07-16",
+      endOn: "2023-12-31",
+    });
+    for (const r of [exact, at1200, withMax, withEnd]) {
+      await deleteRecurringRule(f.deps, f.A, f.HA, r.id);
+    }
   });
 
   it("garda 2^53: o generare care ar depăși intervalul JSON al contului e anulată", async () => {

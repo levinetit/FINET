@@ -7,6 +7,8 @@ import { type Actor, NotFoundError } from "@/lib/authz";
 import {
   DEFAULT_TIME_ZONE,
   addDays,
+  addYears,
+  countOccurrencesUntil,
   type RecurrenceSpec,
   localDateOf,
   occurrenceAfter,
@@ -27,6 +29,7 @@ import {
   type RecurringRuleRow,
   type RulePatch,
   claimOccurrence,
+  countHouseholdRules,
   countRules,
   deleteRuleRow,
   insertRule,
@@ -143,23 +146,55 @@ function noOccurrence(): never {
   throw new ValidationError({ _: "Regula nu are nicio scadență în intervalul ales." });
 }
 
+/**
+ * Plafoanele anti-abuz la creare (revizuirea `security` F5, L2; ADR 0011):
+ * - cel mult `MAX_RULES_PER_HOUSEHOLD` reguli pe gospodărie (orice stare) → 409
+ *   `recurring_limit_reached` (verificat sub un lock pe gospodărie: două creări simultane nu
+ *   trec amândouă de prag);
+ * - `startOn` cel mult `MAX_START_AGE_YEARS` ani în urmă față de azi (București) → 400;
+ * - fără `maxOccurrences`, restanța inițială (scadențele de la început până azi, sau până la
+ *   `endOn`) cel mult `MAX_INITIAL_BACKLOG` → altfel 400 (o regulă zilnică pornită acum 5 ani ar
+ *   genera ~1.800 de tranzacții, 12 pe oră).
+ */
+export const MAX_RULES_PER_HOUSEHOLD = 200;
+export const MAX_START_AGE_YEARS = 5;
+export const MAX_INITIAL_BACKLOG = 1200;
+
 export async function createRecurringRule(
   deps: LedgerDeps,
   actor: Actor,
   householdId: string,
   rawInput: unknown,
+  today: string = todayLocal(),
 ): Promise<RecurringRuleView> {
   const input = parseInput(recurringCreateSchema, rawInput);
   const usesDay = input.frequency === "monthly" || input.frequency === "yearly";
   const dayOfMonth = usesDay ? (input.dayOfMonth ?? Number(input.startOn.slice(8, 10))) : null;
   const interval = input.interval ?? 1;
   const endOn = input.endOn ?? null;
-  const first = occurrenceOnOrAfter(
-    { frequency: input.frequency, interval, dayOfMonth, startOn: input.startOn },
-    input.startOn,
-  );
+  const spec = { frequency: input.frequency, interval, dayOfMonth, startOn: input.startOn };
+  if (input.startOn < addYears(today, -MAX_START_AGE_YEARS)) {
+    throw new ValidationError({
+      startOn: `Data de început poate fi cel mult ${MAX_START_AGE_YEARS} ani în urmă.`,
+    });
+  }
+  const first = occurrenceOnOrAfter(spec, input.startOn);
   if (first === null || (endOn !== null && first > endOn)) noOccurrence();
+  if (input.maxOccurrences == null) {
+    const until = endOn !== null && endOn < today ? endOn : today;
+    if (countOccurrencesUntil(spec, until, MAX_INITIAL_BACKLOG) > MAX_INITIAL_BACKLOG) {
+      throw new ValidationError({
+        startOn: `Regula ar avea peste ${MAX_INITIAL_BACKLOG} de scadențe restante: alege o dată de început mai recentă sau un număr de rate.`,
+      });
+    }
+  }
   return inHousehold(deps, actor, householdId, async (tx, m) => {
+    if ((await countHouseholdRules(tx, m.householdId)) >= MAX_RULES_PER_HOUSEHOLD) {
+      throw new ConflictError(
+        "recurring_limit_reached",
+        `Gospodăria are deja ${MAX_RULES_PER_HOUSEHOLD} de reguli recurente.`,
+      );
+    }
     const account = await requireOpenAccount(tx, m.householdId, input.accountId);
     const amountMinor = resolvePositiveAmount(input, account.currency);
     await checkCategory(tx, m.householdId, input.categoryId, input.type);
@@ -349,9 +384,10 @@ export async function pauseRecurringRule(
 }
 
 /**
- * Reluarea de pe pauză NU generează retroactiv lunile sărite: scadența devine prima ≥ max(azi,
- * scadența veche, ultima ocurență + 1 zi). Dacă nu mai există scadențe (după `end_on` sau după
- * rate), regula trece la `completed`.
+ * Reluarea NU generează retroactiv scadențele sărite: scadența devine prima ≥ max(azi, scadența
+ * veche, ultima ocurență + 1 zi). Pe pauză: dacă nu mai există scadențe (după `end_on` sau după
+ * rate), regula trece la `completed`. Completată: se reia (redevine `active`) doar dacă, după o
+ * modificare a `endOn`/`maxOccurrences`, mai are scadențe; altfel 409 `recurring_completed`.
  */
 export async function resumeRecurringRule(
   deps: LedgerDeps,
@@ -366,10 +402,6 @@ export async function resumeRecurringRule(
     const current = await selectRule(tx, m.householdId, id, true);
     if (!current) throw new NotFoundError();
     if (current.status === "active") return ruleView(current, today);
-    if (current.status === "completed") {
-      throw new ConflictError("recurring_completed", "Regula e completată.");
-    }
-    await requireOpenAccount(tx, m.householdId, current.accountId);
     const last = await lastOccurrenceDate(tx, m.householdId, id);
     const from = [today, current.nextRunOn, last ? addOneDay(last) : current.nextRunOn]
       .sort()
@@ -381,6 +413,12 @@ export async function resumeRecurringRule(
       current.occurrencesCount,
       current.maxOccurrences,
     );
+    // O regulă completată se reia doar dacă (după o modificare a `endOn`/`maxOccurrences`) mai
+    // are scadențe; altfel 409, fără nicio schimbare.
+    if (current.status === "completed" && finished) {
+      throw new ConflictError("recurring_completed", "Regula e completată.");
+    }
+    await requireOpenAccount(tx, m.householdId, current.accountId);
     const row = await updateRuleRow(tx, m.householdId, id, {
       status: finished ? "completed" : "active",
       nextRunOn: next ?? current.nextRunOn,

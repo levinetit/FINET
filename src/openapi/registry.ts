@@ -798,7 +798,7 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "recurring",
     summary: "Creează o regulă recurentă (venit sau cheltuială; fără transferuri în Faza 5).",
     description:
-      "Moneda = a contului (contul nearhivat). `dayOfMonth` doar la `monthly`/`yearly` (implicit ziua din `startOn`; 29–31 → ultima zi în lunile scurte, fără deplasarea zilei țintă). `interval` 1–100, `maxOccurrences` 1–1200, `description` obligatorie. Prima scadență = prima dată ≥ `startOn`; o regulă cu start în trecut are scadențele trecute „de generat” (recuperare limitată la 12 pe regulă pe rulare).",
+      "Moneda = a contului (contul nearhivat). `dayOfMonth` doar la `monthly`/`yearly` (implicit ziua din `startOn`; 29–31 → ultima zi în lunile scurte, fără deplasarea zilei țintă). `interval` 1–100, `maxOccurrences` 1–1200, `description` obligatorie. Prima scadență = prima dată ≥ `startOn`; o regulă cu start în trecut are scadențele trecute „de generat” (recuperare limitată la 12 pe regulă pe rulare). Plafoane: cel mult 200 de reguli pe gospodărie (409 `recurring_limit_reached`); `startOn` cel mult 5 ani în urmă (400); fără `maxOccurrences`, cel mult 1200 de scadențe restante la creare (400).",
     body: { schema: recurringCreateSchema },
     success: { status: 201, schema: dataOf(recurringRuleSchema), description: "Regula creată." },
     errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
@@ -882,7 +882,7 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "recurring",
     summary: "Reia regula, FĂRĂ generarea retroactivă a scadențelor sărite.",
     description:
-      "Scadența devine prima ≥ max(azi, scadența veche, ultima ocurență + 1 zi); fără scadențe rămase → `completed`. Contul arhivat → 409 `account_archived` (dezarhivează contul sau mută regula pe alt cont).",
+      "Scadența devine prima ≥ max(azi, scadența veche, ultima ocurență + 1 zi); fără scadențe rămase → `completed`. O regulă completată se reia doar dacă (după modificarea `endOn`/`maxOccurrences`) mai are scadențe; altfel 409 `recurring_completed`. Contul arhivat → 409 `account_archived` (dezarhivează contul sau mută regula pe alt cont).",
     body: { schema: z.strictObject({}), optional: true },
     success: { status: 200, schema: dataOf(recurringRuleSchema), description: "Regula." },
     errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE, REUSED],

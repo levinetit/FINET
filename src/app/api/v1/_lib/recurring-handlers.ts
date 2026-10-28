@@ -75,7 +75,11 @@ export function createRecurringHandler(request: Request, d: ApiDeps): Promise<Re
     const hh = await currentHousehold(ctx);
     return idempotentCreate(ctx, hh, body, async (db) => ({
       status: 201,
-      body: { data: recurringRuleToJson(await createRecurringRule({ db }, ctx.actor, hh, body)) },
+      body: {
+        data: recurringRuleToJson(
+          await createRecurringRule({ db }, ctx.actor, hh, body, todayOf(ctx)),
+        ),
+      },
     }));
   });
 }

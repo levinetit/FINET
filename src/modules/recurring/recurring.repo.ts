@@ -49,6 +49,21 @@ export async function countRules(
   return { active: row?.active ?? 0, due: row?.due ?? 0, total: row?.total ?? 0 };
 }
 
+/**
+ * Numărul regulilor gospodăriei (orice stare), sub un lock consultativ pe gospodărie ținut până la
+ * sfârșitul tranzacției: două creări simultane se serializează, deci plafonul nu poate fi depășit.
+ */
+export async function countHouseholdRules(tx: Tx, householdId: string): Promise<number> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`finet.recurring_rules:${householdId}`}))`,
+  );
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(recurringRules)
+    .where(eq(recurringRules.householdId, householdId));
+  return row?.n ?? 0;
+}
+
 /** Id-urile regulilor active scadente ale gospodăriei (generarea la cerere). */
 export async function selectDueRuleIds(
   tx: Tx,

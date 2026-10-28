@@ -218,3 +218,27 @@ export function occurrenceAfter(spec: RecurrenceSpec, date: CalendarDate): Calen
   if (date >= MAX_DATE) return null;
   return occurrenceOnOrAfter(spec, addDays(date, 1));
 }
+
+/** Data deplasată cu `n` ani (negativ = în urmă); 29 februarie → 28 în anii nebisecți. */
+export function addYears(date: CalendarDate, n: number): CalendarDate {
+  const [y, mo, d] = dateParts(date);
+  return clampedDay(y + n, mo, d);
+}
+
+/**
+ * Câte scadențe are regula în intervalul [`startOn`, `until`], numărând cel mult `cap + 1`
+ * (suficient ca apelantul să știe că pragul e depășit, fără a parcurge tot intervalul).
+ */
+export function countOccurrencesUntil(
+  spec: RecurrenceSpec,
+  until: CalendarDate,
+  cap: number,
+): number {
+  let n = 0;
+  let d = occurrenceOnOrAfter(spec, spec.startOn);
+  while (d !== null && d <= until && n <= cap) {
+    n += 1;
+    d = occurrenceAfter(spec, d);
+  }
+  return n;
+}
