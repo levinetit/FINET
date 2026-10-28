@@ -9,6 +9,9 @@ import {
   isStaticAssetUrl,
   markReload,
   readLastReload,
+  recentReloads,
+  MAX_RELOADS_PER_WINDOW,
+  RELOAD_WINDOW_MS,
 } from "./chunk-recovery";
 
 function memoryStorage(): StorageLike & { data: Map<string, string> } {
@@ -137,5 +140,54 @@ describe("decizia: reîncărcare sau banner", () => {
       dirty: false,
     });
     expect(later).toBe("reload");
+  });
+});
+
+describe("plafonul de reîncărcări și starea offline (LOW-1)", () => {
+  const memory = () => {
+    const m = new Map<string, string>();
+    return {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+    };
+  };
+
+  it("după 3 reîncărcări în 5 minute decizia devine banner, chiar dacă au trecut peste 8 s", () => {
+    const s = memory();
+    const t0 = 1_000_000;
+    for (let i = 0; i < MAX_RELOADS_PER_WINDOW; i++) markReload(s, t0 + i * 20_000);
+    const now = t0 + 3 * 20_000 + 10_000;
+    expect(recentReloads(s, now)).toHaveLength(MAX_RELOADS_PER_WINDOW);
+    expect(
+      decideRecovery({
+        now,
+        lastReloadAt: readLastReload(s),
+        dirty: false,
+        recentCount: recentReloads(s, now).length,
+      }),
+    ).toBe("banner");
+  });
+
+  it("reîncărcările mai vechi de 5 minute nu mai contează", () => {
+    const s = memory();
+    markReload(s, 1_000);
+    expect(recentReloads(s, 1_000 + RELOAD_WINDOW_MS + 1)).toEqual([]);
+  });
+
+  it("offline → banner, nu reîncărcare", () => {
+    expect(decideRecovery({ now: 100_000, lastReloadAt: null, dirty: false, online: false })).toBe(
+      "banner",
+    );
+    expect(decideRecovery({ now: 100_000, lastReloadAt: null, dirty: false, online: true })).toBe(
+      "reload",
+    );
+  });
+
+  it("un jurnal corupt sau cu tipuri greșite e ignorat", () => {
+    const s = memory();
+    s.setItem("finet:chunk-reload-log", "{nu-e-json");
+    expect(recentReloads(s, 5)).toEqual([]);
+    s.setItem("finet:chunk-reload-log", JSON.stringify(["a", null, 1.5]));
+    expect(recentReloads(s, 5)).toEqual([]);
   });
 });
