@@ -133,7 +133,7 @@ Configurația nesecretă: `/srv/finet/env/finet.backup.env` (model `ops/docker/f
 Cu `sudo crontab -e` (**nu** `crontab -`, care înlocuiește tot crontab-ul root), de exemplu după backup-urile existente ale hostului (02:30, 03:30) și înaintea `dockerai.py` (04:00 la 3 zile):
 
 ```cron
-40 3 * * *   /srv/finet/repo/ops/backup/run-backup.sh >> /var/log/finet-backup.log 2>&1
+40 3 * * *   /bin/sh /srv/finet/repo/ops/backup/run-backup.sh >> /var/log/finet-backup.log 2>&1
 ```
 
 (Calea checkout-ului e cea folosită de operator pentru deploy.) `run-backup.sh`:

@@ -168,6 +168,7 @@ jobs:
 
       - name: shellcheck (ops/backup)
         run: |
+          command -v shellcheck > /dev/null || sudo apt-get install -y shellcheck
           shellcheck --version
           shellcheck -s sh -x ops/backup/*.sh
 

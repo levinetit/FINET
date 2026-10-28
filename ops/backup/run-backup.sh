@@ -1,7 +1,7 @@
 #!/bin/sh
 # FINET — rularea zilnică a backup-ului, pe HOST, din cron-ul root (docs/BACKUP.md, „Programare”):
 #   sudo crontab -e      (NU `crontab -`: suprascrie tot crontab-ul)
-#   40 3 * * * /srv/finet/repo/ops/backup/run-backup.sh >> /var/log/finet-backup.log 2>&1
+#   40 3 * * * /bin/sh /srv/finet/repo/ops/backup/run-backup.sh >> /var/log/finet-backup.log 2>&1
 #
 # Pornește containerul one-shot `finet-backup` (docker compose run --rm) și, la ORICE eșec
 # (backup eșuat, imagine lipsă, container oprit de OOM = 137, timeout, altă rulare în curs),
@@ -76,11 +76,12 @@ printf '%s' "$TIMEOUT" | grep -Eq '^[0-9]+[smh]?$' || { log "FINET_BACKUP_TIMEOU
 umask 077
 mkdir -p "$STATE_DIR" || { log "nu pot crea $STATE_DIR"; exit 2; }
 
+# `sh` explicit: alerta nu depinde de bitul de execuție al fișierelor din checkout.
 send() { # mesaj
   if [ -r "$NOTIFY_ENV" ]; then
-    "$NOTIFY" --env-file "$NOTIFY_ENV" "$1" || log "notificarea a eșuat (mesajul rămâne doar în log)"
+    sh "$NOTIFY" --env-file "$NOTIFY_ENV" "$1" || log "notificarea a eșuat (mesajul rămâne doar în log)"
   else
-    "$NOTIFY" "$1" || log "notificarea a eșuat (fișierul $NOTIFY_ENV lipsește?)"
+    sh "$NOTIFY" "$1" || log "notificarea a eșuat (fișierul $NOTIFY_ENV lipsește?)"
   fi
 }
 

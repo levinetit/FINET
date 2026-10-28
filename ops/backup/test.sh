@@ -96,7 +96,9 @@ cat > "$TMP/fake-notify" << EOF
 [ "\$1" = --env-file ] && shift 2
 printf '%s\n' "\$*" >> "$NOTES"
 EOF
-chmod +x "$TMP/fake-docker" "$TMP/fake-notify"
+# fake-notify rămâne FĂRĂ bit de execuție: run-backup.sh trebuie să-l ruleze cu `sh`.
+chmod +x "$TMP/fake-docker"
+chmod -x "$TMP/fake-notify"
 : > "$NOTES"
 rb() { # epoch, ziua, apoi variabile FAKE_*
   _now=$1; _dow=$2; shift 2

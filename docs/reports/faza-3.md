@@ -70,6 +70,8 @@ Toate în `node:24` (`scratchpad/dk.sh`), cu `NODE_OPTIONS=--max-old-space-size=
 | `sh ops/docker/test-env-examples.sh` | PASS (79 de verificări, inclusiv cele noi pentru `finet-backup`) |
 | `docker compose … config` cu `compose.{s3,sftp,local}.yml` și `compose.restore.yml`, `--profile backup`, env și secrete fictive (Compose 2.26.1) | PASS (exit 0); secretele și `_FILE`-urile fuzionate corect; fără profil și cu `--profile migrate`, fără fișierele backup-ului: PASS |
 | `prettier --check` + `eslint` pe `e2e/auth.spec.ts`, `pnpm typecheck` | PASS |
+| `docker build` al imaginii `finet:backup` (ops/backup/Dockerfile: `COPY --chmod`, utilizatorul 1000 cu HOME `/tmp/home`, scripturile din `/opt/finet-backup`) | NOT RUN (fără build pe host); testul local a folosit `alpine:3.22` cu aceleași pachete și scripturile din repo, deci imaginea se verifică la prima rulare a job-ului `backup-restore` |
+| `pnpm install --frozen-lockfile` | NOT RUN în F3-D (singura schimbare în `package.json` e scriptul `test:ops`; lockfile neatins) |
 | `pnpm test` cu PostgreSQL, `pnpm build`, `pnpm lint` complet | NOT RUN (memoria hostului; F3-D nu modifică `src/`; CI) |
 | Job-urile CI `backup-restore` (build-ul imaginii, testul în imaginea reală, shellcheck pe runner) și `images` (ținta `backup`) | NOT RUN (cer push; coordonatorul) |
 | Backup S3/SFTP real, rolul pe Supabase, cron, restaurare de probă pe producție | NOT RUN (în afara scope-ului; operatorul) |
