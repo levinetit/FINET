@@ -5,6 +5,7 @@ import { ro } from "@/messages/ro";
 import { LOCALES, isValidTimeZone } from "@/modules/profile/profile.schema";
 import { getMe } from "@/modules/profile/profile.service";
 import { listMySessions } from "@/modules/sessions/sessions.service";
+import { getConsents } from "@/modules/usage/consents";
 
 import { requirePageSession } from "../../_lib/session";
 import { PageHeader } from "../page-header";
@@ -12,6 +13,7 @@ import { PageHeader } from "../page-header";
 import { PasswordForm } from "./password-form";
 import { ProfileForm } from "./profile-form";
 import { type SessionRow, SessionsList } from "./sessions-list";
+import { UsageConsent } from "./usage-consent";
 
 export const metadata: Metadata = { title: ro.profile.title };
 
@@ -44,10 +46,12 @@ function formatter(timeZone: string): Intl.DateTimeFormat {
 export default async function ProfilePage() {
   const session = await requirePageSession("/profile");
   const { db } = session.runtime;
-  const [me, sessions] = await Promise.all([
+  const [me, sessions, consents] = await Promise.all([
     getMe(db, session.userId),
     listMySessions(db, session),
+    getConsents(db, session.userId),
   ]);
+  const usageStats = consents.some((c) => c.kind === "usageStats" && c.granted);
   const fmt = formatter(me.preferences.timezone);
   const rows: SessionRow[] = sessions.map((s) => ({
     id: s.id,
@@ -64,7 +68,7 @@ export default async function ProfilePage() {
 
   return (
     <>
-      <PageHeader eyebrow={me.user.email} title={ro.profile.title} />
+      <PageHeader eyebrow={me.user.email} title={ro.profile.title} usageStats={usageStats} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ProfileForm
           name={me.user.name}
@@ -80,6 +84,9 @@ export default async function ProfilePage() {
         <PasswordForm />
         <div className="lg:col-span-2">
           <SessionsList sessions={rows} />
+        </div>
+        <div className="lg:col-span-2">
+          <UsageConsent granted={usageStats} />
         </div>
       </div>
     </>
