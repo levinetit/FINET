@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TEST_ADMIN_URL } from "@/db/testing";
 import { NotFoundError } from "@/lib/authz";
-import { ValidationError } from "@/lib/errors";
-import { createAccount, deleteAccount } from "@/modules/accounts/accounts.service";
+import { ConflictError, ValidationError } from "@/lib/errors";
+import { createAccount, deleteAccount, updateAccount } from "@/modules/accounts/accounts.service";
 import { type LedgerFixture, createLedgerFixture } from "@/modules/ledger/testing";
 
 import { goalToJson } from "./goals.schema";
@@ -171,6 +171,10 @@ describe.skipIf(!TEST_ADMIN_URL)("obiective (Postgres real, finet_app)", () => {
       ValidationError,
     );
     expect((await updateGoal(f.deps, f.A, f.HA, g.id, { accountId: ron })).accountId).toBe(ron);
+    // Moneda unui cont legat de un obiectiv nu se schimbă (cheia compusă) → 409.
+    await expect(updateAccount(f.deps, f.A, f.HA, ron, { currency: "EUR" })).rejects.toBeInstanceOf(
+      ConflictError,
+    );
   });
 
   it("izolare: B nu vede, nu modifică, nu contribuie și nu șterge obiectivele lui A; C (member) le vede", async () => {
