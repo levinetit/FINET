@@ -34,18 +34,22 @@ export async function receiptLikeImage(
 /** JPEG cu EXIF: orientare 6 (rotit 90°), GPS (IFD3), aparat foto. */
 export async function jpegWithGpsExif(): Promise<Buffer> {
   const base = await receiptLikeImage({ width: 300, height: 200 });
-  return sharp(base)
-    .withExif({
-      IFD0: { Make: "TelefonTest", Model: "ModelTest", Orientation: "6" },
-      IFD3: {
-        GPSLatitudeRef: "N",
-        GPSLatitude: "44/1 25/1 0/1",
-        GPSLongitudeRef: "E",
-        GPSLongitude: "26/1 6/1 0/1",
-      },
-    })
-    .jpeg()
-    .toBuffer();
+  return (
+    sharp(base)
+      .withExif({
+        IFD0: { Make: "TelefonTest", Model: "ModelTest" },
+        IFD3: {
+          GPSLatitudeRef: "N",
+          GPSLatitude: "44/1 25/1 0/1",
+          GPSLongitudeRef: "E",
+          GPSLongitude: "26/1 6/1 0/1",
+        },
+      })
+      // Orientarea se setează separat (sharp o scrie din `withMetadata`, nu din IFD0).
+      .withMetadata({ orientation: 6 })
+      .jpeg()
+      .toBuffer()
+  );
 }
 
 const latin1 = (s: string) => Buffer.from(s, "latin1");
@@ -193,3 +197,32 @@ export const HOSTILE: ReadonlyArray<readonly [label: string, data: Buffer, reaso
   ],
   ["fișier gol", Buffer.alloc(0), "empty_file"],
 ];
+
+export type FormPart = readonly [
+  name: string,
+  data: Buffer | string,
+  filename?: string,
+  type?: string,
+];
+
+/**
+ * O cerere `multipart/form-data` cu corpul deja serializat (ca de la un client real). Corpul
+ * generat de `FormData` în undici nu suportă anularea la mijloc, deci se serializează întâi.
+ */
+export async function multipartRequest(
+  parts: readonly FormPart[],
+  headers: Record<string, string> = {},
+): Promise<Request> {
+  const form = new FormData();
+  for (const [name, data, filename, type] of parts) {
+    if (typeof data === "string") form.append(name, data);
+    else form.append(name, new Blob([new Uint8Array(data)], { type: type ?? "" }), filename ?? "f");
+  }
+  const encoded = new Request("http://localhost/api/v1/documents", { method: "POST", body: form });
+  const body = Buffer.from(await encoded.arrayBuffer());
+  return new Request("http://localhost/api/v1/documents", {
+    method: "POST",
+    headers: { "content-type": encoded.headers.get("content-type")!, ...headers },
+    body,
+  });
+}
