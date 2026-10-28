@@ -12,6 +12,7 @@ import { assertAccountsWithinJsonRange } from "@/modules/ledger/range-guard";
 import { applyTransactionTags } from "@/modules/tags/tags.service";
 
 import {
+  type ListFilters,
   type TransactionRow,
   deleteTransactionRows,
   insertTransactionRow,
@@ -22,6 +23,7 @@ import {
 import {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
+  type TransactionListQuery,
   type TransactionPage,
   type TransactionView,
   decodeCursor,
@@ -233,6 +235,23 @@ export async function deleteTransaction(
   });
 }
 
+/** Filtrele repo-ului din interogarea validată (lista și exportul CSV folosesc aceleași). */
+export function listFiltersOf(query: NonNullable<TransactionListQuery>): ListFilters {
+  return {
+    q: query.q || undefined,
+    accountId: query.accountId,
+    categoryId: query.categoryId,
+    tagIds: query.tagIds,
+    merchant: query.merchant || undefined,
+    type: query.type,
+    source: query.source,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
+    amountMinMinor: query.amountMinMinor === undefined ? undefined : BigInt(query.amountMinMinor),
+    amountMaxMinor: query.amountMaxMinor === undefined ? undefined : BigInt(query.amountMaxMinor),
+  };
+}
+
 /**
  * Lista paginată. `limit` lipsă = 50, peste 100 se reduce la 100. Cursorul e legat de sortare: un
  * cursor creat pentru altă sortare e respins. Ordinea e stabilă: `(cheie, id)`.
@@ -251,21 +270,7 @@ export async function listTransactions(
     const rows = await selectTransactionPage(
       tx,
       m.householdId,
-      {
-        q: query.q || undefined,
-        accountId: query.accountId,
-        categoryId: query.categoryId,
-        tagIds: query.tagIds,
-        merchant: query.merchant || undefined,
-        type: query.type,
-        source: query.source,
-        dateFrom: query.dateFrom,
-        dateTo: query.dateTo,
-        amountMinMinor:
-          query.amountMinMinor === undefined ? undefined : BigInt(query.amountMinMinor),
-        amountMaxMinor:
-          query.amountMaxMinor === undefined ? undefined : BigInt(query.amountMaxMinor),
-      },
+      listFiltersOf(query),
       sort,
       cursor,
       limit,

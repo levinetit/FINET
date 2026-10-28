@@ -118,14 +118,8 @@ export type ListFilters = Readonly<{
  * inserări concurente (rândurile existente nu se dublează și nu se pierd între pagini). Se citesc
  * `limit + 1` rânduri, ca apelantul să știe dacă există o pagină următoare.
  */
-export async function selectTransactionPage(
-  tx: Tx,
-  householdId: string,
-  filters: ListFilters,
-  sort: TransactionSort,
-  cursor: Cursor | null,
-  limit: number,
-): Promise<TransactionRow[]> {
+/** Condițiile filtrelor listei (aceleași pentru pagină, numărare și export). */
+function filterConditions(householdId: string, filters: ListFilters): SQL[] {
   const t = transactions;
   const conditions: SQL[] = [eq(t.householdId, householdId)];
   if (filters.accountId) conditions.push(eq(t.accountId, filters.accountId));
@@ -155,6 +149,32 @@ export async function selectTransactionPage(
       or(ilike(t.description, pattern), ilike(t.merchant, pattern), ilike(t.notes, pattern))!,
     );
   }
+  return conditions;
+}
+
+/** Numărul de tranzacții care corespund filtrelor (plafonul exportului CSV). */
+export async function countTransactions(
+  tx: Tx,
+  householdId: string,
+  filters: ListFilters,
+): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(transactions)
+    .where(and(...filterConditions(householdId, filters)));
+  return Number(row?.n ?? 0);
+}
+
+export async function selectTransactionPage(
+  tx: Tx,
+  householdId: string,
+  filters: ListFilters,
+  sort: TransactionSort,
+  cursor: Cursor | null,
+  limit: number,
+): Promise<TransactionRow[]> {
+  const t = transactions;
+  const conditions = filterConditions(householdId, filters);
 
   const byDate = sort.startsWith("date_");
   const descending = sort.endsWith("_desc");
