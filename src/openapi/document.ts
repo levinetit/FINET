@@ -97,7 +97,7 @@ const ERROR_DESCRIPTIONS: Readonly<Record<number, string>> = {
   409: "Conflict cu starea curentă (`conflict`, cu `reason`) sau `request_in_progress` (aceeași `Idempotency-Key` e în curs).",
   413: "Corpul depășește 16 KiB (`payload_too_large`).",
   415: "Corpul nu e `application/json` (`unsupported_media_type`).",
-  422: "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`).",
+  422: "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`) sau un sold calculat care nu poate fi transmis exact (`amount_out_of_range`, peste 2^53 − 1).",
   429: "Prea multe cereri (`rate_limited`, antet `Retry-After`).",
   500: "Eroare internă (`internal_error`, fără detalii).",
 };

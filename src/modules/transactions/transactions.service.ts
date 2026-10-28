@@ -151,6 +151,18 @@ export async function updateTransaction(
       accountId = account.id;
       currency = account.currency;
     }
+    // Mutarea pe un cont în altă monedă fără sumă explicită ar reinterpreta suma (100 RON → 100
+    // EUR): se cere suma nouă (revizuirea F2, LOW-1).
+    if (
+      currency !== current.currency &&
+      patch.amountMinor === undefined &&
+      patch.amount === undefined
+    ) {
+      throw new ConflictError(
+        "currency_change_requires_amount",
+        "Contul nou are altă monedă: trimite și suma în moneda lui.",
+      );
+    }
     const type = patch.type ?? current.type;
     const categoryId = patch.categoryId === undefined ? current.categoryId : patch.categoryId;
     if (patch.categoryId !== undefined || patch.type !== undefined) {

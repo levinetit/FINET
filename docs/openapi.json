@@ -113,6 +113,9 @@
           "401": {
             "$ref": "#/components/responses/E401"
           },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
           "429": {
             "$ref": "#/components/responses/E429"
           },
@@ -165,8 +168,8 @@
                   },
                   "openingBalanceMinor": {
                     "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991
+                    "minimum": -10000000000000,
+                    "maximum": 10000000000000
                   },
                   "openingBalance": {
                     "type": "string",
@@ -305,6 +308,9 @@
           "404": {
             "$ref": "#/components/responses/E404"
           },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
           "429": {
             "$ref": "#/components/responses/E429"
           },
@@ -364,8 +370,8 @@
                   },
                   "openingBalanceMinor": {
                     "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991
+                    "minimum": -10000000000000,
+                    "maximum": 10000000000000
                   },
                   "openingBalance": {
                     "type": "string",
@@ -436,6 +442,9 @@
           },
           "415": {
             "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -566,6 +575,9 @@
           "415": {
             "$ref": "#/components/responses/E415"
           },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
           "429": {
             "$ref": "#/components/responses/E429"
           },
@@ -646,6 +658,9 @@
           },
           "415": {
             "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -2282,7 +2297,7 @@
                   "amountMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 10000000000000
                   },
                   "amount": {
                     "type": "string",
@@ -2505,7 +2520,7 @@
                   "amountMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 10000000000000
                   },
                   "amount": {
                     "type": "string",
@@ -2699,7 +2714,7 @@
                   "amountMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 10000000000000
                   },
                   "amount": {
                     "type": "string",
@@ -2709,12 +2724,12 @@
                   "amountFromMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 10000000000000
                   },
                   "amountToMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 10000000000000
                   },
                   "occurredOn": {
                     "type": "string"
@@ -2897,7 +2912,7 @@
                   "amountMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 10000000000000
                   },
                   "amount": {
                     "type": "string",
@@ -2907,12 +2922,12 @@
                   "amountFromMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 10000000000000
                   },
                   "amountToMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 10000000000000
                   },
                   "occurredOn": {
                     "type": "string"
@@ -3160,7 +3175,7 @@
         }
       },
       "E422": {
-        "description": "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`).",
+        "description": "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`) sau un sold calculat care nu poate fi transmis exact (`amount_out_of_range`, peste 2^53 − 1).",
         "content": {
           "application/json": {
             "schema": {

@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { sql } from "drizzle-orm";
+
+import { withRlsOn } from "@/db";
 import { TEST_ADMIN_URL } from "@/db/testing";
 import { type AuthEnv, type AuthFixture, authEnv, createAuthFixture } from "@/modules/auth/testing";
 import { addMemberByEmail, createUserWithHousehold } from "@/modules/auth/users.service";
-import { systemCategoryId } from "@/modules/ledger/testing";
+import { sqlState, systemCategoryId } from "@/modules/ledger/testing";
 
 import type { ApiDeps } from "./_lib/http";
 import * as L from "./_lib/ledger-handlers";
@@ -35,6 +38,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
   let B: Sessions;
   let C: Sessions;
   let HA: string;
+  let aId: string;
   let HB: string;
   let groceries: string;
   const PASS = { a: "parola-ana-api-123", b: "parola-bogdan-api-1", c: "parola-cristi-api-1" };
@@ -96,6 +100,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
       emailVerified: true,
     });
     HA = a.householdId!;
+    aId = a.userId;
     HB = b.householdId!;
     // Cristi are gospodăria lui personală (mai veche), deci API-ul lucrează în aceea; îl adăugăm
     // în HA doar pentru lista de gospodării.
@@ -472,6 +477,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
       [L.patchAccountHandler, "", { ...s, method: "PATCH", body: { name: "furat" } }, bAcc],
       [L.deleteAccountHandler, "", { ...s, method: "DELETE" }, bAcc],
       [L.archiveAccountHandler, "", { ...s, method: "POST" }, bAcc, true],
+      [L.archiveAccountHandler, "", { ...s, method: "POST" }, bAcc, false],
       [L.getTransactionHandler, "", s, bTxId],
       [L.patchTransactionHandler, "", { ...s, method: "PATCH", body: { amountMinor: 1 } }, bTxId],
       [L.deleteTransactionHandler, "", { ...s, method: "DELETE" }, bTxId],
@@ -479,6 +485,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
       [L.patchCategoryHandler, "", { ...s, method: "PATCH", body: { name: "furat" } }, bCatId],
       [L.deleteCategoryHandler, "", { ...s, method: "DELETE" }, bCatId],
       [L.setCategoryHiddenHandler, "", { ...s, method: "POST" }, bCatId, true],
+      [L.setCategoryHiddenHandler, "", { ...s, method: "POST" }, bCatId, false],
       [L.getTransferHandler, "", s, bTrId],
       [L.patchTransferHandler, "", { ...s, method: "PATCH", body: { amountMinor: 1 } }, bTrId],
       [L.deleteTransferHandler, "", { ...s, method: "DELETE" }, bTrId],
@@ -790,5 +797,115 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
       strict,
     );
     expect(get.status).toBe(200);
+  });
+
+  it("plafonul sumelor (10^13): peste → 400 cu `fields`; la plafon soldul rămâne 200; debordarea → 422, nu 500", async () => {
+    const CAP = 10_000_000_000_000;
+    const acc = await newAccount(A, "Plafon");
+    const tx = (body: Record<string, unknown>) =>
+      call(L.createTransactionHandler, "/api/v1/transactions", {
+        bearer: A.bearer,
+        body: { accountId: acc, type: "income", occurredOn: "2026-10-01", ...body },
+      });
+    const over = await tx({ amountMinor: CAP + 1 });
+    expect(over.status).toBe(400);
+    expect(over.body.error?.fields).toHaveProperty("amountMinor");
+    const overText = await tx({ amount: "100.000.000.000,01" });
+    expect(overText.status).toBe(400);
+    expect(overText.body.error?.fields, JSON.stringify(overText.body)).toHaveProperty("amount");
+    const badOpening = await call(L.createAccountHandler, "/api/v1/accounts", {
+      bearer: A.bearer,
+      body: { name: "Prea mare", type: "bank", currency: "RON", openingBalanceMinor: -CAP - 1 },
+    });
+    expect(badOpening.status).toBe(400);
+    expect(badOpening.body.error?.fields).toHaveProperty("openingBalanceMinor");
+
+    expect((await tx({ amountMinor: CAP })).status).toBe(201);
+    expect((await tx({ amount: "100.000.000.000,00" })).status).toBe(201);
+    const list = await call(L.listAccountsHandler, "/api/v1/accounts", { bearer: A.bearer });
+    expect(list.status).toBe(200);
+    expect(await balanceOf(A, acc)).toBe(2 * CAP);
+
+    // Constrângerile din bază, ca finet_app (aceleași praguri).
+    const asApp = (statement: ReturnType<typeof sql>) =>
+      sqlState(() =>
+        withRlsOn(fx.db, { userId: aId, householdId: HA }, (t) => t.execute(statement)),
+      );
+    expect(
+      await asApp(sql`insert into finet.transactions (household_id, account_id, type, amount_minor, currency, occurred_on)
+        values (${HA}, ${acc}, 'income', ${String(CAP + 1)}::bigint, 'RON', '2026-10-01')`),
+    ).toBe("23514");
+    expect(
+      await asApp(
+        sql`update finet.accounts set opening_balance_minor = ${String(CAP + 1)}::bigint where id = ${acc}`,
+      ),
+    ).toBe("23514");
+
+    // Un sold calculat peste 2^53 (1000 de sume la plafon, inserate direct): 422, cod stabil.
+    const big = await newAccount(A, "Debordare");
+    await fx.scratch.admin`
+      insert into finet.transactions (household_id, account_id, type, amount_minor, currency, occurred_on)
+      select ${HA}, ${big}, 'income', 10000000000000, 'RON', '2026-10-01' from generate_series(1, 1000)`;
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const listed = await call(L.listAccountsHandler, "/api/v1/accounts", { bearer: A.bearer });
+      expect(listed.status).toBe(422);
+      expect(listed.body.error?.code).toBe("amount_out_of_range");
+      const one = await call(L.getAccountHandler, "", { bearer: A.bearer }, big);
+      expect(one.status).toBe(422);
+    } finally {
+      spy.mockRestore();
+    }
+    await fx.scratch.admin`delete from finet.transactions where account_id = ${big}`;
+    expect(
+      (await call(L.listAccountsHandler, "/api/v1/accounts", { bearer: A.bearer })).status,
+    ).toBe(200);
+  });
+
+  it("mutarea unei tranzacții pe un cont în altă monedă cere suma explicită (409)", async () => {
+    const ron = await newAccount(A, "Mutare RON");
+    const eur = await newAccount(A, "Mutare EUR", { currency: "EUR" });
+    const created = await call(L.createTransactionHandler, "/api/v1/transactions", {
+      bearer: A.bearer,
+      body: { accountId: ron, type: "expense", amountMinor: 10_000, occurredOn: "2026-10-02" },
+    });
+    const id = (created.body.data as { id: string }).id;
+    const moved = await call(
+      L.patchTransactionHandler,
+      "",
+      { bearer: A.bearer, method: "PATCH", body: { accountId: eur } },
+      id,
+    );
+    expect(moved.status).toBe(409);
+    expect(moved.body.error?.reason).toBe("currency_change_requires_amount");
+    const withAmount = await call(
+      L.patchTransactionHandler,
+      "",
+      { bearer: A.bearer, method: "PATCH", body: { accountId: eur, amountMinor: 2_000 } },
+      id,
+    );
+    expect(withAmount.status).toBe(200);
+    expect(withAmount.body.data).toMatchObject({
+      accountId: eur,
+      currency: "EUR",
+      amountMinor: 2_000,
+    });
+    // Aceeași monedă: suma rămâne opțională.
+    const ron2 = await newAccount(A, "Mutare RON 2");
+    const back = await call(
+      L.patchTransactionHandler,
+      "",
+      { bearer: A.bearer, method: "PATCH", body: { accountId: ron2, amountMinor: 3_000 } },
+      id,
+    );
+    expect(back.status).toBe(200);
+    const same = await call(
+      L.patchTransactionHandler,
+      "",
+      { bearer: A.bearer, method: "PATCH", body: { accountId: ron } },
+      id,
+    );
+    expect(same.status).toBe(200);
+    expect(same.body.data).toMatchObject({ accountId: ron, amountMinor: 3_000 });
   });
 });

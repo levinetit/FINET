@@ -107,7 +107,7 @@ const NOT_FOUND = 404;
 const CONFLICT = 409;
 const TOO_LARGE = 413;
 const MEDIA = 415;
-const REUSED = 422;
+const REUSED = 422; // și `amount_out_of_range` (un sold calculat peste 2^53)
 
 const MUTATION_ERRORS = [VALIDATION, FORBIDDEN, TOO_LARGE, MEDIA] as const;
 const IDEMPOTENT_ERRORS = [...MUTATION_ERRORS, CONFLICT, REUSED] as const;
@@ -254,7 +254,7 @@ export const OPERATIONS: readonly Operation[] = [
       { name: "includeArchived", schema: boolParam, description: "Include conturile arhivate." },
     ],
     success: { status: 200, schema: accountList, description: "Conturile." },
-    errors: [VALIDATION],
+    errors: [VALIDATION, REUSED],
   },
   {
     method: "POST",
@@ -274,7 +274,7 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "accounts",
     summary: "Un cont, cu soldul calculat.",
     success: { status: 200, schema: dataOf(accountSchema), description: "Contul." },
-    errors: [NOT_FOUND],
+    errors: [NOT_FOUND, REUSED],
   },
   {
     method: "PATCH",
@@ -284,7 +284,7 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Modifică un cont (moneda doar fără tranzacții).",
     body: { schema: accountUpdateSchema },
     success: { status: 200, schema: dataOf(accountSchema), description: "Contul actualizat." },
-    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT, REUSED],
   },
   {
     method: "DELETE",
@@ -303,7 +303,7 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Arhivează contul (rămâne în istoric, nu mai primește tranzacții).",
     body: { schema: z.strictObject({}), optional: true },
     success: { status: 200, schema: dataOf(accountSchema), description: "Contul." },
-    errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE],
+    errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE, REUSED],
   },
   {
     method: "POST",
@@ -313,7 +313,7 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Reactivează un cont arhivat.",
     body: { schema: z.strictObject({}), optional: true },
     success: { status: 200, schema: dataOf(accountSchema), description: "Contul." },
-    errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE],
+    errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE, REUSED],
   },
   // --- Categoriile ---------------------------------------------------------------------------
   {

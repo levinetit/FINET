@@ -174,26 +174,36 @@ describe.skipIf(!TEST_ADMIN_URL)("tranzacții (Postgres real, finet_app)", () =>
     expect(await sqlState(() => insert("5", "RON"))).toBeNull();
   });
 
-  it("sume bigint mari: > 2^53 se stochează, dar serializarea JSON le respinge", async () => {
+  it("sume mari: peste plafonul de 10^13 baza (CHECK) și serviciul le resping; peste 2^53 JSON-ul refuză", async () => {
     const big = 2n ** 53n + 7n;
-    const [row] = await f.admin<{ id: string }[]>`
-      insert into finet.transactions
-        (household_id, account_id, created_by_user_id, type, amount_minor, currency, occurred_on)
-      values (${f.HA}, ${eur}, ${f.A.userId}, 'income', ${big.toString()}::bigint, 'EUR', '1999-01-01')
-      returning id`;
-    const t = await getTransaction(f.deps, f.A, f.HA, row!.id);
-    expect(t.amountMinor).toBe(big);
-    expect(() => transactionToJson(t)).toThrow(MoneyOverflowError);
-    // Prin serviciu nu intră peste 2^53 − 1.
-    await expect(
-      createTransaction(f.deps, f.A, f.HA, {
-        accountId: eur,
-        type: "income",
-        amountMinor: Number.MAX_SAFE_INTEGER + 1,
-        occurredOn: "2026-10-01",
-      }),
-    ).rejects.toBeInstanceOf(ValidationError);
-    await f.admin`delete from finet.transactions where id = ${row!.id}`;
+    expect(
+      await sqlState(
+        () => f.admin`
+          insert into finet.transactions
+            (household_id, account_id, created_by_user_id, type, amount_minor, currency, occurred_on)
+          values (${f.HA}, ${eur}, ${f.A.userId}, 'income', ${big.toString()}::bigint, 'EUR', '1999-01-01')`,
+      ),
+    ).toBe("23514");
+    for (const amountMinor of [Number.MAX_SAFE_INTEGER + 1, 10_000_000_000_001]) {
+      await expect(
+        createTransaction(f.deps, f.A, f.HA, {
+          accountId: eur,
+          type: "income",
+          amountMinor,
+          occurredOn: "2026-10-01",
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    }
+    // Serializarea refuză în continuare o valoare peste 2^53 − 1 (de exemplu un sold calculat).
+    const t = await createTransaction(f.deps, f.A, f.HA, {
+      accountId: eur,
+      type: "income",
+      amountMinor: 10_000_000_000_000,
+      occurredOn: "1999-01-01",
+    });
+    expect(t.amountMinor).toBe(10_000_000_000_000n);
+    expect(() => transactionToJson({ ...t, amountMinor: big })).toThrow(MoneyOverflowError);
+    await f.admin`delete from finet.transactions where id = ${t.id}`;
   });
 
   it("izolare: B nu vede, nu modifică și nu șterge tranzacțiile lui A; nu scrie pe contul lui A", async () => {

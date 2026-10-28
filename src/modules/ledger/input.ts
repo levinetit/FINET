@@ -59,19 +59,31 @@ export const dateSchema = z
   .string()
   .refine(isCalendarDate, { message: "Data trebuie să fie de forma AAAA-LL-ZZ." });
 
-/** Un întreg JSON sigur (sub 2^53), strict pozitiv: o sumă în unități minore. */
+/**
+ * Plafonul unei sume și al unui sold inițial (revizuirea F2, MEDIUM-2; ADR 0004): 10^13 unități
+ * minore (100 de miliarde de lei). Același prag e CHECK în bază (`transactions_amount_range`,
+ * `accounts_opening_balance_range`). Soldurile calculate pot depăși totuși 2^53 după foarte multe
+ * sume la plafon: atunci API-ul răspunde 422 `amount_out_of_range`, nu 500.
+ */
+export const MAX_AMOUNT_MINOR = 10_000_000_000_000;
+const MAX_AMOUNT_MINOR_BIG = BigInt(MAX_AMOUNT_MINOR);
+// Mesajul ca șir: Zod își normalizează (modifică) obiectul de parametri primit, deci nu se
+// refolosește un obiect comun.
+const TOO_LARGE_MESSAGE = "Suma este prea mare.";
+
+/** Un întreg JSON strict pozitiv, cel mult `MAX_AMOUNT_MINOR`: o sumă în unități minore. */
 export const positiveMinorSchema = z
   .number()
   .int()
   .positive()
-  .max(Number.MAX_SAFE_INTEGER, { message: "Suma este prea mare." });
+  .max(MAX_AMOUNT_MINOR, { message: TOO_LARGE_MESSAGE });
 
-/** Un întreg JSON sigur, cu orice semn (soldul inițial poate fi negativ). */
+/** Un întreg JSON cu orice semn, în [-MAX_AMOUNT_MINOR, MAX_AMOUNT_MINOR] (soldul inițial). */
 export const signedMinorSchema = z
   .number()
   .int()
-  .min(-Number.MAX_SAFE_INTEGER)
-  .max(Number.MAX_SAFE_INTEGER);
+  .min(-MAX_AMOUNT_MINOR, { message: TOO_LARGE_MESSAGE })
+  .max(MAX_AMOUNT_MINOR, { message: TOO_LARGE_MESSAGE });
 
 /** Textul unei sume scrise de utilizator (`1.234,56`), parsat cu `parseAmount`. */
 export const amountTextSchema = z.string().min(1).max(40);
@@ -127,7 +139,12 @@ export function resolveAmount(
     if (input.amount !== undefined) {
       const textField = field.endsWith("Minor") ? field.slice(0, -"Minor".length) : field;
       try {
-        return parseAmount(input.amount, currency, { allowNegative }).amountMinor;
+        const parsed = parseAmount(input.amount, currency, { allowNegative }).amountMinor;
+        const abs = parsed < 0n ? -parsed : parsed;
+        if (abs > MAX_AMOUNT_MINOR_BIG) {
+          throw new ValidationError({ [textField]: TOO_LARGE_MESSAGE });
+        }
+        return parsed;
       } catch (error) {
         if (error instanceof InvalidAmountError) {
           throw new ValidationError({ [textField]: error.message });

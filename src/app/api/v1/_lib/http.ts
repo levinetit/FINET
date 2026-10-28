@@ -6,6 +6,7 @@ import { type Db, type DbOrTx, withRlsOn } from "@/db";
 import { type Actor, ForbiddenError, NotFoundError } from "@/lib/authz";
 import type { Config, RateLimitRule } from "@/lib/config";
 import { ConflictError, ValidationError } from "@/lib/errors";
+import { MoneyOverflowError } from "@/lib/money";
 import { currentHouseholdIdOf } from "@/modules/auth/audit";
 import type { FinetAuth } from "@/modules/auth/auth";
 import { hitRateLimit, rateLimitKey } from "@/modules/auth/rate-limit";
@@ -19,6 +20,7 @@ import {
 import {
   IDEMPOTENCY_HEADER,
   type StoredResponse,
+  exceedsDepth,
   isValidIdempotencyKey,
   requestHash,
   runIdempotent,
@@ -117,6 +119,14 @@ export function errorPayload(error: unknown): ErrorPayload | null {
   }
   if (error instanceof ConflictError) {
     return make(409, error.code, error.message, undefined, error.reason);
+  }
+  if (error instanceof MoneyOverflowError) {
+    // Un sold calculat peste 2^53 nu se poate trimite exact în JSON (MEDIUM-2): cod stabil.
+    return make(
+      422,
+      "amount_out_of_range",
+      "O sumă depășește intervalul care poate fi transmis exact.",
+    );
   }
   if (error instanceof ApiError) {
     return make(
@@ -368,6 +378,9 @@ export async function idempotentCreate(
   if (key === null) {
     const response = await run(ctx.deps.db);
     return json(response.body, response.status);
+  }
+  if (exceedsDepth(body)) {
+    throw new ValidationError({ _: "Cererea are prea multe niveluri." });
   }
   const hash = requestHash({
     method: ctx.request.method,
