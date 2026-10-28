@@ -10,7 +10,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
 | 2 — Conturi, categorii, tranzacții, transferuri | **parțial** (implementat în repo) | F2-A, F2-B, F2-C gata; rămân migrațiile pe Supabase, prima rulare E2E `ledger` în CI, verificarea în browser și revizuirea de securitate — vezi mai jos și `docs/reports/faza-2.md` |
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C, F3-D în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI), F3-C (UI, E2E `planning`) și F3-D (backup restic, restaurare testată pe Postgres efemer) gata; rămân instalarea backup-ului și restaurarea de probă pe producție (operatorul), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
-| 4 — Stabilizare (rezervată) | neimplementat | |
+| 4 — Stabilizare | **parțial** (implementat în repo) | recuperarea după deploy, `global-error`, date `zz.ll.aaaa`, `tagMatch=all`, accesibilitate de bază, bugetul JS, `0005_perf_indexes`, testele de regresie; rămân prima rulare CI (build, buget, E2E `regressions`), `0005` pe Supabase, cron-ul de curățare și revizuirea `security` — vezi mai jos și `docs/reports/faza-4.md` |
 | 5 — Recurențe | neimplementat | |
 | 6 — Ingestia bonurilor | neimplementat | |
 | 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
@@ -89,7 +89,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - prima rulare E2E (`ledger`, `auth`, `smoke`) în job-ul `e2e`, după push; verificarea paginilor în browser pe producție;
 - editarea transferurilor din UI, subcategoriile și culorile categoriilor în UI (opțional, API-ul există);
 - aplicarea `0002_ledger` și `0003_idempotency_purge` pe Supabase de operator, după revizuirea `security` (F2-A + F2-B);
-- programarea `finet-admin cleanup-idempotency` (cron pe host sau Portainer, `docs/INFRA.md`), decizia operatorului;
+- programarea `finet-admin cleanup-idempotency`: linia de cron propusă în `docs/INFRA.md` 4f (pasul 6, Faza 4); instalarea de operator;
 - revizuirea `security` a API-ului (F2-B) și a interfeței (F2-C): constatările MEDIUM-1..3, LOW-1, LOW-5 corectate (2026-10-28, `docs/SECURITY_CHECKLIST.md` secțiunea 10; ADR 0004/0005/0006); de re-verificat.
 
 **Amânate din revizuirea F2 (cu motiv):**
@@ -121,6 +121,27 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - `backup.sh` (dump prin `--stdin-from-command`, fișiere, retenție 7/4/12, `check`), `restore.sh`, rolul `finet_backup` (BYPASSRLS, doar citire), `run-backup.sh` pe host cu alertă anti-flood prin `notify.sh`.
 
 **Rămâne în Faza 3:** instalarea backup-ului de către operator (destinația, rolul `finet_backup` pe Supabase, secretele, cron, primul backup și **restaurarea de probă reală**; fără ea nu se introduc date reale), aplicarea `0004` pe Supabase (operatorul), revizuirea `security`. Separatorul CSV: decis de coordonator (`rfc4180` implicit pe API, `ro` din UI).
+
+### Faza 4: stare
+**Făcut în repo** (ADR 0010; măsurători în `docs/PERFORMANCE.md`; raport `docs/reports/faza-4.md`):
+- recuperarea automată la chunk-uri JS vechi după deploy (reîncărcare cel mult o dată la 8 s, banner peste formularele necomise) și pagina `global-error` proprie (închide punctul din F8/Faza 9);
+- datele `zz.ll.aaaa` și în paginile Fazei 2 și în sesiunile din profil (5.3);
+- `tagMatch=any|all` în API (listă și export CSV), UI, OpenAPI, `docs/API.md`;
+- accesibilitate de bază: „Sari la conținut”, `main` focalizabil, focus în „Mai mult”, `prefers-reduced-motion`, contrastul tokenilor testat în ambele teme, titluri unice;
+- bugetul First Load JS per rută (`scripts/check-bundle-size.mjs`, pas CI după build; praguri provizorii);
+- testul lent pe 50.000 de tranzacții și migrația `0005_perf_indexes` (lista: 116 → 16 ms);
+- testele de regresie E2E (proiectul `regressions`): cereri doar către propriul domeniu, prefetch RSC fără sesiune, titluri și `lang`;
+- N3 (scanerul de secrete) închis; linia de cron pentru `cleanup-idempotency` documentată (`docs/INFRA.md` 4f).
+
+**Rămâne / amânat (cu motiv):**
+- prima rulare CI: `pnpm build`, bugetul JS (calibrarea pragurilor din `docs/PERFORMANCE.md`), E2E `regressions` în ambele moduri — local NOT RUN (memoria hostului, fără browser);
+- `0005` pe Supabase, redeploy, cron-ul de curățare: operatorul (`docs/INFRA.md` 4f);
+- lista „problemelor găsite în prima săptămână de folosire reală” (acceptarea Fazei 4 din master prompt): nu există încă rapoarte de la utilizatori; se completează în `docs/reports/faza-4.md` după folosire;
+- exportul CSV complet (~4,5 s la 50.000 de rânduri, dominat de aplicație): pagini mai mari, `Intl.Collator` reutilizat — fază viitoare;
+- căutarea `q` cu `ILIKE '%…%'` (Seq Scan, ~0,1 s la 50.000): index `pg_trgm` doar dacă extensia e disponibilă pe Supabase — fază viitoare;
+- ștergerea indexului vechi `transactions_household_occurred_idx` (redundant parțial cu `0005`): migrație separată, cu aprobare;
+- `@axe-core/playwright`: Faza 9, odată cu hardening-ul;
+- HSTS `preload`: decizia operatorului (Faza 9).
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
@@ -168,7 +189,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
 - **Workerul și migrarea reale:** `finet-worker` (Faza 5/6) și `finet-migrate` (Faza 1) sunt stub-uri; când primesc cod, își citesc configurația cu `FINET_ROLE` corespunzător (`parseConfig` e deja pregătit).
 - **Constatări minore din re-verificarea de securitate (după T5):**
   - N2: stub-urile `finet-worker`/`finet-migrate` nu apelează `parseConfig`, deci regula pe rol se aplică efectiv doar la `web`; test viitor: `FINET_ROLE=worker` + `DATABASE_URL` setat → ieșire cu cod 1.
-  - N3: scanerul (`scripts/scan-client-secrets.mjs`) acceptă id de bot Telegram de 8–10 cifre; extinde la `\d{8,12}` și documentează excepția pentru JWT-ul Supabase `anon` (public prin design).
+  - N3: **închis în Faza 4** (id Telegram 8–12 cifre; fără excepție pentru JWT `anon`: FINET nu trimite cheia `anon` în browser).
   - N4: pe Supabase (PG16+), `roles.sql` poate cere `grant finet_migrator to current_user;` înainte de `create schema ... authorization`; de verificat pe un proiect real (scriptul se oprește în siguranță la eroare).
   - N5: `notify.sh` scrie antetul `From:` din `SMTP_FROM` întreg; construiește-l din adresa validată plus un nume curățat și refuză virgula.
 

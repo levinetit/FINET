@@ -77,7 +77,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | F1 — secrete pe rol (`FINET_ROLE`), URL-urile altor roluri refuzate | DONE | `config.ts`, `config.test.ts` (F1) | 2026-10-27 · security |
 | Niciun secret în `.next/static` | DONE | `pnpm scan:client-secrets` (PASS, 2026-10-28) | 2026-10-28 · programmer |
 | F5 — tipare noi în scanerul de secrete (`scripts/scan-client-secrets.mjs`) | DONE | `scan-client-secrets.test.ts`, `pnpm scan:client-secrets` (PASS) | 2026-10-27 · security (T5) |
-| N3 — scanerul: id bot Telegram 8–12 cifre, excepția JWT `anon` | TODO | `docs/ROADMAP.md` | — |
+| N3 — scanerul: id bot Telegram 8–12 cifre; JWT `anon`: FĂRĂ excepție (FINET nu trimite cheia `anon` Supabase în browser, deci orice JWT în bundle e o scurgere) | DONE | `scan-client-secrets.mjs`, `scan-client-secrets.test.ts` (11 și 12 cifre găsite, 13 nu) | 2026-10-28 · programmer (F4) |
 | F6 — scanare de secrete în istoric/PR (gitleaks) | TODO | `docs/ROADMAP.md` | — |
 
 ## 5. Încărcări de fișiere (viitor, Faza 6)
@@ -164,7 +164,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Plafonul sumelor: ≤ 10^13 unități minore pe sumă și pe soldul inițial, CHECK în bază; un sold calculat peste 2^53 → 422 `amount_out_of_range`, nu 500 (MEDIUM-2) | DONE (local) | `input.ts` (`MAX_AMOUNT_MINOR`), `transactions_amount_range`, `accounts_opening_balance_range` (0002), `http.ts`; `ledger-api.test.ts` (400 cu `fields`, 2 × plafon → 200, CHECK ca `finet_app` → 23514, 1000 × plafon → 422), `transactions.test.ts` | 2026-10-28 · programmer (corecții F2) |
 | Mutarea unei tranzacții pe un cont în altă monedă cere suma explicită (LOW-1) | DONE (local) | `updateTransaction` → 409 `currency_change_requires_amount`; `ledger-api.test.ts` | 2026-10-28 · programmer (corecții F2) |
 | Hash-ul `Idempotency-Key` fără recursie nelimitată (adâncime ≤ 20 → altfel 400); CHECK-ul cheii în bază aliniat la 16–128 (LOW-5) | DONE (local) | `exceedsDepth` (iterativ) în `idempotency.ts`, `http.ts`; `idempotency_keys_key_format` (0002); `idempotency.test.ts` (corp cu 2000 de niveluri → 400) | 2026-10-28 · programmer (corecții F2) |
-| Retenția `app_events` (13 luni, apoi agregare) (LOW-2) | TODO | Faza 9 (pagina „Statistici”); azi evenimentele rămân până la revocare sau ștergerea contului. Programarea `cleanup-idempotency`: decizia operatorului (`docs/INFRA.md`, 4c) | — |
+| Retenția `app_events` (13 luni, apoi agregare) (LOW-2) | TODO | Faza 9 (pagina „Statistici”); azi evenimentele rămân până la revocare sau ștergerea contului. Programarea `cleanup-idempotency`: linia de cron propusă în `docs/INFRA.md` 4f (pasul 6), instalarea de operator | — |
 | `q` (căutarea) și, din F3-C, `merchant` în URL (LOW-3) | PARTIAL | aplicația nu loghează URL-uri sau query string-uri (logurile `[api]`/`[ui]` au doar mesaje fixe); proxy-ul/Traefik/Cloudflare pot înregistra URL-urile (`docs/PRIVACY_NOTES.md`). Alternativa `POST /api/v1/transactions/search`: fază viitoare | — |
 | Plafoane per gospodărie (conturi, categorii, tranzacții) și rate limit pe citiri (LOW-4) | TODO | fază viitoare; azi: rate limit pe mutații per utilizator, `limit` ≤ 100 pe pagină | — |
 | NOTE: `owner_user_id` al contului nu are efect de autorizare (6.1: toți membrii văd conturile gospodăriei); `finet_migrator` nu are politici pe `categories`/`transactions` (FORCE RLS → îi apar goale; doar `idempotency_keys` are politici de curățare) | INFO | ADR 0004, ADR 0005 | 2026-10-28 · programmer |
@@ -231,3 +231,15 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Revizuirea Fazei 3, LOW-4: `finet_backup` fără CREATE în `public` (verificat, oprire la `true`); `default_transaction_read_only` notat ca apărare în plus | DONE (PG17 efemer) | `backup-role.sql`, `docs/BACKUP.md` 3 | 2026-10-28 · programmer (F3-D) |
 | Revizuirea Fazei 3, INFO-1/2: backup-ul conține hash-uri de parole și sesiuni (invalidarea după restaurări non-prod); logul `0600` + `logrotate` | DONE (docs) | `docs/BACKUP.md` 6, 9 | 2026-10-28 · programmer (F3-D) |
 | Revizuirea `security` a F3-D | DONE (PASS_WITH_FINDINGS, 0 Critical/High; corecțiile de mai sus) | coordonatorul | 2026-10-28 · security |
+
+## 14. Stabilizare (Faza 4, 2026-10-28)
+
+| Control | Stare | Dovadă | Data · cine |
+|---|---|---|---|
+| Prefetch RSC (`?_rsc=`, `RSC: 1`, `Next-Router-Prefetch: 1`) fără sesiune, pe TOATE rutele din `(app)` (citite din fișiere): niciun marcaj de date în răspuns, doar redirecționare la `/login`; cu sesiune marcajul apare (testul poate eșua) | DONE (test) / NOT RUN local (fără browser și RAM) | `e2e/regressions.spec.ts` (b), proiectul `regressions` în CI | 2026-10-28 · programmer (F4) |
+| Paginile publice (`/`, `/login`, `/register`, 404) cer resurse doar de pe propriul domeniu (fără fonturi, analytics, CDN) | DONE (test) / NOT RUN local | `e2e/regressions.spec.ts` (a); fonturile sunt locale (`src/app/fonts/`) | 2026-10-28 · programmer (F4) |
+| Pagina `global-error` proprie, fără `style=`, fără detalii tehnice | DONE | `src/app/global-error.tsx`, `ui-rules.test.ts` | 2026-10-28 · programmer (F4) |
+| Recuperarea după deploy: reîncărcare doar pentru fișiere `/_next/static/` de pe propriul domeniu, cel mult o dată la 8 s, fără buclă dacă `sessionStorage` lipsește; fără `eval`, fără date în stocare (doar momentul ultimei reîncărcări) | DONE | `src/app/_lib/chunk-recovery.ts`, `chunk-recovery.test.ts` | 2026-10-28 · programmer (F4) |
+| `tagMatch=any\|all`: același filtru pe gospodărie (`household_id` din sesiune), id-uri uuid validate, parametri SQL legați (fără interpolare) | DONE (Postgres 17 efemer) | `transactions.repo.ts`, `planning-api.test.ts`, `exports.test.ts` | 2026-10-28 · programmer (F4) |
+| Migrația `0005_perf_indexes`: doar un index; RLS, politici, drepturi neatinse | DONE (PG17 efemer) / TODO pe Supabase | `migrate.test.ts` (0005 peste 0000–0004) | 2026-10-28 · programmer (F4) |
+| Revizuirea `security` a Fazei 4 | TODO | agentul `security` | — |

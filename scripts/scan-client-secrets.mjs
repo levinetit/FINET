@@ -16,12 +16,13 @@ export const SECRET_PATTERNS = [
   { name: "Stripe restricted key", regex: /rk_live_[0-9A-Za-z]{8,}/g },
   { name: "Stripe webhook secret", regex: /whsec_[0-9A-Za-z]{8,}/g },
   { name: "cheie privată PEM", regex: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g },
-  // Token de bot Telegram: <id 8–10 cifre>:<35 de caractere>. Înaintea id-ului poate sta orice
+  // Token de bot Telegram: <id 8–12 cifre>:<35 de caractere> (Faza 4, N3: id-urile noi au
+  // depășit 10 cifre). Înaintea id-ului poate sta orice
   // în afară de o cifră (în URL-ul `.../bot<id>:<cheie>/...` stă litera `t`); după cheie, niciun
   // caracter de token, ca să nu prindă fragmente din identificatori mai lungi.
   {
     name: "token bot Telegram",
-    regex: /(?<!\d)\d{8,10}:[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])/g,
+    regex: /(?<!\d)\d{8,12}:[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])/g,
   },
   // JWT: antet și payload JSON în base64url (încep amândouă cu `{"` → `eyJ`).
   { name: "JWT", regex: /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\./g },

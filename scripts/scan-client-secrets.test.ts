@@ -99,6 +99,9 @@ describe("scanDirectory", () => {
   it.each([
     ["token bot Telegram", fakeTelegram],
     ["token bot Telegram", `https://api.telegram.org/bot${fakeTelegram}/sendMessage`],
+    // Faza 4 (N3): id de 11 și 12 cifre.
+    ["token bot Telegram", `1${fakeTelegram}`],
+    ["token bot Telegram", `12${fakeTelegram}`],
     ["JWT", fakeJwt],
     ["URL Postgres cu parolă", fakePgUrl],
     ["URL Postgres cu parolă", fakePgUrl.replace("postgres:", "postgresql:")],
@@ -116,7 +119,7 @@ describe("scanDirectory", () => {
       [
         // Ore/porturi și identificatori cu `:`, prea scurți sau prea lungi pentru Telegram.
         'a="12:30";b="127.0.0.1:3000";c="1234567:' + "A".repeat(35) + '"',
-        'd="12345678901:' + "A".repeat(35) + '";e="1234567890:' + "A".repeat(36) + '"',
+        'd="1234567890123:' + "A".repeat(35) + '";e="1234567890:' + "A".repeat(36) + '"',
         // URL Postgres fără parolă și text `eyJ` izolat.
         'f="postgres://localhost:5432/db";g="postgres://user@host/db";h="eyJhbGciOi"',
         // Prefix AWS fără lungimea completă sau în interiorul unui șir mai lung.
