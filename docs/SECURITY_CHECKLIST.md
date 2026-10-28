@@ -21,7 +21,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Magic link de unică folosință, 10 minute, doar cu SMTP | DONE | `auth.ts`, `auth.test.ts` (mailer fals); butonul din UI apare doar cu SMTP configurat | 2026-10-28 · programmer |
 | Schimbarea parolei revocă celelalte sesiuni | DONE | `password.service.ts`, `me.test.ts`; E2E cu două contexte (NOT RUN local) | 2026-10-28 · programmer |
 | Lista sesiunilor și revocarea (individual, „celelalte”), cu confirmare | DONE | `/api/v1/me/sessions*`, `src/app/(app)/profile/sessions-list.tsx`; E2E (NOT RUN local) | 2026-10-28 · programmer |
-| `?next=` fără open redirect (doar cale relativă internă) | DONE | `src/app/_lib/next-path.ts`, `next-path.test.ts` (29 de forme respinse); verificat pe `next dev` (`next=//evil.com` → `/dashboard`); E2E (NOT RUN local) | 2026-10-28 · programmer |
+| `?next=` fără open redirect (doar cale relativă internă; din H1 validat pe rezultatul normalizat) | DONE | `src/app/_lib/next-path.ts`, `next-path.test.ts` (36 de forme respinse + proprietate); verificat pe `next dev` (`next=//evil.com` → `/dashboard`); E2E (NOT RUN local) | 2026-10-28 · programmer |
 | Parola nu ajunge într-un URL înainte de hidratare (formulare `method="post"`, butoane active doar după hidratare) | DONE | `src/app/_lib/use-hydrated.ts`, formularele din `src/app/**` | 2026-10-28 · programmer |
 | Înregistrare `saas` cu verificarea emailului | TODO | Faza 11 | — |
 | Verificarea E2E în browser a fluxurilor de mai sus | PARTIAL | proiectul `auth` din `playwright.config.ts`, job `e2e` în CI: NOT RUN (browserele nu se instalează pe hostul agentului; prima rulare pe GitHub) | 2026-10-28 · programmer |
@@ -109,3 +109,24 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | F7 — `roles.sql` întărit; CA-ul Supabase din cod (`DATABASE_CA_FILE`, `sslmode=verify-full`) | DONE | `ops/supabase/roles.sql`, `src/lib/db-client.ts`, `db-client.test.ts`, `config.test.ts` | 2026-10-27 · security (T5, T7) |
 | N5 — `notify.sh`: antetul `From:` curățat | TODO | `docs/ROADMAP.md` | — |
 | N2 — stub-urile worker/migrate validează rolul | PARTIAL | `finet-migrate` folosește `parseConfig` din F1-A; `finet-worker` încă stub | 2026-10-27 · programmer |
+
+## 9. Revizuirea de securitate a Fazei 1 (verdict BLOCKED, 2026-10-28) — corecții
+
+| Constatare | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| **H1** HIGH — open redirect prin dot-segmente (`/.//evil.com`, `/a/..//evil.com`, `/%2e//evil.com`) | DONE | `src/app/_lib/next-path.ts` (validare pe rezultatul normalizat `^/(?!/)[^\\]*$`), `next-path.test.ts` (regresii + proprietate pe 14³ combinații), `e2e/auth.spec.ts` („H1: ?next=/.//evil.com”, NOT RUN local); commit `1c0252e` | 2026-10-28 · programmer |
+| **M1** — căi Better Auth active și nelimitate (`/verify-password` etc.) | DONE | listă permisă `ALLOWED_AUTH_PATHS` + `DISABLED_AUTH_PATHS` extins (`auth.ts`, `handler.ts`); `allowlist.test.ts` enumeră `auth.api` și cere 404; `POST /verify-password` cu sesiune → 404; `3bb2000` | 2026-10-28 · programmer |
+| **M2** — fără plafon pe email; găleată mobilă după antetul clientului | DONE | plafon pe email (20 eșecuri/oră, `AUTH_LOGIN_EMAIL_*`), doar eșecuri, reset la succes, rezervare atomică înainte de Better Auth, restituire la 5xx/validare, excepția IP-ului cunoscut (30 de zile); mobil doar cu IP de încredere; `me.test.ts` (6 IP × 5 → 429 după 20, IP cunoscut trece, fereastra expiră), `email-cap.test.ts` (30 simultane → exact 20 la Better Auth, reset la succes, restituire la 500); ADR 0003 (risc rezidual); `db53fa2`, `2544eec`, `de3b106` | 2026-10-28 · programmer |
+| **M3** — `auth_rate_limits` crește nelimitat | DONE | curățare oportunistă (2 × fereastra, ≤ 1/min/tip, ≤ 500 rânduri), subiect ≤ 254; `rate-limit.test.ts`; `2808e67` | 2026-10-28 · programmer |
+| **M4** — oracol de timp la magic link / resetare | DONE | `sendInBackground` (`mailer.ts`, `auth.ts`); `timing.test.ts` (SMTP de 200 ms, diferență < 20 ms); `8386b41`, `a6309bc` | 2026-10-28 · programmer |
+| **M5** — `finet_app` putea scrie `is_platform_admin`, `status`, `email`, parola | DONE | `0001_rls.sql` editat direct (neaplicat): GRANT pe coloane, fără DELETE pe `users`, `finet.promote_first_admin` + `finet.bootstrap_state` (irepetabil); `grants.test.ts`; ADR 0003 (decizie și risc rezidual); `ce0bc38`, `fc78395` | 2026-10-28 · programmer |
+| **L1** — fără plafon de gospodării | DONE | `create_household`: max. 20 per utilizator (`54000`); `household-limit.test.ts`; `2f9aa94` | 2026-10-28 · programmer |
+| **L4** — SMTP fără TLS obligatoriu | DONE | `smtpTransportOptions` (STARTTLS obligatoriu în producție); `mailer.test.ts`; `143e5f0` | 2026-10-28 · programmer |
+| **L5** — `get-session` pentru utilizator dezactivat | DONE | `handler.ts` (revocă sesiunile, răspunde `null`); `native-client.test.ts`; `a592bd7` | 2026-10-28 · programmer |
+| **L2** — `audit_events` șterse în CASCADE la ștergerea gospodăriei | TODO | amânat: ștergerea gospodăriilor nu există încă în aplicație; se decide odată cu ea (Faza 8 / ștergerea contului) | — |
+| **L3** — „ultimul owner” poate pleca/fi scos | TODO | amânat: gestiunea membrilor din UI vine în Faza 8; CLI-ul doar adaugă | — |
+| **L6** — tokenul de resetare stocat în clar în `auth_verifications` | TODO | amânat: opțiunea Better Auth pentru resetare nu există ca la magic link (`storeToken: "hashed"`); token de 24 de caractere, 30 de minute, de unică folosință; de revăzut la actualizarea Better Auth | — |
+| **L7** — parola generată de CLI pe stdout | TODO | amânat: comportament documentat (afișată o singură dată, operatorul o copiază); alternativa (fișier 0600 / doar `--password-stdin`) se decide cu operatorul | — |
+| **L8** — `viaBearer` scutește de CSRF și când există și cookie | TODO | amânat: Bearer cere antet explicit (imposibil cross-site fără CORS, închis); de restrâns la „bearer și fără cookie” la prima revizuire a clientului Android | — |
+| Ștergerea contului (GDPR) | TODO | fază viitoare: funcție SECURITY DEFINER care refuză administratorii și gospodăriile cu un singur membru (`finet_app` nu are DELETE pe `users`, M5) | — |
+

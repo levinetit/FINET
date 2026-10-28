@@ -59,10 +59,21 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 **Rămâne pentru închiderea Fazei 1:**
 - prima rulare a job-ului `e2e` pe GitHub (local NOT RUN: browserele nu se instalează pe hostul agentului) și eventualele ajustări;
 - aplicarea migrațiilor pe Supabase de operator (`docs/INFRA.md`, „Faza 1”), apoi verificarea în browser prin Access;
-- revizuirea de securitate a Fazei 1 (F1-B + F1-C) și actualizarea `docs/SECURITY_CHECKLIST.md`;
+- revizuirea de securitate a Fazei 1: corecțiile H1, M1–M5, L1, L4, L5 făcute (2026-10-28), de re-verificat de `security`;
 - înregistrarea publică `saas` cu verificarea emailului: Faza 11 (sign-up rămâne închis și în `saas`);
 - OpenAPI (`docs/openapi.json`) pentru `/api/v1`: odată cu primele endpointuri din Faza 2;
 - **TODO:** micșorarea imaginii `finet:tools` (583 MB, include `next`): de exemplu `pnpm deploy --prod` cu doar `postgres`/`drizzle-orm`/`zod` (dependențele externe ale `dist/tools/*.mjs`). Neîncercat: cere un build Docker, nepermis pe hostul cu memorie mică.
+
+### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
+Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
+- **L2** — `audit_events` dispar în CASCADE la ștergerea unei gospodării: aplicația nu șterge încă gospodării; se decide odată cu ștergerea (păstrare anonimizată sau `SET NULL`).
+- **L3** — protecția „ultimului owner” (nu poate pleca / nu poate fi scos): odată cu gestiunea membrilor din Faza 8.
+- **L6** — tokenul de resetare a parolei e stocat în clar (Better Auth nu are `storeToken: "hashed"` pentru resetare): de revăzut la actualizarea Better Auth; azi 30 de minute, unică folosință.
+- **L7** — parola generată de CLI apare pe stdout (o singură dată): de decis cu operatorul (fișier 0600 sau doar `--password-stdin`).
+- **L8** — `viaBearer` scutește de CSRF și când cererea are și cookie: de restrâns la prima revizuire a clientului Android.
+- **Ștergerea contului (GDPR)**: fază viitoare, printr-o funcție SECURITY DEFINER care refuză administratorii și gospodăriile cu un singur membru; `finet_app` nu are `DELETE` pe `users` (M5).
+- **Înregistrarea `saas`** va avea nevoie de o funcție de creare a utilizatorilor (Better Auth nu mai creează utilizatori; `finet_app` nu poate insera `status`/`is_platform_admin`).
+- Un rol Postgres separat pentru CLI (ar închide și fereastra de bootstrap a `promote_first_admin`): opțional, cere un secret nou.
 
 ### Puncte deschise
 - **Tokenii shadcn/ui:** închis în F1-C (`surface-2`, `accent-soft`; ADR 0003).

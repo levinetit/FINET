@@ -2,7 +2,7 @@
 
 - **Branch:** `phase/01-auth` (din `main` la `56d1309`), PR #16 draft, fără push din partea agentului.
 - **Data:** 2026-10-28.
-- **Stare:** **parțial**. Codul Fazei 1 e complet în repo (F1-A, F1-B, F1-C). Închiderea cere încă: migrațiile pe Supabase (operatorul), prima rulare a job-ului `e2e` pe GitHub și revizuirea de securitate.
+- **Stare:** **parțial**. Codul Fazei 1 e complet în repo (F1-A, F1-B, F1-C), iar constatările revizuirii de securitate (verdict BLOCKED) H1, M1–M5, L1, L4, L5 sunt corectate (secțiunea 8). Închiderea cere încă: re-verificarea `security`, migrațiile pe Supabase (operatorul) și prima rulare a job-ului `e2e` pe GitHub.
 - Deciziile și abaterile sunt în [ADR 0003](../adr/0003-auth.md). Starea securității: [`docs/SECURITY_CHECKLIST.md`](../SECURITY_CHECKLIST.md).
 
 ## 1. Ce s-a implementat și ce a rămas
@@ -100,7 +100,43 @@ Cele 5 teste sărite sunt cele din `src/lib/db-client.test.ts` care cer un CA re
 
 ## 7. Pașii următori, prioritizați
 1. Push-ul și prima rulare a job-ului `e2e` (ambele moduri), cu iterarea scenariilor după rezultate.
-2. Revizuirea de securitate a Fazei 1 (F1-B + F1-C) și actualizarea listei.
+2. Re-verificarea de securitate a corecțiilor (secțiunea 8) și a constatărilor amânate L2, L3, L6, L7, L8.
 3. Operatorul: secțiunea 4b din `docs/INFRA.md` (migrații pe Supabase, primul utilizator, redeploy, verificarea în browser prin Access, inclusiv consola fără încălcări CSP).
 4. Faza 2, cu OpenAPI generat pentru `/api/v1`.
 5. Micșorarea imaginii `finet:tools` și punctele F6 (SHA-uri pentru acțiuni, digest pentru imagine, audit blocant, gitleaks).
+
+## 8. Corecțiile revizuirii de securitate (2026-10-28)
+
+Verdictul revizuirii `security` a fost BLOCKED. Corecțiile sunt câte un commit `fix(...)` pe constatare (`git log --oneline 3fd39ad..HEAD`); detaliile, deciziile și riscurile reziduale sunt în ADR 0003 („Corecțiile revizuirii de securitate a Fazei 1”), iar dovezile în `docs/SECURITY_CHECKLIST.md`, secțiunea 9.
+
+| Constatare | Corecție | Test |
+|---|---|---|
+| H1 open redirect (dot-segmente) | validare pe rezultatul normalizat `^/(?!/)[^\\]*$` | `next-path.test.ts`, `e2e/auth.spec.ts` |
+| M1 căi Better Auth active | listă permisă + căi dezactivate | `allowlist.test.ts` (enumerează `auth.api`) |
+| M2 fără plafon pe email | 20 eșecuri/oră pe email, rezervare atomică, restituire, excepția IP-ului cunoscut; mobil doar cu IP de încredere | `me.test.ts`, `email-cap.test.ts` (30 simultane → 20) |
+| M3 tabel nelimitat | curățare oportunistă, subiect ≤ 254 | `rate-limit.test.ts` |
+| M4 oracol de timp | emailuri în fundal | `timing.test.ts` |
+| M5 drepturi prea largi | GRANT pe coloane, fără DELETE pe `users`, bootstrap irepetabil al administratorului (`0001_rls.sql` editat, neaplicat) | `grants.test.ts` |
+| L1 gospodării nelimitate | max. 20 per utilizator | `household-limit.test.ts` |
+| L4 SMTP fără TLS | STARTTLS obligatoriu în producție | `mailer.test.ts` |
+| L5 sesiune pentru cont dezactivat | `get-session` → `null`, sesiuni revocate | `native-client.test.ts` |
+
+Amânate (ROADMAP, checklist): L2, L3, L6, L7, L8, ștergerea contului, funcția de creare pentru `saas`.
+
+**Schimbări de comportament de știut:** Better Auth nu mai creează utilizatori în niciun mod (doar CLI-ul); `finet_app` nu mai poate șterge utilizatori sau scrie `status`/`is_platform_admin`/`email`; login-ul cu `X-FINET-Client` primește găleata mobilă doar cu IP de încredere; căile `/api/auth/*` din afara listei permise dau 404; variabilele noi `AUTH_LOGIN_EMAIL_MAX_ATTEMPTS`, `AUTH_LOGIN_EMAIL_WINDOW_SECONDS`. **`0001_rls.sql` s-a schimbat (hash nou):** pe Supabase se aplică direct versiunea finală (nu a fost aplicată nicăieri).
+
+**Verificări** (aceleași condiții ca în secțiunea 3, pe HEAD-ul corecțiilor):
+
+| Comandă | Rezultat |
+|---|---|
+| `pnpm install --frozen-lockfile` | PASS |
+| `pnpm lint` | PASS |
+| `pnpm format:check` | PASS |
+| `pnpm typecheck` | PASS |
+| `pnpm test` (Postgres 17 efemer) | PASS: 29 de fișiere, **460 trecute, 5 sărite (465)**; înainte: 417 + 5 (422) |
+| `pnpm build` | PASS |
+| `pnpm scan:client-secrets` | PASS |
+| `pnpm test:ops` | PASS |
+| `pnpm exec playwright test --list` | PASS: 26 de teste în 3 fișiere (+1: H1) |
+| E2E în browser | NOT RUN (fără browsere pe host; job-ul `e2e` din CI) |
+
