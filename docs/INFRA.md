@@ -240,6 +240,8 @@ Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/
 
 Agentul nu a rulat nimic din această secțiune. Ordinea:
 
+0. **Imaginile se construiesc în CI, nu pe host** (hostul are swap plin și ~1,5 GB liberi; un build local a fost oprit de sistem la 2026-10-28). Workflow-ul `images` (`.github/workflows/images.yml`, la fiecare push pe `main` sau `phase/**`) construiește `web` (`finet:local`) și `tools` (`finet:tools`) și le păstrează 7 zile ca artefacte. Pe host: `sudo sh ops/deploy/pull-images.sh <sha-complet-al-commit-ului>` (verifică suma sha256 și încarcă imaginile sub numele așteptate de compose). Tokenul GitHub (`Actions: read`) se citește din `/home/docker-apps/secrete/github-finet.token`; nu apare în argumentele proceselor.
+
 1. **Backup înainte de migrații** (Supabase: backup-ul zilnic al planului sau un `pg_dump` al schemei `finet` cu URL-ul migratorului). Faza 1 e prima cu tabele, deci în practică baza e goală.
 2. **Secretul Better Auth** (dacă nu există deja): `openssl rand -base64 32 | sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_better_auth_secret` (doar `finet-web` îl primește; rotirea lui invalidează toate sesiunile și tokenurile bearer).
 3. **`/srv/finet/env/finet.admin.env`** din `ops/docker/finet.admin.env.example` (nesecret; URL-ul bazei vine din `finet_database_url`), și `APP_URL=https://finet.<domeniu>` în `finet.env` (originea exactă din browser: Better Auth și CSRF-ul din `/api/v1` o compară cu `Origin`).

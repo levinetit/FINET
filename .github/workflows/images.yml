@@ -1,0 +1,63 @@
+# Construiește imaginile Docker FINET în CI (hostul de producție are prea puțină memorie pentru
+# build) și le păstrează ca artefacte de workflow, descărcate de pe host cu ops/deploy/pull-images.sh.
+# Imaginile nu conțin secrete (se construiesc dintr-un repository public, fără variabile de mediu).
+name: images
+
+on:
+  push:
+    branches: [main, "phase/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: imagine ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: web
+            target: runner
+          - name: tools
+            target: tools
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construiește imaginea (${{ matrix.target }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          target: ${{ matrix.target }}
+          load: true
+          push: false
+          tags: finet:${{ matrix.name }}-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Împachetează imaginea și suma de control
+        run: |
+          mkdir -p out
+          docker save "finet:${{ matrix.name }}-${{ github.sha }}" | gzip -1 > "out/finet-${{ matrix.name }}.tar.gz"
+          (cd out && sha256sum "finet-${{ matrix.name }}.tar.gz" > "finet-${{ matrix.name }}.tar.gz.sha256")
+          ls -l out
+
+      - name: Publică artefactul (7 zile)
+        uses: actions/upload-artifact@v7
+        with:
+          name: finet-${{ matrix.name }}-${{ github.sha }}
+          path: out/
+          retention-days: 7
+          if-no-files-found: error
