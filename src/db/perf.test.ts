@@ -72,7 +72,7 @@ describe.skipIf(!ENABLED)("performanța pe 50.000 de tranzacții (FINET_PERF=1)"
       createAccount(f.deps, actor, h, { name, type: "bank", currency: "RON" }).then((a) => a.id);
     const accA = [await acc(f.HA, f.A, "Banca"), await acc(f.HA, f.A, "Numerar")];
     const accB = await acc(f.HB, f.B, "Banca B");
-    const expense = [];
+    const expense: string[] = [];
     for (const key of [
       "groceries",
       "restaurants",
