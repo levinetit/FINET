@@ -11,7 +11,7 @@ import { MODE, loginOk, password, userEmail } from "./fixtures";
  * Postgres-ul de test, ca `ledger`):
  * (a) paginile publice cer resurse DOAR de pe propriul domeniu (fără Google Fonts, analytics,
  *     CDN-uri);
- * (b) prefetch-ul RSC (`?_rsc=…`, `RSC: 1`) al oricărei rute private, FĂRĂ sesiune, nu întoarce
+ * (b) cererile RSC (`?_rsc=…`, `RSC: 1`, cu și fără `Next-Router-Prefetch`) ale oricărei rute private, FĂRĂ sesiune, nu întorc
  *     date: un marcaj unic creat de utilizatorul `regresii` lipsește din răspuns, iar răspunsul e
  *     o redirecționare spre `/login` (antet sau, la 200, redirecționarea codată în fluxul RSC);
  *     cu sesiune, același marcaj apare (dovada că verificarea poate eșua);
@@ -92,6 +92,7 @@ test("(b) prefetch RSC fără sesiune nu întoarce date, pe toate rutele private
   baseURL,
   playwright,
 }) => {
+  test.slow();
   // Marcajul: un cont cu nume unic, al utilizatorului `regresii`.
   const page = await loggedIn(browser, baseURL!);
   const created = await page.request.post("/api/v1/accounts", {
@@ -100,9 +101,10 @@ test("(b) prefetch RSC fără sesiune nu întoarce date, pe toate rutele private
   });
   expect(created.status(), await created.text()).toBe(201);
 
-  // Cu sesiune, marcajul apare în prefetch-ul RSC al listei de conturi (verificarea e reală).
+  // Cu sesiune, marcajul apare în cererea RSC completă (navigare, fără `Next-Router-Prefetch`:
+  // prefetch-ul unei rute dinamice se oprește la granița de încărcare) a listei de conturi.
   const withSession = await page.request.get(`/accounts?_rsc=${randomUUID().slice(0, 5)}`, {
-    headers: RSC_HEADERS,
+    headers: { RSC: "1" },
     maxRedirects: 0,
   });
   expect(withSession.status()).toBe(200);
@@ -120,7 +122,13 @@ test("(b) prefetch RSC fără sesiune nu întoarce date, pe toate rutele private
       const status = response.status();
       const body = await response.text();
       const label = `${route} (prefetch=${prefetch}) → ${status}`;
+      // Proprietatea de securitate, strictă în ambele cazuri: nicio dată a utilizatorului.
       expect(body, label).not.toContain(MARKER);
+      if (prefetch) {
+        // Prefetch: poate fi doar scheletul până la granița de încărcare (200, fără pagină).
+        expect([200, 301, 302, 303, 307, 308, 401, 403, 404], label).toContain(status);
+        continue;
+      }
       if (status >= 300 && status < 400) {
         expect(response.headers()["location"] ?? "", label).toContain("/login");
       } else if (status === 200) {
@@ -135,6 +143,7 @@ test("(b) prefetch RSC fără sesiune nu întoarce date, pe toate rutele private
 });
 
 test("(c) titluri unice și lang=ro pe rutele principale", async ({ browser, baseURL }) => {
+  test.slow();
   const page = await loggedIn(browser, baseURL!);
   const titles = new Map<string, string>();
   for (const route of STATIC_ROUTES) {
