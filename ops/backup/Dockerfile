@@ -12,7 +12,10 @@
 # (docs/INFRA.md, „Upgrade PostgreSQL”). Pachetele sunt fixate pe versiunea minoră (`~`):
 # revizia exactă dispare din depozitul Alpine la fiecare actualizare de securitate.
 
-ARG ALPINE_IMAGE=alpine:3.22.7
+# Imaginea de bază fixată pe digest (revizuirea Fazei 3, LOW-3): digestul indexului multi-arch
+# al `alpine:3.22.7`, citit din registry (Docker Hub API, fără pull) la 2026-10-28. La o
+# actualizare: `docker buildx imagetools inspect alpine:3.22.<n>` și se schimbă ambele părți.
+ARG ALPINE_IMAGE=alpine:3.22.7@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
 
 FROM ${ALPINE_IMAGE} AS backup
 # uid 1000 = proprietarul /srv/finet/storage (utilizatorul `node` din imaginile FINET); ssh cere

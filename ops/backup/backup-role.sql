@@ -53,17 +53,28 @@ select :'step' = 'role' as is_role_step, :'step' = 'grants' as is_grants_step \g
     do $$ begin raise exception 'Parola trebuie să aibă cel puțin 24 de caractere.'; end $$;
   \endif
 
+  -- O singură tranzacție: dacă verificarea de mai jos eșuează, rolul nu rămâne creat.
+  begin;
   -- Două sesiuni sunt de ajuns (un backup pe zi; restore-ul folosește migratorul).
   create role finet_backup login password :'backup_password'
     nosuperuser nocreatedb nocreaterole noreplication bypassrls
     connection limit 2;
-  -- Sesiunile rolului sunt doar de citire (apărare în plus: rolul are doar SELECT oricum).
+  -- Sesiunile rolului sunt doar de citire. DOAR apărare în plus: un client poate face
+  -- `set default_transaction_read_only = off`; protecția reală e că rolul are doar SELECT.
   alter role finet_backup set default_transaction_read_only = on;
   revoke create on schema public from finet_backup;
 
   select rolname, rolbypassrls, rolsuper, rolcanlogin, rolcreatedb, rolcreaterole,
          rolreplication, rolconnlimit, rolconfig
     from pg_roles where rolname = 'finet_backup';
+  -- Așteptat: false (revizuirea Fazei 3, LOW-4). Dacă e true (un GRANT vechi către PUBLIC pe
+  -- Supabase), scriptul se oprește.
+  select has_schema_privilege('finet_backup', 'public', 'CREATE') as create_in_public \gset
+  \if :create_in_public
+    do $$ begin raise exception 'finet_backup poate crea obiecte în schema public; revocă dreptul (și de la PUBLIC).'; end $$;
+  \endif
+  select 'finet_backup' as rol, false as create_in_public_asteptat, :'create_in_public' as create_in_public;
+  commit;
 \elif :is_grants_step
   begin;
   grant usage on schema finet to finet_backup;
