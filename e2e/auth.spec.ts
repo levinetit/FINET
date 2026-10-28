@@ -9,7 +9,9 @@ test.describe(`autentificare (${MODE})`, () => {
   test("login corect → dashboard cu gospodăria și rolul", async ({ page }) => {
     await loginOk(page, userEmail("main"), password());
     await expect(page.getByRole("heading", { level: 1, name: "Acasă" })).toBeVisible();
-    await expect(page.getByText("Aici va apărea dashboard-ul (Faza 3).")).toBeVisible();
+    // Dashboard-ul Fazei 3: selectorul de lună apare pentru orice membru al unei gospodării,
+    // indiferent dacă are sau nu date.
+    await expect(page.getByLabel("Luna", { exact: true })).toBeVisible();
     await expect(page.getByTestId("household-name")).toHaveText("Gospodăria mea");
     await expect(page.getByTestId("household-role")).toHaveText("Proprietar");
     await expect(page.getByRole("navigation", { name: "Navigare principală" })).toBeVisible();
