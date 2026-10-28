@@ -29,7 +29,10 @@ export type AuditAction =
   | "account.deleted"
   | "category.deleted"
   | "transaction.deleted"
-  | "transfer.deleted";
+  | "transfer.deleted"
+  // Consimțămintele (F2-B, 6.5): doar tipul, în `metadata.kind`.
+  | "consent.granted"
+  | "consent.revoked";
 
 export type AuditEvent = Readonly<{
   action: AuditAction;
