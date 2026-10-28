@@ -298,8 +298,9 @@ export const clientInstallations = finet.table(
     lastSeenAt: ts("last_seen_at").notNull().defaultNow(),
   },
   (t) => [
-    unique("client_installations_installation_id_key").on(t.installationId),
-    index("client_installations_user_id_idx").on(t.userId),
+    // Unic per utilizator, nu global: un utilizator nu poate „ocupa” id-ul instalării altuia și nu
+    // află din conflict că acel id există (decizia revizuirii F2-A).
+    unique("client_installations_user_installation_key").on(t.userId, t.installationId),
     check("client_installations_platform_valid", sql`${t.platform} in ('android', 'web')`),
     check(
       "client_installations_app_version_format",

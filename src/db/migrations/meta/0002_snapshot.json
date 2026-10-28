@@ -1,5 +1,5 @@
 {
-  "id": "9aba60e4-aa35-4066-a503-02370ac2c660",
+  "id": "f4f367ea-eeca-466a-9b6d-bb900f1fdf9b",
   "prevId": "11f5ca52-3f94-4cce-92cd-7a8f7b2fb8f1",
   "version": "7",
   "dialect": "postgresql",
@@ -1511,23 +1511,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "client_installations_user_id_idx": {
-          "name": "client_installations_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "client_installations_user_id_users_id_fk": {
           "name": "client_installations_user_id_users_id_fk",
@@ -1546,10 +1530,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "client_installations_installation_id_key": {
-          "name": "client_installations_installation_id_key",
+        "client_installations_user_installation_key": {
+          "name": "client_installations_user_installation_key",
           "nullsNotDistinct": false,
           "columns": [
+            "user_id",
             "installation_id"
           ]
         }

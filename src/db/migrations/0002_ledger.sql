@@ -106,7 +106,7 @@ CREATE TABLE "finet"."client_installations" (
 	"locale" text,
 	"first_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"last_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "client_installations_installation_id_key" UNIQUE("installation_id"),
+	CONSTRAINT "client_installations_user_installation_key" UNIQUE("user_id","installation_id"),
 	CONSTRAINT "client_installations_platform_valid" CHECK ("finet"."client_installations"."platform" in ('android', 'web')),
 	CONSTRAINT "client_installations_app_version_format" CHECK ("finet"."client_installations"."app_version" is null or "finet"."client_installations"."app_version" ~ '^[0-9A-Za-z.+_-]{1,32}$'),
 	CONSTRAINT "client_installations_version_code_range" CHECK ("finet"."client_installations"."version_code" is null or "finet"."client_installations"."version_code" between 0 and 2100000000),
@@ -190,7 +190,6 @@ CREATE UNIQUE INDEX "categories_system_key_key" ON "finet"."categories" USING bt
 CREATE UNIQUE INDEX "categories_household_parent_name_key" ON "finet"."categories" USING btree ("household_id",coalesce("parent_id", '00000000-0000-0000-0000-000000000000'::uuid),lower("name"));--> statement-breakpoint
 CREATE INDEX "categories_parent_id_idx" ON "finet"."categories" USING btree ("parent_id");--> statement-breakpoint
 CREATE INDEX "category_visibility_category_id_idx" ON "finet"."category_visibility" USING btree ("category_id");--> statement-breakpoint
-CREATE INDEX "client_installations_user_id_idx" ON "finet"."client_installations" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "idempotency_keys_created_at_idx" ON "finet"."idempotency_keys" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "transactions_household_occurred_idx" ON "finet"."transactions" USING btree ("household_id","occurred_on" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "transactions_account_id_idx" ON "finet"."transactions" USING btree ("account_id");--> statement-breakpoint
@@ -447,12 +446,19 @@ alter table finet.app_downloads enable row level security;
 --> statement-breakpoint
 alter table finet.app_downloads force row level security;
 --> statement-breakpoint
+-- Conturile: proprietarul (dacă există) trebuie să fie membru al ACELEIAȘI gospodării; cheia
+-- străină spre users singură ar accepta orice utilizator al platformei. Subinterogarea rulează sub
+-- RLS-ul lui finet_app: politica household_members_select arată membrii gospodăriei curente.
 create policy accounts_household on finet.accounts
   for all to finet_app
   using (household_id = (select finet.current_household_id())
          and (select finet.member_role(finet.current_household_id())) is not null)
   with check (household_id = (select finet.current_household_id())
-         and (select finet.member_role(finet.current_household_id())) is not null);
+         and (select finet.member_role(finet.current_household_id())) is not null
+              and (owner_user_id is null
+              or exists (select 1 from finet.household_members m
+                          where m.household_id = accounts.household_id
+                            and m.user_id = accounts.owner_user_id)));
 --> statement-breakpoint
 create policy category_visibility_household on finet.category_visibility
   for all to finet_app
@@ -506,7 +512,8 @@ create policy client_installations_own on finet.client_installations
   using (user_id = (select finet.current_user_id()))
   with check (user_id = (select finet.current_user_id()));
 --> statement-breakpoint
--- Evenimentele: utilizatorul curent își scrie evenimentele (în gospodăria curentă, dacă e dată)
+-- Evenimentele: utilizatorul curent își scrie evenimentele (în gospodăria curentă, dacă e dată;
+-- instalarea, dacă e dată, trebuie să fie a lui)
 -- și le poate citi doar pe ale lui. Statisticile agregate (Faza 9) vin printr-o funcție dedicată.
 create policy app_events_select on finet.app_events
   for select to finet_app
@@ -515,6 +522,10 @@ create policy app_events_select on finet.app_events
 create policy app_events_insert on finet.app_events
   for insert to finet_app
   with check (user_id = (select finet.current_user_id())
+              and (installation_id is null
+                   or exists (select 1 from finet.client_installations ci
+                               where ci.installation_id = app_events.installation_id
+                                 and ci.user_id = (select finet.current_user_id())))
               and (household_id is null
                    or (household_id = (select finet.current_household_id())
                        and (select finet.member_role(finet.current_household_id())) is not null)));
