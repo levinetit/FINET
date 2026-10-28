@@ -9,7 +9,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 0 — Fundație și infrastructură | **parțial** | vezi mai jos și `docs/reports/faza-0.md` |
 | 1 — Autentificare, profil, gospodărie | **parțial** (implementat în repo) | F1-A, F1-B, F1-C gata; rămân migrațiile pe Supabase, prima rulare E2E în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-1.md` |
 | 2 — Conturi, categorii, tranzacții, transferuri | **parțial** (implementat în repo) | F2-A, F2-B, F2-C gata; rămân migrațiile pe Supabase, prima rulare E2E `ledger` în CI, verificarea în browser și revizuirea de securitate — vezi mai jos și `docs/reports/faza-2.md` |
-| 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI) și F3-C (UI, E2E `planning`) gata; rămân F3-D (backup restic, restaurare testată), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
+| 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C, F3-D în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI), F3-C (UI, E2E `planning`) și F3-D (backup restic, restaurare testată pe Postgres efemer) gata; rămân instalarea backup-ului și restaurarea de probă pe producție (operatorul), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
 | 4 — Stabilizare (rezervată) | neimplementat | |
 | 5 — Recurențe | neimplementat | |
 | 6 — Ingestia bonurilor | neimplementat | |
@@ -116,7 +116,11 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - navigarea nouă (desktop complet; telefon: Acasă, Tranzacții, Bugete, Rapoarte, „Mai mult”);
 - E2E `e2e/planning.spec.ts` (proiectul `planning`, ambele moduri în CI).
 
-**Rămâne în Faza 3:** F3-D (backup restic zilnic + restaurare testată efectiv; fără ea nu se introduc date reale), aplicarea `0004` pe Supabase (operatorul), revizuirea `security`. Separatorul CSV: decis de coordonator (`rfc4180` implicit pe API, `ro` din UI).
+**F3-D (backup restic + restaurare testată), gata în repo** (ADR 0009, `docs/BACKUP.md`; restaurarea testată local pe PostgreSQL 17 efemer, job CI `backup-restore`):
+- imaginea `finet:backup` (restic 0.18, pg_dump 17; ținta `backup` în workflow-ul `images`), serviciul one-shot `finet-backup` (profilul `backup`), destinația S3/SFTP/local prin suprapuneri;
+- `backup.sh` (dump prin `--stdin-from-command`, fișiere, retenție 7/4/12, `check`), `restore.sh`, rolul `finet_backup` (BYPASSRLS, doar citire), `run-backup.sh` pe host cu alertă anti-flood prin `notify.sh`.
+
+**Rămâne în Faza 3:** instalarea backup-ului de către operator (destinația, rolul `finet_backup` pe Supabase, secretele, cron, primul backup și **restaurarea de probă reală**; fără ea nu se introduc date reale), aplicarea `0004` pe Supabase (operatorul), revizuirea `security`. Separatorul CSV: decis de coordonator (`rfc4180` implicit pe API, `ro` din UI).
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
@@ -155,7 +159,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
   - Fișierele exemplu de mediu nu mai conțin secrete, iar `pnpm test:ops` verifică asta.
   - Ce rămâne: arhiva săptămânală necriptată a `/home/docker` (existentă și viitoare) conține în continuare **mediul ALTOR containere** de pe host. E un risc preexistent, în afara FINET, iar decizia (excludere/criptare) e a operatorului.
   - Logurile `json-file` rămân în arhivă; aplicația nu scrie secrete în ele.
-  - Backup-ul propriu criptat al FINET vine în Faza 3 (restic).
+  - Backup-ul propriu criptat al FINET: implementat în Faza 3 (F3-D, restic, `docs/BACKUP.md`); instalarea e a operatorului.
 - **F7 (rest) — CA-ul Supabase din cod: închis în T7.**
   - `DATABASE_CA_FILE` + `src/lib/db-client.ts` → `ssl: { ca, rejectUnauthorized: true }` cu `sslmode=verify-full`/`verify-ca`.
   - CA fără sslmode de verificare sau `sslrootcert` în URL → oprire la pornire.

@@ -222,7 +222,7 @@ Rollback: `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/
 - `backup_home_gdrive_clar.sh` (cron 03:30) face `rclone sync /home` spre `Gdrive:vpnde/home`, **NECRIPTAT**, și duminica o arhivă `tar.gz` a întregului `/home/docker` (data-root-ul Docker) spre `Gdrive:vpnde/docker-archives/`, tot necriptată.
 - Ambele `sync` folosesc `backup_home_gdrive.filter`, care exclude `/docker/**`, modelele Ollama, cache-uri și câteva baze, dar **nimic FINET**. Orice director FINET sub `/home` (de exemplu fostul `/home/docker-apps/finet/`, propus inițial, cu bonuri, extrase și fișierele `.env`) ar fi urcat zilnic pe Google Drive, inclusiv în clar.
 
-**Decizia:** toate datele și secretele FINET stau în **`/srv/finet/`** (`env/`, `secrets/`, `storage/`, `compose/`, `ca/`), în afara surselor ambelor backup-uri. Valorile implicite din `ops/docker/docker-compose.yml` și din `compose.env.example` indică acolo. Backup-ul propriu, **criptat**, al FINET (`pg_dump` din Supabase + fișierele, cu restic) vine în **Faza 3**; până atunci, datele din `/srv/finet/storage` nu au backup (în Faza 0 nu există date reale).
+**Decizia:** toate datele și secretele FINET stau în **`/srv/finet/`** (`env/`, `secrets/`, `storage/`, `compose/`, `ca/`), în afara surselor ambelor backup-uri. Valorile implicite din `ops/docker/docker-compose.yml` și din `compose.env.example` indică acolo. Backup-ul propriu, **criptat**, al FINET (`pg_dump` din Supabase + fișierele, cu restic) e implementat în Faza 3 (F3-D, [`docs/BACKUP.md`](BACKUP.md)); până îl instalează operatorul, datele din `/srv/finet/storage` nu au backup. Repository-ul restic NU se pune sub `/home` (și, pentru o destinație locală de test, tot în `/srv/finet/backup-repo`).
 
 **Secretele în data-root-ul Docker (N1): închis tehnic pentru FINET (T7).**
 - Docker copiază valorile din `environment`/`env_file` în `/home/docker/containers/<id>/config.v2.json`, iar arhiva săptămânală necriptată a `/home/docker` le-ar urca pe Drive.
@@ -291,13 +291,16 @@ Agentul nu a rulat nimic din această secțiune. Ordinea:
 
 Agentul nu a rulat nimic din această secțiune. Interfața Fazei 3 (F3-C) nu are pași proprii de deploy: vine în imaginea `finet-web`. Ordinea:
 
-1. **Imaginile** din workflow-ul `images` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`), ca la 4b, pasul 0.
-2. **Backup** al schemei `finet` (4b, pasul 1). `0004` adaugă tabele și o constrângere unică nedistructivă pe `transactions`.
+1. **Imaginile** din workflow-ul `images` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`, acum `web`, `tools` și `backup`), ca la 4b, pasul 0.
+2. **Backup** al schemei `finet` (4b, pasul 1). `0004` adaugă tabele și o constrângere unică nedistructivă pe `transactions`. Dacă backup-ul F3-D e deja instalat (pasul 6), un `run-backup.sh` manual e backup-ul de dinainte.
 3. **Migrația** `0004_budgets_goals_tags` (rolul `migrate`): prima rulare „aplicate acum 1”, a doua „aplicate acum 0”. `0000`–`0003` nu se schimbă.
 4. **Redeploy `finet-web`** cu imaginea nouă. Fără variabile de mediu sau secrete noi pentru UI (backup-ul F3-D are pașii lui).
 5. **Verificări prin Access**, în browser: `/dashboard` (selectorul de lună, onboarding-ul), `/budgets/new` → un buget de `100` pe o categorie → o cheltuială de `85` în acea categorie → semafor galben și bannerul „Atenție la bugete”; `/goals/new` → o contribuție; `/tags`; `/transactions` → „Export CSV” (fișier `finet-tranzactii.csv`, separator `;`). Antetele CSP ca la 4d, pasul 5.
 
-**Rollback:** imaginea anterioară a `finet-web` (UI-ul Fazei 2 nu citește tabelele noi). Migrația `0004`: comenzile din antetul fișierului, doar cu backup și decizia explicită a operatorului (distruge datele etichetelor, bugetelor și obiectivelor).
+6. **Backup-ul zilnic (F3-D)**, pașii din [`docs/BACKUP.md`](BACKUP.md), secțiunea 5: rolul `finet_backup` (`ops/backup/backup-role.sql`; verifică întâi că `postgres` are `BYPASSRLS`), destinația (S3/SFTP; local doar temporar, nu e în afara serverului), secretele în `/srv/finet/secrets` (`finet_restic_password`, `finet_backup_repository`, `finet_backup_pg_service`, cheile destinației), `/srv/finet/env/finet.backup.env` și `backup-host.env`, `init`, primul backup manual `sudo sh ops/backup/run-backup.sh` (cod 0, două instantanee), notificarea de test, programarea cu `sudo crontab -e` (nu `crontab -`).
+7. **Restaurarea reală de verificare** (`docs/BACKUP.md` 7.A, pe un Postgres de probă, nu peste producție) și rezultatul notat în `docs/reports/faza-3.md`. **Abia după ea se introduc date reale.**
+
+**Rollback:** imaginea anterioară a `finet-web` (UI-ul Fazei 2 nu citește tabelele noi). Backup-ul nu schimbă nimic în aplicație: se oprește scoțând linia din crontab. Migrația `0004`: comenzile din antetul fișierului, doar cu backup și decizia explicită a operatorului (distruge datele etichetelor, bugetelor și obiectivelor).
 
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
@@ -328,7 +331,7 @@ Agentul nu a rulat nimic din această secțiune. Interfața Fazei 3 (F3-C) nu ar
 ## 7. Upgrade PostgreSQL (master prompt 3.5)
 1. Jobul săptămânal anunță versiunea nouă (`ops/postgres/version-check.md`, **neimplementat**), sau operatorul o vede în panou.
 2. PR care rulează testele pe `postgres:<versiunea nouă>-alpine` (local sau în CI, schimbând temporar `ops/postgres/VERSION` pe branch).
-3. Backup propriu verificat (`pg_dump` + fișiere, restic; Faza 3 — până atunci, upgrade-ul se amână).
+3. Backup propriu verificat (`pg_dump` + fișiere, restic; `docs/BACKUP.md`): un `run-backup.sh` reușit chiar înainte. Pentru o versiune majoră nouă, imaginea de backup trebuie să aibă `pg_dump` cel puțin de acea versiune (`postgresql<N>-client` în `ops/backup/Dockerfile`), altfel pg_dump refuză serverul mai nou.
 4. Notează valorile de control: numărul și suma tranzacțiilor pe gospodărie (interogare din Faza 3).
 5. Anunț către familie; fereastră de noapte.
 6. Supabase → Settings → Infrastructure → Upgrade project.
@@ -337,4 +340,4 @@ Agentul nu a rulat nimic din această secțiune. Interfața Fazei 3 (F3-C) nu ar
 9. Dacă verificarea eșuează: restaurare din backup într-un proiect nou și comutarea `DATABASE_URL`.
 
 ## 8. Notificări operaționale
-`ops/notify/notify.sh`: Telegram (`NOTIFY_TELEGRAM_BOT_TOKEN` + `NOTIFY_TELEGRAM_CHAT_ID`) sau email (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `NOTIFY_EMAIL_TO`), `--test`, `--dry-run`, `--env-file`. Folosește `curl` (pe host); secretele nu apar în argumentele proceselor. Scripturile care îl vor folosi (backup, versiune PostgreSQL, `/api/health` roșu, disc) **nu există încă**.
+`ops/notify/notify.sh`: Telegram (`NOTIFY_TELEGRAM_BOT_TOKEN` + `NOTIFY_TELEGRAM_CHAT_ID`) sau email (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `NOTIFY_EMAIL_TO`), `--test`, `--dry-run`, `--env-file`. Folosește `curl` (pe host); secretele nu apar în argumentele proceselor. Îl folosește backup-ul (`ops/backup/run-backup.sh`, F3-D: alertă la eșec cu anti-flood, mesaj săptămânal de succes); scripturile pentru versiunea PostgreSQL, `/api/health` roșu și disc **nu există încă**.

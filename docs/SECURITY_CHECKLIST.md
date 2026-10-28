@@ -209,3 +209,19 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Bani în UI doar prin `money.ts`: scalarea graficelor prin `percentOf` (bigint), valoarea absolută prin `negate` | DONE | `planning-ui.ts`, `ui-rules.test.ts` | 2026-10-28 · programmer (F3-C) |
 | `pnpm build` + `scan:client-secrets` pe codul F3-C | NOT RUN (memoria hostului) | CI | — |
 | Revizuirea `security` a F3-C | TODO | agentul `security` | — |
+
+## 13. Backup restic (F3-D, 2026-10-28)
+
+| Control | Stare | Dovadă | Data · cine |
+|---|---|---|---|
+| Dump complet în ciuda RLS `FORCE`: rol dedicat `finet_backup` (LOGIN, BYPASSRLS, doar USAGE + SELECT pe `finet`, privilegii implicite, read-only, 2 conexiuni); migratorul și `finet_app` eșuează, `--enable-row-security` interzis (dump gol) | DONE (PG17 efemer) / TODO pe Supabase | `ops/backup/backup-role.sql`, `restore-test.sh` b), `test.sh` | 2026-10-28 · programmer (F3-D) |
+| Un `pg_dump` eșuat nu devine instantaneu (`--stdin-from-command`), cod ≠ 0 la orice etapă | DONE | `backup.sh`; `restore-test.sh` (3 negative, niciun instantaneu nou) | 2026-10-28 · programmer (F3-D) |
+| Secrete doar ca fișiere: parola restic, adresa, fișierul libpq (fără URL/parolă în argumente), cheile S3/SFTP; nimic în `environment` sau în imagine; logul fără secrete | DONE | compose `finet-backup`, `lib.sh`, `test-env-examples.sh`, `test.sh`, `restore-test.sh` (grep în log) | 2026-10-28 · programmer (F3-D) |
+| TLS spre Supabase: fișierul libpq trebuie să aibă `sslmode=verify-full` (excepție doar `FINET_BACKUP_INSECURE_DB=1` în teste) | DONE | `lib.sh` `check_pg_service`, `test.sh` | 2026-10-28 · programmer (F3-D) |
+| SFTP: `known_hosts` fixat, `StrictHostKeyChecking=yes`, `BatchMode` | DONE (cod) / NOT RUN pe un server real | `lib.sh`, `compose.sftp.yml`, `test.sh` | 2026-10-28 · programmer (F3-D) |
+| Container: uid 1000, rootfs read-only, `cap_drop: ALL`, `no-new-privileges`, 256 MiB, storage read-only, rețeaua `finet_default`, fără porturi, one-shot | DONE | `ops/docker/docker-compose.yml`, `test-env-examples.sh`, `docker compose config` (PASS) | 2026-10-28 · programmer (F3-D) |
+| Restaurarea păstrează RLS `ENABLE`+`FORCE`, politicile, GRANT-urile (și pe coloane), proprietarii; refuză fără `--yes` și peste o schemă plină | DONE (PG17 efemer) | `restore.sh`, `restore-test.sh` d), e) | 2026-10-28 · programmer (F3-D) |
+| Destinația în afara serverului, cu protecție la ștergere (Object Lock/append-only) | TODO | decizia operatorului (`docs/BACKUP.md` 2, 9) | — |
+| Parola restic păstrată și în afara serverului | TODO | operatorul | — |
+| Primul backup real + restaurare de probă | TODO | operatorul (`docs/BACKUP.md` 5) | — |
+| Revizuirea `security` a F3-D | TODO | agentul `security` | — |
