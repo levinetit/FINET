@@ -862,6 +862,32 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
     ).toBe(200);
   });
 
+  it("garda la scriere (LOW-2): o tranzacție care ar duce contul peste 2^53 − 1 → 422, nimic scris", async () => {
+    const full = await newAccount(A, "Aproape plin");
+    await fx.scratch.admin`
+      insert into finet.transactions (household_id, account_id, type, amount_minor, currency, occurred_on)
+      select ${HA}, ${full}, 'income', 10000000000000, 'RON', '2026-10-01' from generate_series(1, 900)`;
+    const room = Number.MAX_SAFE_INTEGER - 900 * 10_000_000_000_000;
+    const post = (amountMinor: number) =>
+      call(L.createTransactionHandler, "/api/v1/transactions", {
+        bearer: A.bearer,
+        body: { accountId: full, type: "expense", amountMinor, occurredOn: "2026-10-02" },
+      });
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const over = await post(room + 1);
+      expect(over.status).toBe(422);
+      expect(over.body.error?.code).toBe("amount_out_of_range");
+      expect((await post(room)).status).toBe(201);
+    } finally {
+      spy.mockRestore();
+    }
+    const [n] = await fx.scratch.admin<{ n: number }[]>`
+      select count(*)::int as n from finet.transactions where account_id = ${full}`;
+    expect(n!.n).toBe(901);
+    await fx.scratch.admin`delete from finet.transactions where account_id = ${full}`;
+  });
+
   it("mutarea unei tranzacții pe un cont în altă monedă cere suma explicită (409)", async () => {
     const ron = await newAccount(A, "Mutare RON");
     const eur = await newAccount(A, "Mutare EUR", { currency: "EUR" });

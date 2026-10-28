@@ -10,7 +10,7 @@ Faza 3 adaugă planificarea (bugete, obiective), a doua dimensiune de clasificar
 
 ### Migrația `0004_budgets_goals_tags.sql`
 - Prima parte e generată de `drizzle-kit generate --name budgets_goals_tags` din `src/db/schema/planning.ts`; a doua rulare raportează „No schema changes”. Partea scrisă de mână: etichetele de sistem, cheia compusă `goals_account_fk`, triggerele, RLS, politicile și drepturile.
-- `when` din jurnal e pus de mână după `0003` (`0003` are un `when` din viitor; altfel runner-ul ar refuza ordinea).
+- `when` din jurnal e pus de mână după `0003` (`0003` are un `when` din viitor; altfel runner-ul ar refuza ordinea): `0004` = `1793260000000` (≈ 2026-10-29). **Atenție pentru `0005`:** dacă e generată de drizzle-kit înainte de acel moment, primește un `when` mai mic și runner-ul o refuză; `when` se corectează de mână (mai mare decât al lui `0004`).
 - Singura atingere a unui tabel existent: `UNIQUE (id, household_id)` pe `finet.transactions` (`transactions_id_household_key`), ținta cheii compuse din `transaction_tags`. Nedistructivă (construiește un index; `id` e deja cheie primară). drizzle-kit o pune la sfârșit; e mutată de mână **înaintea** cheilor străine (Postgres cere constrângerea unică întâi). Testat în `migrate.test.ts`.
 - Testată: de la zero (toate cinci, apoi a doua rulare 0 aplicate) și peste o bază cu `0000`–`0003` deja aplicate (doar `0004`, apoi nimic).
 - Rollback: în antetul migrației (manual, de operator, cu backup; distruge datele tabelelor noi).
