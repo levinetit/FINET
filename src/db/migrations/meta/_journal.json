@@ -36,6 +36,13 @@
       "when": 1793260000000,
       "tag": "0004_budgets_goals_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793300000000,
+      "tag": "0005_perf_indexes",
+      "breakpoints": true
     }
   ]
 }

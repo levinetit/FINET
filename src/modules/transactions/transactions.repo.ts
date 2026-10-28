@@ -133,11 +133,13 @@ function filterConditions(householdId: string, filters: ListFilters): SQL[] {
       sql`, `,
     );
     if (filters.tagMatch === "all") {
-      // Toate etichetele: numărul legăturilor cu etichetele căutate = numărul lor. Corect pentru
-      // că `tagIds` sunt distincte (schema) și `(transaction_id, tag_id)` e cheie primară.
-      conditions.push(sql`(select count(*) from ${transactionTags} tt
-        where tt.transaction_id = ${t.id} and tt.household_id = ${householdId}
-          and tt.tag_id in (${ids})) = ${filters.tagIds.length}`);
+      // Toate etichetele: tranzacțiile cu atâtea legături spre etichetele căutate câte etichete
+      // sunt. Corect pentru că `tagIds` sunt distincte (schema) și `(transaction_id, tag_id)` e
+      // cheie primară. O singură subinterogare grupată (semi-join), nu un COUNT per rând
+      // (măsurat în Faza 4: 252 ms → vezi docs/PERFORMANCE.md).
+      conditions.push(sql`${t.id} in (select tt.transaction_id from ${transactionTags} tt
+        where tt.household_id = ${householdId} and tt.tag_id in (${ids})
+        group by tt.transaction_id having count(*) = ${filters.tagIds.length})`);
     } else {
       // EXISTS, nu JOIN: o tranzacție cu două etichete căutate apare o singură dată, deci
       // paginarea pe cheie rămâne stabilă.

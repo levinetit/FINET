@@ -1,0 +1,18 @@
+-- FINET 0005_perf_indexes (Faza 4): indexul pentru ordinea listei de tranzacții. Generată de
+-- drizzle-kit din `src/db/schema/ledger.ts` (fără modificări de mână în afara acestui antet).
+-- Deciziile și măsurătorile: docs/adr/0010-stabilizare.md, docs/PERFORMANCE.md.
+--
+-- Motivul: lista (`date_desc`, implicit) și exportul (`date_asc`) ordonează după
+-- `occurred_on, id` cu NULLS implicit (DESC = NULLS FIRST, ASC = NULLS LAST), iar indexul din
+-- 0002 e `DESC NULLS LAST`, deci planificatorul nu îl poate folosi pentru ordine: la 50.000 de
+-- tranzacții lista făcea Seq Scan + sortare pe toată gospodăria la fiecare pagină. Acest index
+-- dă ordinea direct (parcurs invers: ASC NULLS LAST). RLS, politicile și drepturile: neatinse.
+-- `CREATE INDEX` (nu CONCURRENTLY: runner-ul rulează în tranzacție) blochează scrierile pe
+-- `transactions` cât durează construirea (sub o secundă la volumul actual).
+--
+-- NU modifica fișierul după aplicare: runner-ul (src/db/migrate.ts) compară hash-ul.
+--
+-- Rollback (manual, de operator; nu atinge datele):
+--   drop index if exists finet.transactions_household_date_idx;
+--   delete from finet.__drizzle_migrations where hash = '<hash-ul 0005>';  -- doar dacă se revine definitiv
+CREATE INDEX "transactions_household_date_idx" ON "finet"."transactions" USING btree ("household_id","occurred_on" DESC NULLS FIRST,"id" DESC NULLS FIRST);
