@@ -419,8 +419,10 @@ test.describe(`registrul (${MODE})`, () => {
     const toggle = page.getByRole("switch", { name: "Trimite statistici anonime de utilizare" });
     await expect(toggle).toBeEnabled();
     // Pornim mereu din starea „oprit” (testul se poate relua).
+    // Bifa se schimbă abia după răspunsul serverului: `click()` + așteptarea stării (nu `check()`).
     if (await toggle.isChecked()) {
-      await toggle.uncheck();
+      await toggle.click();
+      await expect(toggle).not.toBeChecked();
       await expect(page.getByText("Statisticile de utilizare sunt dezactivate.")).toBeVisible();
     }
 
@@ -435,7 +437,8 @@ test.describe(`registrul (${MODE})`, () => {
     }
 
     expect(await profileSaveHeader()).toBeUndefined();
-    await toggle.check();
+    await toggle.click();
+    await expect(toggle).toBeChecked();
     await expect(page.getByText("Statisticile de utilizare sunt activate.")).toBeVisible();
     expect(await profileSaveHeader()).toMatch(
       /^platform=web; installation=[0-9a-f-]{36}; locale=ro-RO$/,
@@ -445,7 +448,8 @@ test.describe(`registrul (${MODE})`, () => {
     await expect(toggle).toBeChecked();
     expect(await profileSaveHeader()).toMatch(/^platform=web; /);
 
-    await toggle.uncheck();
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
     await expect(page.getByText("Statisticile de utilizare sunt dezactivate.")).toBeVisible();
     expect(await profileSaveHeader()).toBeUndefined();
   });
