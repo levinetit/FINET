@@ -88,7 +88,7 @@ F3-C: niciuna. F3-D: doar pentru `finet-backup`, ca fișiere în `/srv/finet/sec
 - Graficele randate pe server pentru volume mari (Faza 7) citesc toate tranzacțiile lunii/celor 12 luni (ADR 0007).
 - E2E nerulate local: riscuri de fiabilitate la prima rulare — timpul de compilare al `next dev` pe paginile noi (scenariul g are `test.slow()`), focusul în scenariul h depinde de stilul `focus-visible` al `Select`.
 - Backup (F3-D): nimic nu e verificat încă pe Supabase sau pe o destinație reală (rolul BYPASSRLS poate fi refuzat de `postgres`, vezi `docs/BACKUP.md` 3); pg_dump 17 refuză un server 18 (imaginea se actualizează la upgrade); un root compromis pe VPS poate șterge instantaneele dacă destinația nu are Object Lock/append-only; parola restic pierdută = backup ilizibil.
-- Revizuirea `security` a F3-A, F3-B, F3-C, F3-D: TODO.
+- Revizuirea `security` a Fazei 3: PASS_WITH_FINDINGS (0 Critical/High). Corectate pe branch: LOW-2 (exporturile CSV cu cookie cer `Sec-Fetch-Site` `same-origin`/`none`, altfel 403; bearer permis; test în `planning-api.test.ts`, OpenAPI cu 403), LOW-1 (`run-backup.sh` refuză un checkout scriibil de alții; cron din `/srv/finet/src`), LOW-3 (digestul imaginii de bază), LOW-4 (`finet_backup` fără CREATE în `public`), INFO-1/2 (docs: date de autentificare în backup, log `0600` + logrotate). Testele vitest, typecheck, lint și `format:check` pe aceste corecții: NOT RUN local (sub 1,5 GB RAM liberi); `ops/backup/test.sh`, `test-env-examples.sh`, shellcheck și `openapi:check`: PASS.
 
 ## 7. Următorii pași
 1. Operatorul: instalarea backup-ului (`docs/BACKUP.md` 5: destinația, `finet_backup` pe Supabase — verifică BYPASSRLS —, secrete, `init`, primul backup, cron) și restaurarea de probă (condiție pentru date reale).

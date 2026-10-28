@@ -13,6 +13,7 @@ Datele FINET sunt în Supabase (schema `finet`, RLS `ENABLE`+`FORCE` pe toate ta
 
 - **restic** (criptare autentificată, deduplicare, compresie zstd, retenție `forget`, `check`, backend-uri S3/SFTP/local): cerut de master prompt. Versiunea ≥ 0.17 pentru `backup --stdin-from-command`; Alpine 3.22 are 0.18.
 - Imaginea `finet:backup` (`ops/backup/Dockerfile`, Alpine 3.22.7, `restic~0.18`, `postgresql17-client~17`, `openssh-client-default`, `tzdata`), separată de `finet:tools`: imaginea Node nu are nevoie de restic/pg_dump și invers. Construită de workflow-ul `images` (matricea are acum `web`, `tools`, `backup`) și adusă cu `pull-images.sh <sha> backup`; niciun build pe host.
+- Imaginea de bază e fixată pe digest (`alpine:3.22.7@sha256:2e0b81d6…`, indexul multi-arch citit din registry fără pull, LOW-3 din revizuirea Fazei 3); actualizarea: `docker buildx imagetools inspect alpine:3.22.<n>` și se schimbă eticheta și digestul împreună.
 - Pachetele sunt fixate pe versiunea minoră (`~0.18`, `~17`), nu pe revizia exactă (dispare din depozitul Alpine la fiecare patch de securitate; build-ul s-ar rupe). **Decizia mea.** pg_dump trebuie să fie ≥ versiunea majoră a serverului: la upgrade-ul Supabase la 18 se schimbă pachetul (pas adăugat în procedura din `docs/INFRA.md` 7).
 
 ### Serviciul `finet-backup`: one-shot, minim

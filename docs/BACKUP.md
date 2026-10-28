@@ -60,7 +60,7 @@ Toate tabelele FINET au `FORCE ROW LEVEL SECURITY`. `pg_dump` pune `row_security
 | `finet_app` cu `--enable-row-security`         | „reușește”, dar scrie **0 din 125** de tranzacții: un backup gol care pare bun (nu se folosește) |
 | `finet_backup` (LOGIN, BYPASSRLS, doar SELECT) | dump complet, verificat prin restaurare                                                      |
 
-Deci varianta cu cel mai mic privilegiu care produce un dump complet e un rol dedicat **`finet_backup`**: `LOGIN BYPASSRLS`, fără superuser/CREATEDB/CREATEROLE/replicare, `connection limit 2`, `default_transaction_read_only = on`, `USAGE` pe schema `finet` și `SELECT` pe tabelele și secvențele ei, plus privilegii implicite pentru tabelele create de migrațiile viitoare (altfel backup-ul ar eșua cu „permission denied” la prima migrație nouă; testul verifică un tabel creat după GRANT-uri). `pg_read_all_data` nu ajută (nu ocolește RLS) și ar da citire pe tot clusterul, inclusiv schema `auth` a Supabase.
+Deci varianta cu cel mai mic privilegiu care produce un dump complet e un rol dedicat **`finet_backup`**: `LOGIN BYPASSRLS`, fără superuser/CREATEDB/CREATEROLE/replicare, `connection limit 2`, `default_transaction_read_only = on` (**doar apărare în plus**: orice sesiune îl poate dezactiva cu `SET`; protecția reală e că rolul are doar `SELECT`), `USAGE` pe schema `finet` și `SELECT` pe tabelele și secvențele ei, plus privilegii implicite pentru tabelele create de migrațiile viitoare (altfel backup-ul ar eșua cu „permission denied” la prima migrație nouă; testul verifică un tabel creat după GRANT-uri). `pg_read_all_data` nu ajută (nu ocolește RLS) și ar da citire pe tot clusterul, inclusiv schema `auth` a Supabase.
 
 Crearea (operatorul, o dată), ca în `ops/supabase/README.md`:
 
@@ -75,7 +75,7 @@ psql "<url-migrator>?sslmode=verify-full&sslrootcert=<ca.crt>" -v step=grants -f
 unset FINET_BACKUP_PASSWORD
 ```
 
-Ultima interogare a pasului `grants` trebuie să întoarcă `tabele_fara_select = 0`.
+Pasul `role` se oprește (și nu lasă rolul creat: o singură tranzacție) dacă `finet_backup` ar putea crea obiecte în schema `public` (`has_schema_privilege('finet_backup', 'public', 'CREATE')` trebuie să fie `false`, LOW-4). Ultima interogare a pasului `grants` trebuie să întoarcă `tabele_fara_select = 0`.
 
 **DE VERIFICAT pe Supabase:** dacă `postgres` nu are `BYPASSRLS` (pasul 1 dă `permission denied to create role` sau atributul lipsește), varianta de rezervă e dump-ul cu utilizatorul `postgres` al proiectului, într-un fișier de servicii separat (privilegiu mai larg: notează decizia într-un ADR). Nu folosi `--enable-row-security` ca ocolire.
 
@@ -133,17 +133,41 @@ Configurația nesecretă: `/srv/finet/env/finet.backup.env` (model `ops/docker/f
 Cu `sudo crontab -e` (**nu** `crontab -`, care înlocuiește tot crontab-ul root), de exemplu după backup-urile existente ale hostului (02:30, 03:30) și înaintea `dockerai.py` (04:00 la 3 zile):
 
 ```cron
-40 3 * * *   /bin/sh /srv/finet/repo/ops/backup/run-backup.sh >> /var/log/finet-backup.log 2>&1
+40 3 * * *   /bin/sh /srv/finet/src/ops/backup/run-backup.sh >> /var/log/finet-backup.log 2>&1
 ```
 
-(Calea checkout-ului e cea folosită de operator pentru deploy.) `run-backup.sh`:
+**Checkout-ul de încredere (LOW-1).** Cron-ul rulează ca root scripturi din checkout-ul de deploy, `/srv/finet/src` (`docs/INFRA.md`, `docs/GHID_CONSTRUIRE.md`). Cine poate scrie acolo execută cod ca root, deci:
+
+- checkout-ul (și `/srv/finet`, `/srv`) e `root:root`, fără drept de scriere pentru grup/alții (`sudo git clone` îl face așa; verificare: `sudo find /srv/finet/src -perm /022 -not -type l` nu afișează nimic); `git pull` se face doar cu `sudo`;
+- `run-backup.sh` verifică la fiecare rulare că el însuși, `ops/notify/notify.sh`, `ops/docker/docker-compose.yml`, suprapunerea destinației, `compose.env` (alege imaginea pornită de root), `backup-host.env`, `notify.env` și toate directoarele lor până la `/` aparțin lui root și nu pot fi scrise de grup/alții (un director cu sticky bit, ca `/tmp`, e acceptat); altfel refuză (cod 2; alertă `permisiuni` dacă `notify.sh` însuși e sigur) fără să pornească docker;
+- nu se `source`-ază niciun fișier: `backup-host.env` și `notify.env` se citesc doar pe chei cunoscute.
+
+Alternativa, dacă checkout-ul nu poate fi al lui root: copii instalate într-o cale a lui root, ca la agent-office, refăcute după fiecare `git pull` și verificate cu `cmp` (copia păstrează structura, pentru că scriptul găsește compose-ul relativ la el):
+
+```bash
+for f in ops/backup/run-backup.sh ops/backup/compose.s3.yml ops/notify/notify.sh ops/docker/docker-compose.yml; do
+  sudo install -D -o root -g root -m 0755 "/srv/finet/src/$f" "/usr/local/lib/finet/$f"
+done
+# cron: /bin/sh /usr/local/lib/finet/ops/backup/run-backup.sh
+```
+
+**Logul (INFO-2).** Creează-l înainte, doar pentru root, și rotește-l:
+
+```bash
+sudo install -o root -g root -m 0600 /dev/null /var/log/finet-backup.log
+printf '%s\n' '/var/log/finet-backup.log {' '  weekly' '  rotate 8' '  compress' '  missingok' \
+  '  notifempty' '  create 0600 root root' '}' | sudo tee /etc/logrotate.d/finet-backup > /dev/null
+```
+
+Logul nu conține secrete, dar conține numele bucket-ului, gazdele și mesajele de eroare ale bazei.
+
+`run-backup.sh`:
 
 - trimite alertă la orice eșec: etapă (`config`, `repo`, `unlock`, `dump`, `storage`, `forget`, `check`), container oprit (137, OOM), timeout (`FINET_BACKUP_TIMEOUT`, implicit 3h), altă rulare în curs (`lock`), imagine lipsă;
 - anti-flood: aceeași eroare cel mult o dată pe oră (`FINET_BACKUP_ALERT_INTERVAL`); o eroare nouă pleacă imediat;
 - **decizia mea:** un mesaj de succes săptămânal (duminica, `FINET_BACKUP_WEEKLY_OK_DAY`), ca un cron oprit să nu treacă neobservat;
 - scrie `/srv/finet/backup-state/last-success` (epoch), pentru pagina de administrare (6.5) sau o verificare externă.
 
-Rotirea logului: `/var/log/finet-backup.log` e mic (câteva sute de rânduri pe zi); de adăugat în `logrotate` dacă se dorește.
 
 ## 7. Restaurare (procedura testată)
 
@@ -184,7 +208,15 @@ docker exec -u 1000 -e FINET_RESTORE_TEST=1 -e PGHOST=<pg> -e PGUSER=finet -e PG
   sh /work/ops/backup/restore-test.sh
 ```
 
-## 9. Ce NU acoperă
+## 9. Ce conține backup-ul (INFO-1)
+
+Dump-ul conține **toată** schema `finet`, inclusiv `auth_accounts` (hash-urile Argon2id ale parolelor), `auth_sessions` (tokenurile de sesiune), `auth_verifications` și cheile de idempotență. Consecințe:
+
+- repository-ul restic și parola lui se tratează ca baza de producție (cine le are poate încerca hash-urile offline și poate folosi sesiunile încă valide);
+- după o restaurare **în afara producției** (proba din 7.A, o copie de test) se invalidează sesiunile copiei: `delete from finet.auth_sessions; delete from finet.auth_verifications;` (ca superuserul probei), apoi se șterge proba; copia nu se expune pe rețea;
+- după o restaurare de dezastru pe producție, sesiunile restaurate rămân valide până la expirare; dacă incidentul a implicat o compromitere, revocă-le (aceeași comandă) și cere schimbarea parolelor.
+
+## 10. Ce NU acoperă
 
 - Backup-urile planului Supabase (zilnice, pe planul plătit) rămân **în plus**, nu sunt înlocuite.
 - Alte servicii de pe host, `/srv/finet/env`, `/srv/finet/secrets` (secretele se păstrează separat, în managerul de parole; **fără parola restic backup-ul nu se poate citi**).

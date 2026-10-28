@@ -225,4 +225,8 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Destinația în afara serverului, cu protecție la ștergere (Object Lock/append-only) | TODO | decizia operatorului (`docs/BACKUP.md` 2, 9) | — |
 | Parola restic păstrată și în afara serverului | TODO | operatorul | — |
 | Primul backup real + restaurare de probă | TODO | operatorul (`docs/BACKUP.md` 5) | — |
-| Revizuirea `security` a F3-D | TODO | agentul `security` | — |
+| Revizuirea Fazei 3, LOW-1: cron-ul root rulează doar dintr-un checkout `root:root` nescriibil de alții; `run-backup.sh` verifică lanțul (scripturi, compose, `compose.env`, fișierele de mediu, directoarele până la `/`) și refuză; nimic `source`-at | DONE (cod + `test.sh`) / instalarea: operatorul | `run-backup.sh` `check_trust`, `ops/backup/test.sh`, `docs/BACKUP.md` 6 | 2026-10-28 · programmer (F3-D) |
+| Revizuirea Fazei 3, LOW-3: imaginea de bază a backup-ului fixată pe digest | DONE | `ops/backup/Dockerfile` (`alpine:3.22.7@sha256:2e0b81d6…`, din registry), ADR 0009 | 2026-10-28 · programmer (F3-D) |
+| Revizuirea Fazei 3, LOW-4: `finet_backup` fără CREATE în `public` (verificat, oprire la `true`); `default_transaction_read_only` notat ca apărare în plus | DONE (PG17 efemer) | `backup-role.sql`, `docs/BACKUP.md` 3 | 2026-10-28 · programmer (F3-D) |
+| Revizuirea Fazei 3, INFO-1/2: backup-ul conține hash-uri de parole și sesiuni (invalidarea după restaurări non-prod); logul `0600` + `logrotate` | DONE (docs) | `docs/BACKUP.md` 6, 9 | 2026-10-28 · programmer (F3-D) |
+| Revizuirea `security` a F3-D | DONE (PASS_WITH_FINDINGS, 0 Critical/High; corecțiile de mai sus) | coordonatorul | 2026-10-28 · security |
