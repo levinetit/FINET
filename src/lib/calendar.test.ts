@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type RecurrenceSpec,
+  addDays,
   addMonths,
   currentMonth,
+  dayNumber,
+  fromDayNumber,
+  gridDate,
+  occurrenceAfter,
+  occurrenceOnOrAfter,
   daysInMonth,
   daysOfMonth,
   isMonth,
@@ -105,5 +112,112 @@ describe("calendar: data locală în Europe/Bucharest", () => {
     expect(isTimeZone("Nu/Exista")).toBe(false);
     expect(localDateOf(at("2026-12-31T22:30:00Z"), "Nu/Exista")).toBe("2027-01-01");
     expect(localDateOf(at("2026-12-31T22:30:00Z"), "UTC")).toBe("2026-12-31");
+  });
+});
+
+describe("recurențe (Faza 5)", () => {
+  const monthly = (startOn: string, dayOfMonth: number, interval = 1) =>
+    ({ frequency: "monthly", interval, dayOfMonth, startOn }) as const;
+  const seq = (spec: RecurrenceSpec, from: string, n: number) => {
+    const out: string[] = [];
+    let d = occurrenceOnOrAfter(spec, from);
+    while (d && out.length < n) {
+      out.push(d);
+      d = occurrenceAfter(spec, d);
+    }
+    return out;
+  };
+
+  it("addDays/dayNumber trec corect peste luni, ani și 29 februarie", () => {
+    expect(addDays("2026-01-31", 1)).toBe("2026-02-01");
+    expect(addDays("2028-02-28", 1)).toBe("2028-02-29");
+    expect(addDays("2027-02-28", 1)).toBe("2027-03-01");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(fromDayNumber(dayNumber("2026-10-25"))).toBe("2026-10-25");
+    expect(() => dayNumber("2026-02-30")).toThrow(RangeError);
+  });
+
+  it("ziua 31: ultima zi în lunile scurte, fără deplasarea zilei țintă", () => {
+    expect(seq(monthly("2026-01-31", 31), "2026-01-01", 5)).toEqual([
+      "2026-01-31",
+      "2026-02-28",
+      "2026-03-31",
+      "2026-04-30",
+      "2026-05-31",
+    ]);
+    // Bisect: 29 februarie.
+    expect(seq(monthly("2028-01-31", 31), "2028-02-01", 2)).toEqual(["2028-02-29", "2028-03-31"]);
+  });
+
+  it("lunar cu interval 3 (trimestrial) și ziua țintă după data de început", () => {
+    expect(seq(monthly("2026-01-15", 31, 3), "2026-01-01", 4)).toEqual([
+      "2026-01-31",
+      "2026-04-30",
+      "2026-07-31",
+      "2026-10-31",
+    ]);
+    // Ziua țintă înaintea zilei de început: prima scadență e luna următoare a grilei.
+    expect(seq(monthly("2026-01-20", 10), "2026-01-01", 2)).toEqual(["2026-02-10", "2026-03-10"]);
+  });
+
+  it("anual pe 29 februarie: 28 februarie în anii nebisecți, 29 în cei bisecți", () => {
+    const spec = {
+      frequency: "yearly",
+      interval: 1,
+      dayOfMonth: 29,
+      startOn: "2028-02-29",
+    } as const;
+    expect(seq(spec, "2028-01-01", 5)).toEqual([
+      "2028-02-29",
+      "2029-02-28",
+      "2030-02-28",
+      "2031-02-28",
+      "2032-02-29",
+    ]);
+  });
+
+  it("săptămânal și zilnic (cu interval), inclusiv peste schimbările de oră (DST)", () => {
+    const weekly = {
+      frequency: "weekly",
+      interval: 2,
+      dayOfMonth: null,
+      startOn: "2026-03-22",
+    } as const;
+    // 29 martie 2026 = trecerea la ora de vară în București; data nu se deplasează.
+    expect(seq(weekly, "2026-03-22", 3)).toEqual(["2026-03-22", "2026-04-05", "2026-04-19"]);
+    const daily = {
+      frequency: "daily",
+      interval: 1,
+      dayOfMonth: null,
+      startOn: "2026-10-24",
+    } as const;
+    // 25 octombrie 2026 = trecerea la ora de iarnă.
+    expect(seq(daily, "2026-10-24", 3)).toEqual(["2026-10-24", "2026-10-25", "2026-10-26"]);
+    const every3 = {
+      frequency: "daily",
+      interval: 3,
+      dayOfMonth: null,
+      startOn: "2026-01-01",
+    } as const;
+    expect(occurrenceOnOrAfter(every3, "2026-01-05")).toBe("2026-01-07");
+  });
+
+  it("„azi” în București: 23:30 UTC în octombrie (după DST) e deja ziua următoare", () => {
+    expect(localDateOf(new Date("2026-10-25T21:30:00Z"))).toBe("2026-10-25");
+    expect(localDateOf(new Date("2026-10-25T22:30:00Z"))).toBe("2026-10-26");
+    expect(localDateOf(new Date("2026-03-28T22:30:00Z"))).toBe("2026-03-29");
+  });
+
+  it("capătul calendarului: null după 2999-12-31; interval invalid → RangeError", () => {
+    expect(occurrenceAfter(monthly("2999-12-01", 1), "2999-12-01")).toBeNull();
+    expect(() => occurrenceOnOrAfter(monthly("2026-01-01", 1, 0), "2026-01-01")).toThrow(
+      RangeError,
+    );
+  });
+
+  it("gridDate: a n-a dată a grilei, fără drift (calculată din ancoră)", () => {
+    const spec = monthly("2026-01-31", 31);
+    expect(gridDate(spec, 13)).toBe("2027-02-28");
+    expect(gridDate(spec, 14)).toBe("2027-03-31");
   });
 });
