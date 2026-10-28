@@ -112,7 +112,9 @@ describe.skipIf(!TEST_ADMIN_URL)("categorii (Postgres real, finet_app)", () => {
     expect(
       await sqlState(() =>
         withRlsOn(f.db, ctx, (tx) =>
-          tx.execute(sql`update finet.categories set household_id = ${f.HA} where id = ${groceries}`),
+          tx.execute(
+            sql`update finet.categories set household_id = ${f.HA} where id = ${groceries}`,
+          ),
         ),
       ),
     ).toBe("42501");

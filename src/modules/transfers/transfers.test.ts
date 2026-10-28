@@ -27,8 +27,14 @@ describe.skipIf(!TEST_ADMIN_URL)("transferuri (Postgres real, finet_app)", () =>
   beforeAll(async () => {
     f = await createLedgerFixture("finet_it_trf");
     const mk = async (name: string, currency: "RON" | "EUR", openingBalanceMinor = 0) =>
-      (await createAccount(f.deps, f.A, f.HA, { name, type: "bank", currency, openingBalanceMinor }))
-        .id;
+      (
+        await createAccount(f.deps, f.A, f.HA, {
+          name,
+          type: "bank",
+          currency,
+          openingBalanceMinor,
+        })
+      ).id;
     r1 = await mk("R1", "RON", 100_000);
     r2 = await mk("R2", "RON");
     e1 = await mk("E1", "EUR");
@@ -56,7 +62,9 @@ describe.skipIf(!TEST_ADMIN_URL)("transferuri (Postgres real, finet_app)", () =>
     expect(t.to).toMatchObject({ accountId: r2, amountMinor: 25_000n, currency: "RON" });
     expect(await balance(r1)).toBe(75_000n);
     expect(await balance(r2)).toBe(25_000n);
-    const rows = await f.admin<{ type: string; transfer_group_id: string; transfer_direction: string }[]>`
+    const rows = await f.admin<
+      { type: string; transfer_group_id: string; transfer_direction: string }[]
+    >`
       select type, transfer_group_id, transfer_direction from finet.transactions
        where transfer_group_id = ${t.id} order by transfer_direction`;
     expect(rows).toEqual([
@@ -190,9 +198,9 @@ describe.skipIf(!TEST_ADMIN_URL)("transferuri (Postgres real, finet_app)", () =>
               ${group}, ${direction})`;
     const g1 = randomUUID();
     // Un singur rând: eroarea apare la COMMIT, nimic nu rămâne.
-    expect(await sqlState(() => withRlsOn(f.db, ctx, (tx) => tx.execute(leg(g1, r1, "out", 5))))).toBe(
-      "23514",
-    );
+    expect(
+      await sqlState(() => withRlsOn(f.db, ctx, (tx) => tx.execute(leg(g1, r1, "out", 5)))),
+    ).toBe("23514");
     const g2 = randomUUID();
     // Același cont pe ambele rânduri.
     expect(
@@ -235,7 +243,9 @@ describe.skipIf(!TEST_ADMIN_URL)("transferuri (Postgres real, finet_app)", () =>
       select count(*)::int as n from finet.transactions
        where transfer_group_id in (${g1}, ${g2}, ${g3})`;
     expect(left!.n).toBe(0);
-    expect((await getTransfer(f.deps, f.A, f.HA, ok.id)).to.transactionId).toBe(ok.to.transactionId);
+    expect((await getTransfer(f.deps, f.A, f.HA, ok.id)).to.transactionId).toBe(
+      ok.to.transactionId,
+    );
   });
 
   it("modificare: sumele ambelor rânduri, data și textele; monede diferite cer ambele sume", async () => {

@@ -40,7 +40,12 @@ describe.skipIf(!TEST_ADMIN_URL)("conturi și solduri (Postgres real, finet_app)
       occurredOn: day,
     });
   const income = (accountId: string, amountMinor: number) =>
-    createTransaction(f.deps, f.A, f.HA, { accountId, type: "income", amountMinor, occurredOn: day });
+    createTransaction(f.deps, f.A, f.HA, {
+      accountId,
+      type: "income",
+      amountMinor,
+      occurredOn: day,
+    });
 
   it("soldul = inițial + venituri − cheltuieli + transferuri intrate − transferuri ieșite", async () => {
     const bank = await createAccount(f.deps, f.A, f.HA, {
@@ -210,9 +215,10 @@ describe.skipIf(!TEST_ADMIN_URL)("conturi și solduri (Postgres real, finet_app)
       { name: "X", type: "cash", currency: "RON", openingBalanceMinor: 1.5 },
       { name: "X", type: "cash", currency: "RON", bankCode: "BT; drop" },
     ]) {
-      await expect(createAccount(f.deps, f.A, f.HA, bad), JSON.stringify(bad)).rejects.toBeInstanceOf(
-        ValidationError,
-      );
+      await expect(
+        createAccount(f.deps, f.A, f.HA, bad),
+        JSON.stringify(bad),
+      ).rejects.toBeInstanceOf(ValidationError);
     }
   });
 
@@ -235,9 +241,9 @@ describe.skipIf(!TEST_ADMIN_URL)("conturi și solduri (Postgres real, finet_app)
     await expect(
       updateAccount(f.deps, f.A, f.HA, own.id, { ownerUserId: f.B.userId }),
     ).rejects.toBeInstanceOf(ValidationError);
-    expect((await updateAccount(f.deps, f.A, f.HA, own.id, { ownerUserId: null })).ownerUserId).toBe(
-      null,
-    );
+    expect(
+      (await updateAccount(f.deps, f.A, f.HA, own.id, { ownerUserId: null })).ownerUserId,
+    ).toBe(null);
   });
 
   it("izolare: B nu vede, nu modifică, nu arhivează și nu șterge conturile lui A (404)", async () => {

@@ -342,7 +342,10 @@ describe.skipIf(!TEST_ADMIN_URL)("tranzacții (Postgres real, finet_app)", () =>
     it("filtre: tip, categorie, interval de date și de sumă, sursă", async () => {
       const incomes = await all({ accountId: acc, type: "income" });
       expect(incomes.map((r) => r.id).sort()).toEqual(
-        created.filter((t) => t.type === "income").map((t) => t.id).sort(),
+        created
+          .filter((t) => t.type === "income")
+          .map((t) => t.id)
+          .sort(),
       );
       const byCat = await all({ accountId: acc, categoryId: lunch });
       expect(byCat.every((r) => r.categoryId === lunch)).toBe(true);
@@ -355,7 +358,14 @@ describe.skipIf(!TEST_ADMIN_URL)("tranzacții (Postgres real, finet_app)", () =>
         created.filter((t) => t.occurredOn >= "2025-01-03" && t.occurredOn <= "2025-01-04").length,
       );
       const amounts = await all({ accountId: acc, amountMinMinor: 200, amountMaxMinor: 250 });
-      expect(amounts.map((r) => r.amountMinor).sort()).toEqual([200n, 210n, 220n, 230n, 240n, 250n]);
+      expect(amounts.map((r) => r.amountMinor).sort()).toEqual([
+        200n,
+        210n,
+        220n,
+        230n,
+        240n,
+        250n,
+      ]);
       expect(await all({ accountId: acc, source: "receipt" })).toEqual([]);
       expect(await all({ accountId: acc, source: "manual" })).toHaveLength(25);
     });
@@ -392,10 +402,18 @@ describe.skipIf(!TEST_ADMIN_URL)("tranzacții (Postgres real, finet_app)", () =>
         occurredOn: "2026-10-01",
         categoryId: randomUUID(),
       },
-      { accountId: ron, type: "expense", amountMinor: 1, occurredOn: "2026-10-01", notes: "x".repeat(2001) },
+      {
+        accountId: ron,
+        type: "expense",
+        amountMinor: 1,
+        occurredOn: "2026-10-01",
+        notes: "x".repeat(2001),
+      },
     ]) {
-      await expect(createTransaction(f.deps, f.A, f.HA, bad), JSON.stringify(bad).slice(0, 80))
-        .rejects.toBeInstanceOf(ValidationError);
+      await expect(
+        createTransaction(f.deps, f.A, f.HA, bad),
+        JSON.stringify(bad).slice(0, 80),
+      ).rejects.toBeInstanceOf(ValidationError);
     }
     expect(new ConflictError("x").status).toBe(409);
   });
