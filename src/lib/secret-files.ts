@@ -39,10 +39,15 @@ export const SECRET_VARIABLES = [
 export type SecretVariable = (typeof SECRET_VARIABLES)[number];
 
 /**
- * Variabilele marcate `# secret` în `.env.example`, dar încă necitite de config. Goală din F1-B
- * (`BETTER_AUTH_SECRET` e acum validată); rămâne pentru secretele fazelor următoare.
+ * Variabilele marcate `# secret` în `.env.example`, dar necitite de config-ul aplicației: le
+ * citește backup-ul (`ops/backup/`, F3-D) prin `*_FILE`, în containerul `finet-backup`, nu
+ * `finet-web` sau `finet-worker`. Rămân aici ca testul de sincronizare să le acopere.
  */
-export const SECRET_VARIABLES_NOT_YET_VALIDATED = [] as const;
+export const SECRET_VARIABLES_NOT_YET_VALIDATED = [
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "RESTIC_PASSWORD",
+] as const;
 
 /** Dimensiunea maximă a unui fișier secret (o parolă, un token sau un URL, nu un certificat). */
 export const SECRET_FILE_MAX_BYTES = 4096;
