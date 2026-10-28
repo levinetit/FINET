@@ -217,6 +217,9 @@ describe.skipIf(!TEST_ADMIN_URL)("categorii (Postgres real, finet_app)", () => {
     await expect(
       deleteCategory(f.deps, f.A, f.HA, old.id, { reassignTo: old.id }),
     ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      deleteCategory(f.deps, f.A, f.HA, old.id, { reassignTo: randomUUID() }),
+    ).rejects.toBeInstanceOf(NotFoundError);
     expect(await deleteCategory(f.deps, f.A, f.HA, old.id, { reassignTo: target })).toEqual({
       reassigned: 1,
     });
@@ -264,7 +267,7 @@ describe.skipIf(!TEST_ADMIN_URL)("categorii (Postgres real, finet_app)", () => {
     // B nu poate atașa categoria lui A ca părinte sau la o tranzacție.
     await expect(
       createCategory(f.deps, f.B, f.HB, { name: "X", kind: "expense", parentId: secret.id }),
-    ).rejects.toBeInstanceOf(ValidationError);
+    ).rejects.toBeInstanceOf(NotFoundError);
     const accB = await createAccount(f.deps, f.B, f.HB, {
       name: "B",
       type: "cash",
@@ -278,7 +281,7 @@ describe.skipIf(!TEST_ADMIN_URL)("categorii (Postgres real, finet_app)", () => {
         occurredOn: "2026-10-01",
         categoryId: secret.id,
       }),
-    ).rejects.toBeInstanceOf(ValidationError);
+    ).rejects.toBeInstanceOf(NotFoundError);
     // Ocolind serviciul: cheia străină simplă ar accepta-o, triggerul (sub RLS) o respinge.
     const ctxB = { userId: f.B.userId, householdId: f.HB };
     expect(

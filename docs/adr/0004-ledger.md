@@ -56,7 +56,12 @@ Faza 2 aduce conturile, categoriile, tranzacțiile și transferurile, plus tabel
 - `occurred_on` e `date` citit ca text `YYYY-MM-DD` (fără `Date` din JS, deci fără deplasări de fus orar), validat ca dată reală între 1900 și 2999.
 
 ### Erori de domeniu
-- `ValidationError` (400, `invalid_request`, mesaje fixe pe câmp) și `ConflictError` (409, `conflict`, `reason` stabil: `account_not_empty`, `account_has_transactions`, `account_archived`, `account_name_taken`, `category_in_use`, `category_has_children`, `system_category_readonly`, `category_name_taken`, `transfer_row`, …) în `src/lib/errors.ts`; resursele străine sau inexistente dau `NotFoundError` (404 uniform). F2-B le mapează în formatul `{ error: { code, message, fields? } }`.
+- `ValidationError` (400, `invalid_request`, mesaje fixe pe câmp) și `ConflictError` (409, `conflict`, `reason` stabil: `account_not_empty`, `account_has_transactions`, `account_archived`, `account_name_taken`, `category_in_use`, `category_has_children`, `system_category_readonly`, `category_name_taken`, `transfer_row`, …) în `src/lib/errors.ts`; resursele străine sau inexistente dau `NotFoundError` (404 uniform), inclusiv când sunt doar REFERITE dintr-o intrare (contul unei tranzacții sau al unui transfer, categoria, părintele, ținta reasignării): un id aleator și unul al altei gospodării nu se pot deosebi. `ValidationError`/`ConflictError` rămân pentru regulile care se aplică resurselor vizibile (alt tip, același cont, două niveluri, cont arhivat). F2-B le mapează în formatul `{ error: { code, message, fields? } }`.
+
+## Limite cunoscute
+- Politica `accounts_household` re-verifică la FIECARE `UPDATE` că `owner_user_id` e membru: dacă proprietarul unui cont personal pleacă din gospodărie (permis de `household_members_delete`), orice modificare ulterioară a contului (redenumire, arhivare) dă 42501 → 404 până se șterge proprietarul (`owner_user_id = null` în același UPDATE trece). Nicio cale din aplicație nu declanșează asta azi; de rezolvat în Faza 8 (gestiunea membrilor): fie `owner_user_id = null` la scoaterea membrului, fie verificarea mutată într-un trigger BEFORE care rulează doar când `owner_user_id` se schimbă.
+- Inserarea directă în `transactions` cu `household_id` străin e respinsă de triggerul BEFORE (23503) înaintea politicii RLS (42501); ambele refuză scrierea.
+- Cursa pe ierarhia categoriilor (mai sus).
 
 ## Consecințe
 - Aplicarea pe Supabase: `finet-migrate` (o singură migrație nouă, `0002_ledger`), de operator, după revizuiri.

@@ -58,14 +58,10 @@ export function toView(row: TransactionRow): TransactionView {
 }
 
 /** Contul: din gospodărie (altfel 404), nearhivat dacă primește o tranzacție nouă. */
-export async function requireOpenAccount(
-  tx: Tx,
-  householdId: string,
-  accountId: string,
-  field: string,
-) {
+export async function requireOpenAccount(tx: Tx, householdId: string, accountId: string) {
   const account = await selectAccount(tx, householdId, accountId);
-  if (!account) throw new ValidationError({ [field]: "Contul nu există." });
+  // Inexistent sau al altei gospodării (invizibil sub RLS): același 404 uniform.
+  if (!account) throw new NotFoundError();
   if (account.archivedAt) {
     throw new ConflictError("account_archived", "Contul e arhivat și nu mai primește tranzacții.");
   }
@@ -80,7 +76,7 @@ async function checkCategory(
 ): Promise<void> {
   if (!categoryId) return;
   const category = await selectCategory(tx, householdId, categoryId);
-  if (!category) throw new ValidationError({ categoryId: "Categoria nu există." });
+  if (!category) throw new NotFoundError();
   if (category.kind !== type) {
     throw new ValidationError({ categoryId: "Categoria are alt tip decât tranzacția." });
   }
@@ -94,7 +90,7 @@ export async function createTransaction(
 ): Promise<TransactionView> {
   const input = parseInput(transactionCreateSchema, rawInput);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
-    const account = await requireOpenAccount(tx, m.householdId, input.accountId, "accountId");
+    const account = await requireOpenAccount(tx, m.householdId, input.accountId);
     const amountMinor = resolvePositiveAmount(input, account.currency);
     await checkCategory(tx, m.householdId, input.categoryId, input.type);
     const row = await insertTransactionRow(tx, {
@@ -151,7 +147,7 @@ export async function updateTransaction(
     let currency = current.currency;
     let accountId = current.accountId;
     if (patch.accountId && patch.accountId !== current.accountId) {
-      const account = await requireOpenAccount(tx, m.householdId, patch.accountId, "accountId");
+      const account = await requireOpenAccount(tx, m.householdId, patch.accountId);
       accountId = account.id;
       currency = account.currency;
     }

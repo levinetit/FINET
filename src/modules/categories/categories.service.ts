@@ -90,7 +90,8 @@ async function checkParent(
   const fail = (message: string) => new ValidationError({ parentId: message });
   if (parentId === selfId) throw fail("O categorie nu poate fi propriul părinte.");
   const parent = await selectCategory(tx, householdId, parentId);
-  if (!parent) throw fail("Categoria părinte nu există.");
+  // Inexistentă sau a altei gospodării: același 404 uniform.
+  if (!parent) throw new NotFoundError();
   if (parent.parentId !== null) throw fail("Ierarhia are un singur nivel.");
   if (parent.kind !== kind) throw fail("Categoria părinte are alt tip.");
   if (selfId && (await hasChildren(tx, householdId, selfId))) {
@@ -197,7 +198,7 @@ export async function deleteCategory(
         throw new ValidationError({ reassignTo: "Alege o altă categorie." });
       }
       const target = await selectCategory(tx, m.householdId, options.reassignTo);
-      if (!target) throw new ValidationError({ reassignTo: "Categoria nu există." });
+      if (!target) throw new NotFoundError();
       if (target.kind !== current.kind) {
         throw new ValidationError({ reassignTo: "Categoria are alt tip." });
       }

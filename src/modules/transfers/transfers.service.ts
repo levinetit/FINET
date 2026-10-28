@@ -100,8 +100,8 @@ export async function createTransfer(
 ): Promise<TransferView> {
   const input = parseInput(transferCreateSchema, rawInput);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
-    const from = await requireOpenAccount(tx, m.householdId, input.fromAccountId, "fromAccountId");
-    const to = await requireOpenAccount(tx, m.householdId, input.toAccountId, "toAccountId");
+    const from = await requireOpenAccount(tx, m.householdId, input.fromAccountId);
+    const to = await requireOpenAccount(tx, m.householdId, input.toAccountId);
     const amounts = resolveLegAmounts(input, from.currency, to.currency);
     const groupId = randomUUID();
     const common = {

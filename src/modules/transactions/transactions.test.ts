@@ -219,7 +219,7 @@ describe.skipIf(!TEST_ADMIN_URL)("tranzacții (Postgres real, finet_app)", () =>
         amountMinor: 1,
         occurredOn: "2026-10-04",
       }),
-    ).rejects.toBeInstanceOf(ValidationError);
+    ).rejects.toBeInstanceOf(NotFoundError);
     expect((await listTransactions(f.deps, f.B, f.HB)).data).toEqual([]);
     expect((await getTransaction(f.deps, f.A, f.HA, t.id)).amountMinor).toBe(42n);
     // Fără context: niciun rând.
@@ -391,9 +391,8 @@ describe.skipIf(!TEST_ADMIN_URL)("tranzacții (Postgres real, finet_app)", () =>
     });
   });
 
-  it("validare: categorie inexistentă, cont inexistent, dată invalidă → 400; conflictele sunt 409", async () => {
+  it("cont sau categorie inexistente → 404 (ca resursele altei gospodării)", async () => {
     for (const bad of [
-      { accountId: ron, type: "expense", amountMinor: 1, occurredOn: "2026-02-30" },
       { accountId: randomUUID(), type: "expense", amountMinor: 1, occurredOn: "2026-10-01" },
       {
         accountId: ron,
@@ -402,6 +401,14 @@ describe.skipIf(!TEST_ADMIN_URL)("tranzacții (Postgres real, finet_app)", () =>
         occurredOn: "2026-10-01",
         categoryId: randomUUID(),
       },
+    ]) {
+      await expect(createTransaction(f.deps, f.A, f.HA, bad)).rejects.toBeInstanceOf(NotFoundError);
+    }
+  });
+
+  it("validare: dată invalidă, text prea lung → 400; conflictele sunt 409", async () => {
+    for (const bad of [
+      { accountId: ron, type: "expense", amountMinor: 1, occurredOn: "2026-02-30" },
       {
         accountId: ron,
         type: "expense",

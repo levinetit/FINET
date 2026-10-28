@@ -144,7 +144,7 @@ describe.skipIf(!TEST_ADMIN_URL)("transferuri (Postgres real, finet_app)", () =>
         amountMinor: 1,
         occurredOn: day,
       }),
-    ).rejects.toBeInstanceOf(ValidationError);
+    ).rejects.toBeInstanceOf(NotFoundError);
     await expect(
       createTransfer(f.deps, f.B, f.HB, {
         fromAccountId: accB,
@@ -152,7 +152,7 @@ describe.skipIf(!TEST_ADMIN_URL)("transferuri (Postgres real, finet_app)", () =>
         amountMinor: 1,
         occurredOn: day,
       }),
-    ).rejects.toBeInstanceOf(ValidationError);
+    ).rejects.toBeInstanceOf(NotFoundError);
     expect(await count(accB)).toBe(0);
   });
 
