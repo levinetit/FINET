@@ -4,6 +4,7 @@ Analiză **statică** (2026-10-28) a resurselor publice ale site-ului de referin
 
 - [`raport.md`](raport.md): analiza inițială (codul aplicației, rute, apeluri de rețea, anteturi HTTP).
 - [`raport-detaliat.md`](raport-detaliat.md): analiza extinsă (planuri și prețuri, autentificare, stocare locală, constatări de atenție, legătura cu FINET).
+- [`comparatie-finpulse-finet.md`](comparatie-finpulse-finet.md): ce are finpulse și nu are FINET (planificat, neacoperit, respins deliberat).
 
 Note:
 - Rezumatele JSON brute generate de instrumentul REA nu sunt incluse (zgomot, mari); evidența completă era în scratchpad temporar.
