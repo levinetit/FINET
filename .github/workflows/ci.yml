@@ -281,7 +281,7 @@ jobs:
           MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_test
         run: node dist/tools/migrate.mjs
 
-      # Câte opt utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth`, `ledger`, `planning`); parola din
+      # Câte nouă utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth`, `ledger`, `planning`, `regressions`); parola din
       # stdin, niciodată ca argument.
       - name: Utilizatorii E2E (CLI admin)
         env:
@@ -289,7 +289,7 @@ jobs:
         run: |
           set -eu
           for mode in personal saas; do
-            for kind in main parola sesiuni ledger ledger2 seed planning planning2; do
+            for kind in main parola sesiuni ledger ledger2 seed planning planning2 regresii; do
               printf '%s\n' "$E2E_PASSWORD" | node dist/tools/admin.mjs create-user \
                 --email "e2e-$kind-$mode@finet.test" --name "E2E $kind" --password-stdin
             done
@@ -301,17 +301,17 @@ jobs:
       - name: Instalează Chromium (Playwright)
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: E2E — modul personal (smoke, auth, ledger, planning, access)
+      - name: E2E — modul personal (smoke, auth, ledger, planning, regressions, access)
         env:
           E2E_APP_MODE: personal
         run: pnpm test:e2e
 
-      - name: E2E — modul saas (smoke, auth, ledger, planning)
+      - name: E2E — modul saas (smoke, auth, ledger, planning, regressions)
         env:
           E2E_APP_MODE: saas
           E2E_SERVER: dev
           APP_MODE: saas
-        run: pnpm test:e2e --project=smoke --project=auth --project=ledger --project=planning
+        run: pnpm test:e2e --project=smoke --project=auth --project=ledger --project=planning --project=regressions
 
       - name: Raport Playwright (la eșec)
         if: failure()
