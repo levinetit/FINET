@@ -175,11 +175,18 @@ services:
 
   finet-worker:
     <<: *common
+    # Faza 5 (ADR 0011): workerul pg-boss (recurențele: jobul orar `recurring.generate` și
+    # `recurring.generate-now` la cerere). Rulează din imaginea de UNELTE (ținta `tools`, cu
+    # node_modules de producție, deci și pg-boss), nu din imaginea web: ieșirea standalone a
+    # Next.js nu conține pg-boss. Conexiunea: pooler-ul Supabase în modul SESIUNE (5432), rolul
+    # finet_app, `sslmode=verify-full` + CA. Fără DDL la rulare: schema `pgboss` o creează
+    # operatorul (ops/supabase/pgboss-schema.sql), tabelele migrația 0007 (finet-migrate).
+    # Profilul `worker` îl ține oprit până la pornirea explicită (docs/INFRA.md, „Faza 5 pe
+    # producție”):
+    #   docker compose ... --profile worker up -d finet-worker
+    image: ${FINET_TOOLS_IMAGE:-finet:tools}
     container_name: finet-worker
     hostname: finet-worker
-    # Faza 0: workerul e un stub (pg-boss vine în Faza 5/6). Profilul `worker` îl ține oprit
-    # implicit, ca să nu consume memorie pe un host încărcat; pornire explicită:
-    #   docker compose ... --profile worker up -d finet-worker
     profiles: [worker]
     depends_on:
       finet-web:
@@ -197,11 +204,11 @@ services:
       APP_MODE: personal
       STORAGE_DRIVER: local
       STORAGE_DIR: /data/storage
-      NODE_OPTIONS: --max-old-space-size=192
-    command:
-      - node
-      - -e
-      - "console.log('finet-worker: inactiv, vine în Faza 6');const t=setInterval(()=>{},3600000);for(const s of ['SIGTERM','SIGINT'])process.on(s,()=>{clearInterval(t);process.exit(0)})"
+      # Măsurat (F5-A, Postgres efemer): RSS de vârf ~86 MB, cgroup ~97 MB.
+      NODE_OPTIONS: --max-old-space-size=96
+    command: ["node", "dist/tools/worker.mjs"]
+    # SIGTERM: pg-boss termină jobul curent (cel mult 25 s), apoi oprirea; 35 s înainte de SIGKILL.
+    stop_grace_period: 35s
     volumes:
       - *ca-volume
       - type: bind
@@ -211,11 +218,12 @@ services:
           create_host_path: false
     tmpfs:
       - /tmp:size=32m,mode=1777
-    mem_limit: 256m
-    memswap_limit: 256m
+    mem_limit: 150m
+    memswap_limit: 150m
     cpus: 0.5
     pids_limit: 128
-    # Healthcheck-ul din imagine verifică serverul web; stub-ul nu are HTTP.
+    # Fără HTTP: starea lui se vede în /api/health (`queue`, semnalul din
+    # finet.service_heartbeats, ADR 0011), nu printr-un healthcheck Docker.
     healthcheck:
       disable: true
     networks:
