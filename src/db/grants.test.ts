@@ -464,3 +464,107 @@ describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe documente și bonuri (
     });
   });
 });
+
+/** Faza 6 (0009): cotele TVA (doar citire), bugetul AI (doar prin funcții), `queued_document`. */
+describe.skipIf(!TEST_ADMIN_URL)(
+  "drepturile finet_app pe TVA, buget AI și coloanele noi (0009)",
+  () => {
+    let fx: AuthFixture;
+    beforeAll(async () => {
+      fx = await createAuthFixture("finet_it_grants9");
+    });
+    afterAll(async () => {
+      await fx?.close();
+    });
+
+    const FUNCTIONS = [
+      "finet.ai_budget_reserve(bigint, bigint, text)",
+      "finet.ai_budget_spent(text)",
+      "finet.queued_document(uuid)",
+    ];
+
+    it("vat_rates: doar SELECT; ai_budget_usage: niciun drept direct; receipts: coloanele noi actualizabile", async () => {
+      const rows = await fx.scratch.admin<{ table_name: string; privilege_type: string }[]>`
+      select table_name, privilege_type from information_schema.role_table_grants
+       where table_schema = 'finet' and grantee in ('finet_app', 'anon', 'authenticated', 'PUBLIC')
+         and table_name in ('vat_rates', 'ai_budget_usage')
+       order by table_name, privilege_type`;
+      expect(rows).toEqual([{ table_name: "vat_rates", privilege_type: "SELECT" }]);
+      const cols = await fx.scratch.admin<{ column_name: string }[]>`
+      select column_name from information_schema.column_privileges
+       where table_schema = 'finet' and grantee = 'finet_app' and privilege_type = 'UPDATE'
+         and table_name = 'receipts' and column_name in ('issues', 'duplicate_of_receipt_id', 'merge_report')
+       order by column_name`;
+      expect(cols.map((c) => c.column_name)).toEqual([
+        "duplicate_of_receipt_id",
+        "issues",
+        "merge_report",
+      ]);
+      for (const statement of [
+        sql`select * from finet.ai_budget_usage`,
+        sql`insert into finet.ai_budget_usage (month, currency) values (date '2026-10-01', 'USD')`,
+        sql`update finet.vat_rates set rate_bp = 0`,
+        sql`delete from finet.vat_rates`,
+        sql`insert into finet.vat_rates (rate_bp, valid_from) values (1, date '2026-01-01')`,
+      ]) {
+        expect(await sqlState(() => fx.db.execute(statement))).toBe("42501");
+      }
+      const [n] = (await fx.db.execute(
+        sql`select count(*)::int as n from finet.vat_rates`,
+      )) as unknown as { n: number }[];
+      expect(n?.n).toBe(7);
+    });
+
+    it("funcțiile: SECURITY DEFINER, proprietar finet_migrator, search_path fix, EXECUTE doar finet_app", async () => {
+      for (const fn of FUNCTIONS) {
+        const [f] = await fx.scratch.admin<{ app: boolean; anon: boolean; auth: boolean }[]>`
+        select has_function_privilege('finet_app', ${fn}, 'EXECUTE') as app,
+               has_function_privilege('anon', ${fn}, 'EXECUTE') as anon,
+               has_function_privilege('authenticated', ${fn}, 'EXECUTE') as auth`;
+        expect(f, fn).toEqual({ app: true, anon: false, auth: false });
+        const [o] = await fx.scratch.admin<
+          { owner: string; definer: boolean; config: string[]; pub: boolean }[]
+        >`
+        select pg_get_userbyid(p.proowner) as owner, p.prosecdef as definer, p.proconfig as config,
+               exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                        where a.grantee = 0) as pub
+          from pg_proc p where p.oid = ${fn}::regprocedure`;
+        expect(o, fn).toEqual({
+          owner: "finet_migrator",
+          definer: true,
+          config: ["search_path=pg_catalog"],
+          pub: false,
+        });
+      }
+    });
+
+    it("ai_budget_reserve: atomic, doar crește, refuză bugetul 0 și costurile invalide", async () => {
+      const reserve = async (cost: bigint, budget: bigint, cur = "USD") => {
+        const [r] = (await fx.db.execute(
+          sql`select finet.ai_budget_reserve(${cost.toString()}::bigint, ${budget.toString()}::bigint, ${cur}) as ok`,
+        )) as unknown as { ok: boolean }[];
+        return r!.ok;
+      };
+      const spent = async (cur = "USD") => {
+        const [r] = (await fx.db.execute(
+          sql`select finet.ai_budget_spent(${cur})::text as s`,
+        )) as unknown as { s: string }[];
+        return BigInt(r!.s);
+      };
+      expect(await reserve(1n, 0n)).toBe(false);
+      expect(await spent()).toBe(0n);
+      expect(await reserve(60n, 100n)).toBe(true);
+      expect(await reserve(40n, 100n)).toBe(true);
+      expect(await reserve(1n, 100n)).toBe(false);
+      expect(await spent()).toBe(100n);
+      expect(await spent("EUR")).toBe(0n);
+      expect(await sqlState(() => reserve(0n, 100n))).toBe("22023");
+      expect(await sqlState(() => reserve(-5n, 100n))).toBe("22023");
+      expect(await sqlState(() => reserve(1n, 100n, "XYZ"))).toBe("22023");
+      // 10 rezervări paralele de 10 dintr-un buget de 150 (100 deja consumat): exact 5 trec.
+      const results = await Promise.all(Array.from({ length: 10 }, () => reserve(10n, 150n)));
+      expect(results.filter(Boolean)).toHaveLength(5);
+      expect(await spent()).toBe(150n);
+    });
+  },
+);

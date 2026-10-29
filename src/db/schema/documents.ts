@@ -6,6 +6,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   numeric,
   primaryKey,
   smallint,
@@ -68,6 +69,8 @@ export const FALLBACK_REASONS = [
   "budget_exceeded",
   "daily_limit",
   "external_failed",
+  // 0009 (F6-B): AI neconfigurat (`AI_BASE_URL`/cheia lipsesc) → introducere manuală.
+  "ai_unconfigured",
 ] as const;
 export const RECEIPT_LINE_KINDS = ["product", "discount", "deposit_sgr", "bag", "other"] as const;
 export const PAYMENT_METHODS = ["cash", "card", "voucher", "mixed", "other"] as const;
@@ -254,6 +257,18 @@ export const receipts = finet.table(
     dedupKey: text("dedup_key"),
     /** Textul citit (pentru căutare, 6.1); nu apare în loguri. */
     ocrText: text("ocr_text"),
+    /**
+     * 0009 (F6-B): problemele găsite de verificările din cod (coduri stabile, `checks.ts`), afișate
+     * pe ecranul de verificare. Listă JSON de `{ code, field?, line? }`, ≤ 100.
+     */
+    issues: jsonb("issues")
+      .$type<ReadonlyArray<{ code: string; field?: string; line?: number }>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** 0009: „același bon fotografiat din nou” (CUI + număr + dată + total) → bonul original. */
+    duplicateOfReceiptId: uuid("duplicate_of_receipt_id"),
+    /** 0009: raportul unirii unui bon lung (liniile eliminate și motivul, ordinea propusă). */
+    mergeReport: jsonb("merge_report").$type<Readonly<Record<string, unknown>>>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -330,7 +345,7 @@ export const receipts = finet.table(
     check("receipts_provider_used_valid", sql`${t.providerUsed} in ('none', 'local', 'external')`),
     check(
       "receipts_fallback_reason_valid",
-      sql`${t.fallbackReason} is null or ${t.fallbackReason} in ('local_unavailable', 'local_timeout', 'local_failed_validation', 'low_confidence', 'no_local_model', 'consent_missing', 'budget_exceeded', 'daily_limit', 'external_failed')`,
+      sql`${t.fallbackReason} is null or ${t.fallbackReason} in ('local_unavailable', 'local_timeout', 'local_failed_validation', 'low_confidence', 'no_local_model', 'consent_missing', 'budget_exceeded', 'daily_limit', 'external_failed', 'ai_unconfigured')`,
     ),
     check(
       "receipts_dedup_key_format",
@@ -339,6 +354,19 @@ export const receipts = finet.table(
     check(
       "receipts_ocr_text_length",
       sql`${t.ocrText} is null or char_length(${t.ocrText}) <= 20000`,
+    ),
+    index("receipts_duplicate_of_receipt_id_idx").on(t.duplicateOfReceiptId),
+    check(
+      "receipts_issues_shape",
+      sql`jsonb_typeof(${t.issues}) = 'array' and jsonb_array_length(${t.issues}) <= 100 and pg_column_size(${t.issues}) <= 16384`,
+    ),
+    check(
+      "receipts_merge_report_shape",
+      sql`${t.mergeReport} is null or (jsonb_typeof(${t.mergeReport}) = 'object' and pg_column_size(${t.mergeReport}) <= 32768)`,
+    ),
+    check(
+      "receipts_duplicate_not_self",
+      sql`${t.duplicateOfReceiptId} is null or ${t.duplicateOfReceiptId} <> ${t.id}`,
     ),
   ],
 );
@@ -517,5 +545,53 @@ export const documentUsageDaily = finet.table(
       "document_usage_daily_day_range",
       sql`${t.day} between date '2000-01-01' and date '2999-12-31'`,
     ),
+  ],
+);
+
+/**
+ * 0009 (F6-B): cotele de TVA pentru VALIDARE (master prompt 5.5: „se configurează în date, nu în
+ * cod”), cu perioada de valabilitate. Doar citire pentru `finet_app`; se schimbă printr-o
+ * migrație. Cota în puncte de bază (21,00% = 2100).
+ */
+export const vatRates = finet.table(
+  "vat_rates",
+  {
+    country: text("country").notNull().default("RO"),
+    rateBp: integer("rate_bp").notNull(),
+    validFrom: day("valid_from").notNull(),
+    validTo: day("valid_to"),
+  },
+  (t) => [
+    primaryKey({ name: "vat_rates_pkey", columns: [t.country, t.rateBp, t.validFrom] }),
+    check("vat_rates_country_format", sql`${t.country} ~ '^[A-Z]{2}$'`),
+    check("vat_rates_rate_range", sql`${t.rateBp} between 0 and 10000`),
+    check("vat_rates_period", sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
+/**
+ * 0009 (F6-B): bugetul lunar GLOBAL pentru furnizorii AI externi (`AI_MONTHLY_BUDGET`), pe luna
+ * locală (`Europe/Bucharest`) și monedă. Contor care DOAR crește (rezervarea pesimistă de dinaintea
+ * fiecărei încercări), independent de gospodării: ștergerea unei gospodării (care șterge
+ * `ai_calls` în cascadă) nu eliberează bugetul. `finet_app` NU are niciun drept pe tabel: îl
+ * atinge doar prin funcțiile SECURITY DEFINER `ai_budget_reserve` / `ai_budget_spent`.
+ */
+export const aiBudgetUsage = finet.table(
+  "ai_budget_usage",
+  {
+    month: day("month").notNull(),
+    currency: text("currency", { enum: DB_CURRENCIES }).notNull(),
+    reservedMinor: minor("reserved_minor")
+      .notNull()
+      .default(sql`0`),
+    calls: integer("calls").notNull().default(0),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ name: "ai_budget_usage_pkey", columns: [t.month, t.currency] }),
+    check("ai_budget_usage_month_first_day", sql`extract(day from ${t.month}) = 1`),
+    check("ai_budget_usage_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check("ai_budget_usage_reserved_range", sql`${t.reservedMinor} between 0 and 10000000000000`),
+    check("ai_budget_usage_calls_range", sql`${t.calls} between 0 and 100000000`),
   ],
 );
