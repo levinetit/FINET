@@ -368,3 +368,16 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Verificarea operatorului înainte de 0012 (conturi cu `owner_user_id` deja setat) | TODO (operator) | INFRA 4j | — |
 | Revizuirea `security` a F8-A | TODO | agentul `security` | — |
 
+### 19.1 Revizuirea de securitate F8-A (2026-10-29): corecții
+
+| Constatare | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| M1 — invitațiile unui owner scos/retrogradat/plecat rămâneau valabile | DONE (PG17): revocare automată în aceeași tranzacție (retrogradare, eliminare, plecare, transfer) + `accept_invite` cere creatorul încă owner (răspuns uniform) | `members.service.ts`, `family.repo.ts`, `0012_family.sql`, `family.test.ts` („M1”) | 2026-10-29 · programmer (F8-A) |
+| M2 — decontări: plată „peste datorie”, creditorul nu putea anula, membru ținut captiv de sold | DONE (PG17): `from` ≤ datoria curentă (corecții doar de la creditor, `to` orice sumă, owner străin doar stingere), anulare de oricare parte sau de creator (nu de un owner străin; RLS + serviciu), plecarea/eliminarea nu mai sunt blocate (`unsettledBalance`, `formerMemberIds`) | `settlements.service.ts`, `members.service.ts`, `0012_family.sql`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| m1 — ștergerea unei categorii dezvăluia folosirea în conturi personale (și ștergea bugetele personale ale altora) | DONE (PG17): `category_used_elsewhere` (SECURITY DEFINER, boolean) → ascundere în loc de ștergere | `categories.service.ts`, `0012_family.sql`, `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| m2 — ștergerea unei etichete comune șterge legăturile de pe tranzacțiile personale ale altora | ACCEPTED (decizie documentată, fără scurgere) | ADR 0016 (10) | 2026-10-29 · programmer (F8-A) |
+| m3 — `audit_events` și `idempotency_keys.response` vizibile întregii gospodării în bază | ACCEPTED RISK / amânat (formularea corectată; restrângerea cere modificarea modulului `idempotency`) | ADR 0016 (10), PRIVACY_NOTES | 2026-10-29 · programmer (F8-A) |
+| m4 — DoS al soldurilor peste 2^53 | DONE (PG17): plafon 10^14 pe pereche la împărțire, ștergere de împărțire, decontare, anulare | `split-math.ts` (`PAIR_BALANCE_CAP`), `family.test.ts` („m4”) | 2026-10-29 · programmer (F8-A) |
+| m5 — politica proprietarului pe conturile personale prea largă | DONE (PG17): legată de `finet.definer_scope` | `0012_family.sql`, `migrate.test.ts`, `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| m6 — verificarea dinaintea 0012 incompletă | DONE (docs) | INFRA 4j | 2026-10-29 · programmer (F8-A) |
+

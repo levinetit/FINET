@@ -412,6 +412,25 @@ Agentul nu a rulat nimic de aici. Pașii completi de deploy ai Fazei 8 vin în F
     where a.owner_user_id is not null
     group by a.household_id;
    ```
+   Ce anume ar dispărea pentru ceilalți membri (revizuirea m6) — tranzacțiile și regulile recurente create de ALT membru decât proprietarul contului, plus transferurile dintre un astfel de cont și un cont comun (ceilalți vor vedea doar jumătatea comună):
+   ```sql
+   select a.household_id, a.id as cont,
+          (select count(*) from finet.transactions t
+            where t.account_id = a.id and t.created_by_user_id is distinct from a.owner_user_id)
+            as tranzactii_ale_altora,
+          (select count(*) from finet.recurring_rules r
+            where r.account_id = a.id and r.created_by_user_id is distinct from a.owner_user_id)
+            as reguli_ale_altora,
+          (select count(*) from finet.transactions t
+             join finet.transactions o on o.transfer_group_id = t.transfer_group_id and o.id <> t.id
+             join finet.accounts oa on oa.id = o.account_id and oa.owner_user_id is null
+            where t.account_id = a.id and t.transfer_group_id is not null)
+            as transferuri_cu_conturi_comune,
+          (select count(*) from finet.transactions t where t.account_id = a.id) as tranzactii_total
+     from finet.accounts a
+    where a.owner_user_id is not null
+    order by a.household_id, a.id;
+   ```
    Dacă rezultatul e gol sau gospodăriile au un singur membru: nimic de făcut. Altfel, decide cu familia: conturile care trebuie să rămână comune se fac comune ÎNAINTE de migrare (`update finet.accounts set owner_user_id = null where id in (...)`, cu backup).
 2. Backup, apoi migrațiile (rolul `migrate`; „aplicate acum 1”, a doua rulare „aplicate acum 0”). Rollback: antetul `0012_family.sql`.
 3. Nicio variabilă și niciun secret nou pentru F8-A.

@@ -55,10 +55,11 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 
 ## Vizibilitatea între membrii unei gospodării (Faza 8, F8-A; ADR 0016)
 - **Conturile personale** (`owner_user_id` = membrul) și tot ce ține de ele (tranzacții, transferuri — mai puțin jumătatea din contul comun —, etichete, reguli recurente, sumele din dashboard, rapoarte, bugete și exporturi) sunt vizibile DOAR proprietarului, impus în bază (RLS). Conturile comune le văd toți membrii.
+- **Excepții încă vizibile tuturor membrilor în bază (nu prin interfață):** jurnalul de audit (`audit_events`: acțiunea, tipul și id-ul obiectului, fără sume sau texte, deci și id-urile obiectelor personale) și răspunsurile salvate ale cheilor de idempotență (`idempotency_keys.response`, 24 h; prin API se obțin doar cu cheia exactă, aleatoare). Restrângerea lor la autor e amânată (ADR 0016, punctul 10, m3).
 - **Împărțirile și decontările** (cine a plătit, cât datorează fiecare, decontările și notele lor) le văd toți membrii gospodăriei, ca soldurile să fie aceleași pentru toți; descrierea, comerciantul și contul cheltuielii împărțite rămân private plătitorului.
 - **Rămân vizibile tuturor membrilor (amânat):** documentele și bonurile încărcate (comerciant, total, produse), chiar dacă bonul a fost confirmat pe un cont personal; obiectivele; existența numelui unui cont personal (un nume deja folosit nu mai poate fi ales de alt membru). Recomandare: bonurile private nu se încarcă în gospodăria comună.
 - **Invitațiile:** în bază se păstrează doar hash-ul tokenului, cine a invitat, rolul și datele; nu se stochează emailul invitatului. Linkul în clar se arată o singură dată celui care invită.
-- **Plecarea / eliminarea:** datele din conturile comune rămân gospodăriei; conturile personale ale celui plecat rămân în gospodărie, invizibile tuturor, și se șterg doar odată cu gospodăria (de revăzut la ștergerea contului, master prompt 5.6).
+- **Plecarea / eliminarea:** nu sunt blocate de solduri; soldurile și decontările rămân în istoric, cu cel plecat marcat ca fost membru. Datele din conturile comune rămân gospodăriei; conturile personale ale celui plecat rămân în gospodărie, invizibile tuturor, și se șterg doar odată cu gospodăria (de revăzut la ștergerea contului, master prompt 5.6).
 
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.

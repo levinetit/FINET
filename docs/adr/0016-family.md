@@ -26,7 +26,7 @@ Până la Faza 8 toți membrii unei gospodării vedeau tot, gospodăria „curen
 - **Tokenul:** 32 de octeți din CSPRNG (`randomBytes`, 256 de biți), base64url (43 de caractere). În bază ajunge DOAR hash-ul; tokenul în clar se întoarce o singură dată, la creare (`createInvite`). Aplicația nu are SELECT pe `token_hash` (drepturi pe coloane) și nu are DELETE pe invitații.
 - **Comparația „constant-time”:** nu există o comparație de token în cod. Căutarea se face după hash-ul tokenului primit (index unic); timpul depinde de hash, nu de prefixul tokenului, iar două hash-uri nu se compară niciodată în JavaScript.
 - **Acceptarea:** `finet.accept_invite(token_hash)` — SECURITY DEFINER, `search_path = pg_catalog`, EXECUTE doar `finet_app`, acționează pentru utilizatorul DIN CONTEXT, întoarce doar `(invite_household_id, newly_joined)`. Rândul e blocat `FOR UPDATE`; o a doua acceptare concurentă re-evaluează condițiile pe rândul deja folosit și nu-l mai găsește (testat: două acceptări paralele → exact una). Inserarea membrului trece printr-o politică îngustă a proprietarului (`household_members_migrator_join`, variabila tranzacției `finet.joining_household`), ca la `create_household`.
-- **Răspuns uniform:** token inexistent, malformat, expirat, folosit sau revocat → același `InviteUnavailableError` (`invite_unavailable`, 404, mesaj fix). Un utilizator deja membru primește gospodăria fără să consume invitația (rămâne celui invitat). La intrare, gospodăria devine cea activă (decizia mea).
+- **Răspuns uniform:** token inexistent, malformat, expirat, folosit sau revocat → același `InviteUnavailableError` (`invite_unavailable`, 404, mesaj fix). Un utilizator deja membru primește gospodăria fără să consume invitația (rămâne celui invitat). La intrare, gospodăria devine cea activă (decizia mea). **Revizuirea M1:** invitația e utilizabilă doar cât timp creatorul ei e ÎNCĂ owner al gospodăriei (condiție în `accept_invite`, același răspuns uniform); în plus, la retrogradarea, eliminarea, plecarea sau transferul de ownership al unui owner, invitațiile lui active se revocă în aceeași tranzacție, sub lock.
 - **Limite:** acceptarea are limită de rată per utilizator (`invite_accept`, implicit 10 / 15 min, consumată înaintea oricărei verificări); crearea are o limită de 20 de invitații / 24 h / gospodărie, numărate din rândurile care nu se pot șterge (doar crescătoare); valabilitatea implicită 72 h. Gospodăria are cel mult **6 membri** (trigger `household_members_check_cap`, sub lock, pe ORICE cale de inserare, inclusiv CLI) → `household_full`.
 
 ### 3. Roluri și permisiuni (minimal: `owner` / `member`)
@@ -38,8 +38,8 @@ Până la Faza 8 toți membrii unei gospodării vedeau tot, gospodăria „curen
 | schimbă rolul cuiva, transferă ownership-ul, elimină un membru | nu (403) | da |
 | pleacă din gospodărie | da | da, dacă rămâne alt owner |
 | setează / șterge împărțirea unei cheltuieli | doar plătitorul (contul lui personal) | la fel |
-| înregistrează o decontare | doar dacă e una dintre părți | pentru oricare doi membri |
-| anulează o decontare | doar a lui | oricare |
+| înregistrează o decontare | doar dacă e una dintre părți (ca plătitor: cel mult datoria curentă) | și pentru oricare doi membri, dar doar ca stingere a unei datorii existente |
+| anulează o decontare | dacă e una dintre părți sau creatorul | la fel (un owner străin de decontare NU o anulează) |
 
 Testate pe fiecare acțiune × rol (`src/modules/family/family.test.ts`); RLS impune aceleași reguli (`household_invites_owner_*`, `settlements_*`, `transaction_splits_*`, `household_members_*` din 0001).
 
@@ -51,7 +51,7 @@ Testate pe fiecare acțiune × rol (`src/modules/family/family.test.ts`); RLS im
 
 ### 5. Plecarea și eliminarea: ce se întâmplă cu datele
 
-- Blocate cât timp membrul are vreun sold reciproc nenul, în orice monedă, pe orice pereche (`balance_not_settled`); un owner poate înregistra decontarea. Ultimul membru nu „pleacă” (`sole_member`): gospodăria se șterge separat.
+- **Nu** mai sunt blocate de sold (decizia coordonatorului după revizuirea M2: un owner ar fi putut ține un membru captiv cu o cheltuială fictivă și anularea decontării). Soldul rămâne în istoric: cel plecat apare în `getBalances().formerMemberIds` și în perechile soldurilor; serviciul întoarce `{ unsettledBalance }` ca UI-ul să avertizeze, iar auditul păstrează doar indicatorul. Cu un fost membru nu se mai pot înregistra decontări (triggerul cere membri); datoria se poate stinge în afara aplicației sau după o nouă invitație. Ultimul membru nu „pleacă” (`sole_member`): gospodăria se șterge separat.
 - Datele rămân în gospodărie: tranzacțiile din conturile comune rămân ale tuturor; conturile **personale** ale celui plecat (cu tranzacțiile, regulile și etichetele lor) devin invizibile pentru toți și redevin vizibile doar dacă revine; regulile lui recurente pe conturi personale nu se mai generează. Împărțirile și decontările rămân în istoric (fără cheie spre `household_members`; membrii se verifică la inserare). Ștergerea gospodăriei șterge tot (cascada existentă). Preferința de gospodărie activă se șterge la plecare.
 
 ### 6. Gospodăria activă (comutatorul)
@@ -69,6 +69,8 @@ Testate pe fiecare acțiune × rol (`src/modules/family/family.test.ts`); RLS im
 ### 8. Solduri și decontări
 
 - `settlements` (`from_user_id` i-a dat lui `to_user_id` `amount_minor > 0` în `currency`, la `settled_on`, `note` ≤ 200; `from ≠ to`; membri la inserare, trigger; fără DELETE; anularea = `cancelled_at`/`cancelled_by_user_id`, o singură dată). O decontare parțială = o sumă mai mică; mai multe se adună.
+- **Cine poate înregistra ce** (revizuirea M2, decizia coordonatorului): fie `d` = datoria curentă a lui `from` față de `to` (netting pe pereche, în moneda decontării). `to` (a PRIMIT) poate înregistra orice sumă — e doar în defavoarea lui. `from` (a PLĂTIT) poate înregistra cel mult `d`, și doar dacă `d > 0` (își reduce propria datorie); creditorul NU poate înregistra singur o „plată” spre debitor (și-ar crea o creanță) — o corecție în favoarea creditorului o înregistrează debitorul, ca destinatar (`to`). Nimeni nu își creează singur o creanță. Un owner care nu e parte poate doar stinge o datorie existentă (`d > 0`, sumă ≤ `d`). Refuz: 409 `settlement_exceeds_debt`. Verificarea rulează sub lock-ul soldurilor gospodăriei. Anularea: oricare dintre părți sau creatorul (politica `settlements_cancel` în bază + serviciu); o parte nemulțumită de o decontare înregistrată de cealaltă o poate anula.
+- **Plafonul soldurilor** (revizuirea m4): soldul unei perechi rămâne ≤ 10^14 unități minore (`PAIR_BALANCE_CAP`) după orice împărțire, ștergere de împărțire, decontare sau anulare (409 `balance_limit`); un membru are cel mult 5 perechi, deci niciun sold sau total nu ajunge la 2^53 (fără DoS al ecranului de solduri prin ~900 de decontări de 10^13).
 - **Soldurile** se calculează în cod, `bigint`, pe monedă, fără conversie (`computeBalances`): fiecare parte a unui participant ≠ plătitor e o datorie față de plătitor; o decontare scade datoria lui `from` față de `to` (peste datorie, sensul se inversează, nimic nu se pierde). Netting pe perechi, total pe membru (suma totalurilor = 0), rezumatul utilizatorului („Ai de dat / Ai de primit”). JSON doar sub 2^53 (`minorToJson`).
 
 ### 9. Audit și erori
@@ -76,11 +78,20 @@ Testate pe fiecare acțiune × rol (`src/modules/family/family.test.ts`); RLS im
 - Evenimente noi, fără tokenuri, sume, note sau nume: `household.invite_created|invite_revoked|invite_accepted|member_role_changed|member_removed|member_left|ownership_transferred|switched`, `transaction.split_set|split_cleared`, `settlement.created|cancelled` (metadata: doar rolul, orele de valabilitate, modul și numărul de participanți). Testat.
 - Triggerele scrise de mână ridică erorile cu `CONSTRAINT = <nume>`; `translateDbError` le mapează pe coduri fixe (`last_owner`, `household_full`, `split_sum_mismatch`, `account_owner_change`, `invite_not_active`, `settlement_already_cancelled`), fără mesajul Postgres.
 
+### 10. Alte constatări ale revizuirii de securitate (F8-A)
+
+- **m1 — ștergerea unei categorii** comune folosite doar în rânduri invizibile actorului (tranzacții/reguli din conturile personale ale altora, bugetele lor personale): cheia străină ar fi dezvăluit folosirea (409), iar bugetele personale ale altora ar fi dispărut în cascadă. Acum `finet.category_used_elsewhere(id)` (SECURITY DEFINER, doar boolean, doar pentru membri, rândurile văzute de proprietar doar prin variabila `finet.checking_category`) decide: categoria se ASCUNDE în loc să se șteargă (`{ reassigned, hidden: true }`). Rândurile vizibile se reasignează ca înainte; regulile vizibile primesc NULL ca înainte. Se află doar „încă folosită în gospodărie”, nu unde sau de cine.
+- **m2 — ștergerea unei etichete comune** șterge în cascadă și legăturile ei de pe tranzacțiile personale ale altora. Decizia mea: rămâne așa, documentat. Etichetele sunt un vocabular comun al gospodăriei, ștergerea nu dezvăluie nimic (nu există niciun refuz dependent de rânduri invizibile), iar pierderea e doar o etichetă, nu date financiare; proprietarul contului își poate reeticheta tranzacțiile.
+- **m3 — `audit_events` și `idempotency_keys.response`** rămân vizibile tuturor membrilor sub RLS (0001/0002). Auditul nu conține sume sau texte (doar acțiunea, tipul și id-ul obiectului); `idempotency_keys.response` poate conține răspunsul unei crearări (de exemplu o tranzacție dintr-un cont personal), accesibil doar cu cheia exactă prin API, dar citibil în bază de orice membru. Restrângerea la creator cere o coloană `user_id` și modificarea modulului `idempotency` (în afara F8-A): amânat în ROADMAP; formularea din PRIVACY_NOTES și SECURITY_CHECKLIST e corectată.
+- **m5:** politica proprietarului pe conturile personale (`accounts_migrator_personal_owner`) e legată de variabila tranzacției `finet.definer_scope`, setată doar în `due_recurring_rules` (devenită plpgsql) și `category_used_elsewhere`; în afara lor `finet_migrator` nu vede niciun cont (testat).
+- **m6:** verificarea operatorului din INFRA 4j numără și ce dispare efectiv (tranzacții/reguli create de alt membru pe conturi cu proprietar, transferuri spre conturi comune).
+
 ## Alternative respinse
 
 - **Coloana `visibility` separată pe tranzacții:** dublura lui `owner_user_id` din 6.1 și o sursă de incoerență (tranzacție „comună” pe cont personal).
 - **Împărțiri vizibile doar participanților:** soldurile ar fi diferit între membri, iar owner-ul n-ar fi putut verifica soldurile înaintea eliminării unui membru.
 - **Funcție SECURITY DEFINER pentru eliminare cu date personale:** am preferat datele păstrate și invizibile (nicio scurgere, nicio ștergere ireversibilă) în locul blocării plecării sau al ștergerii conturilor personale.
+- **Plecarea blocată de sold** (varianta inițială F8-A): respinsă la revizuire (M2), permitea ținerea captivă a unui membru.
 - **Tokenul ca uuid:** 122 de biți; cerința e ≥ 256.
 
 ## Consecințe
