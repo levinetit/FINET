@@ -183,31 +183,46 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS și drepturi pe tabelele registrului (fine
       sql`insert into finet.accounts (household_id, name, type, currency, owner_user_id)
           values (${f.HA}, ${name}, 'cash', 'RON', ${owner})`;
 
-    it("către un utilizator din altă gospodărie → 42501 la insert și update", async () => {
+    it("către un utilizator din altă gospodărie → 42501 la insert; refuzat și la update", async () => {
       expect(await sqlState(() => as(A(), f.HA, insertAccount(B(), "Cu B")))).toBe("42501");
+      // Din 0012, triggerul `accounts_check_owner_change` (BEFORE, deci înaintea politicii)
+      // refuză orice cont care devine personal: 23514.
       expect(
         await sqlState(() =>
           as(A(), f.HA, sql`update finet.accounts set owner_user_id = ${B()} where id = ${accA}`),
         ),
-      ).toBe("42501");
+      ).toBe("23514");
       // Și către un utilizator inexistent (cheia străină singură ar da 23503, politica întâi).
       expect(await sqlState(() => as(A(), f.HA, insertAccount(randomUUID(), "Fantomă")))).toMatch(
         /^(42501|23503)$/,
       );
     });
 
-    it("către un membru al propriei gospodării sau null → ok", async () => {
-      expect(await sqlState(() => as(A(), f.HA, insertAccount(C(), "Al lui C")))).toBeNull();
+    it("Faza 8 (0012): un cont personal doar pentru sine; null → ok; comun → personal refuzat", async () => {
+      // Un cont „personal” al altui membru ar fi invizibil creatorului: RLS îl refuză.
+      expect(await sqlState(() => as(A(), f.HA, insertAccount(C(), "Al lui C")))).toBe("42501");
       expect(await sqlState(() => as(A(), f.HA, insertAccount(A(), "Al lui A")))).toBeNull();
       expect(await sqlState(() => as(A(), f.HA, insertAccount(null, "Comun")))).toBeNull();
+      // Comun → personal (al altuia sau al tău): refuzat de triggerul din 0012 (23514).
       expect(
         await sqlState(() =>
           as(A(), f.HA, sql`update finet.accounts set owner_user_id = ${C()} where id = ${accA}`),
         ),
-      ).toBeNull();
+      ).toBe("23514");
       expect(
         await sqlState(() =>
-          as(A(), f.HA, sql`update finet.accounts set owner_user_id = null where id = ${accA}`),
+          as(A(), f.HA, sql`update finet.accounts set owner_user_id = ${A()} where id = ${accA}`),
+        ),
+      ).toBe("23514");
+      // Personal → comun: permis proprietarului.
+      expect(
+        await sqlState(() =>
+          as(
+            A(),
+            f.HA,
+            sql`update finet.accounts set owner_user_id = null
+                 where household_id = ${f.HA} and name = 'Al lui A'`,
+          ),
         ),
       ).toBeNull();
     });

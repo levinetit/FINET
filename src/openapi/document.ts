@@ -153,6 +153,8 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
       },
       "X-Content-Type-Options": { description: "`nosniff`.", schema: { type: "string" } },
     };
+  } else if (op.success.sse) {
+    success.content = { "text/event-stream": { schema: { type: "string" } } };
   } else if (op.success.csv) {
     success.content = { "text/csv; charset=utf-8": { schema: { type: "string" } } };
     success.headers = {
@@ -260,6 +262,10 @@ export function buildOpenApiDocument(): Json {
       { name: "me", description: "Contul curent (Faza 1) și consimțămintele." },
       { name: "usage", description: "Statisticile de utilizare (6.5)." },
       { name: "households", description: "Gospodăriile utilizatorului." },
+      {
+        name: "family",
+        description: "Familia (Faza 8): membri, invitații, împărțiri, solduri, decontări, live.",
+      },
       { name: "accounts", description: "Conturile." },
       { name: "categories", description: "Categoriile." },
       { name: "transactions", description: "Tranzacțiile (venituri, cheltuieli)." },

@@ -766,8 +766,11 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 registru pe PostgreSQL real", () =
       hobby,
     );
     expect(reassigned.status).toBe(200);
-    expect(reassigned.body.data).toEqual({ reassigned: 1 });
-    expect((await call(L.getCategoryHandler, "", { bearer: A.bearer }, hobby)).status).toBe(404);
+    // Faza 8 (ADR 0016 §10): gospodăria lui A are mai mulți membri → categoria se ascunde.
+    expect(reassigned.body.data).toEqual({ reassigned: 1, hidden: true });
+    const after = await call(L.getCategoryHandler, "", { bearer: A.bearer }, hobby);
+    expect(after.status).toBe(200);
+    expect(after.body.data).toMatchObject({ id: hobby, hidden: true });
   });
 
   it("rate limiting pe mutații (per utilizator): 429 cu Retry-After", async () => {

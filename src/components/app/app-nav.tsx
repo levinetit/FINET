@@ -23,6 +23,7 @@ import {
   TagIcon,
   TargetIcon,
   UserIcon,
+  UsersIcon,
   WalletIcon,
 } from "./icons";
 
@@ -46,6 +47,8 @@ const ITEMS = [
   { href: "/budgets", label: ro.nav.budgets, icon: PieIcon, mobile: false },
   { href: "/goals", label: ro.nav.goals, icon: TargetIcon, mobile: false },
   { href: "/recurring", label: ro.nav.recurring, icon: RepeatIcon, mobile: false },
+  // Faza 8: familia (membri, invitații, solduri, decontări); pe telefon în „Mai mult”.
+  { href: "/family", label: ro.nav.family, icon: UsersIcon, mobile: false },
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
 ] as const;

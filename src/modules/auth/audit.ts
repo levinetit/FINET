@@ -1,18 +1,18 @@
 import "server-only";
 
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { type Db, type Tx, withRlsOn } from "@/db";
-import { auditEvents, householdMembers } from "@/db/schema";
+import { auditEvents, householdMembers, userPreferences } from "@/db/schema";
 
 /**
  * Jurnalul de audit al autentificării (6.1, 6.3): CINE (id), CE (acțiune tehnică), pe ce TIP
  * de obiect (id). Fără emailuri, IP-uri, user-agent sau alte date personale în `metadata`.
  *
  * `audit_events` aparține unei gospodării (RLS: actorul trebuie să fie membru al gospodăriei
- * curente). Evenimentele unui utilizator se scriu în gospodăria lui CURENTĂ (decizia mea, până
- * la comutarea între gospodării din Faza 8: cea mai veche apartenență, adică gospodăria
- * personală creată odată cu contul).
+ * curente). Evenimentele unui utilizator se scriu în gospodăria lui CURENTĂ: cea aleasă cu
+ * comutatorul din Faza 8 (`user_preferences.active_household_id`), dacă e încă membru; altfel cea
+ * mai veche apartenență (gospodăria personală creată odată cu contul).
  */
 
 export type AuditAction =
@@ -23,6 +23,19 @@ export type AuditAction =
   | "auth.sessions_revoked_others"
   | "user.created"
   | "household.member_added"
+  // Familia (Faza 8): doar CINE, pe ce obiect și rolul; fără tokenuri, sume sau nume.
+  | "household.invite_created"
+  | "household.invite_revoked"
+  | "household.invite_accepted"
+  | "household.member_role_changed"
+  | "household.member_removed"
+  | "household.member_left"
+  | "household.ownership_transferred"
+  | "household.switched"
+  | "transaction.split_set"
+  | "transaction.split_cleared"
+  | "settlement.created"
+  | "settlement.cancelled"
   // Registrul (Faza 2): doar CINE și pe ce obiect, fără sume sau descrieri (5.6, 6.1).
   | "account.archived"
   | "account.unarchived"
@@ -60,6 +73,8 @@ export type AuditEvent = Readonly<{
     | "session"
     | "household"
     | "household_member"
+    | "household_invite"
+    | "settlement"
     | "account"
     | "category"
     | "transaction"
@@ -74,13 +89,30 @@ export type AuditEvent = Readonly<{
   metadata?: Record<string, string | number | boolean | null>;
 }>;
 
-/** Gospodăria curentă a utilizatorului din contextul RLS (`null` dacă nu are niciuna). */
+/**
+ * Gospodăria curentă a utilizatorului din contextul RLS (`null` dacă nu are niciuna): cea activă
+ * aleasă de el (`user_preferences.active_household_id`), dacă apartenența EXISTĂ ÎN BAZĂ la
+ * momentul cererii, altfel cea mai veche apartenență. Interogarea pornește mereu din
+ * `household_members`, deci o preferință rămasă după plecare sau eliminare e ignorată: apartenența
+ * se verifică la FIECARE cerere (Faza 8, comutatorul de gospodărie).
+ */
 export async function currentHouseholdIdOf(tx: Tx, userId: string): Promise<string | null> {
   const rows = await tx
     .select({ householdId: householdMembers.householdId })
     .from(householdMembers)
+    .leftJoin(
+      userPreferences,
+      and(
+        eq(userPreferences.userId, householdMembers.userId),
+        eq(userPreferences.activeHouseholdId, householdMembers.householdId),
+      ),
+    )
     .where(eq(householdMembers.userId, userId))
-    .orderBy(asc(householdMembers.joinedAt), asc(householdMembers.householdId))
+    .orderBy(
+      sql`(${userPreferences.userId} is null)`,
+      asc(householdMembers.joinedAt),
+      asc(householdMembers.householdId),
+    )
     .limit(1);
   return rows[0]?.householdId ?? null;
 }

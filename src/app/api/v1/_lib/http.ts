@@ -7,6 +7,11 @@ import { type Actor, ForbiddenError, NotFoundError } from "@/lib/authz";
 import type { Config, RateLimitRule } from "@/lib/config";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { MoneyOverflowError } from "@/lib/money";
+import {
+  DEFAULT_ACCEPT_LIMIT,
+  InviteRateLimitedError,
+  InviteUnavailableError,
+} from "@/modules/family/invites.service";
 import { currentHouseholdIdOf } from "@/modules/auth/audit";
 import type { FinetAuth } from "@/modules/auth/auth";
 import { hitRateLimit, rateLimitKey } from "@/modules/auth/rate-limit";
@@ -52,6 +57,8 @@ export type ApiLimits = Readonly<{
   documentUpload: RateLimitRule;
   /** Reprocesarea unui bon (un nou apel AI), pe utilizator (în plus față de `mutations`). */
   receiptReprocess: RateLimitRule;
+  /** Acceptarea invitațiilor (Faza 8), pe utilizator, consumată și pentru tokenurile greșite. */
+  inviteAccept: RateLimitRule;
 }>;
 
 /** Limitele implicite (decizia mea): generoase pentru un client real, mici pentru un abuz. */
@@ -66,6 +73,8 @@ export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
   documentUpload: Object.freeze({ max: 30, windowSeconds: 600 }),
   // F6-C (decizia mea): 10 reprocesări la 10 minute per utilizator (fiecare costă un apel AI).
   receiptReprocess: Object.freeze({ max: 10, windowSeconds: 600 }),
+  // F8-A (ADR 0016): 10 încercări de acceptare la 15 minute per utilizator.
+  inviteAccept: Object.freeze({ ...DEFAULT_ACCEPT_LIMIT }),
 });
 
 export type ApiDeps = Readonly<{
@@ -78,6 +87,8 @@ export type ApiDeps = Readonly<{
   /** Doar pentru teste: plafonul de rânduri și pagina exportului de tranzacții. */
   exportMaxRows?: number;
   exportPageSize?: number;
+  /** Doar pentru teste: ritmul fluxului SSE (`GET /api/v1/events`, ADR 0017). */
+  live?: Readonly<{ heartbeatMs?: number; lifetimeMs?: number }>;
 }>;
 
 /** Corpul maxim acceptat (octeți). */
@@ -138,6 +149,15 @@ export function errorPayload(error: unknown): ErrorPayload | null {
   }
   if (error instanceof ConflictError) {
     return make(409, error.code, error.message, undefined, error.reason);
+  }
+  // Faza 8: invitația inutilizabilă (răspuns uniform, fără enumerare) și limita de acceptare.
+  if (error instanceof InviteUnavailableError) {
+    return make(404, error.code, error.message);
+  }
+  if (error instanceof InviteRateLimitedError) {
+    return make(429, error.code, error.message, undefined, undefined, {
+      "Retry-After": String(Math.max(1, error.retryAfterSeconds)),
+    });
   }
   if (error instanceof MoneyOverflowError) {
     // Un sold calculat peste 2^53 nu se poate trimite exact în JSON (MEDIUM-2): cod stabil.

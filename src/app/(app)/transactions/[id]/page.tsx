@@ -5,6 +5,10 @@ import { notFound } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
 import { ro } from "@/messages/ro";
+import { NotFoundError } from "@/lib/authz";
+import { memberToJson, splitToJson } from "@/modules/family/family.schema";
+import { listMembers } from "@/modules/family/members.service";
+import { getTransactionSplit } from "@/modules/family/splits.service";
 import { isValidId } from "@/modules/ledger/input";
 import { receiptIdsForTransactions } from "@/modules/receipts/receipts.service";
 import { getTransactionTagIds } from "@/modules/tags/tags.service";
@@ -19,6 +23,7 @@ import { todayIn } from "../../../_lib/ledger-ui";
 import { PageHeader } from "../../page-header";
 import { TransactionForm } from "../transaction-form";
 
+import { SplitEditor } from "./split-editor";
 import { TransferDetails } from "./transfer-details";
 
 export const metadata: Metadata = { title: ro.transactions.editTitle };
@@ -54,7 +59,21 @@ export default async function TransactionPage({
         ? ((await receiptIdsForTransactions({ db }, page.actor, householdId, [tx.id])).get(tx.id) ??
           null)
         : null;
-    return { tx, options, transfer, tagIds, receiptId };
+    // Faza 8: împărțirea (vizibilă tuturor membrilor) și membrii, doar pentru cheltuieli.
+    const split =
+      tx.type === "expense"
+        ? await getTransactionSplit({ db }, page.actor, householdId, tx.id)
+            .then(splitToJson)
+            .catch((error: unknown) => {
+              if (error instanceof NotFoundError) return null;
+              throw error;
+            })
+        : null;
+    const members =
+      tx.type === "expense"
+        ? (await listMembers({ db }, page.actor, householdId)).map(memberToJson)
+        : [];
+    return { tx, options, transfer, tagIds, receiptId, split, members };
   });
   if (!result.ok) {
     return (
@@ -64,7 +83,24 @@ export default async function TransactionPage({
       </>
     );
   }
-  const { tx, options, transfer, tagIds, receiptId } = result.value;
+  const { tx, options, transfer, tagIds, receiptId, split, members } = result.value;
+  const me = page.actor.userId.toLowerCase();
+  const owner = options.allAccounts.find((a) => a.id === tx.accountId)?.ownerUserId ?? null;
+  const canSplit =
+    tx.type === "expense" &&
+    owner === me &&
+    members.length > 1 &&
+    (split === null || split.payerUserId === me);
+  const splitReason =
+    tx.type !== "expense"
+      ? null
+      : owner === null
+        ? ro.split.notEligibleCommon
+        : split && split.payerUserId !== me
+          ? ro.split.notEligibleOther
+          : members.length <= 1
+            ? ro.split.soloHousehold
+            : null;
   if (transfer) {
     const name = (accountId: string) =>
       options.allAccounts.find((a) => a.id === accountId)?.name ?? "—";
@@ -110,6 +146,20 @@ export default async function TransactionPage({
         initialTagIds={tagIds}
         today={todayIn()}
       />
+      {tx.type === "expense" ? (
+        <div className="mt-4">
+          <SplitEditor
+            transactionId={tx.id}
+            totalMinor={tx.amountMinor}
+            currency={tx.currency}
+            members={members.map((m) => ({ userId: m.userId, name: m.name }))}
+            meUserId={me}
+            split={split}
+            canEdit={canSplit}
+            reason={splitReason}
+          />
+        </div>
+      ) : null}
     </>
   );
 }

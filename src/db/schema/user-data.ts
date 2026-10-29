@@ -24,6 +24,11 @@ export const userPreferences = finet.table(
       withTimezone: true,
       mode: "date",
     }),
+    // Faza 8: gospodăria activă aleasă de utilizator (comutatorul). Doar o PREFERINȚĂ: la fiecare
+    // cerere se verifică apartenența (`currentHouseholdIdOf`); dacă nu mai e membru, se ignoră.
+    activeHouseholdId: uuid("active_household_id").references(() => households.id, {
+      onDelete: "set null",
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

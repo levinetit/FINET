@@ -222,28 +222,40 @@ describe.skipIf(!TEST_ADMIN_URL)("conturi și solduri (Postgres real, finet_app)
     }
   });
 
-  it("proprietarul contului trebuie să fie membru al gospodăriei", async () => {
-    const own = await createAccount(f.deps, f.A, f.HA, {
+  it("Faza 8: un cont personal e doar al tău și doar tu îl vezi; comun nu devine personal", async () => {
+    const own = await createAccount(f.deps, f.C, f.HA, {
       name: "Al lui C",
       type: "cash",
       currency: "RON",
       ownerUserId: f.C.userId,
     });
     expect(own.ownerUserId).toBe(f.C.userId);
+    // A (owner al gospodăriei) nu-l vede.
+    await expect(getAccount(f.deps, f.A, f.HA, own.id)).rejects.toBeInstanceOf(NotFoundError);
+    expect((await listAccounts(f.deps, f.A, f.HA)).accounts.map((a) => a.id)).not.toContain(own.id);
+    expect((await listAccounts(f.deps, f.C, f.HA)).accounts.map((a) => a.id)).toContain(own.id);
+    // Pentru alt membru sau pentru un străin: refuzat.
+    for (const ownerUserId of [f.C.userId, f.B.userId]) {
+      await expect(
+        createAccount(f.deps, f.A, f.HA, {
+          name: "Al altuia",
+          type: "cash",
+          currency: "RON",
+          ownerUserId,
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    }
+    // Personal → alt membru: conflict; personal → comun: permis.
     await expect(
-      createAccount(f.deps, f.A, f.HA, {
-        name: "Al lui B",
-        type: "cash",
-        currency: "RON",
-        ownerUserId: f.B.userId,
-      }),
-    ).rejects.toBeInstanceOf(ValidationError);
+      updateAccount(f.deps, f.C, f.HA, own.id, { ownerUserId: f.A.userId }),
+    ).rejects.toMatchObject({ reason: "account_owner_change" });
+    const shared = await updateAccount(f.deps, f.C, f.HA, own.id, { ownerUserId: null });
+    expect(shared.ownerUserId).toBe(null);
+    expect((await getAccount(f.deps, f.A, f.HA, own.id)).id).toBe(own.id);
+    // Comun → personal: conflict (ar ascunde istoricul de ceilalți).
     await expect(
-      updateAccount(f.deps, f.A, f.HA, own.id, { ownerUserId: f.B.userId }),
-    ).rejects.toBeInstanceOf(ValidationError);
-    expect(
-      (await updateAccount(f.deps, f.A, f.HA, own.id, { ownerUserId: null })).ownerUserId,
-    ).toBe(null);
+      updateAccount(f.deps, f.A, f.HA, own.id, { ownerUserId: f.A.userId }),
+    ).rejects.toMatchObject({ reason: "account_owner_change" });
   });
 
   it("izolare: B nu vede, nu modifică, nu arhivează și nu șterge conturile lui A (404)", async () => {

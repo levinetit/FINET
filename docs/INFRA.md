@@ -400,6 +400,69 @@ Agentul nu a rulat nimic din această secțiune și nu a atins LiteLLM-ul real s
 
 **Rollback:** imaginea anterioară a `finet-web` (paginile și rutele noi dispar; datele rămân); `stop finet-worker` (bonurile rămân `queued`); linia de cron a curățării se scoate. Migrațiile: comenzile din antete, doar cu backup și decizia operatorului.
 
+## 4j. Faza 8 (F8-A): verificarea dinaintea migrației `0012_family`
+
+Agentul nu a rulat nimic de aici. Pașii completi de deploy ai Fazei 8 vin în F8-B; F8-A adaugă doar migrația și o verificare OBLIGATORIE înainte de ea, pentru că `0012` schimbă vizibilitatea: un cont cu `owner_user_id` setat devine PERSONAL și dispare pentru ceilalți membri (ADR 0016).
+
+1. Pe Supabase (SQL editor, rol cu drept de citire peste RLS, de exemplu `postgres`), înainte de `0012`:
+   ```sql
+   select a.household_id, count(*) as conturi_cu_proprietar,
+          (select count(*) from finet.household_members m where m.household_id = a.household_id) as membri
+     from finet.accounts a
+    where a.owner_user_id is not null
+    group by a.household_id;
+   ```
+   Ce anume ar dispărea pentru ceilalți membri (revizuirea m6) — tranzacțiile și regulile recurente create de ALT membru decât proprietarul contului, plus transferurile dintre un astfel de cont și un cont comun (ceilalți vor vedea doar jumătatea comună):
+   ```sql
+   select a.household_id, a.id as cont,
+          (select count(*) from finet.transactions t
+            where t.account_id = a.id and t.created_by_user_id is distinct from a.owner_user_id)
+            as tranzactii_ale_altora,
+          (select count(*) from finet.recurring_rules r
+            where r.account_id = a.id and r.created_by_user_id is distinct from a.owner_user_id)
+            as reguli_ale_altora,
+          (select count(*) from finet.transactions t
+             join finet.transactions o on o.transfer_group_id = t.transfer_group_id and o.id <> t.id
+             join finet.accounts oa on oa.id = o.account_id and oa.owner_user_id is null
+            where t.account_id = a.id and t.transfer_group_id is not null)
+            as transferuri_cu_conturi_comune,
+          (select count(*) from finet.transactions t where t.account_id = a.id) as tranzactii_total
+     from finet.accounts a
+    where a.owner_user_id is not null
+    order by a.household_id, a.id;
+   ```
+   Dacă rezultatul e gol sau gospodăriile au un singur membru: nimic de făcut. Altfel, decide cu familia: conturile care trebuie să rămână comune se fac comune ÎNAINTE de migrare (`update finet.accounts set owner_user_id = null where id in (...)`, cu backup).
+2. Backup, apoi migrațiile (rolul `migrate`; „aplicate acum 1”, a doua rulare „aplicate acum 0”). Rollback: antetul `0012_family.sql`.
+3. Nicio variabilă și niciun secret nou pentru F8-A.
+
+## 4k. Faza 8 pe producție (ordinea completă, după revizuiri; F8-B)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0016, 0017.
+
+1. **Verificarea dinaintea migrației** (4j, obligatorie: conturile cu `owner_user_id` deja setat devin personale).
+2. **Imaginile** `finet` și `finet:tools` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`).
+3. **Backup** al schemei `finet` (un `run-backup.sh` manual), apoi **migrația `0012_family`** (rolul `migrate`; prima rulare „aplicate acum 1”, a doua „aplicate acum 0”). Rollback: antetul fișierului, doar cu backup.
+4. **Redeploy `finet-web`** (aduce `/api/v1/family/*`, `/api/v1/invites/accept`, `/api/v1/households/active`, `/api/v1/transactions/{id}/split`, `GET /api/v1/events` și paginile `/family`, `/join/[token]`). **Nicio variabilă și niciun secret nou.** Workerul nu se schimbă pentru Faza 8 (redeploy doar dacă imaginea e comună și vrei aceeași versiune).
+5. **Cloudflare Access:** fiecare membru invitat trebuie să aibă emailul în politica aplicației Access (altfel linkul `/join/<token>` dă 403 la margine, înaintea FINET). Contul FINET al membrului se creează în continuare cu CLI-ul (`admin create-user`, modul `personal`), apoi el acceptă invitația din aplicație (nu mai e nevoie de `admin add-member`).
+6. **Actualizările live prin tunel** (ADR 0017; pe producție NOT RUN de agent):
+   ```bash
+   # din browserul autentificat prin Access (DevTools → Network → events): tipul `eventsource`, statusul 200,
+   # `content-type: text/event-stream`, iar mesajul `ready` apare imediat (fără întârziere de bufferizare).
+   # Fără Access:
+   curl -s -o /dev/null -w '%{http_code}\n' https://finet.<domeniu>/api/v1/events   # → 403
+   ```
+   Cu două ferestre (doi membri) pe `/family`: o decontare înregistrată într-una apare în cealaltă în câteva secunde, fără reîncărcare. Dacă evenimentele întârzie până la închiderea fluxului (bufferizare la un proxy), aplicația trece singură pe reîncărcare la 60 s; de raportat ca defect (Traefik: fără middleware de compresie pe `text/event-stream`; tunelul Cloudflare nu bufferizează SSE).
+7. **Verificări funcționale (browser, prin Access):**
+   - `/family` → „Creează link de invitație” → linkul apare o singură dată (după reîncărcare nu mai e afișat);
+   - al doilea membru deschide linkul → „Acceptă invitația” → intră; comutatorul de gospodărie apare deasupra paginilor;
+   - un cont „personal” al membrului → o cheltuială → pagina tranzacției → „Împarte cheltuiala” (egal) → la amândoi soldurile pe `/family` și widgetul de pe Acasă;
+   - decontare parțială → soldul scade; anulare → revine;
+   - același link încă o dată → „Invitația nu mai este valabilă…”.
+8. **Jurnale:** linkul de invitație conține tokenul în cale; jurnalele Cloudflare/Traefik pot conține căi `/join/<token>`. Tokenul e de unică folosință și expiră (≤ 168 h); dacă jurnalele de acces sunt păstrate și partajate, revocă invitațiile neacceptate. Același token mai trece prin două canale (risc ACCEPTAT, SECURITY_CHECKLIST §20): `/login?next=/join/<token>` (cine deschide linkul fără sesiune) și, dacă e configurat SMTP, emailul magic-link (URL-ul de întoarcere conține `next`). Atenuări: unică folosință, expiră ≤ 168 h, cere Access + sesiune, destinatarul e invitatul, revocabil; pe `/join/*` răspunsurile au `Referrer-Policy: no-referrer`.
+9. **Bazele de dezvoltare/staging** care au aplicat o versiune ANTERIOARĂ a `0012_family` (din branch, înaintea revizuirilor) trebuie recreate: hash-ul migrației s-a schimbat, iar runner-ul refuză o migrație modificată după aplicare. Producția nu e afectată (`0012` nu e aplicată acolo).
+
+**Rollback:** imaginea anterioară a `finet-web` (paginile și rutele familiei dispar; datele rămân). Migrația `0012`: comenzile din antet, doar cu backup și decizia operatorului (atenție: rollback-ul ei face din nou conturile personale vizibile tuturor).
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

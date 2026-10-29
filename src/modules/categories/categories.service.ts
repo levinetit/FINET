@@ -9,9 +9,11 @@ import { isValidId, parseInput } from "@/modules/ledger/input";
 
 import {
   type CategoryRow,
+  categoryUsedElsewhere,
   countUsage,
   deleteCategoryRow,
   hasChildren,
+  householdMemberCount,
   insertCategory,
   reassignTransactions,
   selectCategories,
@@ -162,6 +164,14 @@ export async function updateCategory(
  * Șterge o categorie personalizată (5.6). Folosită → cere `reassignTo` (o categorie vizibilă, de
  * același tip); tranzacțiile se mută în aceeași tranzacție SQL, apoi categoria se șterge.
  * Întoarce câte tranzacții au fost reasignate.
+ *
+ * Faza 8 (revizuirile m1 și F8-B, ADR 0016 §10): în gospodăriile cu MAI MULȚI membri o categorie
+ * personalizată se ASCUNDE mereu în loc să se șteargă (`hidden: true`), ca rezultatul să nu
+ * depindă de rândurile pe care actorul nu le vede (conturile personale ale altora, bugetele lor
+ * personale: cheia străină ar fi dezvăluit folosirea, iar bugetele ar fi dispărut în cascadă).
+ * Cu UN singur membru se șterge efectiv, cu excepția cazului în care mai e folosită în rândurile
+ * rămase de la foști membri (`category_used_elsewhere`): atunci tot se ascunde. Numele categoriei
+ * ascunse rămâne ocupat; ca să refolosești numele, redenumește sau reafișează categoria ascunsă.
  */
 export async function deleteCategory(
   deps: LedgerDeps,
@@ -169,7 +179,7 @@ export async function deleteCategory(
   householdId: string,
   categoryId: string,
   rawOptions: unknown = {},
-): Promise<{ reassigned: number }> {
+): Promise<{ reassigned: number; hidden: boolean }> {
   if (!isValidId(categoryId)) throw new NotFoundError();
   const options = parseInput(categoryDeleteSchema, rawOptions) ?? {};
   const id = categoryId.toLowerCase();
@@ -204,6 +214,19 @@ export async function deleteCategory(
       }
       reassigned = await reassignTransactions(tx, m.householdId, id, target.id);
     }
+    if (
+      (await householdMemberCount(tx, m.householdId)) > 1 ||
+      (await categoryUsedElsewhere(tx, id))
+    ) {
+      await updateCategoryRow(tx, m.householdId, id, { hidden: true });
+      await insertAudit(tx, actor.userId, m.householdId, {
+        action: "category.deleted",
+        targetType: "category",
+        targetId: id,
+        metadata: { reassigned, hidden: true },
+      });
+      return { reassigned, hidden: true };
+    }
     if (!(await deleteCategoryRow(tx, m.householdId, id))) throw new NotFoundError();
     await insertAudit(tx, actor.userId, m.householdId, {
       action: "category.deleted",
@@ -211,6 +234,6 @@ export async function deleteCategory(
       targetId: id,
       metadata: { reassigned },
     });
-    return { reassigned };
+    return { reassigned, hidden: false };
   });
 }

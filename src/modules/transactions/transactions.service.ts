@@ -1,6 +1,9 @@
 import "server-only";
 
+import { and, eq } from "drizzle-orm";
+
 import type { Tx } from "@/db";
+import { transactionSplits } from "@/db/schema";
 import { type Actor, NotFoundError } from "@/lib/authz";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { insertAudit } from "@/modules/auth/audit";
@@ -61,6 +64,20 @@ export function toView(row: TransactionRow): TransactionView {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+async function hasSplits(tx: Tx, householdId: string, transactionId: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: transactionSplits.id })
+    .from(transactionSplits)
+    .where(
+      and(
+        eq(transactionSplits.householdId, householdId),
+        eq(transactionSplits.transactionId, transactionId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 /** Contul: din gospodărie (altfel 404), nearhivat dacă primește o tranzacție nouă. */
@@ -154,6 +171,19 @@ export async function updateTransaction(
         "Un transfer se modifică prin serviciul de transferuri.",
       );
     }
+    // Faza 8: o cheltuială împărțită între membri are suma părților = totalul (verificat și la
+    // COMMIT în bază). Suma, contul sau tipul nu se schimbă cât timp împărțirea există.
+    const touchesTotal =
+      patch.amountMinor !== undefined ||
+      patch.amount !== undefined ||
+      (patch.accountId !== undefined && patch.accountId !== current.accountId) ||
+      (patch.type !== undefined && patch.type !== current.type);
+    if (touchesTotal && (await hasSplits(tx, m.householdId, id))) {
+      throw new ConflictError(
+        "transaction_split",
+        "Tranzacția e împărțită între membri: modifică întâi împărțirea.",
+      );
+    }
     let currency = current.currency;
     let accountId = current.accountId;
     if (patch.accountId && patch.accountId !== current.accountId) {
@@ -218,6 +248,14 @@ export async function deleteTransaction(
   await inHousehold(deps, actor, householdId, async (tx, m) => {
     const current = await selectTransaction(tx, m.householdId, id, true);
     if (!current) throw new NotFoundError();
+    // Faza 8: ștergerea unei cheltuieli împărțite ar schimba în tăcere soldurile tuturor
+    // (inclusiv după decontări): întâi se elimină împărțirea.
+    if (await hasSplits(tx, m.householdId, id)) {
+      throw new ConflictError(
+        "transaction_split",
+        "Tranzacția e împărțită între membri: elimină întâi împărțirea.",
+      );
+    }
     if (current.transferGroupId) {
       await deleteTransactionRows(tx, m.householdId, { transferGroupId: current.transferGroupId });
       await insertAudit(tx, actor.userId, m.householdId, {

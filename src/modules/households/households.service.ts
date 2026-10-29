@@ -22,7 +22,7 @@ export type HouseholdSummary = Readonly<{
   defaultCurrency: "RON" | "EUR" | "USD";
   timezone: string;
   role: HouseholdRole;
-  /** Gospodăria în care lucrează API-ul (cea mai veche apartenență, ADR 0003). */
+  /** Gospodăria în care lucrează API-ul: cea activă (ADR 0016), altfel cea mai veche. */
   current: boolean;
   joinedAt: string;
 }>;

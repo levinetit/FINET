@@ -1,4 +1,4 @@
-# FINET — arhitectura (ce există după Fazele 1–5 și F6-A)
+# FINET — arhitectura (ce există după Fazele 1–6 și F8-A)
 
 Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
 
@@ -119,6 +119,9 @@ Paginile `/dashboard`, `/tags`, `/budgets` (+ `new`, `[id]`), `/goals` (+ `new`,
   - bonul se salvează mereu „De verificat” (`needs_review`), cu cheia de deduplicare;
   - termenul documentului e de 12 minute.
 - Detalii: ADR 0014.
+
+## Familia (F8-A)
+`src/modules/family/` (schema/serviciu/repo, ca restul registrului; ADR 0016): `invites.service.ts` (token CSPRNG 256 biți → doar SHA-256 în bază, `finet.accept_invite` SECURITY DEFINER pentru acceptare, limită de rată), `members.service.ts` (membri, roluri, eliminare, plecare, transfer de ownership, gospodăria activă), `splits.service.ts` (împărțirea unei cheltuieli din contul personal al plătitorului), `settlements.service.ts` (decontări și solduri), `split-math.ts` (aritmetica pură în `bigint`: rotunjiri, netting pe perechi). Gospodăria curentă: `currentHouseholdIdOf` (`src/modules/auth/audit.ts`) alege `user_preferences.active_household_id` doar dacă apartenența există la acea cerere. Vizibilitatea personal/comun e în RLS (0012): un cont cu `owner_user_id` e vizibil doar proprietarului, iar tranzacțiile, etichetele, regulile recurente și toate agregatele moștenesc regula. API-ul și UI-ul: F8-B.
 
 ## Storage
 Interfața `Storage` (`put`/`putStream`/`get`/`openRead`/`delete`/`exists`); cheile `<prefix>/<uuid>` și `households/<uuid>/documents/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath pe fiecare director, `O_NOFOLLOW`, scriere atomică, plafon `maxBytes`, `cleanupTemp`); în worker e doar citire. Driverul `s3` aruncă `NotImplementedError` (neimplementat nici în Faza 6, ADR 0013).

@@ -346,3 +346,55 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | E2E: fără consimțământ → `awaiting_consent` și zero cereri la serverul AI fals; CI fără furnizor real (`AI_ALLOWED_HOSTS` = loopback) | NOT RUN local (CI) | `e2e/receipts.spec.ts`, `ci.yml` | — |
 | Revizuirea `security` a F6-C | TODO | agentul `security` | — |
 
+## 19. Familia: date și servicii (F8-A, 2026-10-29)
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Tabele noi (`household_invites`, `transaction_splits`, `settlements`) cu RLS ENABLE + FORCE în aceeași migrație; fără context: 0 rânduri; nimic pentru anon/authenticated/PUBLIC | DONE (PG17) | `0012_family.sql`, `family-rls.test.ts`, `migrate.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Drepturi minime pe coloane: `token_hash` necitibil de aplicație, INSERT pe invitații/decontări doar pe coloanele permise (fără `created_at`, `used_*`, anulare), fără DELETE pe invitații/decontări, fără UPDATE pe împărțiri, `household_members` UPDATE doar `role` | DONE (PG17) | `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| CHECK-uri plate (fără BETWEEN) în schema TS, migrație și snapshot; FK compusă `(transaction_id, household_id)` | DONE (test static) | `family.ts`, `0012_family.sql`, `0012_snapshot.json`, `migrate.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Funcții SECURITY DEFINER doar cele necesare (`accept_invite`, `check_transfer_group`, `due_recurring_rules`, triggerele plafon/ultimul owner), `search_path = pg_catalog`, REVOKE de la PUBLIC, EXECUTE doar `finet_app`, întorc doar identificatori; politicile `finet_migrator` noi sunt înguste (variabile de tranzacție, gospodăria curentă) | DONE (test static + PG17) | `migrate.test.ts`, `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Tokenul invitației: 256 biți CSPRNG, stocat doar SHA-256, afișat o singură dată, expirabil (≤ 168 h, CHECK), de unică folosință (consum atomic `FOR UPDATE`; două acceptări concurente → una), revocabil, răspuns uniform (inexistent/expirat/folosit/revocat/malformat), limită de rată la acceptare înaintea verificărilor, 20 de invitații/zi/gospodărie doar crescător | DONE (PG17) | `invites.service.ts`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Ultimul owner (L3): nu pleacă, nu e scos, nu e retrogradat; baza refuză direct; cursa a doi owneri care se retrogradează reciproc → exact unul reușește (advisory lock); transfer explicit | DONE (PG17) | `household_members_guard_owner`, `members.service.ts`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Plafonul de 6 membri pe orice cale de inserare (CLI, invitație), sub lock | DONE (PG17) | `household_members_check_cap`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Vizibilitatea personal/comun impusă în bază și moștenită de tranzacții, transferuri, etichete, recurențe și agregate (dashboard, raport, buget, export CSV); un membru nu citește, nu modifică, nu șterge și nu scrie în contul personal al altuia (inclusiv prin obiective și confirmarea bonurilor) | DONE (PG17) | `0012_family.sql` (`ALTER POLICY`), `family-rls.test.ts`, `accounts.test.ts`, `ledger-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Transfer personal → comun nu poate fi rupt de cine vede doar jumătatea comună (verificarea grupului vede ambele rânduri) | DONE (PG17) | `check_transfer_group` (0012), `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Comutatorul de gospodărie activă: apartenența verificată la FIECARE cerere (`currentHouseholdIdOf` pornește din `household_members`); preferința rămasă după eliminare e ignorată; setarea unei gospodării străine → 404 | DONE (PG17) | `audit.ts`, `members.service.ts`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Împărțiri: suma = total exact (servicii, toate modurile și rotunjirile) ȘI în bază (trigger amânat pe părți și pe sumă/monedă/tip/cont); doar plătitorul (cont personal) scrie; participanți membri; Zod strict (plătitorul nu vine din input); cheltuiala împărțită nu se modifică (sumă/cont/tip) și nu se șterge prin serviciu | DONE (PG17 + unitar) | `split-math.ts`, `splits.service.ts`, `split-math.test.ts`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Solduri în `bigint`, pe monedă, identice pentru toți membrii (2 și 3 membri), decontări parțiale, garda 2^53 la JSON | DONE (PG17 + unitar) | `settlements.service.ts`, `family.schema.ts`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Permisiuni pe roluri testate pe fiecare acțiune; izolare între gospodării pe fiecare serviciu (404 uniform) | DONE (PG17) | `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Erori cu cod fix (constrângerile triggerelor mapate), audit fără tokenuri/sume/note | DONE (PG17) | `ledger/context.ts`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Documentele/bonurile, obiectivele și numele conturilor personale: vizibile/ocupate în toată gospodăria | ACCEPTED RISK până la o fază următoare | ADR 0016 (1), ROADMAP „Faza 8”, PRIVACY_NOTES | 2026-10-29 · programmer (F8-A) |
+| Verificarea operatorului înainte de 0012 (conturi cu `owner_user_id` deja setat) | TODO (operator) | INFRA 4j | — |
+| Revizuirea `security` a F8-A | TODO | agentul `security` | — |
+
+### 19.1 Revizuirea de securitate F8-A (2026-10-29): corecții
+
+| Constatare | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| M1 — invitațiile unui owner scos/retrogradat/plecat rămâneau valabile | DONE (PG17): revocare automată în aceeași tranzacție (retrogradare, eliminare, plecare, transfer) + `accept_invite` cere creatorul încă owner (răspuns uniform) | `members.service.ts`, `family.repo.ts`, `0012_family.sql`, `family.test.ts` („M1”) | 2026-10-29 · programmer (F8-A) |
+| M2 — decontări: plată „peste datorie”, creditorul nu putea anula, membru ținut captiv de sold | DONE (PG17): `from` doar dacă datorează și cel mult datoria curentă (creditorul nu-și creează creanțe; corecțiile le înregistrează destinatarul), `to` orice sumă, owner străin doar stingere, anulare de oricare parte sau de creator (nu de un owner străin; RLS + serviciu), plecarea/eliminarea nu mai sunt blocate (`unsettledBalance`, `formerMemberIds`) | `settlements.service.ts`, `members.service.ts`, `0012_family.sql`, `family.test.ts` | 2026-10-29 · programmer (F8-A) |
+| m1 — ștergerea unei categorii dezvăluia folosirea în conturi personale (și ștergea bugetele personale ale altora) | DONE (PG17): `category_used_elsewhere` (SECURITY DEFINER, boolean) → ascundere în loc de ștergere | `categories.service.ts`, `0012_family.sql`, `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| m2 — ștergerea unei etichete comune șterge legăturile de pe tranzacțiile personale ale altora | ACCEPTED (decizie documentată, fără scurgere) | ADR 0016 (10) | 2026-10-29 · programmer (F8-A) |
+| m3 — `audit_events` și `idempotency_keys.response` vizibile întregii gospodării în bază | ACCEPTED RISK / amânat (formularea corectată; restrângerea cere modificarea modulului `idempotency`) | ADR 0016 (10), PRIVACY_NOTES | 2026-10-29 · programmer (F8-A) |
+| m4 — DoS al soldurilor peste 2^53 | DONE (PG17): plafon 10^14 pe pereche la împărțire, ștergere de împărțire, decontare, anulare | `split-math.ts` (`PAIR_BALANCE_CAP`), `family.test.ts` („m4”) | 2026-10-29 · programmer (F8-A) |
+| m5 — politica proprietarului pe conturile personale prea largă | DONE (PG17): legată de `finet.definer_scope` | `0012_family.sql`, `migrate.test.ts`, `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| m6 — verificarea dinaintea 0012 incompletă | DONE (docs) | INFRA 4j | 2026-10-29 · programmer (F8-A) |
+
+
+## 20. Familia: API, interfață, actualizări live (F8-B, 2026-10-29)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Tokenul de invitație în clar doar în răspunsul de creare; listarea fără token; crearea refuză `Idempotency-Key` (răspunsul memorat ar conține tokenul) — tokenul nu ajunge în `idempotency_keys` | DONE (PG17) | `family-handlers.ts`, `family-api.test.ts` | 2026-10-29 · programmer (F8-B) |
+| Acceptarea: `POST` cu tokenul în corp (nu în URL-ul API-ului); 404 uniform pentru folosit/revocat/greșit/malformat (același corp); 429 + `Retry-After` (limita consumată și la tokenurile greșite); pagina `/join/[token]` nu consumă și nu verifică nimic la deschidere, nu afișează numele gospodăriei, `no-referrer`, `noindex` | DONE (PG17 + E2E scris) | `http.ts` (`errorPayload`), `family-api.test.ts`, `e2e/family.spec.ts` (b) | 2026-10-29 · programmer (F8-B) |
+| Permisiuni pe rol prin API (member → 403 la invitații și roluri; ultimul owner → 409); gospodăria din sesiune/bază, niciodată din cerere; comutatorul → 404 pe gospodărie străină | DONE (PG17) | `family-api.test.ts` | 2026-10-29 · programmer (F8-B) |
+| SSE: autentificat (sesiune + proxy Access, ruta nu e exclusă din `src/proxy.ts`), scopat pe gospodăria curentă, reverificare sesiune + apartenență la fiecare puls (`close`), închidere imediată la eliminare/plecare/comutare, durată maximă 5 min, plafon 4/utilizator (cea mai veche evacuată) și 200 total (429), curățare la abort, fără conexiune la bază ținută între pulsuri | DONE (PG17) | `family-handlers.ts` (`eventsHandler`), `live-bus.ts`, `family-api.test.ts` | 2026-10-29 · programmer (F8-B) |
+| Evenimentul poartă DOAR tip + id; tranzacțiile/transferurile care ating doar conturi personale ajung doar la proprietar (publicul calculat sub RLS-ul actorului, fail closed) | DONE (PG17) | `_lib/live.ts`, `family-api.test.ts` („nici măcar id-ul”) | 2026-10-29 · programmer (F8-B) |
+| UI fără `style=`/`dangerouslySetInnerHTML`, CSP cu nonce neschimbat (`connect-src 'self'`), fără float pe sume (procentele în puncte de bază prin parsarea exactă) | DONE (unitar) | `ui-rules.test.ts`, `a11y-rules.test.ts`, `family-ui.test.ts`; E2E (d) CSP — NOT RUN local | 2026-10-29 · programmer (F8-B) |
+| Bufferizarea SSE prin tunelul Cloudflare / Traefik pe producție | TODO (operator) | INFRA 4k, pasul 6 | — |
+| Tokenul în calea `/join/<token>` poate apărea în jurnalele proxy-urilor | ACCEPTED RISK (unică folosință, ≤ 168 h, revocabil) | ADR 0017, INFRA 4k pasul 8 | 2026-10-29 · programmer (F8-B) |
+| Tokenul invitației în `/login?next=/join/<token>` și în emailul magic-link (când SMTP e configurat) | ACCEPTED RISK (unică folosință, expiră ≤ 168 h, cere Access + sesiune, destinatar = invitatul, revocabil); `Referrer-Policy: no-referrer` pe `/join/*` | INFRA 4k pasul 8, `security-headers.ts` (`referrerPolicyFor`), `proxy.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Owner care stinge unilateral o datorie și apoi elimină creditorul: acesta nu mai poate anula decontarea | ACCEPTED RISK (încredere de familie, Access); atenuare: dialogul de eliminare arată decontările active ale membrului | ADR 0016 §10, `members-panel.tsx` | 2026-10-29 · programmer (F8-A) |
+| Ștergerea categoriei nu depinde de rânduri invizibile (mai mulți membri → mereu ascunsă, răspuns identic) | DONE (PG17) | `categories.service.ts`, `categories.test.ts`, `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
+| Revizuirea `security` a F8-B | TODO | agentul `security` | — |

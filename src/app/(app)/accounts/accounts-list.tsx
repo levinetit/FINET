@@ -47,6 +47,7 @@ export function AccountsList({
               <span className="text-sm text-muted-foreground">
                 {ro.ledger.accountTypes[a.type] ?? a.type} · {a.currency}
                 {a.archived ? ` · ${ro.accounts.archivedBadge}` : ""}
+                {a.ownerUserId ? ` · ${ro.accounts.personalBadge}` : ""}
               </span>
             </span>
             <span

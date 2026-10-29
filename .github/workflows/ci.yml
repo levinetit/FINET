@@ -295,7 +295,7 @@ jobs:
           MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_test
         run: node dist/tools/migrate.mjs
 
-      # Câte treisprezece utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth`, `ledger`, `planning`, `regressions`, `recurring`, `receipts`); parola din
+      # Câte șaisprezece utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth`, `ledger`, `planning`, `regressions`, `recurring`, `receipts`, `family`); parola din
       # stdin, niciodată ca argument.
       - name: Utilizatorii E2E (CLI admin)
         env:
@@ -303,7 +303,7 @@ jobs:
         run: |
           set -eu
           for mode in personal saas; do
-            for kind in main parola sesiuni ledger ledger2 seed planning planning2 regresii recurring recurring2 receipts receipts2; do
+            for kind in main parola sesiuni ledger ledger2 seed planning planning2 regresii recurring recurring2 receipts receipts2 family family2 family3; do
               printf '%s\n' "$E2E_PASSWORD" | node dist/tools/admin.mjs create-user \
                 --email "e2e-$kind-$mode@finet.test" --name "E2E $kind" --password-stdin
             done
@@ -350,7 +350,7 @@ jobs:
           done
           grep -q '"event":"started"' "$RUNNER_TEMP/worker.log" || { cat "$RUNNER_TEMP/worker.log"; exit 1; }
 
-      - name: E2E — modul personal (smoke, auth, ledger, planning, regressions, recurring, receipts, access)
+      - name: E2E — modul personal (smoke, auth, ledger, planning, regressions, recurring, receipts, family, access)
         env:
           E2E_APP_MODE: personal
           E2E_AI_MOCK_URL: http://127.0.0.1:4010

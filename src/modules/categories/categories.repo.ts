@@ -139,6 +139,26 @@ export async function reassignTransactions(
   return rows.length;
 }
 
+/**
+ * Faza 8 (revizuirea m1): categoria e folosită în rânduri pe care utilizatorul curent NU le vede
+ * (tranzacții sau reguli din conturile personale ale altor membri, bugetele lor personale)?
+ * Funcția SECURITY DEFINER întoarce doar un boolean, pentru gospodăria din contextul RLS.
+ */
+export async function categoryUsedElsewhere(tx: Tx, id: string): Promise<boolean> {
+  const rows = await tx.execute<{ used: boolean }>(
+    sql`select finet.category_used_elsewhere(${id}::uuid) as used`,
+  );
+  return rows[0]?.used === true;
+}
+
+/** Câți membri are gospodăria (din contextul RLS: membrii gospodăriei curente). */
+export async function householdMemberCount(tx: Tx, householdId: string): Promise<number> {
+  const rows = await tx.execute<{ n: number }>(
+    sql`select count(*)::int as n from finet.household_members where household_id = ${householdId}`,
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 export async function deleteCategoryRow(tx: Tx, householdId: string, id: string): Promise<boolean> {
   const rows = await tx
     .delete(categories)

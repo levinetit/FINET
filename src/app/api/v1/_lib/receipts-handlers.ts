@@ -12,6 +12,7 @@ import {
   reprocessReceipt,
   updateReceipt,
 } from "@/modules/receipts/receipts.service";
+import { getTransaction } from "@/modules/transactions/transactions.service";
 
 import type { DocumentsApiDeps } from "./documents-handlers";
 import {
@@ -26,6 +27,7 @@ import {
   readQuery,
   routeId,
 } from "./http";
+import { accountsAudience, householdAudience, notifyLive } from "./live";
 
 /**
  * Handlerele bonurilor (Faza 6, F6-C; ADR 0015): `GET /receipts`, `GET/PATCH/DELETE
@@ -102,7 +104,8 @@ export function confirmReceiptHandler(
     const receiptId = routeId(id);
     const body = await readJsonBody(request);
     const hh = await currentHousehold(ctx);
-    return idempotentCreate(ctx, hh, body, async (db) => {
+    let confirmed: { receiptId: string; transactionId: string } | null = null;
+    const response = await idempotentCreate(ctx, hh, body, async (db) => {
       const result = await confirmReceipt(
         { ...deps(d, ctx.now), db },
         ctx.actor,
@@ -110,6 +113,7 @@ export function confirmReceiptHandler(
         receiptId,
         body,
       );
+      confirmed = { receiptId, transactionId: result.transactionId };
       return {
         status: 201,
         body: {
@@ -120,6 +124,23 @@ export function confirmReceiptHandler(
         },
       };
     });
+    // Faza 8 (ADR 0017): bonurile sunt ale tuturor membrilor (ADR 0016); tranzacția după cont.
+    const done = confirmed as { receiptId: string; transactionId: string } | null;
+    if (done && response.ok) {
+      notifyLive(hh, "receipt", done.receiptId, householdAudience());
+      const tx = await getTransaction({ db: d.db }, ctx.actor, hh, done.transactionId).catch(
+        () => null,
+      );
+      if (tx) {
+        notifyLive(
+          hh,
+          "transaction",
+          tx.id,
+          await accountsAudience(d.db, ctx.actor, hh, [tx.accountId]),
+        );
+      }
+    }
+    return response;
   });
 }
 

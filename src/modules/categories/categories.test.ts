@@ -220,14 +220,33 @@ describe.skipIf(!TEST_ADMIN_URL)("categorii (Postgres real, finet_app)", () => {
     await expect(
       deleteCategory(f.deps, f.A, f.HA, old.id, { reassignTo: randomUUID() }),
     ).rejects.toBeInstanceOf(NotFoundError);
+    // Faza 8: HA are doi membri (A, C) → categoria se ascunde, nu se șterge (ADR 0016 §10).
     expect(await deleteCategory(f.deps, f.A, f.HA, old.id, { reassignTo: target })).toEqual({
       reassigned: 1,
+      hidden: true,
     });
     expect((await getTransaction(f.deps, f.A, f.HA, t.id)).categoryId).toBe(target);
-    await expect(getCategory(f.deps, f.A, f.HA, old.id)).rejects.toBeInstanceOf(NotFoundError);
-    // Nefolosită: se șterge direct. Cu subcategorii: refuzat.
+    expect((await getCategory(f.deps, f.A, f.HA, old.id)).hidden).toBe(true);
+    // Nefolosită: tot ascunsă în HA; numele rămâne ocupat până la redenumirea celei ascunse.
     const free = await createCategory(f.deps, f.A, f.HA, { name: "Liberă", kind: "income" });
-    expect(await deleteCategory(f.deps, f.A, f.HA, free.id)).toEqual({ reassigned: 0 });
+    expect(await deleteCategory(f.deps, f.A, f.HA, free.id)).toEqual({
+      reassigned: 0,
+      hidden: true,
+    });
+    await expect(
+      createCategory(f.deps, f.A, f.HA, { name: "Liberă", kind: "income" }),
+    ).rejects.toMatchObject({ reason: "category_name_taken" });
+    await updateCategory(f.deps, f.A, f.HA, free.id, { name: "Liberă (veche)" });
+    expect((await createCategory(f.deps, f.A, f.HA, { name: "Liberă", kind: "income" })).name).toBe(
+      "Liberă",
+    );
+    // Gospodăria cu un singur membru (HB): ștergere efectivă.
+    const solo = await createCategory(f.deps, f.B, f.HB, { name: "Solo", kind: "income" });
+    expect(await deleteCategory(f.deps, f.B, f.HB, solo.id)).toEqual({
+      reassigned: 0,
+      hidden: false,
+    });
+    await expect(getCategory(f.deps, f.B, f.HB, solo.id)).rejects.toBeInstanceOf(NotFoundError);
     const p = await createCategory(f.deps, f.A, f.HA, { name: "Părinte", kind: "income" });
     await createCategory(f.deps, f.A, f.HA, { name: "Copil", kind: "income", parentId: p.id });
     await expect(deleteCategory(f.deps, f.A, f.HA, p.id)).rejects.toMatchObject({
