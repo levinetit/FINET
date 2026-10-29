@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,7 @@ import { createUserWithHousehold } from "@/modules/auth/users.service";
 import { main } from "@/tools/admin/cli";
 
 import { uploadDocuments } from "./documents.service";
+import { expireDocumentFile } from "./retention";
 import { multipartRequest, receiptLikeImage } from "./testing";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
@@ -87,8 +88,10 @@ describe.skipIf(!TEST_ADMIN_URL)("retenția documentelor (cleanup-documents)", (
     // Un fișier temporar orfan (scriere întreruptă), vechi.
     const tmp = join(dir, `${fresh}.tmp-7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f`);
     await writeFile(tmp, "x");
+    const old2h = new Date(Date.now() - 2 * 3600 * 1000);
+    await utimes(tmp, old2h, old2h);
 
-    const r = await cli(["cleanup-documents", "--temp-hours", "0"], { ...ENV, STORAGE_DIR: root });
+    const r = await cli(["cleanup-documents", "--temp-hours", "1"], { ...ENV, STORAGE_DIR: root });
     expect(r, r.err).toMatchObject({ code: 0, out: "expired=1 failed=0 temp=1" });
     const files = await readdir(dir);
     expect(files.sort()).toEqual([fresh, processing].sort());
@@ -125,9 +128,45 @@ describe.skipIf(!TEST_ADMIN_URL)("retenția documentelor (cleanup-documents)", (
         STORAGE_DIR: empty,
       });
       expect(bad.code).toBe(2);
+      // Revizuirea F6-C: minimum 1 oră (o scriere în curs are un temporar proaspăt).
+      const zero = await cli(["cleanup-documents", "--temp-hours", "0"], {
+        ...ENV,
+        STORAGE_DIR: empty,
+      });
+      expect(zero.code).toBe(2);
+      expect(zero.err).toMatch(/1–9999/);
       await mkdir(join(empty, "households"));
     } finally {
       await rm(empty, { recursive: true, force: true });
     }
+  });
+  it("cursa cu reprocesarea: un document expirat, dar repus în coadă, NU își pierde fișierul", async () => {
+    const deps = { db: fx.db, storage: new LocalStorage(root), config: testConfig() };
+    const id = (
+      await uploadDocuments(
+        deps,
+        { userId },
+        hh,
+        await multipartRequest([["files", await receiptLikeImage({ seed: 204 })]]),
+      )
+    ).documents[0]!.id;
+    // Selecția l-ar fi întors (expirat, needs_review) ...
+    await fx.scratch.admin`
+      update finet.documents set expires_at = now() - interval '1 day', status = 'needs_review'
+       where id = ${id}`;
+    // ... dar între timp reprocesarea l-a repus în coadă.
+    await fx.scratch.admin`update finet.documents set status = 'queued' where id = ${id}`;
+    const ref = { document_id: id, household_id: hh, actor_user_id: userId };
+    expect(await expireDocumentFile(deps, ref)).toBe(false);
+    await fx.scratch.admin`update finet.documents set status = 'processing' where id = ${id}`;
+    expect(await expireDocumentFile(deps, ref)).toBe(false);
+    expect(await readdir(join(root, "households", hh, "documents"))).toContain(id);
+    const [row] = await fx.scratch.admin<{ storage_key: string | null }[]>`
+      select storage_key from finet.documents where id = ${id}`;
+    expect(row!.storage_key).not.toBeNull();
+    // Înapoi în `needs_review`: acum se șterge.
+    await fx.scratch.admin`update finet.documents set status = 'needs_review' where id = ${id}`;
+    expect(await expireDocumentFile(deps, ref)).toBe(true);
+    expect(await readdir(join(root, "households", hh, "documents"))).not.toContain(id);
   });
 });

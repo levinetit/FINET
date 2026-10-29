@@ -8,7 +8,13 @@ import { type Actor, NotFoundError } from "@/lib/authz";
 import { DEFAULT_TIME_ZONE, localDateOf } from "@/lib/calendar";
 import type { Config } from "@/lib/config";
 import { ConflictError, ValidationError } from "@/lib/errors";
-import { type Storage, type StorageKey, isStorageKey, storageKeyName } from "@/lib/storage";
+import {
+  type Storage,
+  type StorageKey,
+  isKeyOfHousehold,
+  isStorageKey,
+  storageKeyName,
+} from "@/lib/storage";
 import { insertAudit } from "@/modules/auth/audit";
 import { type Entitlements, createEntitlements } from "@/modules/entitlements";
 import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
@@ -305,7 +311,8 @@ export async function deleteDocument(
     });
     return deleted.storageKey;
   });
-  if (key && isStorageKey(key)) await deps.storage.delete(key);
+  // Doar o cheie a ACESTEI gospodării (revizuirea F6-C); altfel fișierul nu se atinge.
+  if (key && isKeyOfHousehold(key, householdId)) await deps.storage.delete(key);
 }
 
 /** Consumul de azi (contorul de lângă zona de încărcare). */
@@ -402,7 +409,7 @@ export async function openDocumentFile(
     documentIn(tx, householdId, id),
   );
   const key = row.storageKey;
-  if (key === null || !isStorageKey(key)) throw new NotFoundError();
+  if (key === null || !isKeyOfHousehold(key, householdId)) throw new NotFoundError();
   let source: AsyncIterable<Uint8Array>;
   try {
     source = await deps.storage.openRead(key);

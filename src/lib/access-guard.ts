@@ -27,16 +27,23 @@ export function verifierFor(access: AccessConfig): AccessVerifier | null {
   return verifier.verify;
 }
 
-/** `true` dacă cererea trece de Access (aceeași funcție ca în proxy). */
+/**
+ * Singura cale exclusă din proxy. `guardAccess` o transmite FIX politicii (nu calea din URL), ca
+ * excepțiile de sănătate/liveness din `isRequestAllowed` să nu se poată aplica niciodată unei rute
+ * păzite aici, oricum ar fi scrisă adresa cererii (revizuirea F6-C).
+ */
+export const PROXY_EXCLUDED_PATH = "/api/v1/documents";
+
+/** `true` dacă cererea trece de Access (aceeași funcție ca în proxy), pe calea fixă. */
 export async function accessAllowed(
-  request: Readonly<{ method: string; url: string; headers: Headers }>,
+  request: Readonly<{ method: string; headers: Headers }>,
 ): Promise<boolean> {
   try {
     const config = getConfig();
     return await isRequestAllowed(
       {
         method: request.method,
-        pathname: new URL(request.url).pathname,
+        pathname: PROXY_EXCLUDED_PATH,
         headers: request.headers,
       },
       {

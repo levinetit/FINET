@@ -4,10 +4,12 @@ import { getConfig, type StorageConfig } from "@/lib/config";
 import { LocalStorage, type LocalStorageOptions } from "@/lib/storage/local";
 import { S3Storage } from "@/lib/storage/s3";
 import {
+  assertKeyOfHousehold,
   assertStorageKey,
   householdDocumentKey,
   InvalidStorageKeyError,
   isStorageHouseholdId,
+  isKeyOfHousehold,
   isStorageKey,
   StorageError,
   StorageLimitError,
@@ -30,9 +32,11 @@ import {
  */
 
 export {
+  assertKeyOfHousehold,
   assertStorageKey,
   householdDocumentKey,
   InvalidStorageKeyError,
+  isKeyOfHousehold,
   isStorageHouseholdId,
   isStorageKey,
   LocalStorage,

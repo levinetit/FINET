@@ -17,7 +17,7 @@ import { type Actor, NotFoundError } from "@/lib/authz";
 import { DEFAULT_TIME_ZONE, localDateOf } from "@/lib/calendar";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { InvalidAmountError, parseAmount } from "@/lib/money";
-import { type Storage, isStorageKey } from "@/lib/storage";
+import { type Storage, isKeyOfHousehold } from "@/lib/storage";
 import { insertAudit } from "@/modules/auth/audit";
 import { selectCategory } from "@/modules/categories/categories.repo";
 import { addUsage, lockHouseholdDocuments, usageOfDay } from "@/modules/documents/documents.repo";
@@ -912,7 +912,8 @@ export async function deleteReceipt(
     return docs.map((d) => d.storageKey).filter((k) => k !== null);
   });
   if (deps.storage) {
-    await Promise.allSettled(keys.filter(isStorageKey).map((k) => deps.storage!.delete(k)));
+    const own = keys.filter((k) => isKeyOfHousehold(k, householdId));
+    await Promise.allSettled(own.map((k) => deps.storage!.delete(k)));
   }
 }
 

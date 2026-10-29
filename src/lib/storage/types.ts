@@ -122,6 +122,26 @@ export function isStorageKey(value: unknown): value is StorageKey {
   return typeof value === "string" && KEY.test(value);
 }
 
+/**
+ * Cheia e un document AL ACESTEI gospodării (`households/<householdId>/documents/<uuid>`), nu
+ * doar o cheie bine formată: apărare în adâncime la citire și ștergere (revizuirea F6-C), peste
+ * CHECK-ul `documents_storage_key_shape` din bază. Altfel `InvalidStorageKeyError`.
+ */
+export function isKeyOfHousehold(value: unknown, householdId: string): value is StorageKey {
+  return (
+    isStorageKey(value) &&
+    isStorageHouseholdId(householdId) &&
+    value.startsWith(`households/${householdId.toLowerCase()}/documents/`)
+  );
+}
+
+export function assertKeyOfHousehold(
+  value: unknown,
+  householdId: string,
+): asserts value is StorageKey {
+  if (!isKeyOfHousehold(value, householdId)) throw new InvalidStorageKeyError();
+}
+
 /** Respinge orice nu are forma exactă a unei chei generate (deci și `..`, căi absolute, `\`). */
 export function assertStorageKey(value: unknown): asserts value is StorageKey {
   if (!isStorageKey(value)) throw new InvalidStorageKeyError();

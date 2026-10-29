@@ -1,10 +1,11 @@
 import "server-only";
 
-import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, isNotNull, lte, notInArray, sql } from "drizzle-orm";
 
 import type { Db } from "@/db";
 import { documents } from "@/db/schema";
-import { type Storage, isStorageKey } from "@/lib/storage";
+import { type Storage, isKeyOfHousehold } from "@/lib/storage";
+import { lockHouseholdDocuments } from "@/modules/documents/documents.repo";
 import { insertAudit } from "@/modules/auth/audit";
 import { inHousehold } from "@/modules/ledger/context";
 
@@ -25,7 +26,7 @@ export const RETENTION_BATCH = 200;
 
 export type RetentionResult = Readonly<{ expired: number; failed: number; tempRemoved: number }>;
 
-type ExpiredRef = { document_id: string; household_id: string; actor_user_id: string };
+export type ExpiredRef = { document_id: string; household_id: string; actor_user_id: string };
 
 export async function expireDocumentFiles(
   deps: Readonly<{
@@ -49,35 +50,7 @@ export async function expireDocumentFiles(
   const perHousehold = new Map<string, { actor: string; n: number }>();
   for (const ref of refs) {
     try {
-      const done = await inHousehold(
-        { db: deps.db },
-        { userId: ref.actor_user_id },
-        ref.household_id,
-        async (tx) => {
-          const [row] = await tx
-            .select({ storageKey: documents.storageKey })
-            .from(documents)
-            .where(
-              and(
-                eq(documents.householdId, ref.household_id),
-                eq(documents.id, ref.document_id),
-                isNotNull(documents.storageKey),
-                lte(documents.expiresAt, sql`now()`),
-              ),
-            )
-            .limit(1)
-            .for("update");
-          if (!row?.storageKey || !isStorageKey(row.storageKey)) return false;
-          await deps.storage.delete(row.storageKey);
-          await tx
-            .update(documents)
-            .set({ storageKey: null, fileDeletedAt: new Date(), updatedAt: new Date() })
-            .where(
-              and(eq(documents.householdId, ref.household_id), eq(documents.id, ref.document_id)),
-            );
-          return true;
-        },
-      );
+      const done = await expireDocumentFile(deps, ref);
       if (done) {
         expired++;
         const h = perHousehold.get(ref.household_id) ?? { actor: ref.actor_user_id, n: 0 };
@@ -104,4 +77,47 @@ export async function expireDocumentFiles(
     tempRemoved = await deps.storage.cleanupTemp(deps.tempOlderThanMs);
   }
   return { expired, failed, tempRemoved };
+}
+
+/**
+ * Un singur document (exportat pentru teste): sub lock-ul gospodăriei, rândul re-citit și blocat
+ * (expirat, cu fișier, NU în coadă/în lucru), apoi fișierul (doar o cheie a gospodăriei), apoi
+ * `storage_key = NULL`. `false` dacă documentul nu mai îndeplinește condițiile.
+ */
+export async function expireDocumentFile(
+  deps: Readonly<{ db: Db; storage: Storage }>,
+  ref: ExpiredRef,
+): Promise<boolean> {
+  return inHousehold(
+    { db: deps.db },
+    { userId: ref.actor_user_id },
+    ref.household_id,
+    async (tx) => {
+      // Serializat cu reprocesarea, încărcarea și workerul (același lock pe gospodărie).
+      await lockHouseholdDocuments(tx, ref.household_id);
+      const [row] = await tx
+        .select({ storageKey: documents.storageKey })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.householdId, ref.household_id),
+            eq(documents.id, ref.document_id),
+            isNotNull(documents.storageKey),
+            lte(documents.expiresAt, sql`now()`),
+            // Revizuirea F6-C: un document repus în coadă (reprocesare) sau în lucru nu se
+            // atinge, chiar dacă selecția l-a întors înainte de schimbarea stării.
+            notInArray(documents.status, ["queued", "processing"]),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (!row?.storageKey || !isKeyOfHousehold(row.storageKey, ref.household_id)) return false;
+      await deps.storage.delete(row.storageKey);
+      await tx
+        .update(documents)
+        .set({ storageKey: null, fileDeletedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(documents.householdId, ref.household_id), eq(documents.id, ref.document_id)));
+      return true;
+    },
+  );
 }

@@ -18,8 +18,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { NotImplementedError } from "@/lib/errors";
 import {
+  assertKeyOfHousehold,
   createStorage,
   InvalidStorageKeyError,
+  isKeyOfHousehold,
   isStorageKey,
   LocalStorage,
   S3Storage,
@@ -331,5 +333,30 @@ describe("LocalStorage — curățarea fișierelor temporare orfane (F9)", () =>
 
   it("vârstă invalidă → StorageError", async () => {
     await expect(storage.cleanupTemp(-1)).rejects.toBeInstanceOf(StorageError);
+  });
+});
+
+describe("cheia unui document al gospodăriei (revizuirea F6-C)", () => {
+  const H = "7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f";
+  const OTHER = "11111111-2222-4333-8444-555555555555";
+  const D = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+  it("acceptă doar `households/<gospodăria>/documents/<uuid>` al aceleiași gospodării", () => {
+    const own = `households/${H}/documents/${D}`;
+    expect(isKeyOfHousehold(own, H)).toBe(true);
+    expect(isKeyOfHousehold(own, H.toUpperCase())).toBe(true);
+    expect(() => assertKeyOfHousehold(own, H)).not.toThrow();
+    for (const key of [
+      `households/${OTHER}/documents/${D}`,
+      `exports/${D}`,
+      `households/${H}/documents/../${D}`,
+      `households/${H}/documents/${D}/x`,
+      null,
+      42,
+    ]) {
+      expect(isKeyOfHousehold(key, H), String(key)).toBe(false);
+      expect(() => assertKeyOfHousehold(key, H)).toThrow(InvalidStorageKeyError);
+    }
+    expect(isKeyOfHousehold(own, "nu-e-uuid")).toBe(false);
   });
 });

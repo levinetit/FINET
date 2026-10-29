@@ -226,8 +226,9 @@ export async function main(io: AdminIo): Promise<number> {
       // contoare în ieșire (fără căi, chei sau nume).
       const raw = flags["temp-hours"];
       const hours = raw === undefined ? 24 : Number(raw);
-      if (typeof raw === "string" && !/^[0-9]{1,4}$/.test(raw)) {
-        throw new UsageError("--temp-hours: un număr întreg de ore (0–9999)");
+      // Minimum 1 oră (revizuirea F6-C): o scriere în curs are un fișier `*.tmp-*` proaspăt.
+      if (typeof raw === "string" && (!/^[0-9]{1,4}$/.test(raw) || Number(raw) < 1)) {
+        throw new UsageError("--temp-hours: un număr întreg de ore (1–9999)");
       }
       let storage = io.storage;
       let mounted = true;

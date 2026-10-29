@@ -396,6 +396,21 @@ describe("FAIL-CLOSED", () => {
         run,
       );
       await expectForbidden(withJwt);
+      // Calea dată politicii e FIXĂ: nici o adresă de sănătate/liveness nu primește excepțiile.
+      prodEnv({ HEALTH_TOKEN });
+      for (const url of [
+        "https://finet.exemplu.invalid/api/health",
+        "http://127.0.0.1:3000/api/health/live",
+      ]) {
+        await expectForbidden(
+          await guardAccess(
+            new Request(url, {
+              headers: { host: "127.0.0.1:3000", [HEALTH_TOKEN_HEADER]: HEALTH_TOKEN },
+            }),
+            run,
+          ),
+        );
+      }
       // HEALTH_TOKEN nu deschide ruta de încărcare.
       prodEnv({ HEALTH_TOKEN });
       await expectForbidden(
