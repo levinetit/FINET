@@ -113,6 +113,13 @@
       "when": 1794800000000,
       "tag": "0014_statement_uploads",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794900000000,
+      "tag": "0017_shopping_lists",
+      "breakpoints": true
     }
   ]
 }
