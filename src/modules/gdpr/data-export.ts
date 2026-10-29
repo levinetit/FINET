@@ -34,6 +34,8 @@ import {
   receipts,
   recurringRules,
   settlements,
+  shoppingListItems,
+  shoppingLists,
   statementImports,
   statementLines,
   tags,
@@ -112,9 +114,9 @@ async function* jsonPages<T extends { id: string }>(
 
 // --- Verificarea dinaintea exportului (revizuirea F9) ---------------------------------------
 
-/** Intrările fixe: `README.txt`, `profil.json` și cele 15 fișiere de pe fiecare gospodărie. */
+/** Intrările fixe: `README.txt`, `profil.json` și cele 16 fișiere de pe fiecare gospodărie. */
 export const FIXED_ENTRIES = 2;
-export const ENTRIES_PER_HOUSEHOLD = 15;
+export const ENTRIES_PER_HOUSEHOLD = 16;
 /** Estimarea pe tranzacție (JSON + CSV, necomprimat) și rezerva pentru restul textului. */
 export const BYTES_PER_TRANSACTION = 4096;
 export const TEXT_RESERVE_BYTES = 64 * 1024 * 1024;
@@ -190,7 +192,8 @@ originale ale bonurilor încărcate de tine.
   autentificare (fără parolă), instalările și evenimentele de utilizare.
 - gospodarii/<n>/: câte un dosar pentru fiecare dintre cele ${n} gospodării din care faci parte:
   gospodăria, conturile, categoriile, etichetele, tranzacțiile (JSON și CSV), bugetele, obiectivele,
-  regulile recurente, bonurile încărcate de tine (cu liniile lor), importurile de extrase făcute de
+  regulile recurente, listele de cumpărături pe care le vezi (comune și personale ale tale, cu
+  articolele lor), bonurile încărcate de tine (cu liniile lor), importurile de extrase făcute de
   tine (cu rândurile lor; fișierele extraselor nu se păstrează), împărțirile și decontările în
   care ești parte, acțiunile tale din jurnalul de audit și fișierele bonurilor (fisiere/).
 
@@ -407,6 +410,35 @@ export async function* dataExportEntries(
       `${dir}/recurente.json`,
       exportJson(await rowsOf(db, userId, hh, recurringRules, eq(recurringRules.householdId, hh))),
     ];
+
+    // Faza 10: listele de cumpărături vizibile utilizatorului (sub RLS: listele personale ale
+    // altor membri nu apar) și articolele lor, cu starea potrivirii (fără conținutul bonurilor).
+    const lists = await inHh(db, userId, hh, (tx) =>
+      tx
+        .select()
+        .from(shoppingLists)
+        .where(eq(shoppingLists.householdId, hh))
+        .orderBy(asc(shoppingLists.id)),
+    );
+    const listItems =
+      lists.length === 0
+        ? []
+        : await inHh(db, userId, hh, (tx) =>
+            tx
+              .select()
+              .from(shoppingListItems)
+              .where(
+                and(
+                  eq(shoppingListItems.householdId, hh),
+                  inArray(
+                    shoppingListItems.listId,
+                    lists.map((l) => l.id),
+                  ),
+                ),
+              )
+              .orderBy(asc(shoppingListItems.listId), asc(shoppingListItems.position)),
+          );
+    yield [`${dir}/liste-cumparaturi.json`, exportJson({ lists, items: listItems })];
 
     // Bonurile încărcate de el: documentele (fără cheia de storage), bonurile, liniile.
     const docs = await inHh(db, userId, hh, (tx) =>

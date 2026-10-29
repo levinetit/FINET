@@ -14,6 +14,7 @@ import { type AuthEnv, type AuthFixture, authEnv, createAuthFixture } from "@/mo
 import { createUserWithHousehold } from "@/modules/auth/users.service";
 import { MemoryStorage } from "@/modules/gdpr/testing";
 import { createTransaction } from "@/modules/transactions/transactions.service";
+import { createList } from "@/modules/shopping/shopping.service";
 
 import * as G from "./_lib/gdpr-handlers";
 import { type Sessions, apiRequest, assertContract, readJson, sessionsFor } from "./_lib/testing";
@@ -149,6 +150,17 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
               ${createHash("sha256").update(docId).digest("hex")})`;
     storage.seed(key, new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
 
+    // Faza 10: lista personală a Anei (invizibilă lui Bogdan) și una comună a lui Bogdan.
+    await createList(deps, { userId: ana.id }, ana.hh, {
+      name: "Lista secretă a Anei",
+      personal: true,
+      items: [{ name: "Cadou ascuns" }],
+    });
+    await createList(deps, { userId: bogdan.id }, ana.hh, {
+      name: "Lista comună de weekend",
+      items: [{ name: "Roșii" }],
+    });
+
     const crossSite = await call(G.dataExportHandler, "/api/v1/me/export", {
       cookie: bogdan.S.cookie,
       headers: { "sec-fetch-site": "cross-site" },
@@ -172,6 +184,9 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
     expect(all).not.toContain("Secretul Anei");
     expect(all).not.toContain("424242");
     expect(all).not.toContain("Personal Ana");
+    expect(all).toContain("Lista comună de weekend");
+    expect(all).not.toContain("Lista secretă a Anei");
+    expect(all).not.toContain("Cadou ascuns");
     expect(all).not.toContain("ana@exemplu.ro");
     expect(all).not.toMatch(/\$argon2/);
     expect(all).not.toContain(bogdan.S.bearer);
@@ -184,6 +199,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
       // Faza 7: importurile de extras (fără fișiere).
       expect(names).toContain("gospodarii/1/extrase.json");
       expect(names).toContain(`gospodarii/1/fisiere/${docId}.png`);
+      expect(names.filter((n) => n.endsWith("liste-cumparaturi.json"))).toHaveLength(2);
       expect(names.filter((n) => n.endsWith("gospodarie.json"))).toHaveLength(2);
       // Fiecare JSON e valid.
       for (const n of names.filter((x) => x.endsWith(".json"))) {
