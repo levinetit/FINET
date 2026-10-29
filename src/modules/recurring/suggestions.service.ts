@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, eq, gte, inArray, ne, sql } from "drizzle-orm";
 
 import { accounts, recurringRules, recurringSuggestionDismissals, transactions } from "@/db/schema";
 import { type Actor, NotFoundError } from "@/lib/authz";
@@ -109,24 +109,34 @@ export async function acceptRecurringSuggestion(
   rawInput: unknown = {},
 ): Promise<RecurringRuleView> {
   const input = parseInput(acceptSuggestionSchema, rawInput);
-  const s = await findSuggestion(deps, actor, householdId, signature);
+  if (!signatureSchema.safeParse(signature).success) throw new NotFoundError();
   const today = todayLocal((deps.now ?? (() => new Date()))());
-  return createRecurringRule(
-    deps,
-    actor,
-    householdId,
-    {
-      accountId: s.accountId,
-      categoryId: s.categoryId,
-      type: s.type,
-      amountMinor: Number(s.amountMinor),
-      description: s.description,
-      ...(s.merchant ? { merchant: s.merchant } : {}),
-      frequency: s.frequency,
-      startOn: input.startOn ?? s.nextOn,
-    },
-    today,
-  );
+  // Două acceptări simultane (fără `Idempotency-Key`) nu creează două reguli (revizuirea F7-B,
+  // m2): blocare pe amprentă în tranzacția creării; propunerea se recalculează SUB blocare, deci
+  // a doua cerere vede regula deja creată („acoperită”) și primește 404.
+  return inHousehold(deps, actor, householdId, async (tx, m) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`finet.suggestion:${m.householdId}:${signature}`}, 0))`,
+    );
+    const inner = { ...deps, db: tx };
+    const s = await findSuggestion(inner, actor, m.householdId, signature);
+    return createRecurringRule(
+      inner,
+      actor,
+      m.householdId,
+      {
+        accountId: s.accountId,
+        categoryId: s.categoryId,
+        type: s.type,
+        amountMinor: Number(s.amountMinor),
+        description: s.description,
+        ...(s.merchant ? { merchant: s.merchant } : {}),
+        frequency: s.frequency,
+        startOn: input.startOn ?? s.nextOn,
+      },
+      today,
+    );
+  });
 }
 
 export async function dismissRecurringSuggestion(

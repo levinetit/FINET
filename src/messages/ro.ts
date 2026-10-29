@@ -312,6 +312,8 @@ export const ro = {
           "Schimbul valutar e deja importat în celălalt cont: alege „venit/cheltuială” sau „sari”.",
         statement_upload_processing:
           "Extrasul e citit chiar acum. Încearcă din nou peste un minut.",
+        receipt_match_personal_account:
+          "Tranzacția e într-un cont personal: bonul se leagă doar de un cont comun sau de contul personal al celui care l-a încărcat.",
         receipt_transaction_edited:
           "Tranzacția bonului are etichete sau e împărțită: leag-o manual de tranzacția din extras.",
         // Faza 8: familia (ADR 0016).

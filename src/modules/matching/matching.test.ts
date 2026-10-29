@@ -37,14 +37,20 @@ describe.skipIf(!TEST_ADMIN_URL)("potrivirea bonurilor și propunerile (Postgres
     return id;
   };
   const receipt = async (
-    over: { total?: number; on?: string; merchant?: string; cui?: string | null } = {},
+    over: {
+      total?: number;
+      on?: string;
+      merchant?: string;
+      cui?: string | null;
+      uploader?: string;
+    } = {},
   ) => {
     const doc = randomUUID();
     await f.admin`insert into finet.documents (id, household_id, kind, status, detected_mime,
         size_bytes, sha256, storage_key, uploaded_by_user_id)
       values (${doc}, ${f.HA}, 'receipt', 'needs_review', 'image/jpeg', 10,
         ${createHash("sha256").update(doc).digest("hex")}, ${`households/${f.HA}/documents/${doc}`},
-        ${f.A.userId})`;
+        ${over.uploader ?? f.A.userId})`;
     const id = randomUUID();
     await f.admin`insert into finet.receipts (id, household_id, document_id, status, total_minor,
         occurred_on, merchant_name, merchant_tax_id)
@@ -173,9 +179,18 @@ describe.skipIf(!TEST_ADMIN_URL)("potrivirea bonurilor și propunerile (Postgres
     await expect(
       decideReceiptMatch(deps(), f.A, f.HA, r, { transactionId: t, decision: "reject" }),
     ).rejects.toMatchObject({ status: 404 });
+    // m3 (revizuirea F7-B): nici proprietarul contului personal nu leagă de el bonul încărcat de
+    // A (bonul e al gospodăriei, tranzacția ar rămâne invizibilă celorlalți) → conflict explicit.
+    expect((await getReceiptMatches(deps(), f.C, f.HA, r))!.candidates).toEqual([]);
+    await expect(
+      decideReceiptMatch(deps(), f.C, f.HA, r, { transactionId: t, decision: "confirm" }),
+    ).rejects.toMatchObject({ reason: "receipt_match_personal_account" });
+    // Bonul încărcat de C se poate lega de tranzacția din contul personal al lui C.
+    const own = await receipt({ total: 7777, on: "2026-11-16", uploader: f.C.userId });
     expect(
-      (await getReceiptMatches(deps(), f.C, f.HA, r))!.candidates.map((c) => c.transactionId),
+      (await getReceiptMatches(deps(), f.C, f.HA, own))!.candidates.map((c) => c.transactionId),
     ).toEqual([t]);
+    await decideReceiptMatch(deps(), f.C, f.HA, own, { transactionId: t, decision: "confirm" });
     // Altă gospodărie: bonul nu există.
     await expect(getReceiptMatches(deps(), f.B, f.HB, r)).rejects.toMatchObject({ status: 404 });
   });
@@ -217,5 +232,58 @@ describe.skipIf(!TEST_ADMIN_URL)("potrivirea bonurilor și propunerile (Postgres
     await expect(
       dismissRecurringSuggestion(deps(), f.A, f.HA, "z".repeat(64)),
     ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("acceptarea simultană a aceleiași propuneri (fără Idempotency-Key) creează O SINGURĂ regulă", async () => {
+    for (const d of ["2026-08-09", "2026-09-09", "2026-10-09", "2026-11-09"]) {
+      await stmtTx(common, 3333, d, "CINEMAEXEMPLU Abonament");
+    }
+    const s = (await listRecurringSuggestions(deps(), f.A, f.HA)).find((x) =>
+      x.description.startsWith("CINEMAEXEMPLU"),
+    )!;
+    expect(s).toBeTruthy();
+    const results = await Promise.allSettled([
+      acceptRecurringSuggestion(deps(), f.A, f.HA, s.signature),
+      acceptRecurringSuggestion(deps(), f.C, f.HA, s.signature),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({ status: 404 });
+    const [n] = await f.admin<{ n: number }[]>`
+      select count(*)::int as n from finet.recurring_rules
+       where account_id = ${common} and description like 'CINEMAEXEMPLU%'`;
+    expect(n!.n).toBe(1);
+  });
+
+  it("m3: o tranzacție din contul PERSONAL al lui A nu șterge tranzacția comună a bonului salvat de B", async () => {
+    const personalA = (
+      await createAccount({ db: f.db }, f.A, f.HA, {
+        name: "Personal A",
+        type: "bank",
+        currency: "RON",
+        ownerUserId: f.A.userId,
+      })
+    ).id;
+    const r = await receipt({
+      total: 4321,
+      on: "2026-11-17",
+      merchant: "Librarie",
+      cui: null,
+      uploader: f.C.userId,
+    });
+    const own = randomUUID();
+    await f.admin`insert into finet.transactions (id, household_id, account_id, type, amount_minor,
+        currency, occurred_on, description, source, created_by_user_id)
+      values (${own}, ${f.HA}, ${common}, 'expense', 4321, 'RON', '2026-11-17', 'Librarie',
+        'receipt', ${f.C.userId})`;
+    await f.admin`update finet.receipts set status = 'saved', transaction_id = ${own} where id = ${r}`;
+    const t = await stmtTx(personalA, 4321, "2026-11-17", "LIBRARIE");
+    expect((await getReceiptMatches(deps(), f.A, f.HA, r))!.candidates).toEqual([]);
+    await expect(
+      decideReceiptMatch(deps(), f.A, f.HA, r, { transactionId: t, decision: "confirm" }),
+    ).rejects.toMatchObject({ reason: "receipt_match_personal_account" });
+    const [still] = await f.admin<{ n: number }[]>`
+      select count(*)::int as n from finet.transactions where id = ${own}`;
+    expect(still!.n).toBe(1);
   });
 });

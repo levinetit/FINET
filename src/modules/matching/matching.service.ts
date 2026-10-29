@@ -4,6 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { Tx } from "@/db";
 import {
+  accounts,
   documents,
   processingBatches,
   receiptLines,
@@ -80,6 +81,35 @@ async function eligibleReceipt(tx: Tx, householdId: string, r: ReceiptRow) {
   return { own: own.id };
 }
 
+/** Cine a încărcat bonul (documentul sau lotul); `null` dacă utilizatorul nu mai există. */
+async function receiptAuthor(tx: Tx, householdId: string, r: ReceiptRow): Promise<string | null> {
+  if (r.batchId !== null) {
+    const [b] = await tx
+      .select({ u: processingBatches.createdByUserId })
+      .from(processingBatches)
+      .where(
+        and(eq(processingBatches.householdId, householdId), eq(processingBatches.id, r.batchId)),
+      )
+      .limit(1);
+    return b?.u ?? null;
+  }
+  const [d] = await tx
+    .select({ u: documents.uploadedByUserId })
+    .from(documents)
+    .where(and(eq(documents.householdId, householdId), eq(documents.id, r.documentId!)))
+    .limit(1);
+  return d?.u ?? null;
+}
+
+/**
+ * Revizuirea F7-B (m3): bonul e vizibil întregii gospodării, deci se leagă doar de o tranzacție
+ * dintr-un cont COMUN sau din contul personal al AUTORULUI bonului — nu de o tranzacție invizibilă
+ * celorlalți membri și nu ca să șteargă tranzacția comună a altui membru.
+ */
+function accountAllowed(owner: string | null, author: string | null): boolean {
+  return owner === null || (author !== null && owner === author);
+}
+
 async function candidatesFor(tx: Tx, householdId: string, r: ReceiptRow) {
   const from = sql`${r.occurredOn}::date - ${MATCH_MAX_DAYS}::int`;
   const to = sql`${r.occurredOn}::date + ${MATCH_MAX_DAYS}::int`;
@@ -92,8 +122,10 @@ async function candidatesFor(tx: Tx, householdId: string, r: ReceiptRow) {
       currency: transactions.currency,
       description: transactions.description,
       merchant: transactions.merchant,
+      owner: accounts.ownerUserId,
     })
     .from(transactions)
+    .innerJoin(accounts, eq(accounts.id, transactions.accountId))
     .where(
       and(
         eq(transactions.householdId, householdId),
@@ -109,6 +141,8 @@ async function candidatesFor(tx: Tx, householdId: string, r: ReceiptRow) {
       ),
     )
     .limit(100);
+  const author = await receiptAuthor(tx, householdId, r);
+  const allowed = rows.filter((t) => accountAllowed(t.owner, author));
   const { ranked, ambiguous } = rankCandidates(
     {
       totalMinor: r.totalMinor!,
@@ -117,7 +151,7 @@ async function candidatesFor(tx: Tx, householdId: string, r: ReceiptRow) {
       merchantName: r.merchantName,
       merchantTaxId: r.merchantTaxId,
     },
-    rows,
+    allowed,
   );
   return {
     ambiguous,
@@ -239,6 +273,24 @@ export async function decideReceiptMatch(
     const hh = m.householdId;
     const r = await loadReceipt(tx, hh, receiptId.toLowerCase(), true);
     const eligible = await eligibleReceipt(tx, hh, r);
+    // Contul tranzacției (sub RLS): unul personal al altui membru decât autorul bonului → conflict
+    // explicit (m3), înaintea verificării de candidat.
+    const [targetAccount] = await tx
+      .select({ owner: accounts.ownerUserId })
+      .from(transactions)
+      .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+      .where(and(eq(transactions.householdId, hh), eq(transactions.id, txId)))
+      .limit(1);
+    if (
+      input.decision === "confirm" &&
+      targetAccount &&
+      !accountAllowed(targetAccount.owner, await receiptAuthor(tx, hh, r))
+    ) {
+      throw new ConflictError(
+        "receipt_match_personal_account",
+        "Tranzacția e într-un cont personal: bonul se poate lega doar de un cont comun sau de contul personal al celui care l-a încărcat.",
+      );
+    }
     // Tranzacția trebuie să fie un candidat VALID acum (vizibilă, aceeași sumă/monedă, ±3 zile,
     // nelegată, nerespinsă): un id ghicit sau străin dă 404 uniform.
     const { candidates } = eligible ? await candidatesFor(tx, hh, r) : { candidates: [] };
