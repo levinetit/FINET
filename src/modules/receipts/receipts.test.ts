@@ -436,3 +436,82 @@ describe("textul PDF: fără NUL și caractere de control (Postgres refuză U+00
     expect(t).toContain("AB");
   });
 });
+
+describe("schema ca text în prompt (json_object): sincronizată cu schema Zod", () => {
+  it("promptul conține toate cheile (top-level și linie), enum-urile și un exemplu valid", async () => {
+    const {
+      RECEIPT_PROMPT_EXAMPLE,
+      modelLineSchema,
+      modelReceiptSchema,
+      MODEL_LINE_TYPES,
+      MODEL_PAYMENT_METHODS,
+      receiptSchemaPromptText,
+    } = await import("./extraction.schema");
+    const { receiptTextMessages, receiptVisionMessages } = await import("./prompts");
+    const text = receiptSchemaPromptText();
+    for (const k of [
+      ...Object.keys(modelReceiptSchema.shape),
+      ...Object.keys(modelLineSchema.shape),
+    ]) {
+      expect(text, k).toContain(`"${k}"`);
+    }
+    for (const v of [...MODEL_LINE_TYPES, ...MODEL_PAYMENT_METHODS])
+      expect(text).toContain(`"${v}"`);
+    // Exemplul din prompt e exact obiectul exportat și trece schema strictă și verificările din cod.
+    expect(text).toContain(JSON.stringify(RECEIPT_PROMPT_EXAMPLE));
+    const ex = toExtractedReceipt(parseModelReceipt(RECEIPT_PROMPT_EXAMPLE));
+    expect(checkReceipt(ex, { today: "2026-10-29", vatRates: RO_VAT_RATES_FALLBACK })).toEqual([]);
+    // Ambele trasee (vision și text) au schema în promptul sistem.
+    for (const messages of [
+      receiptTextMessages("x"),
+      receiptVisionMessages([Buffer.from([0xff, 0xd8])]),
+    ]) {
+      expect(messages[0]!.role).toBe("system");
+      expect(String(messages[0]!.content)).toContain(text);
+    }
+  });
+
+  it("serverul AI fals: în modul json_object cererea are response_format json_object și schema în prompt; cheile inventate sunt respinse", async () => {
+    const { createAiClient } = await import("@/lib/ai");
+    const { startMockAiServer } = await import("@/lib/ai/mock-server");
+    const { RECEIPT_JSON_SCHEMA } = await import("./extraction.schema");
+    const { receiptTextMessages, RECEIPT_MAX_TOKENS } = await import("./prompts");
+    const mock = await startMockAiServer();
+    try {
+      mock.enqueue({
+        kind: "content",
+        content: JSON.stringify({ merchant: { name: "X" }, items: [], totals: { total: "1.00" } }),
+      });
+      const client = createAiClient({
+        baseUrl: mock.baseUrl,
+        apiKey: "sk-test-0000000000",
+        allowedHosts: [mock.host],
+        timeoutMs: 2000,
+        maxRetries: 0,
+      });
+      const r = await client.chat({
+        model: "finet-text-external",
+        messages: receiptTextMessages("BON"),
+        maxTokens: RECEIPT_MAX_TOKENS,
+        jsonSchema: { name: "receipt", schema: RECEIPT_JSON_SCHEMA },
+        responseFormat: "json_object",
+      });
+      const body = mock.requests[0]!.body!;
+      expect(body.response_format).toEqual({ type: "json_object" });
+      const system = (body.messages as { role: string; content: string }[])[0]!;
+      for (const k of [
+        "merchantName",
+        "merchantTaxId",
+        "receiptNumber",
+        "lines",
+        "lineTotal",
+        "vatRate",
+      ]) {
+        expect(system.content).toContain(`"${k}"`);
+      }
+      expect(() => parseModelReceipt(parseModelJson(r.content))).toThrow(ExtractionInvalidError);
+    } finally {
+      await mock.close();
+    }
+  });
+});
