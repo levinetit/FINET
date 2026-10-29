@@ -29,6 +29,14 @@
       "description": "Statisticile de utilizare (6.5)."
     },
     {
+      "name": "app",
+      "description": "Aplicația Android: ultima versiune publicată (Faza 9)."
+    },
+    {
+      "name": "admin",
+      "description": "Administratorul platformei: statisticile (Faza 9)."
+    },
+    {
       "name": "households",
       "description": "Gospodăriile utilizatorului."
     },
@@ -715,6 +723,475 @@
         }
       }
     },
+    "/api/v1/admin/stats": {
+      "get": {
+        "operationId": "getUsageStats",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Statisticile de utilizare (6.5), doar pentru administratorul platformei.",
+        "description": "Utilizatori activi (zi/săptămână/lună, pe platformă; din instalări și sesiuni), instalări pe versiune (cu `belowMinimum`/`outdated` față de ultima versiune Android), descărcări, login-uri pe zi, evenimente și ecrane, erori pe versiune, apeluri AI și costul lunar de operare, evenimentele arhivate (agregate după 13 luni). `members` (nume, ultima activitate, platformă, versiune) doar în modul `personal`. Nicio informație financiară a utilizatorilor. Altcineva decât administratorul: 403.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Statisticile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "generatedAt": {
+                          "type": "string"
+                        },
+                        "activeUsers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "platform": {
+                                "type": "string"
+                              },
+                              "daily": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "weekly": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "monthly": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "platform",
+                              "daily",
+                              "weekly",
+                              "monthly"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "sessionUsers": {
+                          "type": "object",
+                          "properties": {
+                            "daily": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "weekly": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "monthly": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "expiredSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "daily",
+                            "weekly",
+                            "monthly",
+                            "expiredSessions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "installations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "platform": {
+                                "type": "string"
+                              },
+                              "appVersion": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "versionCode": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "belowMinimum": {
+                                "type": "boolean"
+                              },
+                              "outdated": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "platform",
+                              "appVersion",
+                              "versionCode",
+                              "count",
+                              "belowMinimum",
+                              "outdated"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "downloads": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "source",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "logins": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "day": {
+                                "type": "string"
+                              },
+                              "platform": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "day",
+                              "platform",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "screens": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "screen": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "screen",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "errors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "errorCode": {
+                                "type": "string"
+                              },
+                              "appVersion": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "errorCode",
+                              "appVersion",
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "ai": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "provider": {
+                                "type": "string"
+                              },
+                              "result": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "avgDurationMs": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "provider",
+                              "result",
+                              "count",
+                              "avgDurationMs"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "aiCost": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "month": {
+                                "type": "string"
+                              },
+                              "currency": {
+                                "type": "string"
+                              },
+                              "costMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "month",
+                              "currency",
+                              "costMinor"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "archivedEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "latestAndroid": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "versionName": {
+                                  "type": "string"
+                                },
+                                "versionCode": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "minSupportedVersionCode": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "versionName",
+                                "versionCode",
+                                "minSupportedVersionCode"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "members": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "userId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "lastSeenAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "platform": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "appVersion": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "versionCode": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "belowMinimum": {
+                                    "type": "boolean"
+                                  },
+                                  "outdated": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "userId",
+                                  "name",
+                                  "lastSeenAt",
+                                  "platform",
+                                  "appVersion",
+                                  "versionCode",
+                                  "belowMinimum",
+                                  "outdated"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "generatedAt",
+                        "activeUsers",
+                        "sessionUsers",
+                        "installations",
+                        "downloads",
+                        "logins",
+                        "features",
+                        "screens",
+                        "errors",
+                        "ai",
+                        "aiCost",
+                        "archivedEvents",
+                        "latestAndroid",
+                        "members"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/ai/usage": {
       "get": {
         "operationId": "getAiUsage",
@@ -778,6 +1255,112 @@
           },
           "401": {
             "$ref": "#/components/responses/E401"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/app/android/latest": {
+      "get": {
+        "operationId": "getAndroidLatest",
+        "tags": [
+          "app"
+        ],
+        "summary": "Ultima versiune publicată a aplicației Android (metadate, fără APK).",
+        "description": "Datele vin din configurația serverului (fișierul `<STORAGE_DIR>/app/android-latest.json`, scris de operator), nu din cod. Fără versiune publicată sau cu un fișier invalid: 404 `android_release_unavailable`. Aplicația cheamă endpointul cel mult o dată pe zi; dacă `versionCode` e mai mare decât cel instalat, anunță versiunea nouă; sub `minSupportedVersionCode` cere actualizarea.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versiunea curentă.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "versionName": {
+                          "type": "string",
+                          "description": "Versiunea semantică (`1.0.0`, din tagul `FINET-v1.0.0`)."
+                        },
+                        "versionCode": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Crește monoton cu fiecare build publicat."
+                        },
+                        "minSupportedVersionCode": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Sub această valoare aplicația cere actualizarea și nu mai trimite cereri financiare."
+                        },
+                        "url": {
+                          "type": "string",
+                          "description": "Linkul de descărcare (https; GitHub Releases)."
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "description": "Suma SHA-256 a APK-ului (hex, 64 de caractere)."
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Dimensiunea APK-ului, în octeți."
+                        },
+                        "notes": {
+                          "type": "string",
+                          "description": "Notele versiunii, în română (cel mult 2000 de caractere)."
+                        },
+                        "publishedAt": {
+                          "description": "Momentul publicării (ISO 8601) sau `null`.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "versionName",
+                        "versionCode",
+                        "minSupportedVersionCode",
+                        "url",
+                        "sha256",
+                        "sizeBytes",
+                        "notes",
+                        "publishedAt"
+                      ],
+                      "additionalProperties": false,
+                      "title": "AndroidRelease"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -2373,8 +2956,28 @@
           "documents"
         ],
         "summary": "Încarcă 1–4 bonuri (poze JPEG/PNG/WebP sau PDF), opțional ca bon lung.",
-        "description": "`multipart/form-data`, citit în flux. Tipul se detectează după conținut (nu după extensie sau `Content-Type`); HEIC/HEIF → 415 `heic_unsupported`; SVG/HTML/alte tipuri → 415. Plafoane: `MAX_UPLOAD_MB` pe fișier (implicit 10), ≤ 4 fișiere, pixeli, pagini PDF. Același fișier (SHA-256) → documentul existent (`duplicate: true`, 200), fără limită. Limita zilnică (409 `daily_document_limit`), cota (409 `storage_quota_exceeded`), bon lung cu o poză deja încărcată (409 `long_receipt_duplicate`), extrase (400, Faza 7). Starea inițială: `queued` cu consimțământul `externalAi`, altfel `awaiting_consent`. Ruta e exclusă din proxy-ul Next (ca fluxul să nu fie copiat în memorie), cu aceeași verificare Cloudflare Access. Fără `Idempotency-Key`: idempotentă prin SHA-256. Limită proprie de cereri (429).",
+        "description": "`multipart/form-data`, citit în flux. Tipul se detectează după conținut (nu după extensie sau `Content-Type`); HEIC/HEIF → 415 `heic_unsupported`; SVG/HTML/alte tipuri → 415. Plafoane: `MAX_UPLOAD_MB` pe fișier (implicit 10), ≤ 4 fișiere, pixeli, pagini PDF. Același fișier (SHA-256) → documentul existent (`duplicate: true`, 200), fără limită. Limita zilnică (409 `daily_document_limit`), cota (409 `storage_quota_exceeded`), bon lung cu o poză deja încărcată (409 `long_receipt_duplicate`), extrase (400, Faza 7). Starea inițială: `queued` cu consimțământul `externalAi`, altfel `awaiting_consent`. Ruta e exclusă din proxy-ul Next (ca fluxul să nu fie copiat în memorie), cu aceeași verificare Cloudflare Access. Fără `Idempotency-Key`: idempotentă prin SHA-256 (și reîncercarea exactă a unui bon lung → 200 duplicat). Faza 9 (coada offline): cu `X-FINET-Expected-User` și/sau `X-FINET-Expected-Household`, ambele trebuie să coincidă cu utilizatorul sesiunii și cu gospodăria curentă, altfel 409 `owner_mismatch` (`reason`: `user` sau `household`), înainte de citirea corpului; fără ele nu se verifică nimic în plus. Limită proprie de cereri (429).",
         "parameters": [
+          {
+            "name": "X-FINET-Expected-User",
+            "in": "header",
+            "required": false,
+            "description": "Opțional (coada offline): id-ul utilizatorului care a făcut scanarea. Dacă unul dintre antetele `X-FINET-Expected-*` e prezent, ambele sunt impuse; nepotrivire → 409 `owner_mismatch` (`reason: user`).",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "X-FINET-Expected-Household",
+            "in": "header",
+            "required": false,
+            "description": "Opțional (coada offline): gospodăria în care a fost făcută scanarea; diferită de gospodăria curentă → 409 `owner_mismatch` (`reason: household`).",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
           {
             "$ref": "#/components/parameters/FinetClient"
           }
@@ -6911,6 +7514,307 @@
           },
           "415": {
             "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/me/delete": {
+      "post": {
+        "operationId": "deleteMyAccount",
+        "tags": [
+          "me"
+        ],
+        "summary": "Șterge contul (ireversibil): parola curentă + confirmarea `ȘTERGE`.",
+        "description": "Conturile fără parolă (doar magic link) cer o sesiune creată în ultimele 15 minute (altfel 403 `reauth_required`). 400 `invalid_password` la parola greșită; 409 `last_owner` dacă e ultimul proprietar al unei gospodării cu alți membri; 409 `platform_admin` pentru administratorul platformei (bootstrap-ul e irepetabil). Conturile personale ale utilizatorului se șterg (nu devin comune); rândul utilizatorului se șterge sau, dacă e referit de împărțiri/decontări din istoricul altora, se anonimizează (`outcome: anonymized`). Sesiunile se închid.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "confirm": {
+                    "type": "string",
+                    "const": "ȘTERGE"
+                  }
+                },
+                "required": [
+                  "confirm"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contul a fost șters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "outcome": {
+                          "type": "string",
+                          "enum": [
+                            "deleted",
+                            "anonymized"
+                          ]
+                        },
+                        "deletedHouseholds": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "leftHouseholds": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "outcome",
+                        "deletedHouseholds",
+                        "leftHouseholds"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/me/deletion": {
+      "get": {
+        "operationId": "getDeletionPreview",
+        "tags": [
+          "me"
+        ],
+        "summary": "Ce s-ar întâmpla la ștergerea contului (fără sume).",
+        "description": "`deletedHouseholds`: gospodăriile în care utilizatorul e singurul membru (se șterg cu toate datele și fișierele). `leftHouseholds`: cele din care iese (`unsettled`: are solduri nedecontate, care rămân în istoricul celorlalți). `blockedHouseholds`: cele în care e ultimul proprietar și mai există alți membri — ștergerea e refuzată până transferă rolul.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Previzualizarea.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "hasPassword": {
+                          "type": "boolean"
+                        },
+                        "platformAdmin": {
+                          "type": "boolean"
+                        },
+                        "deletedHouseholds": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "leftHouseholds": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "unsettled": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "unsettled"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "blockedHouseholds": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "hasPassword",
+                        "platformAdmin",
+                        "deletedHouseholds",
+                        "leftHouseholds",
+                        "blockedHouseholds"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/me/export": {
+      "get": {
+        "operationId": "exportMyData",
+        "tags": [
+          "me"
+        ],
+        "summary": "Exportul complet al datelor contului: arhivă ZIP în flux.",
+        "description": "JSON (profil, preferințe, consimțăminte, sesiuni fără tokenuri, instalări, evenimente; pe fiecare gospodărie: conturi, categorii, etichete, tranzacții și în CSV, bugete, obiective, recurențe, bonurile încărcate de utilizator cu liniile lor, împărțirile și decontările în care e parte, acțiunile lui din audit) și fișierele originale ale bonurilor lui. Doar ce vede utilizatorul (RLS: conturile personale ale altor membri nu apar). Fără parole, tokenuri sau chei. Cu cookie: doar `Sec-Fetch-Site: same-origin` sau `none` (altfel 403); 3 exporturi pe oră. Arhiva fără ZIP64: dacă estimarea (fișierele bonurilor + tranzacțiile) depășește 4 GiB sau 65 535 de intrări, 413 `export_too_large` înainte de orice octet.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arhiva `finet-export.zip`.",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"bon-<id>.<ext>\"` (nume generat de server).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
           },
           "429": {
             "$ref": "#/components/responses/E429"

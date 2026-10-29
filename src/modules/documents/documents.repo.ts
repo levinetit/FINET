@@ -40,6 +40,19 @@ export async function selectBySha256(
     .where(and(eq(documents.householdId, householdId), inArray(documents.sha256, [...hashes])));
 }
 
+/** Numărul documentelor dintr-un lot (bon lung) al gospodăriei (reîncercarea exactă, Faza 9). */
+export async function countBatchDocuments(
+  tx: Tx,
+  householdId: string,
+  batchId: string,
+): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(documents)
+    .where(and(eq(documents.householdId, householdId), eq(documents.batchId, batchId)));
+  return row?.n ?? 0;
+}
+
 /**
  * Lock consultativ pe gospodărie până la sfârșitul tranzacției: două încărcări simultane se
  * serializează, deci limita zilnică și cota nu pot fi depășite prin cereri paralele.

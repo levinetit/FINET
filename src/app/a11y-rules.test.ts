@@ -76,4 +76,31 @@ describe("accesibilitate (reguli statice)", () => {
     expect(duplicates).toEqual([]);
     expect(titles.size).toBeGreaterThan(15);
   });
+
+  it("ecranul bonului: confirmarea blocată e accesibilă, iar „Reprocesează” cere confirmare", () => {
+    const review = read("(app)/receipts/[id]/receipt-review.tsx");
+    // Butonul rămâne focalizabil: `aria-disabled` + explicația asociată prin `aria-describedby`.
+    expect(review).toMatch(/aria-disabled=\{blocker !== null/);
+    expect(review).toMatch(/aria-describedby=\{blocker !== null \? "confirm-blocked"/);
+    expect(review).toContain('id="confirm-blocked"');
+    expect(review).toContain('href="/accounts"');
+    // Serverul rămâne sursa de adevăr, dar clicul pe un buton blocat nu trimite nimic.
+    expect(review).toMatch(/if \(blocker !== null \|\| accountId === ""\) return;/);
+    // „Reprocesează” trece prin ConfirmButton (nu direct pe onClick), în ecran și în listă.
+    expect(review).toMatch(/<ConfirmButton[^>]*\n\s*label=\{t\.reprocess\}/);
+    expect(review).not.toMatch(/onClick=\{\(\) => void reprocess\(\)\}/);
+    const row = read("(app)/receipts/receipt-row-actions.tsx");
+    expect(row).toMatch(/<ConfirmButton[^>]*\n\s*label=\{t\.reprocess\}/);
+    expect(read("../components/ledger/confirm-button.tsx")).toMatch(/role="group"/);
+  });
+
+  // Regresia CI F9-B (axe `label-content-name-mismatch`, WCAG 2.5.3): un `aria-label` pe un buton
+  // sau o legătură trebuie să conțină textul vizibil. Cazurile reparate nu mai au `aria-label`.
+  it("butonul „Nu, mulțumesc” și logoul din navigare au numele din textul vizibil (fără aria-label)", () => {
+    const pwa = readFileSync(join(APP, "../components/app/pwa-app.tsx"), "utf8");
+    const dismiss = pwa.slice(pwa.indexOf("onClick={dismiss}"), pwa.indexOf("{ro.pwa.notNow}"));
+    expect(dismiss).not.toContain("aria-label");
+    const nav = readFileSync(join(APP, "../components/app/app-nav.tsx"), "utf8");
+    expect(nav).not.toMatch(/<Link href="\/dashboard" aria-label=/);
+  });
 });

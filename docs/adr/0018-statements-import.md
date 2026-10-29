@@ -1,6 +1,6 @@
 # ADR 0018 — Importul extraselor bancare: parsere pe elemente poziționale, extracție în proces copil, deduplicare, schimb valutar, anulare
 
-- **Stare:** propus (F7-A + F7-B, branch `phase/07-statements`). Migrațiile `0013_statements` și `0014_statement_uploads` și redeploy-ul: operatorul, după revizuiri (`docs/INFRA.md`, „4l”). Potrivirea bon ↔ tranzacție și plățile recurente: ADR 0019.
+- **Stare:** propus (F7-A + F7-B, branch `phase/07-statements`). Migrațiile `0013_statements` și `0014_statement_uploads` și redeploy-ul: operatorul, după revizuiri (`docs/INFRA.md`, „4n”). Potrivirea bon ↔ tranzacție și plățile recurente: ADR 0019.
 - **Legături:** master prompt Faza 7 (7), 3.6 (AI hibrid; `external_ai_statements`), 5.1 (bani), 5.2 (date), 5.6 (ștergere), 6.1 (`statements`, `statement_lines`), 6.2, 6.3; ADR 0004 (registrul, transferurile), 0013 (încărcări, proces copil pentru PDF), 0016 (conturi personale).
 
 ## Context
@@ -78,6 +78,15 @@ Extracția PDF rulează DOAR în worker (procesul copil limitat). Calea:
 5. **Revolut cu mai multe monede într-un PDF:** refuzat cu `multi_currency_statement` (fiecare monedă e un cont separat; utilizatorul exportă câte un extras pe monedă).
 
 Revizuirea F7-A, aplicată tot în F7-B: cheia `fx` doar printre schimburi; marcajele de secțiune ignorate pe rândurile de continuare (controlate de plătitor); perioada citită o singură dată; cheile duplicate din același fișier marcate la previzualizare; anularea verifică tot grupul unui transfer și refuză explicit (`statement_import_counterpart_hidden`) când piciorul e într-un cont personal invizibil; contorul zilnic nu scade (trigger); IBAN-urile tăiate pe mai multe rânduri eliminate din descrieri.
+
+### 12. Ordinea migrațiilor după merge-ul cu Faza 9 (0016 aplicată înaintea lui 0013/0014)
+
+Faza 9 (`0016_gdpr_stats`, `when` 1794600000000) a ajuns pe producție înaintea Fazei 7. Runner-ul (`src/db/migrate.ts`) identifică migrațiile după `created_at` = `when` și REFUZĂ o migrație neaplicată anterioară uneia deja aplicate („e anterioară unor migrații deja aplicate”) — o protecție utilă (un jurnal reordonat nu trebuie să aplice ceva „în trecut”), deci nu l-am slăbit. Decizia (riscul minim): `0013` și `0014`, neaplicate nicăieri, primesc `when` 1794700000000 și 1794800000000, iar jurnalul le listează DUPĂ `0016` (`idx` 14 și 15). Numele fișierelor rămân (`0013_statements.sql`, `0014_statement_uploads.sql`); conținutul SQL nu se schimbă (doar comentariul din antet, înainte de prima aplicare).
+
+- **Dependențe verificate:** `0013`/`0014` folosesc doar obiecte din `0000`–`0012` (conturi, tranzacții, bonuri, funcțiile de context RLS); `0016` nu folosește nimic din Faza 7. Ordinea `… 0012, 0016, 0013, 0014` e deci validă, iar o bază nouă se construiește în aceeași ordine.
+- **Testat** (`src/db/migrate.test.ts`): de la zero (16 migrații, a doua rulare 0); o bază cu `0000`–`0012` + `0016` aplicate și date (ca producția) primește `0013` și `0014`, datele existente rămân neatinse, a doua rulare aplică 0, iar amprenta schemei (coloane, constrângeri, indecși, politici, funcții, triggere, ACL-uri) e IDENTICĂ cu a unei baze create de la zero.
+- **drizzle-kit:** ia ca „ultimul” snapshot fișierul cu numărul cel mai mare (`0016_snapshot.json`), deci acela conține acum schema completă (Fazele 7 + 9, `prevId` = snapshotul 0014); `drizzle-kit generate` raportează „No schema changes”. La următoarea migrație, numărul din numele generat trebuie ales de mână (≥ 0017), ca la Faza 9.
+- **Ștergerea contului (Faza 9):** `erase_current_user` șterge conturile personale ale utilizatorului; importurile, rândurile și încărcările de extras de pe ele dispar în cascadă, iar fișierele PDF temporare ale încărcărilor se șterg după commit, ca documentele (vezi `src/modules/gdpr/account-deletion.ts`). Exportul GDPR include importurile de extras create de utilizator, cu rândurile lor.
 
 ## Consecințe
 

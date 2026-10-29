@@ -132,6 +132,31 @@ describe("receiveMultipart — fișiere valide", () => {
   });
 });
 
+let jpgs: Buffer[] = [];
+beforeEach(async () => {
+  if (jpgs.length === 0) {
+    jpgs = await Promise.all([1, 2, 3, 4, 5].map((seed) => receiptLikeImage({ seed })));
+  }
+});
+
+describe("receiveMultipart — limitele exacte (busboy declanșează limita la atingere)", () => {
+  it("maxFiles fișiere + TOATE câmpurile (bon lung de 4 poze) → acceptat", async () => {
+    for (const order of ["fields-first", "fields-last"] as const) {
+      const files: Part[] = [0, 1, 2, 3].map((i) => ["files", jpgs[i]!, `${i}.jpg`] as const);
+      const fieldParts: Part[] = [
+        ["kind", "receipt"],
+        ["longReceipt", "true"],
+      ];
+      const parts =
+        order === "fields-first" ? [...fieldParts, ...files] : [...files, ...fieldParts];
+      const result = await receiveMultipart(await formRequest(parts), storage, HH, LIMITS);
+      expect(result.fields).toEqual({ kind: "receipt", longReceipt: "true" });
+      expect(result.files.map((f) => f.index)).toEqual([0, 1, 2, 3]);
+      await rm(join(root, "households"), { recursive: true, force: true });
+    }
+  });
+});
+
 describe("receiveMultipart — refuzuri (fără fișiere rămase)", () => {
   it.each(HOSTILE)("%s → refuzat (%s)", async (_label, data, reason) => {
     const error = await uploadError(await formRequest([["files", data, "bon.jpg", "image/jpeg"]]));
@@ -232,6 +257,37 @@ describe("receiveMultipart — refuzuri (fără fișiere rămase)", () => {
     expect((await uploadError(await formRequest([["file", jpg, "a.jpg"]]))).reason).toBe(
       "invalid_field",
     );
+    expect(await storedFiles()).toEqual([]);
+  });
+
+  it("o parte în plus (câmp necunoscut) peste o cerere completă → invalid_field", async () => {
+    const parts: Part[] = [
+      ["kind", "receipt"],
+      ["longReceipt", "true"],
+      ...[0, 1, 2, 3].map((i) => ["files", jpgs[i]!, `${i}.jpg`] as const),
+      ["extra", "x"],
+    ];
+    expect((await uploadError(await formRequest(parts))).reason).toBe("invalid_field");
+    expect(await storedFiles()).toEqual([]);
+  });
+
+  it("câmp duplicat (kind de două ori) → invalid_field", async () => {
+    const parts: Part[] = [
+      ["kind", "receipt"],
+      ["kind", "receipt"],
+      ["files", jpgs[0]!, "0.jpg"],
+    ];
+    expect((await uploadError(await formRequest(parts))).reason).toBe("invalid_field");
+  });
+
+  it("maxFiles + 1 fișiere cu toate câmpurile → 413 too_many_files, nimic rămas", async () => {
+    const parts: Part[] = [
+      ["kind", "receipt"],
+      ["longReceipt", "true"],
+      ...[0, 1, 2, 3, 4].map((i) => ["files", jpgs[i]!, `${i}.jpg`] as const),
+    ];
+    const error = await uploadError(await formRequest(parts));
+    expect([error.status, error.reason]).toEqual([413, "too_many_files"]);
     expect(await storedFiles()).toEqual([]);
   });
 

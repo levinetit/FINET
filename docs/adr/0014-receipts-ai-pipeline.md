@@ -26,9 +26,11 @@ F6-A stochează și preprocesează documentele (ADR 0013). F6-B le citește cu u
 
   Nu se trimit `tools`/`functions`, iar nimic din răspuns nu se execută.
 - **Cheia:** doar `AI_API_KEY_FILE` (secretul Docker `finet_litellm_key`) și doar în rolul `worker`. Valoarea în clar (`AI_API_KEY`) e refuzată la pornire. Alt rol cu fișierul primește tot o eroare de configurare, iar fișierul nu se deschide. Cheia apare doar în antetul `Authorization`. Erorile sunt `AiError` cu cod fix (`timeout`, `provider_error`, `response_too_large`, `failed_validation`, `budget_exceeded`, `config`), fără conținut, URL sau cheie.
-- **`AI_RESPONSE_FORMAT`:** `json_schema` (implicit, ieșire structurată strictă), `json_object` sau `none`.
+- **`AI_RESPONSE_FORMAT`:** `json_object` (implicit din 2026-10-29), `json_schema` sau `none`.
+  - **Constatat pe producție (primul bon real):** cu `json_schema`, Gemini prin LiteLLM răspunde HTTP 400 `INVALID_ARGUMENT` (schema FINET nu e acceptată de `responseSchema`: `pattern`, `additionalProperties`, uniuni cu `null`, `maxItems`/`maxLength`). Cu `json_object` fără schemă în prompt, modelul inventa chei (`merchant`, `items`, `totals` …) și validarea strictă pica.
+  - **Corectura:** promptul sistem conține, în orice mod, schema EXACTĂ ca text, generată din `modelReceiptSchema` (`receiptSchemaPromptText`): cheile top-level și ale liniei, tipurile, valorile enum, `null` pentru necitibil, un exemplu sintetic complet și interdicția altor chei. Un test verifică sincronizarea cu schema Zod; un câmp nou fără descriere nu compilează. Validarea rămâne STRICTĂ: un răspuns cu alte chei duce la bon gol „De verificat” (`extraction_failed`). Categorisirea avea deja forma explicită în prompt (`CATEGORIZE_SYSTEM`) și merge la fel cu `json_object`.
   - Documentația LiteLLM (Context7, `docs.litellm.ai/docs/completion/json_mode`) spune că `json_schema` merge cu Gemini 2.0+ (`responseJsonSchema` nativ, inclusiv `additionalProperties: false`).
-  - **Neverificat pe LiteLLM-ul real:** tipurile reuniune (`["string","null"]`) și `pattern` din schemă. Dacă furnizorul refuză schema (HTTP 400 la primul bon), operatorul trece pe `json_object`. Validarea reală rămâne oricum Zod.
+  - Pe producție, schema FINET a fost totuși refuzată (vezi mai sus); `json_schema` rămâne doar opțional.
 
 ### 2. Bugetul și jurnalul (`ai_calls`, `ai_budget_usage`)
 
@@ -164,7 +166,7 @@ Un document (sau un bon lung) are **12 minute** (`DOCUMENT_DEADLINE_MS`, decizia
 - **Ce pleacă la Google (prin LiteLLM), doar cu consimțământ și în buget:** imaginea preprocesată fără metadate, textul PDF-ului (≤ 12 000 de caractere, care poate conține date personale tipărite pe bon: numele clientului, cardul de fidelitate) și, pentru categorisire, numele normalizate ale produselor plus numele categoriilor gospodăriei. Detalii în `docs/PRIVACY_NOTES.md`.
 - Bugetul implicit 0 înseamnă că nimic nu pleacă până la decizia operatorului.
 - Riscuri rămase:
-  - `json_schema` e neverificat pe LiteLLM-ul real; plasa de siguranță e `AI_RESPONSE_FORMAT=json_object`.
+  - `json_schema` e refuzat de Gemini prin LiteLLM (HTTP 400); implicit e `json_object`, cu schema exactă în prompt și validarea strictă în cod.
   - Rezervarea pesimistă consumă bugetul mai repede decât costul real (fail-closed).
   - Acuratețea reală e necunoscută.
   - Cota de 5% diferă de brief (punctul 5).
@@ -183,3 +185,11 @@ Un document (sau un bon lung) are **12 minute** (`DOCUMENT_DEADLINE_MS`, decizia
 
    Testat: 6 loturi `[valid, corupt, valid, valid]` nu împiedică procesarea documentului altei gospodării.
 4. **Bugetul:** dacă tokenii raportați costă mai mult decât s-a rezervat, diferența intră și ea în contor (care doar crește), cu plafonul contorului, nu cu bugetul: costul real se înregistrează chiar dacă depășește bugetul, iar rezervările următoare sunt refuzate.
+
+## Model ales (provizoriu, 2026-10-29)
+
+- **Model:** `gemini/gemini-3.8-flash` prin LiteLLM, pentru ambele trasee (vision pe imagini și text pe PDF), plus categorisirea.
+- **Format de răspuns:** `AI_RESPONSE_FORMAT=json_object`, cu schema exactă în prompt (promptul `receipt-v2`) și validarea strictă în cod. `json_schema` e refuzat de Gemini prin LiteLLM (HTTP 400), deci nu se folosește.
+- **Buget:** 10 USD/lună în aplicație și 10 USD/30 de zile pe cheia LiteLLM.
+- **Rezultat până acum:** primul bon real a trecut cu încredere 100.
+- **Ce rămâne:** evaluarea pe 15–25 de bonuri reale, cu adevărul (ground-truth) scris de mână de operator, înainte ca modelul să fie considerat validat. Până atunci alegerea e provizorie, iar acuratețea reală rămâne necunoscută.

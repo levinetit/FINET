@@ -99,7 +99,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Audit fără emailuri, IP-uri, user-agent (doar id-uri și tipuri) | DONE | `audit.ts`, ADR 0003 | 2026-10-27 · programmer |
 | UI: erorile neprevăzute fără detalii (`[ui] sesiunea nu a putut fi verificată`) | DONE | `src/app/_lib/session.ts`, `src/app/error.tsx` | 2026-10-28 · programmer |
 | Audit la ștergerile din registru (`transaction.deleted`, `transfer.deleted`, `account.deleted`, `category.deleted`, arhivare) fără sume sau descrieri | DONE | `src/modules/*/…service.ts`, `transactions.test.ts`, `transfers.test.ts` | 2026-10-28 · programmer (F2-A) |
-| `app_events`: format fix pentru nume/ecran/cod de eroare (fără text liber sau sume) în bază; lista fixă de nume în Zod | PARTIAL | CHECK-uri în `0002_ledger.sql`, test în `ledger-rls.test.ts`; lista Zod în F2-B | 2026-10-28 · programmer (F2-A) |
+| `app_events`: format fix pentru nume/ecran/cod de eroare (fără text liber sau sume) în bază; lista fixă de nume în Zod | DONE | CHECK-uri în `0002_ledger.sql` (`ledger-rls.test.ts`); lista Zod `APP_EVENT_NAMES`/`APP_SCREENS` în `src/modules/usage/usage.schema.ts` (F2-B), `usage.test.ts` (câmp în plus → 400); agregatul `app_event_daily` cu aceleași formate (0016) | 2026-10-29 · programmer (F9-B) |
 | Loguri structurate (pino) | TODO | faza în care apar logurile de business | — |
 | F2-B: evenimentele de utilizare fără date financiare (listă fixă de nume, ecrane, coduri; orice câmp în plus → 400 fără ecoul valorii), stocate doar cu consimțământ `usage_stats` activ | DONE (local) | `src/modules/usage/usage.schema.ts`, `usage.test.ts` | 2026-10-28 · programmer (F2-B) |
 | F2-B: `X-FINET-Client` parsat strict (chei fixe, limite = CHECK-urile din bază), invalid → ignorat; cel mult o scriere la 15 min; membrii gospodăriei fără emailuri în API | DONE (local) | `src/modules/auth/request.ts`, `usage.test.ts`, `ledger-api.test.ts` | 2026-10-28 · programmer (F2-B) |
@@ -144,12 +144,12 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | **L1** — fără plafon de gospodării | DONE | `create_household`: max. 20 per utilizator (`54000`); `household-limit.test.ts`; `2f9aa94` | 2026-10-28 · programmer |
 | **L4** — SMTP fără TLS obligatoriu | DONE | `smtpTransportOptions` (STARTTLS obligatoriu în producție); `mailer.test.ts`; `143e5f0` | 2026-10-28 · programmer |
 | **L5** — `get-session` pentru utilizator dezactivat | DONE | `handler.ts` (revocă sesiunile, răspunde `null`); `native-client.test.ts`; `a592bd7` | 2026-10-28 · programmer |
-| **L2** — `audit_events` șterse în CASCADE la ștergerea gospodăriei | TODO | amânat: ștergerea gospodăriilor nu există încă în aplicație; se decide odată cu ea (Faza 8 / ștergerea contului) | — |
-| **L3** — „ultimul owner” poate pleca/fi scos | TODO | amânat: gestiunea membrilor din UI vine în Faza 8; CLI-ul doar adaugă | — |
+| **L2** — `audit_events` șterse în CASCADE la ștergerea gospodăriei | DONE (decizie, F9-B) | o gospodărie se șterge doar la ștergerea contului SINGURULUI ei membru; jurnalul dispare cu ea, ca restul datelor (nu rămâne nimeni care să-l citească); rămâne o linie de log fără id-uri sau conținut (`[gdpr] cont șters; …`); în gospodăriile cu alți membri plecarea se auditează ÎNAINTE de ieșire (`household.member_left`, `accountDeleted: true`). ADR 0021 §1; `src/modules/gdpr/account-deletion.test.ts` („singurul membru…”, „gospodăria comună…”) PASS pe PG17 și PG18 | 2026-10-29 · programmer (F9-B) |
+| **L3** — „ultimul owner” poate pleca/fi scos | DONE (F8-A; și la ștergerea contului, F9-B) | triggerul `household_members_guard_owner` (0012) + `members.service.ts` (`family.test.ts`); ștergerea contului: 409 `last_owner`, nimic șters (`account-deletion.test.ts` „ultimul owner…”, `gdpr-api.test.ts`) | 2026-10-29 · programmer (F9-B) |
 | **L6** — tokenul de resetare stocat în clar în `auth_verifications` | TODO | amânat: opțiunea Better Auth pentru resetare nu există ca la magic link (`storeToken: "hashed"`); token de 24 de caractere, 30 de minute, de unică folosință; de revăzut la actualizarea Better Auth | — |
 | **L7** — parola generată de CLI pe stdout | TODO | amânat: comportament documentat (afișată o singură dată, operatorul o copiază); alternativa (fișier 0600 / doar `--password-stdin`) se decide cu operatorul | — |
 | **L8** — `viaBearer` scutește de CSRF și când există și cookie | TODO | amânat: Bearer cere antet explicit (imposibil cross-site fără CORS, închis); de restrâns la „bearer și fără cookie” la prima revizuire a clientului Android | — |
-| Ștergerea contului (GDPR) | TODO | fază viitoare: funcție SECURITY DEFINER care refuză administratorii și gospodăriile cu un singur membru (`finet_app` nu are DELETE pe `users`, M5) | — |
+| Ștergerea contului (GDPR) | DONE (local, PG17 + PG18; E2E scris) | `0016_gdpr_stats.sql` (`finet.erase_current_user`: SECURITY DEFINER, `search_path = pg_catalog`, doar utilizatorul din context, refuză administratorul și un utilizator încă membru, întoarce doar `deleted`/`anonymized`/`not_found`), `src/modules/gdpr/account-deletion.ts`; `account-deletion.test.ts` (9 teste), `gdpr-api.test.ts`; `e2e/gdpr.spec.ts` (NOT RUN local). Detalii: secțiunea 22 | 2026-10-29 · programmer (F9-B) |
 
 ## 10. Interfața registrului (F2-C, 2026-10-28)
 
@@ -166,7 +166,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Plafonul sumelor: ≤ 10^13 unități minore pe sumă și pe soldul inițial, CHECK în bază; un sold calculat peste 2^53 → 422 `amount_out_of_range`, nu 500 (MEDIUM-2) | DONE (local) | `input.ts` (`MAX_AMOUNT_MINOR`), `transactions_amount_range`, `accounts_opening_balance_range` (0002), `http.ts`; `ledger-api.test.ts` (400 cu `fields`, 2 × plafon → 200, CHECK ca `finet_app` → 23514, 1000 × plafon → 422), `transactions.test.ts` | 2026-10-28 · programmer (corecții F2) |
 | Mutarea unei tranzacții pe un cont în altă monedă cere suma explicită (LOW-1) | DONE (local) | `updateTransaction` → 409 `currency_change_requires_amount`; `ledger-api.test.ts` | 2026-10-28 · programmer (corecții F2) |
 | Hash-ul `Idempotency-Key` fără recursie nelimitată (adâncime ≤ 20 → altfel 400); CHECK-ul cheii în bază aliniat la 16–128 (LOW-5) | DONE (local) | `exceedsDepth` (iterativ) în `idempotency.ts`, `http.ts`; `idempotency_keys_key_format` (0002); `idempotency.test.ts` (corp cu 2000 de niveluri → 400) | 2026-10-28 · programmer (corecții F2) |
-| Retenția `app_events` (13 luni, apoi agregare) (LOW-2) | TODO | Faza 9 (pagina „Statistici”); azi evenimentele rămân până la revocare sau ștergerea contului. Programarea `cleanup-idempotency`: linia de cron propusă în `docs/INFRA.md` 4f (pasul 6), instalarea de operator | — |
+| Retenția `app_events` (13 luni, apoi agregare) (LOW-2) | DONE (local; cron-ul: operatorul, INFRA 4m) | `finet.aggregate_app_events` + `app_event_daily` (0016), `finet-admin aggregate-events`; `stats.test.ts` („retenția…”), `cli.test.ts` („aggregate-events…”) PASS | 2026-10-29 · programmer (F9-B) |
 | `q` (căutarea) și, din F3-C, `merchant` în URL (LOW-3) | PARTIAL | aplicația nu loghează URL-uri sau query string-uri (logurile `[api]`/`[ui]` au doar mesaje fixe); proxy-ul/Traefik/Cloudflare pot înregistra URL-urile (`docs/PRIVACY_NOTES.md`). Alternativa `POST /api/v1/transactions/search`: fază viitoare | — |
 | Plafoane per gospodărie (conturi, categorii, tranzacții) și rate limit pe citiri (LOW-4) | TODO | fază viitoare; azi: rate limit pe mutații per utilizator, `limit` ≤ 100 pe pagină | — |
 | NOTE: `owner_user_id` al contului nu are efect de autorizare (6.1: toți membrii văd conturile gospodăriei); `finet_migrator` nu are politici pe `categories`/`transactions` (FORCE RLS → îi apar goale; doar `idempotency_keys` are politici de curățare) | INFO | ADR 0004, ADR 0005 | 2026-10-28 · programmer |
@@ -399,7 +399,98 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Ștergerea categoriei nu depinde de rânduri invizibile (mai mulți membri → mereu ascunsă, răspuns identic) | DONE (PG17) | `categories.service.ts`, `categories.test.ts`, `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
 | Revizuirea `security` a F8-B | TODO | agentul `security` | — |
 
-## 21. Extrase bancare: date, extracție, parsere, servicii (F7-A, 2026-10-29)
+## 21. PWA, service worker, IndexedDB (F9-A, 2026-10-29; ADR 0020)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Nicio excepție nouă de la Cloudflare Access: `/sw.js`, `/manifest.webmanifest`, `/icons/*`, `/offline`, `/pwa/*`, `/help`, `/settings/android`, `GET /api/v1/app/android/latest` → 403 fără JWT | DONE (unitar + E2E scris) | `src/proxy.test.ts`, `e2e/access.spec.ts` (NOT RUN local) | 2026-10-29 · programmer (F9-A) |
+| Manifestul cerut cu `crossOrigin="use-credentials"` (altfel fără cookie Access) | DONE | `src/app/layout.tsx`, `src/pwa/pwa-files.test.ts`, `e2e/pwa.spec.ts` | 2026-10-29 · programmer (F9-A) |
+| Iconițele cerute de browser fără cookie la instalare | ACCEPTED RISK (iconiță generică; fără date); bypass Cloudflare doar pe căi exacte, decizia operatorului | ADR 0020 §1, INFRA 4l | 2026-10-29 · programmer (F9-A) |
+| SW: cache DOAR pentru asset-uri statice (`/_next/static/**` în producție, iconițe, manifest, fișierele `/offline`) și `/offline`; niciodată API, non-GET, altă origine, navigări, redirect, non-200, `no-store`/`private`, HTML (în afară de `/offline`) | DONE (unitar, codul servit în `node:vm`) | `src/pwa/sw.test.ts` | 2026-10-29 · programmer (F9-A) |
+| SW: pe `/api/**` și metodele non-GET nu apelează `respondWith` (încărcarea multipart și SSE neatinse) | DONE (unitar) | `src/pwa/sw.test.ts` | 2026-10-29 · programmer (F9-A) |
+| SW: precache validat înainte de scriere (pagina de login Access nu ajunge în cache); cache versionat cu BUILD_ID, curățarea versiunilor vechi, plafon 400 | DONE (unitar) | `src/pwa/sw.test.ts` | 2026-10-29 · programmer (F9-A) |
+| SW: fără `skipWaiting` automat; activare doar la clic, amânată cu formular necomis | DONE (unitar + cod) | `sw.test.ts`, `src/components/app/pwa.tsx` | 2026-10-29 · programmer (F9-A) |
+| `/offline`: HTML fix, fără sesiune/cookie, fără script/stil inline, fără `style=`, fără cereri de rețea în scriptul ei; CSP neschimbat | DONE (unitar) | `src/pwa/pwa-files.test.ts` | 2026-10-29 · programmer (F9-A) |
+| IndexedDB: pozele doar pe dispozitiv, cu `userId` + `householdId`; încărcate DOAR pentru proprietarul curent (gospodăria activă); intrările altor utilizatori șterse la pornire; TTL 7 zile; baza ștearsă la deconectare | DONE (unitar + E2E scris) | `offline-scans.test.ts`, `app-nav.tsx`, `e2e/pwa.spec.ts` (NOT RUN local) | 2026-10-29 · programmer (F9-A) |
+| Proprietarul impus de SERVER: încărcările din coadă trimit `X-FINET-Expected-User`/`-Household`; `POST /api/v1/documents` respinge nepotrivirea cu 409 `owner_mismatch` înainte de citirea corpului și de stocare (antete opționale, impuse când există); clientul nu retrimite (alt cont → șters, altă gospodărie → păstrat) și recitește proprietarul (`GET /api/v1/me`) înaintea fiecărei treceri | DONE (PG17 + unitar) | `documents-handlers.ts` (`assertExpectedOwner`), `documents-api.test.ts`, `offline-scans.test.ts`, `offline-scans-client.ts` | 2026-10-29 · programmer (F9-A, constatarea coordonatorului) |
+| Coada: ștergere locală doar după 2xx; erori permanente vizibile; o retrimitere nu creează documente noi (SHA-256; reîncercarea exactă a bonului lung → 200 duplicat) | DONE (unitar + PG17) | `offline-scans.test.ts`, `documents.test.ts` | 2026-10-29 · programmer (F9-A) |
+| Plafoane locale (10 intrări, 50 MB, tip JPEG/PNG, `MAX_UPLOAD_MB`), eroarea de cotă fără scrieri parțiale | DONE (unitar) | `offline-scans.test.ts` | 2026-10-29 · programmer (F9-A) |
+| `GET /api/v1/app/android/latest`: sesiune obligatorie, fișier validat strict (https, sha256, semver, ≤ 16 KiB), invalid → 404 fără conținut în log | DONE (PG17) | `src/app/api/v1/app-api.test.ts` | 2026-10-29 · programmer (F9-A) |
+| Codul QR generat local (fără dependență, fără JS în browser) | DONE (vectori python-qrcode) | `src/lib/qr.test.ts` | 2026-10-29 · programmer (F9-A) |
+| Audit axe pe paginile noi | DONE (scris; NOT RUN local) | `e2e/a11y.spec.ts` (proiectul `a11y`, axe-core 4.14.0 injectat cu `page.evaluate`, compatibil cu CSP-ul cu nonce; WCAG 2.1 A/AA, zero `serious`/`critical` pe 2 pagini publice + 16 autentificate, inclusiv `/help`, `/settings`, `/settings/android`, `/settings/privacy`); rulează în CI (ambele moduri) | 2026-10-29 · programmer (F9-B) |
+| Revizuirea `security` a F9-A | TODO | agentul `security` | — |
+
+## 22. GDPR, retenție, statistici, upgrade PostgreSQL și auditul Fazei 9 (F9-B, 2026-10-29; ADR 0021)
+
+### 22.1 Controalele noi
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Ștergerea contului cere reautentificarea (parola, sau o sesiune ≤ 15 min fără parolă) și confirmarea scrisă `ȘTERGE` (Zod strict, câmpuri în plus → 400); CSRF ca orice mutație cu cookie; două limite de rată: IP + utilizator (`account_delete`) și DOAR utilizator, 5/oră (`account_delete_user`, revizuirea F9) | DONE (PG17) | `account-deletion.ts`, `gdpr-handlers.ts`; `account-deletion.test.ts` („parola greșită…”, „fără parolă…”), `gdpr-api.test.ts` (400, 403 CSRF; „limită DOAR pe utilizator…”: 3 IP-uri diferite → a 3-a încercare 429) | 2026-10-29 · programmer (F9-B) |
+| Ultimul owner cu alți membri → 409 `last_owner`, NIMIC șters (nici gospodăria proprie, nici sesiunile, nici fișierele) | DONE (PG17) | `account-deletion.test.ts` („ultimul owner…”) | 2026-10-29 · programmer (F9-B) |
+| Administratorul platformei nu se șterge din aplicație (409 `platform_admin`; garda și în `finet.erase_current_user`, 42501): bootstrap-ul e irepetabil (M5) | DONE (PG17) | `account-deletion.test.ts` („administratorul platformei…”), `gdpr-api.test.ts` | 2026-10-29 · programmer (F9-B) |
+| Conturile PERSONALE ale celui șters (inclusiv din gospodăriile părăsite demult) se șterg cu tranzacțiile lor; NU devin comune (`owner_user_id ON DELETE SET NULL` nu mai are pe cine atinge); jumătatea comună a unui transfer personal → comun devine o tranzacție obișnuită, soldul comun e neschimbat | DONE (PG17, PG18) | `0016_gdpr_stats.sql` (`erase_current_user`, pașii 1–3); `account-deletion.test.ts` („gospodăria comună…”: conturile șterse, sold comun identic, owner-ul vede doar contul comun și pe al lui) | 2026-10-29 · programmer (F9-B) |
+| Rândul `users`: șters dacă nimic nu-l mai referă; altfel anonimizat („Cont șters”, `deleted-<id>@deleted.invalid`, `disabled`), fără sesiuni, parolă, preferințe, apartenențe, bugete personale | DONE (PG17, PG18) | `account-deletion.test.ts` („singurul membru…” → `deleted`; „gospodăria comună…” → `anonymized`) | 2026-10-29 · programmer (F9-B) |
+| Gospodăria cu un singur membru: ștearsă cu tot conținutul; fișierele DOAR ale ei (`isKeyOfHousehold`) șterse după commit; un eșec la fișiere nu readuce datele, se numără în log fără id-uri sau chei; orfanele se curăță cu `finet-admin cleanup-orphan-storage` (dry-run implicit, `--yes`, plafon, legături ignorate, refuz fără storage montat sau când totul pare orfan) | DONE (PG17) | `account-deletion.test.ts` („singurul membru…”, „o eroare la ștergerea fișierelor…”), `cli.test.ts` („cleanup-orphan-storage…”), `finet.existing_households` (doar id-uri) în `migrate.test.ts` | 2026-10-29 · programmer (F9-B) |
+| `finet.erase_current_user`: doar utilizatorul din context, refuzat cât e încă membru sau fără context (42501), idempotent (`not_found`) | DONE (PG17) | `account-deletion.test.ts` („finet.erase_current_user…”) | 2026-10-29 · programmer (F9-B) |
+| Politicile noi ale proprietarului (`TO finet_migrator`) legate de `finet.definer_scope`, setată/resetată doar în cele 3 funcții; o variabilă setată de `finet_app` nu deschide nimic | DONE (PG17) | `migrate.test.ts` („0016_gdpr_stats: …” verifică fiecare politică), `stats.test.ts` („aplicația nu are niciun drept direct…”) | 2026-10-29 · programmer (F9-B) |
+| Exportul: doar ce vede utilizatorul (RLS pe gospodărie: fără conturile personale ale altora), împărțiri/decontări în care e parte, audit doar ca actor, documente doar ale lui; fără parole, tokenuri, chei de storage, hash-uri; arhivă în flux, nume de fișier fix, `no-store`, `nosniff`; cu cookie doar `Sec-Fetch-Site: same-origin|none`; 3/oră; auditat fără conținut | DONE (PG17, PG18; E2E scris) | `data-export.ts`, `gdpr-handlers.ts`; `gdpr-api.test.ts` („exportul…”: conținutul citit cu Python `zipfile`, santinele absente); `e2e/gdpr.spec.ts` (NOT RUN local) | 2026-10-29 · programmer (F9-B) |
+| Scriitorul ZIP: nume fără `..`, absolute, `\`, caractere de control; arhiva validă pentru un cititor independent; limitele formatului (4 GiB, 65 535 de intrări) verificate ÎNAINTE de flux (estimare sub RLS) → 413 `export_too_large` cu cod fix (revizuirea F9) | DONE | `src/lib/zip.ts`, `zip.test.ts` (Python `zipfile.testzip`, `unzip -t`); `estimateExport`/`assertExportFits` în `data-export.ts`, `gdpr-api.test.ts` („exportul peste limitele ZIP…”) | 2026-10-29 · programmer (F9-B) |
+| Statisticile: doar administratorul activ (403/404 altfel, și pentru un administrator dezactivat); nicio sumă, descriere, comerciant sau email; membrii doar în `personal` | DONE (PG17, PG18; E2E scris) | `stats.test.ts` (santinele: sumă și text într-o tranzacție reală, absente din răspuns), `gdpr-api.test.ts`, `e2e/gdpr.spec.ts` | 2026-10-29 · programmer (F9-B) |
+| `app_event_daily`: RLS ENABLE + FORCE, fără niciun drept pentru `finet_app`, fără coloane de utilizator/instalare/gospodărie | DONE (PG17) | `migrate.test.ts`, `stats.test.ts` (SELECT ca `finet_app` → 42501) | 2026-10-29 · programmer (F9-B) |
+| Rutele noi (`/settings/privacy`, `/settings/statistics`, `/api/v1/me/export`, `/api/v1/me/deletion`, `/api/v1/me/delete`, `/api/v1/admin/stats`) fără excepție de la Access | DONE (unitar; E2E scris) | `src/proxy.test.ts`, `e2e/access.spec.ts` (NOT RUN local) | 2026-10-29 · programmer (F9-B) |
+| Better Auth `deleteUser` neactivat (nicio a doua cale de ștergere, nepăzită) | DONE | `src/modules/auth/auth.ts` (fără `user.deleteUser`) | 2026-10-29 · programmer (F9-B) |
+| Upgrade PostgreSQL 17 → 18: restaurarea backup-ului propriu pe versiunea următoare păstrează RLS, politici, funcții, ACL, date | DONE (încercat local, 2 rulări) | `ops/postgres/upgrade-test.sh` (amprenta identică, 1270 de linii), migrațiile „aplicate acum 0”, testele `src/db` + GDPR pe PG18; `.github/workflows/pg-next.yml` (săptămânal) | 2026-10-29 · programmer (F9-B) |
+| Backup-urile păstrează datele unui cont șters până la expirarea instantaneelor (7/4/12) | ACCEPTED RISK (de menționat în politica `saas`) | `docs/PRIVACY_NOTES.md` („Export și ștergere GDPR…”) | 2026-10-29 · programmer (F9-B) |
+| Revizuirea `security` a F9-B | TODO | agentul `security` | — |
+
+### 22.2 HSTS `preload` — NU se activează (decizia operatorului)
+
+Azi: `Strict-Transport-Security: max-age=31536000; includeSubDomains` (secțiunea 3). Ce ar însemna `preload` (și înscrierea pe hstspreload.org):
+- domeniul de bază (de exemplu `levinetit.com`) și **toate** subdomeniile lui, inclusiv cele care nu sunt FINET (alte servicii de pe host, panouri, `*.levinetit.com` din tunel), ar fi accesibile **doar prin HTTPS** în toate browserele, codat în binarul browserului; orice subdomeniu fără certificat valid devine inaccesibil;
+- condiția de înscriere cere antetul cu `preload` pe domeniul de bază (nu doar pe `finet.<domeniu>`), `includeSubDomains` și `max-age ≥ 1 an`;
+- **retragerea** din listă durează luni (până la noile versiuni ale browserelor); greșeala nu se repară rapid;
+- câștigul pentru FINET e mic: aplicația e oricum doar în spatele Cloudflare Access și al tunelului (HTTPS de la primul contact cu Cloudflare), iar HSTS fără `preload` protejează deja după prima vizită.
+Concluzie: rămâne fără `preload`; dacă operatorul îl vrea, întâi inventarul tuturor subdomeniilor, apoi antetul pe domeniul de bază, apoi înscrierea.
+
+### 22.3 Parcurgerea listei (secțiunile 1–21), 2026-10-29
+
+Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) în coloana „Dovadă”, ori e marcat explicit TODO/PARTIAL cu responsabilul. În F9-B au fost **re-rulate** (PASS): pe PostgreSQL 17 — `src/db/migrate.test.ts`, `src/app/api/v1/idempotency.test.ts`, `me.test.ts`, `documents-api.test.ts`, `src/modules/documents/documents.test.ts`, `src/proxy.test.ts`, `src/app/{ui-rules,a11y-rules,contrast,smoke}.test.ts`, `src/openapi`, `src/tools/admin/cli.test.ts`, plus testele noi F9-B; pe PostgreSQL 18 — `src/db/{migrate,rls,grants,family-rls,ledger-rls,planning-rls,household-limit}.test.ts`, `src/modules/family/family.test.ts`, `transactions`, `transfers` și testele F9-B. Restul dovezilor sunt cele din fazele lor (neschimbate de F9-B) și din CI.
+
+| Secțiune | Rânduri | Deschise (TODO / PARTIAL / risc acceptat) | Cine le închide |
+|---|---|---|---|
+| 1. Autentificare | 15 | 2: înregistrarea `saas` (Faza 11); E2E `auth` în browser (CI) | Faza 11; CI |
+| 2. Autorizare și RLS | 21 | 4: migrațiile pe Supabase; revizuirile `security` F2-A/F2-B | operatorul; `security` |
+| 3. Antete | 10 | 1: fără încălcări CSP în browser (E2E, CI) | CI |
+| 4. Secrete | 7 | 1: gitleaks în CI | fază viitoare |
+| 5. Încărcări | 5 | 2: limite ZIP (import, Faza 7); cron-ul `cleanup-documents` | Faza 7; operatorul |
+| 6. Loguri | 9 | 1: loguri structurate (pino) | fază viitoare |
+| 7. CI | 6 | 3: `pnpm audit` blocant; acțiuni fixate pe SHA; E2E în CI | fază viitoare; CI |
+| 8. Infrastructură | 11 | 5: arhiva `/home/docker`; Data API pe proiectul real; N4; N5; N2 | operatorul; fază viitoare |
+| 9. Revizuirea Fazei 1 | 15 | 3: L6, L7, L8 (L2, L3 și ștergerea contului: închise în F9-B) | actualizarea Better Auth; operatorul; clientul Android |
+| 10. Registrul (UI) | 16 | 2: LOW-3 (text în URL, acceptat); LOW-4 plafoane per gospodărie (LOW-2 închis în F9-B) | fază viitoare |
+| 11. Planificare (F3-A) | 19 | 4: revizuirile `security` F3-A/F3-B; 2^53 pe totaluri (rezidual); `0004` pe Supabase | `security`; operatorul |
+| 12. Planificare (UI) | 13 | 6: verificări în browser / build în CI; text în URL (acceptat); revizuirea `security` F3-C | CI; `security` |
+| 13. Backup | 17 | 5: rol `finet_backup` pe Supabase; SFTP (dacă e ales); Drive fără Object Lock (acceptat); parola restic în afara serverului; primul backup real | operatorul |
+| 14. Stabilizare | 8 | 4: verificări în browser; `0005` pe Supabase; revizuirea `security` | CI; operatorul; `security` |
+| 15. Recurențe și worker | 27 | 8: riscuri reziduale acceptate (rol comun web/worker, semnalul de viață), verificări pe producție, revizuirea F5-B | `security`; operatorul |
+| 16. Documente (F6-A) | 19 | 3: fără antivirus (acceptat); cron-ul retenției; revizuirea `security` | operatorul; `security` |
+| 17. Pipeline AI (F6-B) | 21 | 3: `json_schema` la primul deploy; jurnalele LiteLLM; revizuirea `security` | operatorul; `security` |
+| 18. Bonuri (F6-C) | 14 | 2: E2E cu serverul AI fals (CI); revizuirea `security` | CI; `security` |
+| 19. Familia (F8-A) | 25 | 5: vizibilitatea documentelor/obiectivelor (amânat); pre-check 0012; m2, m3 (acceptate); revizuirea `security` | fază viitoare; operatorul; `security` |
+| 20. Familia (F8-B) | 12 | 5: SSE prin tunel; tokenul în URL/email (acceptat); datoria stinsă de owner (acceptat); revizuirea `security` | operatorul; `security` |
+| 21. PWA (F9-A) | 16 | 2: iconițele fără cookie Access (acceptat); revizuirea `security` (auditul axe: închis în F9-B) | operatorul; `security` |
+| 22. F9-B | 17 | 2: backup-urile cu date șterse (acceptat); revizuirea `security` | `security` |
+
+### 22.4 Rămase deschise după Faza 9 (lista consolidată)
+
+- **Operatorul (producție):** migrațiile `0013`–`0016` pe Supabase (cu Faza 7) și verificările lor; deploy-urile F9 (INFRA 4l, 4m); cron-urile `cleanup-idempotency`, `finet-cleanup`, `aggregate-events`; primul backup real și restaurarea de probă; parola restic în afara serverului; Data API oprit (test pe proiectul real), N4; arhiva necriptată `/home/docker`; SSE prin tunel; jurnalele LiteLLM fără corpuri; `json_schema` la primul deploy; HSTS `preload` (22.2).
+- **CI (prima rulare a branch-ului):** E2E în ambele moduri (`auth`, `ledger`, `planning`, `regressions`, `recurring`, `receipts`, `family`, `pwa`, `gdpr`, `a11y`, `access`), `check:bundle`, `pg-next` (manual o dată).
+- **Revizuirile `security` independente:** F2-A, F2-B, F3-A, F3-B, F3-C, Faza 4, F5-B, F6-A, F6-B, F6-C, F8-A, F8-B, F9-A, F9-B.
+- **Faze viitoare:** gitleaks, acțiuni GitHub pe SHA și `pnpm audit` blocant, loguri structurate, plafoane per gospodărie (LOW-4), L6/L7/L8, vizibilitatea per membru a documentelor și obiectivelor, eșecurile de autentificare agregate în „Statistici”, Lighthouse ≥ 90 rulat pe producție.
+- **Riscuri acceptate (documentate):** fără antivirus; text liber în URL (LOW-3); iconițele PWA fără cookie Access; tokenul invitației în URL/email; datoria stinsă unilateral de owner; Drive fără Object Lock; datele unui cont șters în backup-uri până la expirarea instantaneelor. (Fișierele orfane la o ștergere eșuată: comanda `cleanup-orphan-storage`, revizuirea F9.)
+
+## 23. Extrase bancare: date, extracție, parsere, servicii (F7-A, 2026-10-29)
 
 | Cerință | Stare | Dovadă | Data · revizor |
 |---|---|---|---|
@@ -420,7 +511,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | PDF-urile băncilor fără parser prin AI local/extern (`external_ai_statements`) | TODO (amânat, refuz clar azi) | ADR 0018 §10, ROADMAP | — |
 | Revizuirea `security` a F7-A | TODO | agentul `security` | — |
 
-## 22. Extrase bancare: API, worker, interfață, potrivire, recurențe (F7-B, 2026-10-29)
+## 24. Extrase bancare: API, worker, interfață, potrivire, recurențe (F7-B, 2026-10-29)
 
 | Cerință | Stare | Dovadă | Data · revizor |
 |---|---|---|---|

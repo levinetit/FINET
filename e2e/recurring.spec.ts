@@ -131,7 +131,7 @@ test.describe(`plățile recurente (${MODE})`, () => {
     const row = page.getByTestId("recurring-row").filter({ hasText: description });
     await expect(row).toBeVisible();
     await expect(row.getByText("scadentă")).toBeVisible();
-    // Singular sau plural, după câte reguli scadente are utilizatorul („1 regulă scadentă”).
+    // Singular sau plural, după numărul regulilor scadente din baza comună a testelor E2E.
     await expect(page.getByTestId("recurring-counts")).toContainText(/regul(ă|i) scadent(ă|e)/);
 
     await page.getByTestId("recurring-generate").click();

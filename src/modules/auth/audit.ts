@@ -76,7 +76,9 @@ export type AuditAction =
   | "receipt.match_rejected"
   | "recurring.suggestion_dismissed"
   | "consent.granted"
-  | "consent.revoked";
+  | "consent.revoked"
+  // GDPR (F9-B): doar numărul de gospodării exportate, fără conținut.
+  | "user.data_exported";
 
 export type AuditEvent = Readonly<{
   action: AuditAction;

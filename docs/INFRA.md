@@ -360,10 +360,10 @@ Agentul nu a rulat nimic din această secțiune și nu a atins LiteLLM-ul real.
 
    Verificare: `curl -s -m 240 -H "Authorization: Bearer $K" localhost:4000/health`.
 3. **Cheia virtuală FINET** (per aplicație, cu buget în LiteLLM și doar cele două alias-uri permise): `/srv/finet/secrets/finet_litellm_key`, `1000:1000`, mod 400 (`sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_litellm_key`). Compose-ul o montează DOAR în `finet-worker` (`AI_API_KEY_FILE`). Recomandat: jurnalele LiteLLM fără corpurile cererilor pentru această cheie (PRIVACY_NOTES).
-4. **`/srv/finet/env/finet.worker.env`:** `AI_BASE_URL=http://172.88.88.4:4000/v1`, `AI_ALLOWED_HOSTS=172.88.88.4:4000`, modelele, `AI_TIMEOUT_MS`, `AI_MAX_RETRIES`, `AI_CONFIDENCE_THRESHOLD`, `AI_PRICE_INPUT_PER_MTOK`/`AI_PRICE_OUTPUT_PER_MTOK` (tarifele reale ale modelului ales, în moneda bugetului), `AI_RESPONSE_FORMAT=json_schema`. **`AI_MONTHLY_BUDGET` rămâne 0** (nimic nu pleacă) până după pasul 6.
+4. **`/srv/finet/env/finet.worker.env`:** `AI_BASE_URL=http://172.88.88.4:4000/v1`, `AI_ALLOWED_HOSTS=172.88.88.4:4000`, modelele, `AI_TIMEOUT_MS`, `AI_MAX_RETRIES`, `AI_CONFIDENCE_THRESHOLD`, `AI_PRICE_INPUT_PER_MTOK`/`AI_PRICE_OUTPUT_PER_MTOK` (tarifele reale ale modelului ales, în moneda bugetului), `AI_RESPONSE_FORMAT=json_object` (implicit; `json_schema` e refuzat de Gemini prin LiteLLM cu HTTP 400). **`AI_MONTHLY_BUDGET` rămâne 0** (nimic nu pleacă) până după pasul 6.
 5. **Rețeaua:** `finet-worker` e pe `apps` (`172.88.88.131`), ca `litellm-apps` (`172.88.88.4`). Firewall-ul gazdei (`LEVINETIT-FW` în `DOCKER-USER`) privește porturile publicate; traficul între containerele de pe `apps` merge deja (open-webui → openclaw). Verificare: `sudo docker exec finet-worker node -e "fetch('http://172.88.88.4:4000/health/liveliness').then(r=>console.log(r.status))"` → 200.
 6. **Prima verificare reală, înainte de buget > 0:** din imaginea de unelte sau dintr-un clone, `AI_EVAL=1 AI_BASE_URL=… AI_API_KEY_FILE=… pnpm eval:receipts` (8 bonuri sintetice, sub 1 cent la tarifele Flash).
-   - Dacă primul apel dă HTTP 400 (schema refuzată), pune `AI_RESPONSE_FORMAT=json_object` și repetă.
+   - Cu `json_object`, schema exactă (cheile, tipurile, un exemplu) e în promptul sistem; un răspuns cu alte chei e respins de validarea strictă și bonul ajunge „De verificat” (`extraction_failed`).
    - Rezultatul pe bonuri sintetice NU e o evaluare reală: evaluează apoi pe 20–30 de bonuri reale proprii, cu `ground-truth` scris de mână, și notează modelul ales într-un ADR (3.6).
 7. **Bugetul:** `AI_MONTHLY_BUDGET` (de exemplu `5.00`) + `AI_MONTHLY_BUDGET_CURRENCY=USD`, apoi recrearea `finet-worker`. Ce s-a consumat luna aceasta: `select month, currency, reserved_minor, calls from finet.ai_budget_usage` (ca `finet_migrator`). Rezervarea e pesimistă, deci consumul raportat e peste costul real.
 8. **Verificare:** logul workerului are `{"event":"receipts","enabled":true,"ai":true}` la pornire. Un bon încărcat cu consimțământ trece în ≤ 1 minut în `needs_review` (`select status, confidence, issues from finet.receipts order by created_at desc limit 5`).
@@ -463,11 +463,76 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 
 **Rollback:** imaginea anterioară a `finet-web` (paginile și rutele familiei dispar; datele rămân). Migrația `0012`: comenzile din antet, doar cu backup și decizia operatorului (atenție: rollback-ul ei face din nou conturile personale vizibile tuturor).
 
-## 4l. Faza 7 pe producție (ordinea completă, după revizuiri; F7-A + F7-B)
+## 4l. Faza 9 (F9-A): PWA, offline, aplicația Android — pe producție (după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0020. **Fără migrație, fără variabilă de mediu nouă, fără secret nou.**
+
+1. **Imaginea** `finet` pentru commit-ul aprobat, apoi **redeploy `finet-web`** (aduce `/sw.js`, `/manifest.webmanifest`, `/icons/*`, `/offline`, `/pwa/*`, `/help`, `/settings`, `/settings/android`, `GET /api/v1/app/android/latest`). Workerul nu se schimbă.
+2. **Cloudflare Access: nu se schimbă nimic.** Toate căile de mai sus cer Access, ca restul aplicației. Manifestul e cerut cu credențiale. Opțional (decizia operatorului), dacă iconițele lipsesc la instalare: o aplicație Access de tip *Bypass* DOAR pe căile exacte `/manifest.webmanifest`, `/icons/icon-192.png`, `/icons/icon-512.png`, `/icons/icon-maskable-192.png`, `/icons/icon-maskable-512.png`, `/icons/apple-touch-icon.png` (fișiere statice, fără date) — și atunci și excepția exactă în aplicație (ADR 0020 §1; nefăcută acum). **Niciodată** bypass pe `/sw.js`, `/offline`, `/api/**` sau pe un prefix.
+3. **Verificări (browser, prin Access):**
+   - DevTools → Application → Service Workers: `/sw.js` activ, domeniul `/`; Cache Storage: un singur `finet-static-<BUILD_ID>` cu `/offline`, `/pwa/*`, iconițele, manifestul și `/_next/static/*` — **niciun** `/api/*`, nicio pagină;
+   - DevTools → Network → „Offline” → navighează la `/transactions` → pagina „Nu există conexiune la internet”;
+   - `/import` offline → o poză → „Păstrează pentru mai târziu” → „În așteptare (offline)”; înapoi online → dispare, documentul apare o singură dată;
+   - după un deploy nou: bannerul „Versiune nouă a aplicației disponibilă” → „Actualizează”.
+   ```bash
+   # fără Access, toate dau 403:
+   for p in /sw.js /manifest.webmanifest /icons/icon-192.png /offline /api/v1/app/android/latest; do
+     curl -s -o /dev/null -w "$p %{http_code}\n" "https://finet.<domeniu>$p"; done
+   ```
+4. **Aplicația Android (când există un release):** fișierul `<STORAGE_DIR>/app/android-latest.json` (în container: `${STORAGE_DIR}/app/android-latest.json`; pe host: volumul de storage al `finet-web`), proprietar uid-ul containerului, ≤ 16 KiB:
+   ```json
+   {
+     "versionName": "1.0.0",
+     "versionCode": 1,
+     "minSupportedVersionCode": 1,
+     "url": "https://github.com/<organizatie>/<repo>/releases/download/FINET-v1.0.0/finet-1.0.0.apk",
+     "sha256": "<64 de caractere hex din finet-1.0.0.apk.sha256>",
+     "sizeBytes": 23456789,
+     "notes": "Prima versiune.",
+     "publishedAt": "2026-11-01T10:00:00Z"
+   }
+   ```
+   Se citește la fiecare cerere (fără restart). Un fișier invalid înseamnă „indisponibil” (log `[android] android-latest.json: conținut invalid`). Verificare: `/settings/android` arată versiunea, suma și codul QR; `GET /api/v1/app/android/latest` → 200.
+
+**Rollback:** imaginea anterioară a `finet-web`. Service worker-ul deja instalat rămâne în browsere până la următoarea verificare: scriptul vechi lipsește (404) → browserul îl dezînregistrează singur; pentru o oprire imediată, utilizatorii pot șterge datele site-ului.
+
+## 4m. Faza 9 (F9-B): GDPR, statistici, retenție — pe producție (după revizuiri, după 4l)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0021. **O migrație (`0016_gdpr_stats`), fără variabilă de mediu nouă, fără secret nou.** La merge cu Faza 7 (migrațiile 0013–0015), jurnalul `meta/_journal.json` se reconciliază: `0016` rămâne ultima (`when` 1794600000000), cu `idx` după 0015.
+
+1. **Verificarea dinainte (doar citire, Supabase SQL Editor sau `psql` ca `finet_migrator`):**
+   ```sql
+   -- câte evenimente intră în prima agregare (mai vechi de 13 luni); orientativ, fără date personale
+   select count(*) from finet.app_events where occurred_at < now() - interval '13 months';
+   -- administratorul platformei (nu își poate șterge contul din aplicație)
+   select count(*) from finet.users where is_platform_admin;
+   ```
+   Nimic de corectat: migrația nu rescrie date și nu adaugă coloane pe tabelele existente.
+2. **Backup propriu verificat** (`run-backup.sh` reușit chiar înainte), apoi **migrația**: `docker compose … --profile migrate run --rm finet-migrate` → `aplicată: 0016_gdpr_stats`; a doua rulare: `aplicate acum 0`.
+3. **Imaginea** `finet` pentru commit-ul aprobat, apoi redeploy `finet-web` (paginile `/settings/privacy`, `/settings/statistics` și rutele `GET /api/v1/me/export`, `GET /api/v1/me/deletion`, `POST /api/v1/me/delete`, `GET /api/v1/admin/stats`) și imaginea `tools` (comanda `aggregate-events`). Workerul nu se schimbă. **Cloudflare Access: nimic de schimbat** (toate căile cer Access).
+4. **Retenția evenimentelor:** prima rulare manuală, apoi zilnic, cu `sudo crontab -e` (NU `crontab -`, NU redirectări care suprascriu crontab-ul), la 04:35 (după `cleanup-idempotency` 04:15 și `finet-cleanup` 04:25):
+   ```cron
+   35 4 * * *  cd /srv/finet/src && docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile admin run --rm -T finet-admin aggregate-events >> /var/log/finet-cleanup.log 2>&1
+   ```
+   Ieșirea: doar numărul de evenimente agregate (prima dată poate fi mare; loturi de 10 000). Verificare: a doua zi `sudo tail -n 3 /var/log/finet-cleanup.log`.
+5. **Verificări prin Access (browser):**
+   - ca administrator: `Setări → Statistici` arată tabelele (utilizatori activi, instalări, login-uri), fără sume sau descrieri; ca alt membru: 404;
+   - `Setări → Datele mele → Descarcă arhiva` → `finet-export.zip` se deschide (README, `profil.json`, `gospodarii/<n>/…`);
+   - ștergerea: doar pe un cont de test creat pentru asta (`finet-admin create-user`), niciodată pe un cont real; după ștergere, login-ul eșuează. Logul `finet-web` are o linie `[gdpr] cont șters; … fișiere=N eșuate=M`. Dacă `eșuate` > 0 (sau periodic): fișierele orfane se găsesc și se șterg cu comanda dedicată, întâi în dry-run (doar contoare):
+     ```bash
+     sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile cleanup run --rm -T finet-cleanup cleanup-orphan-storage          # scanned=… orphans=… deleted=0 dry_run=1
+     sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile cleanup run --rm -T finet-cleanup cleanup-orphan-storage --yes    # șterge cel mult 100
+     ```
+     Rulează în serviciul `finet-cleanup` (singurul cu storage-ul montat în SCRIERE), cu aceeași regulă de siguranță ca `cleanup-documents`: fără `STORAGE_DIR` montat nu atinge nimic; refuză dacă niciun director nu are gospodărie în bază. Opțional, săptămânal (`sudo crontab -e`), DOAR în dry-run, ca semnal în log: `45 4 * * 1  cd /srv/finet/src && docker compose … --profile cleanup run --rm -T finet-cleanup cleanup-orphan-storage >> /var/log/finet-cleanup.log 2>&1`; ștergerea (`--yes`) rămâne manuală, după citirea raportului (ADR 0021 §1).
+6. **HSTS `preload`:** rămâne oprit. Consecințele sunt în `docs/SECURITY_CHECKLIST.md`, secțiunea 22.
+
+**Rollback:** imaginile anterioare ale `finet-web` și `tools`; migrația se poate lăsa aplicată (nimic din aplicația veche nu o folosește). Rollback-ul complet al 0016 e în antetul fișierului și pierde agregatele zilnice.
+
+## 4n. Faza 7 pe producție (ordinea completă, după revizuiri; F7-A + F7-B)
 
 Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0018 (inclusiv §11, calea PDF) și ADR 0019.
 
-1. **Ordinea:** după ce `0012_family` e aplicată (4k). Imaginile `finet` și `finet:tools` pentru commit-ul aprobat.
+1. **Ordinea:** după 4k (`0012_family`) și 4m (`0016_gdpr_stats`, deja aplicată pe producție). Jurnalul migrațiilor are ordinea `… 0012, 0016, 0013, 0014`: `0013` și `0014` au `when` ridicat peste `0016` la merge-ul cu Faza 9 (1794700000000, 1794800000000), ca runner-ul să le aplice DUPĂ `0016` (refuză o migrație nouă anterioară uneia deja aplicate); numele fișierelor rămân. Imaginile `finet` și `finet:tools` pentru commit-ul aprobat.
 2. **Verificarea dinaintea lui `0014`** (indexul unic „un bon per tranzacție” pe `receipts`): pe Supabase, ca `postgres`, cu psql (ca la `roles.sql`):
    ```bash
    psql "<url-postgres>?sslmode=verify-full&sslrootcert=<ca.crt>" -X -At -c \
@@ -509,7 +574,16 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 
 ## 7. Upgrade PostgreSQL (master prompt 3.5)
 1. Jobul săptămânal anunță versiunea nouă (`ops/postgres/version-check.md`, **neimplementat**), sau operatorul o vede în panou.
-2. PR care rulează testele pe `postgres:<versiunea nouă>-alpine` (local sau în CI, schimbând temporar `ops/postgres/VERSION` pe branch).
+2. Compatibilitatea: workflow-ul săptămânal `.github/workflows/pg-next.yml` (din Faza 9) rulează testele pe `postgres:<VERSION+1>-alpine` și încercarea upgrade-ului (`ops/postgres/upgrade-test.sh`: dump pe versiunea curentă → restaurare pe cea următoare, amprenta identică, migrațiile „aplicate acum 0”). Trebuie să fie verde înainte de pasul 6. Manual (pe host, doar containere efemere pe o rețea privată, cu `--memory=256m`):
+   ```bash
+   # serverul vechi (VERSION) migrat + datele de control; serverul nou gol; apoi:
+   docker run --rm --network <rețea> -v "$PWD/ops/postgres:/ops:ro" -e FINET_UPGRADE_TEST=1 \
+     -e OLD_URL=postgres://finet:<fictiv>@<vechi>:5432/finet_upgrade \
+     -e NEW_URL=postgres://finet:<fictiv>@<nou>:5432/finet_upgrade \
+     -e NEW_MIGRATOR_URL=postgres://finet_migrator:finet_migrator_ci@<nou>:5432/finet_upgrade \
+     --entrypoint sh postgres:<nou>-alpine /ops/upgrade-test.sh
+   ```
+   Rezultatul încercării 17 → 18 (Faza 9): `docs/reports/faza-9.md`, F9-B.
 3. Backup propriu verificat (`pg_dump` + fișiere, restic; `docs/BACKUP.md`): un `run-backup.sh` reușit chiar înainte. Pentru o versiune majoră nouă, imaginea de backup trebuie să aibă `pg_dump` cel puțin de acea versiune (`postgresql<N>-client` în `ops/backup/Dockerfile`), altfel pg_dump refuză serverul mai nou.
 4. Notează valorile de control: numărul și suma tranzacțiilor pe gospodărie (interogare din Faza 3).
 5. Anunț către familie; fereastră de noapte.

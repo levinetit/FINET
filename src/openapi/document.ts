@@ -147,6 +147,13 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
       description: q.description,
       schema: strip(requestSchema(q.schema)),
     })),
+    ...(op.headers ?? []).map((h) => ({
+      name: h.name,
+      in: "header",
+      required: false,
+      description: h.description,
+      schema: { type: "string", maxLength: 64 },
+    })),
     { $ref: "#/components/parameters/FinetClient" },
   ];
   if (op.idempotent) parameters.push({ $ref: "#/components/parameters/IdempotencyKey" });
@@ -272,6 +279,8 @@ export function buildOpenApiDocument(): Json {
     tags: [
       { name: "me", description: "Contul curent (Faza 1) și consimțămintele." },
       { name: "usage", description: "Statisticile de utilizare (6.5)." },
+      { name: "app", description: "Aplicația Android: ultima versiune publicată (Faza 9)." },
+      { name: "admin", description: "Administratorul platformei: statisticile (Faza 9)." },
       { name: "households", description: "Gospodăriile utilizatorului." },
       {
         name: "family",

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Teste E2E, în șapte proiecte, pe două servere:
+ * Teste E2E, în mai multe proiecte, pe două servere (Faza 9: `pwa`, scanarea offline):
  * - `smoke`, `auth`, `ledger` și `planning` (browser): `pnpm dev` cu Access dezactivat DOAR pentru test
  *   (NODE_ENV=development, CF_ACCESS_REQUIRED=false; `src/lib/config.ts` refuză asta în
  *   producție și nu e slăbit). `auth` cere un Postgres de test migrat (`DATABASE_URL` = rolul
@@ -163,6 +163,28 @@ export default defineConfig({
       // date SINTETICE. Partea cu PDF și potrivirea cer workerul + serverul AI fals (ca `receipts`).
       name: "statements",
       testMatch: /statements\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      // PWA și offline (Faza 9, ADR 0020): același server și aceeași bază, utilizatorii `pwa` și
+      // `pwa2`; service worker-ul permis explicit (implicit oricum).
+      // În `saas`, testele cozii offline (cer `/import` și încărcarea, deci entitlements) se sar
+      // până în Faza 11, ca proiectul `receipts`.
+      name: "pwa",
+      testMatch: /pwa\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL, serviceWorkers: "allow" },
+    },
+    {
+      // GDPR și statistici (Faza 9, F9-B, ADR 0021): exportul, ștergerea contului (utilizatorul
+      // `gdpr2` dispare), „Statistici” (administratorul = `main` din modul personal).
+      name: "gdpr",
+      testMatch: /gdpr\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      // Accesibilitatea (Faza 9, F9-B): axe-core pe paginile principale, utilizatorul `a11y`.
+      name: "a11y",
+      testMatch: /a11y\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {

@@ -54,6 +54,86 @@ export const modelReceiptSchema = z.strictObject({
 });
 export type ModelReceipt = z.infer<typeof modelReceiptSchema>;
 
+type ReceiptKey = keyof typeof modelReceiptSchema.shape;
+type LineKey = keyof typeof modelLineSchema.shape;
+
+/**
+ * Descrierea fiecărui câmp, pentru prompt (în modul `json_object` modelul nu primește schema
+ * JSON). Tipul `Record<cheie, …>` obligă descrierea să aibă EXACT cheile schemei Zod (un câmp nou
+ * fără descriere nu compilează), iar un test verifică promptul generat față de schemă.
+ */
+const RECEIPT_FIELD_DOCS: Readonly<Record<ReceiptKey, string>> = {
+  merchantName: "string sau null — numele comerciantului, ca pe bon",
+  merchantTaxId: 'string sau null — CUI/CIF, cu sau fără "RO", exact cum apare',
+  storeAddress: "string sau null — adresa magazinului",
+  receiptNumber: "string sau null — numărul bonului",
+  date: 'string sau null — data bonului, format "YYYY-MM-DD"',
+  paymentMethod: `unul dintre ${MODEL_PAYMENT_METHODS.map((m) => `"${m}"`).join(", ")} sau null`,
+  currency: '"RON", "EUR", "USD" sau null',
+  total: 'string sau null — TOTALUL de plată, ex. "45.90" (punct zecimal, max. 2 zecimale)',
+  vatTotal: 'string sau null — totalul TVA de pe bon, ex. "4.55"',
+  lines: `listă (max. ${MAX_RECEIPT_LINES}) de obiecte-linie, în ordinea de pe bon`,
+};
+const LINE_FIELD_DOCS: Readonly<Record<LineKey, string>> = {
+  name: "string — denumirea produsului, ca pe bon",
+  quantity: 'string sau null — cantitatea, ex. "1" sau "0.754" (max. 3 zecimale)',
+  unitPrice: 'string sau null — prețul unitar, ex. "7.49"',
+  lineTotal: 'string — totalul liniei, POZITIV, ex. "14.98" (și pentru reduceri)',
+  vatRate: 'string sau null — cota TVA a liniei în procente, ex. "21" sau "11"',
+  type: `unul dintre ${MODEL_LINE_TYPES.map((t) => `"${t}"`).join(", ")}`,
+};
+
+/** Un exemplu complet, SINTETIC (date inventate), valid după `modelReceiptSchema`. */
+export const RECEIPT_PROMPT_EXAMPLE: ModelReceipt = {
+  merchantName: "MAGAZIN EXEMPLU SRL",
+  merchantTaxId: "RO22891860",
+  storeAddress: "Str. Exemplu 1, Oraș",
+  receiptNumber: "0042",
+  date: "2026-01-15",
+  paymentMethod: "card",
+  currency: "RON",
+  total: "15.48",
+  vatTotal: "1.48",
+  lines: [
+    {
+      name: "LAPTE 1L",
+      quantity: "2",
+      unitPrice: "7.49",
+      lineTotal: "14.98",
+      vatRate: "11",
+      type: "item",
+    },
+    {
+      name: "GARANTIE SGR",
+      quantity: "1",
+      unitPrice: "0.50",
+      lineTotal: "0.50",
+      vatRate: "0",
+      type: "deposit",
+    },
+  ],
+};
+
+/**
+ * Schema ca TEXT, pentru promptul sistem (în orice mod de răspuns): cheile exacte, tipurile,
+ * valorile permise, `null` pentru necitibil, un exemplu și interdicția altor chei. Generată din
+ * aceeași schemă Zod, deci nu poate diverge (test de sincronizare în `receipts.test.ts`).
+ */
+export function receiptSchemaPromptText(): string {
+  const receiptKeys = Object.keys(modelReceiptSchema.shape) as ReceiptKey[];
+  const lineKeys = Object.keys(modelLineSchema.shape) as LineKey[];
+  return [
+    `Răspunsul e UN obiect JSON cu EXACT aceste ${receiptKeys.length} chei (toate prezente, nicio altă cheie):`,
+    ...receiptKeys.map((k) => `- "${k}": ${RECEIPT_FIELD_DOCS[k]}`),
+    `Fiecare element din "lines" are EXACT aceste ${lineKeys.length} chei (toate prezente, nicio altă cheie):`,
+    ...lineKeys.map((k) => `- "${k}": ${LINE_FIELD_DOCS[k]}`),
+    "Sumele, cantitățile și cotele sunt ȘIRURI (în ghilimele), nu numere. Ce nu se poate citi e null.",
+    'Nu folosi alte nume de chei (de exemplu NU "merchant", "items", "totals", "payment").',
+    "Exemplu (date inventate):",
+    JSON.stringify(RECEIPT_PROMPT_EXAMPLE),
+  ].join("\n");
+}
+
 /** Schema JSON trimisă furnizorului (`response_format: json_schema`, strict), aceeași formă. */
 export const RECEIPT_JSON_SCHEMA: Readonly<Record<string, unknown>> = (() => {
   const nullableString = (pattern?: string, maxLength?: number) => ({

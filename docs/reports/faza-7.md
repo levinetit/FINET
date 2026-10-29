@@ -1,6 +1,6 @@
 # Raportul Fazei 7 — Extrase bancare, potrivire, abonamente (F7-A, F7-B)
 
-Branch `phase/07-statements`. Datele, extracția, parserele și serviciile (F7-A) sunt descrise în ADR 0018 și în `docs/SECURITY_CHECKLIST.md` (secțiunea 21). Raportul de față descrie F7-B (ADR 0018 §11, ADR 0019) și starea de acceptare a fazei.
+Branch `phase/07-statements`. Datele, extracția, parserele și serviciile (F7-A) sunt descrise în ADR 0018 și în `docs/SECURITY_CHECKLIST.md` (secțiunea 23; F7-B: secțiunea 24). Raportul de față descrie F7-B (ADR 0018 §11, ADR 0019) și starea de acceptare a fazei.
 
 **Confidențialitate:** extrasele reale ale operatorului nu au intrat în repo, în teste, în documentație, în loguri sau în CI. Fixture-urile și datele E2E sunt SINTETICE. Verificarea de scurgeri (locală, în afara repo-ului) a rulat înaintea fiecărui commit: PASS pe tot ce s-a adăugat în F7-B.
 
@@ -85,7 +85,7 @@ Toate pe PostgreSQL 17 efemer (`finet-ci-pg-f7b`, `--memory=320m`, rețeaua `fin
 
 ## 5. Puncte deschise pentru operator și coordonator
 
-- **`0013` + `0014` pe Supabase** (INFRA 4l), cu verificarea dinainte a indexului unic pe `receipts`. Programarea `finet-cleanup` (4i) devine obligatorie: fără ea, PDF-urile neconfirmate rămân pe disc.
+- **`0013` + `0014` pe Supabase** (INFRA 4n), cu verificarea dinainte a indexului unic pe `receipts`. Programarea `finet-cleanup` (4i) devine obligatorie: fără ea, PDF-urile neconfirmate rămân pe disc.
 - **Istoricul git:** commit-ul `934c152` (F7-A, publicat) conține într-un comentariu, șters ulterior din fișier, un cuvânt care apare în extrasul BRD real. Cuvântul nu mai e nicăieri în tree. Decizia îi aparține coordonatorului.
 - **Posibil defect latent în F6:** `receiveMultipart` (bonuri) folosește `parts: maxFiles + TEXT_FIELDS.length`, iar busboy semnalează `partsLimit` deja la atingerea plafonului. O cerere cu toate câmpurile și 4 fișiere ar putea fi refuzată. La extrase am folosit +1. De verificat separat.
 - **Lista locală a leakcheck-ului:** am adăugat cuvinte românești și englezești generice din codul F7-B (în afara repo-ului).

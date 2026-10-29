@@ -152,6 +152,7 @@ export default async function ImportPage({
         initialUsage={result.value.usage}
         initialRecent={result.value.recent}
         externalAi={result.value.externalAi}
+        maxUploadBytes={config.documents.maxUploadBytes}
       />
     </>
   );

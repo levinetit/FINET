@@ -1,7 +1,7 @@
 -- FINET 0014_statement_uploads (Faza 7, F7-B): calea PDF-urilor de extras spre worker, curățarea
 -- previzualizărilor vechi, potrivirea bon ↔ tranzacție și propunerile de plăți recurente.
 -- Prima parte e generată de `drizzle-kit generate --name statement_uploads` din
--- src/db/schema/statements.ts (`when` din jurnal fixat de mână la 1794200000000, după 0013; 0015 e
+-- src/db/schema/statements.ts (`when` din jurnal fixat de mână la 1794800000000, după 0013, care vine după 0016; 0015 e
 -- rezervată, Faza 9 folosește ≥ 0016). A doua parte (după „PARTEA SCRISĂ DE MÂNĂ”) e adăugată o
 -- singură dată, înainte de prima aplicare. Deciziile: docs/adr/0018-statements-import.md (§11) și
 -- docs/adr/0019-matching-recurring.md. NU modifica fișierul după aplicare: runner-ul compară hash-ul.

@@ -364,6 +364,8 @@ services:
     # Ieșirea: doar contoare (`expired=… failed=… temp=…`). Programat zilnic de operator
     # (docs/INFRA.md, „Faza 6 pe producție”):
     #   docker compose ... --profile cleanup run --rm -T finet-cleanup
+    # Fișierele orfane (F9-B, ADR 0021): aceeași imagine, comanda dată explicit (dry-run implicit):
+    #   docker compose ... --profile cleanup run --rm -T finet-cleanup cleanup-orphan-storage [--yes]
     image: ${FINET_TOOLS_IMAGE:-finet:tools}
     build:
       context: ../..

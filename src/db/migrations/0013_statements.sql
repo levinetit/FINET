@@ -2,7 +2,7 @@
 -- (`statement_imports`), rândurile parsate (`statement_lines`) și contorul zilnic al
 -- previzualizărilor (`statement_usage_daily`).
 -- Prima parte e generată de `drizzle-kit generate --name statements` din
--- src/db/schema/statements.ts (`when` din jurnal fixat de mână la 1794100000000, după 0012). A doua
+-- src/db/schema/statements.ts (`when` din jurnal fixat de mână la 1794700000000: DUPĂ 0016_gdpr_stats, aplicată deja pe producție înaintea Fazei 7; runner-ul refuză o migrație nouă anterioară uneia aplicate). A doua
 -- parte (după „PARTEA SCRISĂ DE MÂNĂ”) e adăugată o singură dată, înainte de prima aplicare: cheia
 -- `statement_lines_transaction_fk` cu `SET NULL (transaction_id)`, RLS ENABLE + FORCE, politicile
 -- (vizibilitatea conturilor PERSONALE din 0012: un import pe un cont personal îl vede doar

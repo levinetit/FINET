@@ -96,14 +96,21 @@
     {
       "idx": 13,
       "version": "7",
-      "when": 1794100000000,
-      "tag": "0013_statements",
+      "when": 1794600000000,
+      "tag": "0016_gdpr_stats",
       "breakpoints": true
     },
     {
       "idx": 14,
       "version": "7",
-      "when": 1794200000000,
+      "when": 1794700000000,
+      "tag": "0013_statements",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794800000000,
       "tag": "0014_statement_uploads",
       "breakpoints": true
     }

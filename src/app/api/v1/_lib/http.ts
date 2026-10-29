@@ -61,6 +61,14 @@ export type ApiLimits = Readonly<{
   inviteAccept: RateLimitRule;
   /** Încărcarea extraselor (Faza 7), pe utilizator (în plus față de `mutations` și de cota zilnică). */
   statementUpload: RateLimitRule;
+  /** Exportul GDPR complet (Faza 9), pe utilizator: arhivă mare, deci rar. */
+  gdprExport: RateLimitRule;
+  /**
+   * Ștergerea contului (Faza 9, revizuirea F9): încercările DOAR pe utilizator, indiferent de IP
+   * (în plus față de limita pe IP de încredere + utilizator): ghicirea parolei dintr-o sesiune
+   * furată nu se poate distribui pe mai multe IP-uri.
+   */
+  accountDelete: RateLimitRule;
 }>;
 
 /** Limitele implicite (decizia mea): generoase pentru un client real, mici pentru un abuz. */
@@ -80,6 +88,10 @@ export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
   // F7-B (decizia mea): 20 de încărcări de extrase la 10 minute per utilizator; fiecare PDF ține
   // procesul copil al workerului ocupat până la 30 s CPU, iar cota zilnică e de 50 pe gospodărie.
   statementUpload: Object.freeze({ max: 20, windowSeconds: 600 }),
+  // F9-B (decizia mea): 3 exporturi GDPR pe oră per utilizator.
+  gdprExport: Object.freeze({ max: 3, windowSeconds: 3600 }),
+  // Revizuirea F9: 5 încercări de ștergere a contului pe oră per utilizator.
+  accountDelete: Object.freeze({ max: 5, windowSeconds: 3600 }),
 });
 
 export type ApiDeps = Readonly<{
@@ -352,7 +364,8 @@ export async function enforceRateLimit(
     | "api_recurring_generate"
     | "api_document_upload"
     | "api_receipt_reprocess"
-    | "api_statement_upload",
+    | "api_statement_upload"
+    | "gdpr_export",
   rule: RateLimitRule,
 ): Promise<void> {
   const result = await hitRateLimit(

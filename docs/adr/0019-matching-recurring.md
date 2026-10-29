@@ -1,6 +1,6 @@
 # ADR 0019 — Potrivirea bon ↔ tranzacție din extras și propunerile de plăți recurente
 
-- **Stare:** propus (F7-B, branch `phase/07-statements`). Migrația `0014_statement_uploads` și redeploy-ul le face operatorul, după revizuiri (`docs/INFRA.md`, 4l).
+- **Stare:** propus (F7-B, branch `phase/07-statements`). Migrația `0014_statement_uploads` și redeploy-ul le face operatorul, după revizuiri (`docs/INFRA.md`, 4n).
 - **Legături:** master prompt Faza 7 (potrivire, abonamente), 5.1 (bani), 5.5 (bonuri), 6.1, 6.2; ADR 0011 (recurențe), 0014–0015 (bonuri), 0016 (conturi personale), 0018 (extrase).
 
 ## Context

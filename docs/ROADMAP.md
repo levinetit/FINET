@@ -15,7 +15,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 6 — Ingestia bonurilor | **în repo** (F6-A, F6-B, F6-C; de revizuit și de aplicat pe producție) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat) — ADR 0013. F6-B: migrația `0009_receipt_pipeline`, clientul LiteLLM, jobul `receipt.process`, verificările 5.5 și scorul, categorisirea, bonul lung, bugetul global, fixtures sintetice și `pnpm eval:receipts` — ADR 0014. F6-C: API-ul public (`/api/v1/documents`, `/receipts`, `/ai/usage`), paginile `/import`, `/receipts`, `/receipts/[id]`, retenția originalelor (`0011`, `cleanup-documents`), E2E cu serverul AI fals și workerul — ADR 0015. Rămân `0008`–`0011` pe Supabase, evaluarea pe bonuri reale și revizuirea `security` |
 | 7 — Extrase bancare, potrivire, abonamente | **în repo** (F7-A + F7-B) | F7-A: migrația `0013_statements`, extracția PDF în procesul copil al workerului, parserele BT, BRD, Raiffeisen, Revolut (fixture-uri sintetice), CSV/XLSX/ZIP cu mapare de coloane, deduplicare, schimb valutar ca transfer, anulare, acoperire — ADR 0018. F7-B: migrația `0014_statement_uploads` (PDF-urile spre worker, 24 h), API-ul `/api/v1/statements/*`, potrivirea bon ↔ tranzacție, plățile recurente detectate, interfața, E2E — ADR 0018 §11, ADR 0019. Rămân `0013`/`0014` pe Supabase, E2E în CI și revizuirea `security` — vezi mai jos |
 | 8 — Familie | **parțial** (F8-A și F8-B în repo) | F8-A: migrația `0012_family` (invitații, împărțiri cu verificare amânată a sumei, decontări, gospodăria activă, vizibilitatea personal/comun în RLS pe conturi, tranzacții, etichete, recurențe), serviciile `src/modules/family/` (invitații, membri, roluri, ultimul owner, comutator, împărțiri, solduri, decontări) — ADR 0016. F8-B: API-ul `/api/v1` al familiei, `/family`, `/join/[token]`, comutatorul, împărțirea pe tranzacție, widgetul de pe Acasă, actualizările live (SSE, ADR 0017), E2E `family`. Rămân `0012` pe Supabase, deploy-ul (INFRA 4k) și revizuirea `security` — vezi mai jos |
-| 9 — Hardening, PWA, offline | neimplementat | |
+| 9 — Hardening, PWA, offline | **în repo** (F9-A, F9-B; branch `phase/09-hardening`, de revizuit și de aplicat pe producție) | F9-A: manifest, iconițe, service worker, `/offline`, scanarea offline (IndexedDB), invitația de instalare, `/help`, `/settings`, `/settings/android`, `GET /api/v1/app/android/latest` (ADR 0020). F9-B: migrația `0016_gdpr_stats`, exportul GDPR (ZIP în flux), ștergerea contului, retenția `app_events` (`aggregate-events`), „Statistici” pentru administrator, încercarea upgrade-ului PostgreSQL 17 → 18 (PASS) și workflow-ul `pg-next`, auditul axe (E2E `a11y`), dovezile din SECURITY_CHECKLIST (ADR 0021). **Reper „v1.0 personal”** după deploy — vezi „Faza 9: stare” |
 | 10 — Liste de cumpărături și prețuri | neimplementat | |
 | 11 — Fundația SaaS | neimplementat | |
 | 12 — Planuri, plăți, recomandări | neimplementat | |
@@ -93,7 +93,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - revizuirea `security` a API-ului (F2-B) și a interfeței (F2-C): constatările MEDIUM-1..3, LOW-1, LOW-5 corectate (2026-10-28, `docs/SECURITY_CHECKLIST.md` secțiunea 10; ADR 0004/0005/0006); de re-verificat.
 
 **Amânate din revizuirea F2 (cu motiv):**
-- **LOW-2** — retenția `app_events` (13 luni, apoi agregare pe zi/versiune): Faza 9, odată cu pagina „Statistici”; până atunci evenimentele se șterg la revocarea `usage_stats`. Programarea `finet-admin cleanup-idempotency` rămâne decizia operatorului.
+- **LOW-2** — retenția `app_events` (13 luni, apoi agregare pe zi/versiune): **închis în F9-B** (`finet-admin aggregate-events`, `app_event_daily`; ADR 0021). Programarea `finet-admin cleanup-idempotency` rămâne decizia operatorului.
 - **LOW-3** — `q` (căutarea în tranzacții) circulă în URL: aplicația nu loghează URL-uri, dar proxy-ul/Traefik/Cloudflare le pot înregistra (`docs/PRIVACY_NOTES.md`); alternativa `POST /api/v1/transactions/search` într-o fază viitoare.
 - **LOW-4** — plafoane per gospodărie (număr de conturi, categorii, tranzacții) și rate limit pe citiri: fază viitoare.
 - **NOTE** — `owner_user_id` nu are efect de autorizare (6.1); `finet_migrator` nu are politici pe `categories`/`transactions` (intenționat).
@@ -209,7 +209,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 
 **Amânate (motiv):** PDF-urile băncilor fără parser prin AI (`external_ai_statements`; ADR 0018 §10); extrasele scanate; Revolut/Wise cu mai multe monede într-un PDF (refuzat explicit: un extras pe monedă); categorisirea automată a tranzacțiilor importate; evenimente live pentru importuri (un import atinge multe tranzacții).
 
-**Rămâne:** `0013` + `0014` pe Supabase (INFRA 4l, cu verificarea dinainte), E2E și build în CI, revizuirea `security`.
+**Rămâne:** `0013` + `0014` pe Supabase (INFRA 4n, cu verificarea dinainte), E2E și build în CI, revizuirea `security`.
 
 ### Faza 8: stare
 **F8-A (date și servicii), gata în repo, verificat local pe PostgreSQL 17 efemer (subseturi; suita completă, typecheck-ul complet și build-ul în CI):**
@@ -224,7 +224,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - **obiective** personale (`goals` rămân comune);
 - indexul unic al numelor de conturi pe proprietar (azi un nume de cont personal e „ocupat” pentru toată gospodăria, deci vizibil ca existent);
 - semantica bugetelor comune „doar din conturile comune” (azi: din tranzacțiile vizibile cititorului);
-- ștergerea contului de utilizator: `accounts.owner_user_id ON DELETE SET NULL` ar face conturile personale comune — funcția de ștergere a contului trebuie să le trateze;
+- ștergerea contului de utilizator: `accounts.owner_user_id ON DELETE SET NULL` ar face conturile personale comune — **tratat în F9-B** (conturile personale se șterg înainte, în toate gospodăriile; ADR 0021);
 - API-ul, UI-ul, SSE și E2E: F8-B (făcut, vezi mai jos).
 
 **F8-B (API, UI, live, E2E), gata în repo (ADR 0017):** endpointurile `/api/v1/family/*`, `/api/v1/invites/accept`, `/api/v1/households/active`, `/api/v1/transactions/{id}/split`, `GET /api/v1/events` (SSE în procesul web, cu rezervă pe interogare periodică); paginile `/family`, `/join/[token]`, comutatorul de gospodărie, cardul de împărțire, widgetul „Ai de dat / Ai de primit”, conturile personale în formular; E2E `family` (modul `personal`).
@@ -233,9 +233,28 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 
 **Rămâne:** `0012` pe Supabase (cu verificarea din INFRA 4j) și deploy-ul (INFRA 4k), revizuirea `security` pentru F8-B, verificarea SSE prin tunelul Cloudflare.
 
+### Faza 9: stare (reperul „v1.0 personal”)
+**F9-A** (ADR 0020) și **F9-B** (ADR 0021) sunt gata în repo, verificate local pe PostgreSQL 17 (și, pentru F9-B, pe 18) prin subseturi; suita completă, typecheck-ul complet, build-ul, bugetul JS și E2E rulează în CI. Cu Faza 9, varianta `personal` are toate funcțiile din master prompt (Fazele 0–6, 8, 9); **Faza 7 (extrase)** e în lucru pe alt branch și face parte din „v1.0 personal” când e livrată.
+
+**F9-B, gata în repo:** `0016_gdpr_stats` (`app_event_daily`; `finet.erase_current_user`, `aggregate_app_events`, `usage_stats`); `GET /api/v1/me/export`, `GET /api/v1/me/deletion`, `POST /api/v1/me/delete`, `GET /api/v1/admin/stats`; paginile `/settings/privacy` și `/settings/statistics`; `finet-admin aggregate-events`; `ops/postgres/upgrade-test.sh` + `.github/workflows/pg-next.yml`; proiectele E2E `gdpr` și `a11y` (axe-core); SECURITY_CHECKLIST secțiunea 22.
+
+**Rămas pentru „v1.0 personal” (după Faza 9):**
+- operatorul: migrația `0016` pe Supabase (`0000`–`0012` sunt aplicate; `0013`–`0015` vin cu Faza 7), deploy-ul F9 (INFRA 4l, 4m), cron-ul `aggregate-events`, backup-ul real și restaurarea de probă, verificarea în browser prin Access;
+- CI: prima rulare verde a branch-ului (E2E `pwa`, `gdpr`, `a11y`, `access`; `check:bundle`; `pg-next` manual o dată);
+- revizuirile `security` amânate (F2-B … F9-B) și revizuirea independentă a F9-B;
+- Lighthouse ≥ 90: rulare manuală pe producție (metoda în `docs/reports/faza-9.md`);
+- Faza 7 (extrase), reconcilierea jurnalului de migrații (0013–0015 vs 0016) la merge.
+
+**Amânate din F9-B (motiv):**
+- fereastră de grație la ștergerea contului (decizia mea: ștergere imediată, ADR 0021);
+- eșecurile de autentificare agregate în „Statistici” (nu se înregistrează încă) și descărcările de pe GitHub (fără acces la API-ul GitHub);
+- detaliile pe utilizator în `saas` doar cu motiv în audit (Faza 11);
+- jobul care anunță versiunea majoră nouă oferită de Supabase (`ops/postgres/version-check.md`, cere tokenul Management API);
+- HSTS `preload` (decizia operatorului; consecințele în SECURITY_CHECKLIST, secțiunea 22).
+
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
-- **L2** — `audit_events` dispar în CASCADE la ștergerea unei gospodării: aplicația nu șterge încă gospodării; se decide odată cu ștergerea (păstrare anonimizată sau `SET NULL`).
+- **L2** — `audit_events` dispar în CASCADE la ștergerea unei gospodării: **închis în F9-B** (decizie: gospodăria se șterge doar la ștergerea contului singurului ei membru, iar jurnalul ei dispare cu ea, ca toate celelalte date; rămâne o linie de log fără id-uri sau conținut; ADR 0021).
 - **L3** — protecția „ultimului owner” (nu poate pleca / nu poate fi scos): **închis în F8-A** (triggerul `household_members_guard_owner` + serviciile, ADR 0016).
 - **L6** — tokenul de resetare a parolei e stocat în clar (Better Auth nu are `storeToken: "hashed"` pentru resetare): de revăzut la actualizarea Better Auth; azi 30 de minute, unică folosință.
 - **L7** — parola generată de CLI apare pe stdout (o singură dată): de decis cu operatorul (fișier 0600 sau doar `--password-stdin`).
@@ -245,7 +264,7 @@ Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; 
   - N2: `releaseRateLimit` după rularea ferestrei decrementează contorul ferestrei noi (câștig de cel mult 1 încercare pe fereastră; neglijabil).
   - N3: cât timp nu există un administrator, un proces `finet_app` compromis își poate promova un utilizator; după primul bootstrap e închis. Un `finet_app` compromis poate rescrie `auth_accounts` (inerent unei aplicații care resetează parole).
   - N4: cheia `/reset-password` are subiect fix per IP; fără IP de încredere (doar dezvoltare) toți împart un bucket global.
-- **Ștergerea contului (GDPR)**: fază viitoare, printr-o funcție SECURITY DEFINER care refuză administratorii și gospodăriile cu un singur membru; `finet_app` nu are `DELETE` pe `users` (M5).
+- **Ștergerea contului (GDPR)**: **închis în F9-B** (`finet.erase_current_user`, ADR 0021): administratorul platformei e refuzat; gospodăriile cu un singur membru se șterg (nu blochează).
 - **Înregistrarea `saas`** va avea nevoie de o funcție de creare a utilizatorilor (Better Auth nu mai creează utilizatori; `finet_app` nu poate insera `status`/`is_platform_admin`).
 - Un rol Postgres separat pentru CLI (ar închide și fereastra de bootstrap a `promote_first_admin`): opțional, cere un secret nou.
 
@@ -291,7 +310,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
 | B — Autentificare și profil | neimplementat (API-ul web există din F1-B: login `bearer`, `/api/v1/me`, sesiuni) | Faza 1 + API `/api/v1/` |
 | C — Funcții de bază (dashboard, tranzacții, bugete) | neimplementat | Fazele 2–3 |
 | D — Recurențe și documente (bonuri, extrase, partajare) | neimplementat | Fazele 5–7 |
-| E — Stabilizare și livrare (APK semnat, GitHub Releases) | neimplementat | Faza 9 (pagina de descărcare) |
+| E — Stabilizare și livrare (APK semnat, GitHub Releases) | neimplementat | backend gata în F9-A: `GET /api/v1/app/android/latest`, `/settings/android` |
 
 Telefoanele ajung la FINET prin WARP (`ops/cloudflare/README.md`, pasul 5).
 
@@ -321,7 +340,9 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | Rută FINET | Echivalent finpulse | Faza | Stare |
 |---|---|---|---|
 | `/login` | `/login` | 1 | producție; Google și Facebook: Faza 11 (`saas`) |
-| `/profile` | `/settings` (parțial) | 1 | producție; setările complete și „Aplicația Android”: Faza 9 |
+| `/profile` | `/settings` (parțial) | 1 | producție |
+| `/settings`, `/settings/android` | `/settings` | 9 | branch (F9-A): ghidul de instalare PWA, aplicația Android (descărcare, QR, pași) |
+| `/settings/privacy` | — | 9 | branch (F9-B): exportul GDPR și ștergerea contului |
 | `/accounts`, `/accounts/new`, `/accounts/[id]` | — | 2 | producție |
 | `/transactions`, `/transactions/new`, `/transactions/[id]` | listă de tranzacții din dashboard | 2 | producție |
 | `/transfers/new` | — | 2 | producție |
@@ -340,9 +361,9 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/receipts/matches` | — | 7 | branch (F7-B): coada potrivirilor bon ↔ extras |
 | `/join/[token]` | — | 8 | branch (F8-B): acceptare prin buton (`POST`), mesaj uniform |
 | `/family` | membri, bugete comune, decontări | 8 | branch (F8-B): solduri, decontări, membri, invitații, împărțiri, comun vs personal; comutatorul în antet; împărțirea pe `/transactions/[id]`; widgetul pe `/dashboard` |
-| `/offline` | — (la finpulse dă 404) | 9 | planificat |
-| `/help` (ghid în aplicație) | `/help` | 9 | planificat |
-| `/admin/statistics` (nume provizoriu) | — | 9 | planificat; statistici de utilizare, doar administrator |
+| `/offline` | — (la finpulse dă 404) | 9 | branch (F9-A): HTML static, servit din cache de service worker |
+| `/help` (ghid în aplicație) | `/help` | 9 | branch (F9-A) |
+| `/settings/statistics` | — | 9 | branch (F9-B): statistici de utilizare, doar administratorul platformei (`saas`: panoul de administrare, Faza 11) |
 | `/shopping-lists` | `/shopping-lists` | 10 | planificat |
 | `/prices` (nume provizoriu) | prețuri pe magazin, inflație | 10 | planificat |
 | `/ask` (nume provizoriu) | „raport AI în limbaj natural” | 10 | planificat |

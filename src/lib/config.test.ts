@@ -745,6 +745,11 @@ describe("furnizorul AI (F6-B, ADR 0014)", () => {
     expect(issuesOf({ ...DEV, AI_PRICE_INPUT_PER_MTOK: "0.001" })).toEqual([
       "AI_PRICE_INPUT_PER_MTOK",
     ]);
+    // Implicit json_object (Gemini prin LiteLLM refuză schema FINET în json_schema).
+    expect(parseConfig(DEV).ai.responseFormat).toBe("json_object");
+    expect(parseConfig({ ...DEV, AI_RESPONSE_FORMAT: "json_schema" }).ai.responseFormat).toBe(
+      "json_schema",
+    );
     expect(parseConfig({ ...DEV, AI_RESPONSE_FORMAT: "json_object" }).ai.responseFormat).toBe(
       "json_object",
     );

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   blankPdf,
+  buildPdf,
   HOSTILE,
   jpegWithGpsExif,
   pdfWithDeclaredImage,
@@ -191,14 +192,65 @@ describe("preprocesarea PDF-urilor", () => {
     expect(spawnedPdfChildren()).toBe(before);
   });
 
-  it("dimensiune prin referință indirectă → pdf_image_unverifiable (fără decodare)", async () => {
+  it("dimensiune prin referință spre un obiect lipsă → pdf_image_unverifiable (fără decodare)", async () => {
+    const before = spawnedPdfChildren();
+    // Aceeași lungime a textului (offseturile xref rămân valide): obiectul 9 nu există.
+    const missing = Buffer.from(
+      pdfWithDeclaredImage(300, 300, true)
+        .toString("latin1")
+        .replace("/Width 6 0 R", "/Width 9 0 R"),
+      "latin1",
+    );
+    expect(await codeOf(preprocessDocument(missing, "application/pdf", LIMITS))).toBe(
+      "pdf_image_unverifiable",
+    );
+    expect(spawnedPdfChildren()).toBe(before);
+  });
+
+  it("dimensiune indirectă rezolvată: plafoanele se aplică valorii (20000 × 20000 → image_too_large, fără copil)", async () => {
     const before = spawnedPdfChildren();
     expect(
       await codeOf(
-        preprocessDocument(pdfWithDeclaredImage(300, 300, true), "application/pdf", LIMITS),
+        preprocessDocument(pdfWithDeclaredImage(20000, 20000, true), "application/pdf", LIMITS),
       ),
-    ).toBe("pdf_image_unverifiable");
+    ).toBe("image_too_large");
     expect(spawnedPdfChildren()).toBe(before);
+  });
+
+  it("PDF scanat cu `/Height N 0 R` și `/Length N 0 R` (Quartz/Skia/scanere) → acceptat până la imagine", async () => {
+    const jpg = await sharp(await receiptLikeImage({ width: 300, height: 500 }))
+      .jpeg()
+      .toBuffer();
+    const l1 = (t: string) => Buffer.from(t, "latin1");
+    const pdf = buildPdf([
+      l1("<< /Type /Catalog /Pages 2 0 R >>"),
+      l1("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+      l1(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 500] /Resources << /XObject << /Im1 5 0 R >> >> /Contents 4 0 R >>",
+      ),
+      Buffer.concat([
+        l1("<< /Length 30 >>\nstream\n"),
+        l1("q 300 0 0 500 0 0 cm /Im1 Do Q"),
+        l1("\nendstream"),
+      ]),
+      Buffer.concat([
+        l1(
+          "<< /Type /XObject /Subtype /Image /Width 300 /Height 6 0 R /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length 7 0 R >>\nstream\n",
+        ),
+        jpg,
+        l1("\nendstream"),
+      ]),
+      l1("500"),
+      l1(String(jpg.length)),
+    ]);
+    expect(
+      scanPdfImages(pdf, { maxImagePixels: 25_000_000, maxTotalPixels: 50_000_000, maxImages: 96 }),
+    ).toEqual([{ width: 300, height: 500 }]);
+    const result = await preprocessDocument(pdf, "application/pdf", LIMITS);
+    expect(result.pages).toBe(1);
+    const image = onlyImage(result);
+    expect(image.width).toBeGreaterThan(0);
+    expect(activePdfChildren()).toBe(0);
   });
 
   it("timeout pe PDF: procesul copil e ucis (SIGKILL), nicio muncă rămasă", async () => {

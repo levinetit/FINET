@@ -25,6 +25,8 @@ export const ro = {
     family: "Familie",
     reports: "Rapoarte",
     profile: "Profil",
+    settings: "Setări",
+    help: "Ajutor",
     more: "Mai mult",
     moreLabel: "Alte pagini",
     logout: "Deconectează-te",
@@ -538,6 +540,9 @@ export const ro = {
     rateLimitedRetry: (seconds: number) =>
       `Prea multe exporturi într-un minut. Încearcă din nou peste ${seconds} ${seconds === 1 ? "secundă" : "secunde"}.`,
     error: "Exportul nu a reușit. Încearcă din nou.",
+    // F9-B (revizuirea F9): arhiva GDPR peste limitele formatului ZIP (4 GiB / 65 535 de fișiere).
+    archiveTooLarge:
+      "Arhiva ar depăși 4 GB sau 65.535 de fișiere. Cere operatorului exportul (sau șterge întâi bonuri vechi).",
   },
   tags: {
     title: "Etichete",
@@ -893,6 +898,8 @@ export const ro = {
     reprocessing: "Se trimite…",
     reprocessed: "Bonul a fost trimis din nou la citire. Revino în aproximativ un minut.",
     reprocessHint: "Citirea din nou consumă un document din limita zilei.",
+    reprocessConfirm:
+      "Reprocesarea șterge rezultatul curent al bonului (inclusiv corecturile tale) și îl citește din nou. Continui?",
     deleteConfirm: "Ștergi bonul și pozele lui? Tranzacția salvată din el (dacă există) rămâne.",
     deleted: "Bonul a fost șters.",
     noMerchant: "Magazin necunoscut",
@@ -985,7 +992,11 @@ export const ro = {
     confirmed: "Bonul a fost salvat ca tranzacție.",
     openTransaction: "Vezi tranzacția",
     savedNote: "Bonul e salvat ca tranzacție; nu se mai modifică.",
-    noAccounts: "Adaugă întâi un cont, ca bonul să poată fi salvat.",
+    noAccount: (currency: string) =>
+      `Pentru a salva bonul ai nevoie de un cont în ${currency}. Creează mai întâi un cont.`,
+    noAccountInCurrency: (currency: string) =>
+      `Niciunul dintre conturile tale deschise nu e în ${currency}. Pentru a salva bonul ai nevoie de un cont în ${currency}: creează mai întâi unul.`,
+    goToAccounts: "Mergi la conturi",
     issueText: {
       extraction_failed: "Bonul nu a putut fi citit automat; completează câmpurile.",
       ai_unavailable: "Serviciul AI nu e configurat; completează câmpurile manual.",
@@ -1410,6 +1421,291 @@ export const ro = {
     dismiss: "Nu e recurentă",
     accepted: "Regula recurentă a fost creată.",
     dismissed: "Propunerea a fost respinsă.",
+  },
+  // Faza 9 (ADR 0020): coada scanărilor offline din `/import`.
+  offline: {
+    title: "În așteptare pe acest dispozitiv",
+    hint: "Pozele se păstrează doar pe acest dispozitiv și se încarcă singure când revine conexiunea. Se șterg de aici după ce serverul le confirmă.",
+    offlineNow:
+      "Nu există conexiune. Pozele (JPEG sau PNG) se păstrează pe dispozitiv și se încarcă automat mai târziu.",
+    saveOffline: "Păstrează pentru mai târziu",
+    savedOffline:
+      "Fără conexiune: pozele au fost păstrate pe dispozitiv și se vor încărca automat.",
+    syncing: "Se încarcă scanările în așteptare…",
+    needsAuth:
+      "Sesiunea a expirat: autentifică-te din nou ca scanările în așteptare să se încarce.",
+    unavailable:
+      "Scanările offline nu sunt disponibile în acest browser (de exemplu în modul privat).",
+    entry: (files: number, long: boolean) =>
+      long ? `Bon lung, ${files} poze` : files === 1 ? "1 poză" : `${files} poze`,
+    statePending: "În așteptare (offline)",
+    stateFailed: "Nu a putut fi încărcat",
+    otherHousehold: "Pentru altă gospodărie: comută gospodăria ca să o încarci.",
+    savedAt: (when: string) => `salvat ${when}`,
+    retry: "Reîncearcă",
+    remove: "Șterge",
+    removeLabel: (what: string) => `Șterge de pe dispozitiv: ${what}`,
+    retryLabel: (what: string) => `Reîncearcă încărcarea: ${what}`,
+    uploaded: (n: number) =>
+      n === 1
+        ? "O scanare în așteptare a fost încărcată."
+        : `${n} scanări în așteptare au fost încărcate.`,
+    errors: {
+      offline_type:
+        "Fără conexiune se pot păstra doar poze JPEG sau PNG (PDF-urile și WebP se încarcă online).",
+      offline_too_large: "Una dintre poze depășește dimensiunea maximă.",
+      offline_full: "Ai deja 10 încărcări în așteptare. Așteaptă conexiunea sau șterge din ele.",
+      offline_space: "Pozele în așteptare depășesc 50 MB. Așteaptă conexiunea sau șterge din ele.",
+      offline_quota: "Nu mai e spațiu pe dispozitiv pentru poze în așteptare.",
+      offline_unavailable: "Pozele nu au putut fi păstrate pe dispozitiv.",
+      offline_network: "Încă nu există conexiune; se reîncearcă automat.",
+      offline_server: "Serverul nu a răspuns; se reîncearcă automat.",
+      offline_auth: "Autentifică-te din nou ca să se încarce.",
+      daily_document_limit: "Limita de documente pe azi a fost atinsă; se reîncearcă mai târziu.",
+      storage_quota_exceeded: "Spațiul de stocare al gospodăriei e plin.",
+      owner_household_mismatch:
+        "Scanarea a fost făcută în altă gospodărie: comută gospodăria ca să o încarci.",
+      long_receipt_duplicate:
+        "Una dintre poze a mai fost încărcată; bonul lung se încarcă din poze noi.",
+    } as Record<string, string>,
+  },
+  // Faza 9: service worker-ul (actualizarea) și invitația de instalare.
+  pwa: {
+    updateReady: "Versiune nouă a aplicației disponibilă.",
+    update: "Actualizează",
+    updateDirty: "Salvează întâi formularul deschis, apoi actualizează.",
+    later: "Mai târziu",
+    installTitle: "Instalează FINET",
+    installBody:
+      "Adaugă FINET pe ecranul telefonului: se deschide ca o aplicație și poți scana bonuri și fără semnal.",
+    install: "Instalează",
+    notNow: "Nu, mulțumesc",
+    iosBody: "Pe iPhone: apasă butonul Partajează din Safari, apoi „Adaugă pe ecranul principal”.",
+    guideLink: "Ghidul de instalare",
+  },
+  settings: {
+    title: "Setări",
+    eyebrow: "Aplicația",
+    profileTitle: "Profil și securitate",
+    profileBody: "Numele, parola, sesiunile active și consimțămintele.",
+    profileLink: "Deschide profilul",
+    installTitle: "Instalează aplicația web (PWA)",
+    androidTitle: "Aplicația Android",
+    androidBody: "Descarcă aplicația Android (APK), cu codul QR și pașii de instalare.",
+    androidLink: "Aplicația Android",
+    helpTitle: "Ajutor",
+    helpBody: "Ghidul de utilizare și întrebările frecvente.",
+    helpLink: "Deschide ghidul",
+    privacyTitle: "Datele mele",
+    privacyBody: "Descarcă toate datele contului sau șterge contul.",
+    privacyLink: "Datele mele",
+    statsTitle: "Statistici",
+    statsBody: "Utilizarea aplicației (doar pentru administrator), fără date financiare.",
+    statsLink: "Deschide statisticile",
+  },
+  // Faza 9 (F9-B, ADR 0021): exportul GDPR și ștergerea contului.
+  privacy: {
+    title: "Datele mele",
+    eyebrow: "Setări",
+    exportTitle: "Descarcă datele tale",
+    exportBody:
+      "O arhivă ZIP cu tot ce ține de contul tău: profilul, gospodăriile, conturile, tranzacțiile (JSON și CSV), bugetele, obiectivele, recurențele, bonurile încărcate de tine (cu fișierele lor), împărțirile și decontările în care ești parte. Doar ce vezi și în aplicație; fără parole sau tokenuri.",
+    exportButton: "Descarcă arhiva",
+    exportHint: "Cel mult 3 descărcări pe oră. Arhiva poate fi mare dacă ai multe bonuri.",
+    deleteTitle: "Șterge contul",
+    deleteBody:
+      "Ștergerea e imediată și NU poate fi anulată. Descarcă întâi arhiva dacă vrei să-ți păstrezi datele.",
+    loading: "Se încarcă…",
+    loadError: "Nu am putut verifica ce se întâmplă la ștergere. Reîncarcă pagina.",
+    deletedList: "Se șterg, cu toate datele și fișierele lor (ești singurul membru):",
+    leftList:
+      "Ieși din aceste gospodării; conturile tale personale de acolo se șterg, datele comune rămân celorlalți membri:",
+    unsettled: "ai solduri nedecontate: rămân în istoricul celorlalți",
+    blockedList:
+      "Ești ultimul proprietar în aceste gospodării cu alți membri. Transferă întâi rolul de proprietar (pagina Familie), apoi revino:",
+    familyLink: "Mergi la Familie",
+    history:
+      "Împărțirile și decontările cu alți membri rămân în istoricul lor, sub numele „Cont șters”.",
+    password: "Parola curentă",
+    noPassword:
+      "Contul tău nu are parolă: pentru siguranță, ștergerea cere o autentificare din ultimele 15 minute.",
+    confirmLabel: "Scrie ȘTERGE ca să confirmi",
+    confirmWord: "ȘTERGE",
+    confirmMismatch: "Scrie exact ȘTERGE (cu majuscule și diacritice).",
+    submit: "Șterge definitiv contul",
+    submitting: "Se șterge…",
+    wrongPassword: "Parola nu e corectă.",
+    reauth: "Autentifică-te din nou (deconectare și conectare), apoi reia ștergerea în 15 minute.",
+    lastOwner: "Ești ultimul proprietar al unei gospodării cu alți membri: transferă întâi rolul.",
+    platformAdmin:
+      "Ești administratorul platformei: contul nu se poate șterge din aplicație. Operatorul desemnează întâi alt administrator.",
+    error: "Contul nu a putut fi șters. Încearcă din nou.",
+  },
+  // Faza 9 (F9-B, master prompt 6.5): pagina „Statistici” a administratorului.
+  stats: {
+    title: "Statistici",
+    eyebrow: "Administrare",
+    intro:
+      "Date agregate despre utilizarea aplicației, din instalări, sesiuni și evenimentele de utilizare (cu acordul fiecărui utilizator). Nicio sumă, descriere sau alt conținut financiar.",
+    active: "Utilizatori activi",
+    platform: "Platforma",
+    day: "Ziua",
+    daily: "Azi (24 h)",
+    weekly: "7 zile",
+    monthly: "30 de zile",
+    sessions: "Sesiuni (toate platformele)",
+    expiredSessions: "Sesiuni expirate necurățate",
+    installations: "Instalări active (30 de zile)",
+    version: "Versiunea",
+    count: "Număr",
+    status: "Stare",
+    belowMinimum: "sub versiunea minimă",
+    outdated: "nu e ultima",
+    current: "la zi",
+    downloads: "Descărcări APK (pagina FINET)",
+    source: "Sursa",
+    logins: "Conectări pe zi (30 de zile)",
+    features: "Utilizarea funcțiilor (30 de zile)",
+    event: "Evenimentul",
+    screens: "Ecranele cele mai folosite",
+    screen: "Ecranul",
+    errors: "Erori frecvente (30 de zile)",
+    errorCode: "Codul",
+    ai: "AI (30 de zile)",
+    provider: "Furnizorul",
+    result: "Rezultatul",
+    avgDuration: "Durata medie",
+    aiCost: "Costul AI estimat (de operare)",
+    month: "Luna",
+    cost: "Cost",
+    archived: (n: number) => `Evenimente mai vechi de 13 luni, agregate pe zi și versiune: ${n}.`,
+    members: "Membri",
+    member: "Membru",
+    lastSeen: "Ultima activitate",
+    never: "—",
+    empty: "Nu există date încă.",
+    latestAndroid: (v: string, code: number, min: number) =>
+      `Ultima versiune Android: ${v} (build ${code}); minimă: build ${min}.`,
+    noAndroid: "Nu există o versiune Android publicată.",
+    loginFailures:
+      "Eșecurile de autentificare nu se înregistrează încă agregat (doar limitarea ratei); descărcările de pe GitHub nu sunt citite (fără acces la API-ul GitHub).",
+  },
+  android: {
+    title: "Aplicația Android",
+    eyebrow: "Setări",
+    unavailable:
+      "Nu există încă o versiune Android publicată. Revino după ce administratorul o publică.",
+    version: "Versiunea",
+    published: "Publicată",
+    size: "Dimensiune",
+    sha256: "Suma SHA-256",
+    notes: "Ce e nou",
+    download: "Descarcă APK-ul",
+    qrTitle: "Cod QR",
+    qrHint: "Scanează codul cu camera telefonului ca să deschizi același link de descărcare.",
+    qrLabel: (version: string) => `Cod QR pentru descărcarea FINET ${version}`,
+    stepsTitle: "Pași de instalare",
+    steps: [
+      "Pe telefon, pornește Cloudflare One (WARP): fără el, aplicația nu se poate conecta la FINET.",
+      "Descarcă APK-ul (butonul de mai sus sau codul QR).",
+      "Opțional, verifică suma SHA-256 a fișierului descărcat: trebuie să fie identică cu cea de mai sus.",
+      "Deschide fișierul. Android cere permisiunea „Instalează aplicații necunoscute” pentru browser sau pentru aplicația Fișiere: acord-o doar pentru această instalare.",
+      "Confirmă instalarea, apoi deschide FINET și autentifică-te cu contul tău.",
+      "La o versiune nouă, aplicația te anunță; instalarea o confirmi tot tu.",
+    ],
+    minSupported: (code: number) =>
+      `Versiunile mai vechi decât build-ul ${code} trebuie actualizate.`,
+  },
+  help: {
+    title: "Ajutor",
+    eyebrow: "Ghid FINET",
+    intro: "Pașii principali pentru a folosi FINET și răspunsuri la întrebările frecvente.",
+    tocLabel: "Cuprins",
+    soon: "în curând",
+    sections: [
+      {
+        id: "conturi",
+        title: "Conturi",
+        body: [
+          "Adaugă conturile gospodăriei din pagina Conturi, fiecare cu tipul și moneda lui.",
+          "Soldul unui cont se calculează din tranzacții; un cont arhivat nu mai apare în formulare, dar istoricul rămâne.",
+        ],
+      },
+      {
+        id: "tranzactii",
+        title: "Tranzacții și transferuri",
+        body: [
+          "Adaugă o cheltuială sau un venit din Tranzacții → Adaugă; alege contul, categoria și data.",
+          "Mutarea banilor între conturile tale e un transfer (nu o cheltuială): Tranzacții → Transfer.",
+          "Plățile care se repetă (chirie, abonamente) se definesc o singură dată în Recurențe.",
+        ],
+      },
+      {
+        id: "bonuri",
+        title: "Bonuri fiscale",
+        body: [
+          "Din Scanează (pe telefon) sau Import, fotografiază bonul sau alege poza ori PDF-ul. Un bon lung se fotografiază în 2–4 bucăți, în modul „bon lung”.",
+          "Dacă ai activat citirea cu AI (Profil), bonul e citit automat și apare în Bonuri ca „De verificat”; tu confirmi suma și categoria.",
+          "Fără semnal în magazin: pozele se păstrează pe telefon și se încarcă singure când revine conexiunea (vezi întrebările de mai jos).",
+        ],
+      },
+      {
+        id: "extrase",
+        title: "Extrase bancare",
+        body: [
+          "Din Import → „Extras bancar”, alege contul și încarcă extrasul: PDF (BT, BRD, Raiffeisen, Revolut), CSV sau Excel de la orice bancă (alegi tu coloanele) ori un ZIP.",
+          "Previzualizarea arată rândurile, duplicatele (care nu se mai importă) și dacă soldurile se potrivesc; abia confirmarea creează tranzacțiile. Un import se poate anula din Extrase.",
+          "Pagina „Acoperire extrase” arată lunile acoperite pe fiecare cont, iar bonurile se pot lega de tranzacția din extras (Bonuri → Potriviri).",
+        ],
+      },
+      {
+        id: "familie",
+        title: "Familie",
+        body: [
+          "Din pagina Familie, proprietarul gospodăriei invită membri cu un link de unică folosință.",
+          "O cheltuială comună se poate împărți între membri; soldurile arată cine cui datorează, iar decontările le închid.",
+          "Dacă faci parte din mai multe gospodării, alegi gospodăria activă din partea de sus a paginii.",
+        ],
+      },
+      {
+        id: "instalare",
+        title: "Instalează aplicația (PWA)",
+        body: [
+          "Android (Chrome, Edge, Samsung Internet): deschide FINET, apoi apasă „Instalează” în invitația din aplicație sau din meniul browserului → „Instalează aplicația” / „Adaugă pe ecranul de pornire”.",
+          "iPhone și iPad (Safari): deschide FINET, apasă butonul Partajează, apoi „Adaugă pe ecranul principal” și „Adaugă”.",
+          "Calculator (Chrome, Edge): pictograma de instalare din bara de adrese.",
+          "Aplicația instalată folosește același cont; datele nu se păstrează pe telefon, în afară de pozele scanate fără semnal, până la încărcare.",
+          "Există și o aplicație Android nativă: Setări → Aplicația Android.",
+        ],
+      },
+    ],
+    faqTitle: "Întrebări frecvente",
+    faq: [
+      {
+        q: "Ce se întâmplă cu bonurile scanate fără internet?",
+        a: "Rămân pe dispozitiv (în browser), apar în Import ca „În așteptare (offline)” și se încarcă automat când revine conexiunea. Se șterg de pe dispozitiv doar după ce serverul confirmă primirea. Dacă un bon nu poate fi încărcat (de exemplu e prea mare), rămâne vizibil, cu motivul și butonul „Șterge”.",
+      },
+      {
+        q: "Se pot încărca de două ori aceleași poze?",
+        a: "Nu: serverul recunoaște o poză deja încărcată și nu creează un document nou.",
+      },
+      {
+        q: "Ce rămâne pe telefon după deconectare?",
+        a: "Nimic din datele tale: la deconectare se șterg și pozele în așteptare. Aplicația păstrează doar fișierele ei (cod, iconițe, pagina „fără conexiune”).",
+      },
+      {
+        q: "De ce văd pagina „Nu există conexiune la internet”?",
+        a: "Telefonul nu are rețea sau nu ajunge la server. Datele financiare nu sunt disponibile offline; revino când ai conexiune.",
+      },
+      {
+        q: "Cine îmi vede tranzacțiile?",
+        a: "Membrii gospodăriei active văd tranzacțiile din conturile comune; conturile personale le vezi doar tu.",
+      },
+      {
+        q: "Cum renunț la citirea bonurilor cu AI?",
+        a: "Din Profil, dezactivează acordul pentru citirea cu AI. Bonurile noi se încarcă, dar le completezi manual.",
+      },
+    ],
   },
   common: {
     loading: "Se încarcă…",

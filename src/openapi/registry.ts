@@ -28,6 +28,12 @@ import {
 } from "@/modules/transactions/transactions.schema";
 import { transferCreateSchema, transferUpdateSchema } from "@/modules/transfers/transfers.schema";
 import { appEventsBatchSchema, consentsPutSchema } from "@/modules/usage/usage.schema";
+import { usageStatsSchema } from "@/modules/usage/stats.schema";
+import {
+  deleteAccountSchema,
+  deletionPreviewSchema,
+  deletionResultSchema,
+} from "@/modules/gdpr/gdpr.schema";
 import { DOCUMENT_STATUSES, RECEIPT_STATUSES } from "@/db/schema";
 import { receiptConfirmSchema, receiptPatchSchema } from "@/modules/receipts/receipts.schema";
 import { matchDecisionSchema } from "@/modules/matching/matching.schema";
@@ -61,6 +67,7 @@ import {
   splitSchema,
   accountSchema,
   aiUsageSchema,
+  androidReleaseSchema,
   budgetSchema,
   documentSchema,
   receiptConfirmResultSchema,
@@ -112,6 +119,8 @@ export type Operation = Readonly<{
   summary: string;
   description?: string;
   query?: readonly QueryParam[];
+  /** Antete opționale specifice operației (Faza 9: proprietarul așteptat la încărcare). */
+  headers?: readonly Readonly<{ name: string; description: string }>[];
   /** Corpul JSON (dacă există). `optional`: se poate trimite fără corp și fără Content-Type. */
   body?: Readonly<{ schema: z.ZodType; optional?: boolean }>;
   /** Corpul `multipart/form-data` (încărcarea documentelor, Faza 6): câmpuri text + fișiere. */
@@ -328,6 +337,65 @@ export const OPERATIONS: readonly Operation[] = [
     },
     errors: [...MUTATION_ERRORS],
   },
+  // --- GDPR (Faza 9, ADR 0021) ---------------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/me/export",
+    operationId: "exportMyData",
+    tag: "me",
+    summary: "Exportul complet al datelor contului: arhivă ZIP în flux.",
+    description:
+      "JSON (profil, preferințe, consimțăminte, sesiuni fără tokenuri, instalări, evenimente; pe fiecare gospodărie: conturi, categorii, etichete, tranzacții și în CSV, bugete, obiective, recurențe, bonurile încărcate de utilizator cu liniile lor, împărțirile și decontările în care e parte, acțiunile lui din audit) și fișierele originale ale bonurilor lui. Doar ce vede utilizatorul (RLS: conturile personale ale altor membri nu apar). Fără parole, tokenuri sau chei. Cu cookie: doar `Sec-Fetch-Site: same-origin` sau `none` (altfel 403); 3 exporturi pe oră. Arhiva fără ZIP64: dacă estimarea (fișierele bonurilor + tranzacțiile) depășește 4 GiB sau 65 535 de intrări, 413 `export_too_large` înainte de orice octet.",
+    success: {
+      status: 200,
+      schema: null,
+      binary: ["application/zip"],
+      description: "Arhiva `finet-export.zip`.",
+    },
+    errors: [VALIDATION, FORBIDDEN, TOO_LARGE],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/me/deletion",
+    operationId: "getDeletionPreview",
+    tag: "me",
+    summary: "Ce s-ar întâmpla la ștergerea contului (fără sume).",
+    description:
+      "`deletedHouseholds`: gospodăriile în care utilizatorul e singurul membru (se șterg cu toate datele și fișierele). `leftHouseholds`: cele din care iese (`unsettled`: are solduri nedecontate, care rămân în istoricul celorlalți). `blockedHouseholds`: cele în care e ultimul proprietar și mai există alți membri — ștergerea e refuzată până transferă rolul.",
+    success: {
+      status: 200,
+      schema: dataOf(deletionPreviewSchema),
+      description: "Previzualizarea.",
+    },
+    errors: [VALIDATION],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/me/delete",
+    operationId: "deleteMyAccount",
+    tag: "me",
+    summary: "Șterge contul (ireversibil): parola curentă + confirmarea `ȘTERGE`.",
+    description:
+      "Conturile fără parolă (doar magic link) cer o sesiune creată în ultimele 15 minute (altfel 403 `reauth_required`). 400 `invalid_password` la parola greșită; 409 `last_owner` dacă e ultimul proprietar al unei gospodării cu alți membri; 409 `platform_admin` pentru administratorul platformei (bootstrap-ul e irepetabil). Conturile personale ale utilizatorului se șterg (nu devin comune); rândul utilizatorului se șterge sau, dacă e referit de împărțiri/decontări din istoricul altora, se anonimizează (`outcome: anonymized`). Sesiunile se închid.",
+    body: { schema: deleteAccountSchema },
+    success: {
+      status: 200,
+      schema: dataOf(deletionResultSchema),
+      description: "Contul a fost șters.",
+    },
+    errors: [...MUTATION_ERRORS, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/admin/stats",
+    operationId: "getUsageStats",
+    tag: "admin",
+    summary: "Statisticile de utilizare (6.5), doar pentru administratorul platformei.",
+    description:
+      "Utilizatori activi (zi/săptămână/lună, pe platformă; din instalări și sesiuni), instalări pe versiune (cu `belowMinimum`/`outdated` față de ultima versiune Android), descărcări, login-uri pe zi, evenimente și ecrane, erori pe versiune, apeluri AI și costul lunar de operare, evenimentele arhivate (agregate după 13 luni). `members` (nume, ultima activitate, platformă, versiune) doar în modul `personal`. Nicio informație financiară a utilizatorilor. Altcineva decât administratorul: 403.",
+    success: { status: 200, schema: dataOf(usageStatsSchema), description: "Statisticile." },
+    errors: [VALIDATION, FORBIDDEN],
+  },
   // --- Statistici de utilizare (6.5) ---------------------------------------------------------
   {
     method: "POST",
@@ -340,6 +408,22 @@ export const OPERATIONS: readonly Operation[] = [
     body: { schema: appEventsBatchSchema },
     success: { status: 204, schema: null, description: "Primit." },
     errors: [...MUTATION_ERRORS],
+  },
+  // --- Aplicația Android (Faza 9; promptul Android 12.1) --------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/app/android/latest",
+    operationId: "getAndroidLatest",
+    tag: "app",
+    summary: "Ultima versiune publicată a aplicației Android (metadate, fără APK).",
+    description:
+      "Datele vin din configurația serverului (fișierul `<STORAGE_DIR>/app/android-latest.json`, scris de operator), nu din cod. Fără versiune publicată sau cu un fișier invalid: 404 `android_release_unavailable`. Aplicația cheamă endpointul cel mult o dată pe zi; dacă `versionCode` e mai mare decât cel instalat, anunță versiunea nouă; sub `minSupportedVersionCode` cere actualizarea.",
+    success: {
+      status: 200,
+      schema: dataOf(androidReleaseSchema),
+      description: "Versiunea curentă.",
+    },
+    errors: [VALIDATION, NOT_FOUND],
   },
   // --- Gospodăriile --------------------------------------------------------------------------
   {
@@ -843,7 +927,19 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "documents",
     summary: "Încarcă 1–4 bonuri (poze JPEG/PNG/WebP sau PDF), opțional ca bon lung.",
     description:
-      "`multipart/form-data`, citit în flux. Tipul se detectează după conținut (nu după extensie sau `Content-Type`); HEIC/HEIF → 415 `heic_unsupported`; SVG/HTML/alte tipuri → 415. Plafoane: `MAX_UPLOAD_MB` pe fișier (implicit 10), ≤ 4 fișiere, pixeli, pagini PDF. Același fișier (SHA-256) → documentul existent (`duplicate: true`, 200), fără limită. Limita zilnică (409 `daily_document_limit`), cota (409 `storage_quota_exceeded`), bon lung cu o poză deja încărcată (409 `long_receipt_duplicate`), extrase (400, Faza 7). Starea inițială: `queued` cu consimțământul `externalAi`, altfel `awaiting_consent`. Ruta e exclusă din proxy-ul Next (ca fluxul să nu fie copiat în memorie), cu aceeași verificare Cloudflare Access. Fără `Idempotency-Key`: idempotentă prin SHA-256. Limită proprie de cereri (429).",
+      "`multipart/form-data`, citit în flux. Tipul se detectează după conținut (nu după extensie sau `Content-Type`); HEIC/HEIF → 415 `heic_unsupported`; SVG/HTML/alte tipuri → 415. Plafoane: `MAX_UPLOAD_MB` pe fișier (implicit 10), ≤ 4 fișiere, pixeli, pagini PDF. Același fișier (SHA-256) → documentul existent (`duplicate: true`, 200), fără limită. Limita zilnică (409 `daily_document_limit`), cota (409 `storage_quota_exceeded`), bon lung cu o poză deja încărcată (409 `long_receipt_duplicate`), extrase (400, Faza 7). Starea inițială: `queued` cu consimțământul `externalAi`, altfel `awaiting_consent`. Ruta e exclusă din proxy-ul Next (ca fluxul să nu fie copiat în memorie), cu aceeași verificare Cloudflare Access. Fără `Idempotency-Key`: idempotentă prin SHA-256 (și reîncercarea exactă a unui bon lung → 200 duplicat). Faza 9 (coada offline): cu `X-FINET-Expected-User` și/sau `X-FINET-Expected-Household`, ambele trebuie să coincidă cu utilizatorul sesiunii și cu gospodăria curentă, altfel 409 `owner_mismatch` (`reason`: `user` sau `household`), înainte de citirea corpului; fără ele nu se verifică nimic în plus. Limită proprie de cereri (429).",
+    headers: [
+      {
+        name: "X-FINET-Expected-User",
+        description:
+          "Opțional (coada offline): id-ul utilizatorului care a făcut scanarea. Dacă unul dintre antetele `X-FINET-Expected-*` e prezent, ambele sunt impuse; nepotrivire → 409 `owner_mismatch` (`reason: user`).",
+      },
+      {
+        name: "X-FINET-Expected-Household",
+        description:
+          "Opțional (coada offline): gospodăria în care a fost făcută scanarea; diferită de gospodăria curentă → 409 `owner_mismatch` (`reason: household`).",
+      },
+    ],
     multipart: {
       description: "Câmpurile text înaintea fișierelor.",
       fields: {
