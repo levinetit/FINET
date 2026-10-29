@@ -152,6 +152,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
+      // Familia (Faza 8): același server și aceeași bază, utilizatorii `family`, `family2`,
+      // `family3`; doar în modul `personal` (în `saas` testul se sare).
+      name: "family",
+      testMatch: /family\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // Doar fixture-ul `request`: nu pornește niciun browser.
       name: "access",
       testMatch: /access\.spec\.ts$/,
