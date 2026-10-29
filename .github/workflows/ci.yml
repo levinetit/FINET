@@ -261,6 +261,8 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
       # Parola utilizatorilor E2E, doar pentru baza temporară a job-ului (nu e un secret real).
       E2E_PASSWORD: e2e-parola-de-test-ci-1
+      # Faza 6: storage-ul comun al serverului de dezvoltare și al workerului (proiectul `receipts`).
+      STORAGE_DIR: .data/e2e-storage
 
     steps:
       - uses: actions/checkout@v7
@@ -293,7 +295,7 @@ jobs:
           MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_test
         run: node dist/tools/migrate.mjs
 
-      # Câte unsprezece utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth`, `ledger`, `planning`, `regressions`, `recurring`); parola din
+      # Câte treisprezece utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth`, `ledger`, `planning`, `regressions`, `recurring`, `receipts`); parola din
       # stdin, niciodată ca argument.
       - name: Utilizatorii E2E (CLI admin)
         env:
@@ -301,7 +303,7 @@ jobs:
         run: |
           set -eu
           for mode in personal saas; do
-            for kind in main parola sesiuni ledger ledger2 seed planning planning2 regresii recurring recurring2; do
+            for kind in main parola sesiuni ledger ledger2 seed planning planning2 regresii recurring recurring2 receipts receipts2; do
               printf '%s\n' "$E2E_PASSWORD" | node dist/tools/admin.mjs create-user \
                 --email "e2e-$kind-$mode@finet.test" --name "E2E $kind" --password-stdin
             done
@@ -313,9 +315,45 @@ jobs:
       - name: Instalează Chromium (Playwright)
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: E2E — modul personal (smoke, auth, ledger, planning, regressions, recurring, access)
+      # Faza 6 (ADR 0015): serverul AI FALS (răspunsuri deterministe, numără cererile) și WORKERUL
+      # real (pg-boss, preprocesarea, pipeline-ul), în fundal, cu secrete FICTIVE. Niciun furnizor
+      # real: AI_ALLOWED_HOSTS permite doar serverul fals de pe loopback.
+      - name: Serverul AI fals și workerul (fundal, pentru proiectul `receipts`)
+        env:
+          FINET_ROLE: worker
+          DATABASE_URL: ""
+          WORKER_DATABASE_URL: postgres://finet_app:finet_app_ci@localhost:5432/finet_test
+          FINET_ALLOW_INSECURE_DB: "1"
+          AI_BASE_URL: http://127.0.0.1:4010/v1
+          AI_ALLOWED_HOSTS: 127.0.0.1:4010
+          AI_API_KEY_FILE: ${{ runner.temp }}/finet-ai-key-fictiv
+          AI_MONTHLY_BUDGET: "5.00"
+          AI_MONTHLY_BUDGET_CURRENCY: USD
+          AI_PRICE_INPUT_PER_MTOK: "0.10"
+          AI_PRICE_OUTPUT_PER_MTOK: "0.40"
+          AI_RESPONSE_FORMAT: json_object
+          AI_DAILY_DOCUMENT_LIMIT: "200"
+        run: |
+          set -eu
+          mkdir -p "$STORAGE_DIR"
+          printf 'sk-e2e-fictiv-0000000000000000\n' > "$AI_API_KEY_FILE"
+          nohup node e2e/ai-mock-server.mjs > "$RUNNER_TEMP/ai-mock.log" 2>&1 &
+          nohup node dist/tools/worker.mjs > "$RUNNER_TEMP/worker.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:4010/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4010/health
+          for i in $(seq 1 60); do
+            grep -q '"event":"started"' "$RUNNER_TEMP/worker.log" && break
+            sleep 1
+          done
+          grep -q '"event":"started"' "$RUNNER_TEMP/worker.log" || { cat "$RUNNER_TEMP/worker.log"; exit 1; }
+
+      - name: E2E — modul personal (smoke, auth, ledger, planning, regressions, recurring, receipts, access)
         env:
           E2E_APP_MODE: personal
+          E2E_AI_MOCK_URL: http://127.0.0.1:4010
         run: pnpm test:e2e
 
       - name: E2E — modul saas (smoke, auth, ledger, planning, regressions, recurring)
@@ -324,6 +362,12 @@ jobs:
           E2E_SERVER: dev
           APP_MODE: saas
         run: pnpm test:e2e --project=smoke --project=auth --project=ledger --project=planning --project=regressions --project=recurring
+
+      - name: Logurile workerului și ale serverului AI fals (la eșec; fără conținut de bonuri)
+        if: failure()
+        run: |
+          tail -n 200 "$RUNNER_TEMP/worker.log" || true
+          tail -n 50 "$RUNNER_TEMP/ai-mock.log" || true
 
       - name: Raport Playwright (la eșec)
         if: failure()

@@ -133,3 +133,34 @@ test("CORS închis: un preflight din altă origine nu primește Access-Control-A
     [],
   );
 });
+
+// Faza 6 (ADR 0015): `/api/v1/documents` e EXCLUSĂ din matcher-ul proxy-ului (încărcarea în flux),
+// dar ruta refăce aceeași verificare Access: fără JWT, 403 înainte de sesiune și de corp, pe
+// toate metodele; sub-căile trec în continuare prin proxy.
+test("fără JWT Access, încărcarea și lista documentelor dau 403 (ruta exclusă din proxy)", async ({
+  request,
+}) => {
+  const post = await request.post("/api/v1/documents", {
+    multipart: { files: { name: "bon.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(16) } },
+    maxRedirects: 0,
+  });
+  expect(post.status()).toBe(403);
+  expect(await post.json()).toEqual({ error: { code: "forbidden", message: "Acces interzis." } });
+  expect(post.headers()["content-security-policy"]).toMatch(/frame-ancestors 'none'/);
+  expect((await request.get("/api/v1/documents", { maxRedirects: 0 })).status()).toBe(403);
+  const bad = await request.post("/api/v1/documents", {
+    headers: { "Cf-Access-Jwt-Assertion": "a.b.c" },
+    multipart: { files: { name: "bon.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(16) } },
+    maxRedirects: 0,
+  });
+  expect(bad.status()).toBe(403);
+  for (const path of [
+    "/api/v1/documents/7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f",
+    "/api/v1/documents/7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f/file",
+    "/api/v1/receipts",
+    "/import",
+    "/receipts",
+  ]) {
+    expect((await request.get(path, { maxRedirects: 0 })).status(), path).toBe(403);
+  }
+});

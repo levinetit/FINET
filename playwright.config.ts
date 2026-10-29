@@ -8,7 +8,8 @@ import { defineConfig, devices } from "@playwright/test";
  *   `finet_app`), utilizatorii E2E creați cu CLI-ul admin (`e2e/fixtures.ts`) și `E2E_PASSWORD`;
  *   `ledger` (Faza 2: conturi, tranzacții, transferuri, categorii) și `planning` (Faza 3:
  *   dashboard, bugete, obiective, etichete, rapoarte, export CSV), `regressions` (Faza 4) și
- *   `recurring` (Faza 5: plăți recurente) au aceleași cerințe;
+ *   `recurring` (Faza 5: plăți recurente) au aceleași cerințe; `receipts` (Faza 6: bonuri) cere în
+ *   plus workerul și serverul AI fals (`E2E_AI_MOCK_URL`, pornite de CI; altfel sărit);
  *   Modul aplicației: `E2E_APP_MODE=personal|saas` (implicit `personal`); cele două moduri se
  *   rulează unul după altul (două `next dev` în același director s-ar bloca reciproc);
  * - `access` (doar HTTP, fără browser): serverul de producție (`.next/standalone/server.js`,
@@ -46,6 +47,9 @@ const devEnv: Record<string, string> = {
   APP_URL: `http://127.0.0.1:${devPort}`,
   // Secret FICTIV, doar pentru serverul de test (fără cuvintele refuzate de `config.ts`).
   BETTER_AUTH_SECRET: "e2e-local-0123456789abcdefghijklmnopqrstuv",
+  // Faza 6: același director ca workerul pornit de CI (proiectul `receipts`).
+  STORAGE_DIR: process.env.STORAGE_DIR || ".data/e2e-storage-dev",
+  AI_DAILY_DOCUMENT_LIMIT: process.env.AI_DAILY_DOCUMENT_LIMIT || "200",
 };
 const prodEnv: Record<string, string> = {
   ...(process.env as Record<string, string>),
@@ -138,6 +142,13 @@ export default defineConfig({
       // `recurring2` (izolarea).
       name: "recurring",
       testMatch: /recurring\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      // Bonurile (Faza 6): același server și aceeași bază, plus WORKERUL și SERVERUL AI FALS
+      // (`e2e/ai-mock-server.mjs`), pornite de CI în fundal (`E2E_AI_MOCK_URL`); fără ele, sărit.
+      name: "receipts",
+      testMatch: /receipts\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
