@@ -2,7 +2,11 @@ import "server-only";
 
 import { ConfigError, parseConfig } from "@/lib/config";
 
+import { LocalStorage } from "@/lib/storage";
+
 import { PgTlsConfigError } from "./boss";
+import { DEFAULT_PREPROCESS_TIMEOUT_MS } from "./receipts/preprocess";
+import { aiRuntimeFromConfig } from "./receipts/receipt-jobs";
 import { type RunningWorker, errorCode, startWorker } from "./main";
 
 /**
@@ -39,6 +43,26 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
       databaseCa: config.database.ca,
       allowInsecure: config.database.allowInsecure,
       log,
+      // Bonurile (Faza 6): storage-ul DOAR citire (montaj read-only în compose; ADR 0013) și
+      // furnizorul AI (`null` dacă AI_BASE_URL/AI_API_KEY_FILE lipsesc: introducere manuală).
+      receipts:
+        config.storage.driver === "local"
+          ? {
+              storage: new LocalStorage(config.storage.dir, { readOnly: true }),
+              limits: {
+                maxImagePixels: config.documents.maxImagePixels,
+                maxPdfPages: config.documents.maxPdfPages,
+                timeoutMs: DEFAULT_PREPROCESS_TIMEOUT_MS,
+                duplicateMaxDistance: config.documents.duplicateMaxDistance,
+              },
+              ai: aiRuntimeFromConfig(config),
+            }
+          : undefined,
+    });
+    log({
+      event: "receipts",
+      enabled: config.storage.driver === "local",
+      ai: config.ai.baseUrl !== null && config.ai.apiKey !== null,
     });
     io.onSignal(worker.stop);
     return { code: 0, worker };

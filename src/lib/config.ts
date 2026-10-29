@@ -85,6 +85,35 @@ export type AccessConfig = Readonly<{
   aud: string | null;
 }>;
 
+/**
+ * Furnizorul AI (Faza 6, F6-B; master prompt 3.6; ADR 0014): LiteLLM-ul de pe gazdă, compatibil
+ * OpenAI. Alias-urile modelelor stau în configurația LiteLLM, nu în cod.
+ */
+export type AiConfig = Readonly<{
+  /** Documente procesate cu AI pe zi, per gospodărie. */
+  dailyDocumentLimit: number;
+  /** Bugetul lunar global pentru furnizorii AI externi (0 = fără AI extern). */
+  monthlyBudget: Money;
+  /** `AI_BASE_URL` (de exemplu `http://172.88.88.4:4000/v1`); `null` = AI neconfigurat. */
+  baseUrl: string | null;
+  /** `AI_ALLOWED_HOSTS`: gazdele (`host` sau `host:port`) permise pentru `AI_BASE_URL`. */
+  allowedHosts: readonly string[];
+  /** Cheia virtuală LiteLLM, DOAR din `AI_API_KEY_FILE` și doar pentru `FINET_ROLE=worker`. */
+  apiKey: string | null;
+  /** `AI_VISION_MODEL` (implicit `finet-vision-external`). */
+  visionModel: string;
+  /** `AI_TEXT_MODEL` (implicit `finet-text-external`). */
+  textModel: string;
+  /** Termenul unei încercări (`AI_TIMEOUT_MS`, implicit 60 000). */
+  timeoutMs: number;
+  /** Reîncercări după prima încercare (`AI_MAX_RETRIES`, 0..3, implicit 2). */
+  maxRetries: number;
+  /** Sub acest scor (0..100), bonul trece „De verificat” (`AI_CONFIDENCE_THRESHOLD`, implicit 80). */
+  confidenceThreshold: number;
+  /** Tarifele pentru estimarea costului, în unități minore ale monedei bugetului per 1M tokeni. */
+  pricing: Readonly<{ inputPerMTokMinor: bigint; outputPerMTokMinor: bigint }>;
+}>;
+
 export type RateLimitRule = Readonly<{ max: number; windowSeconds: number }>;
 
 export type AuthConfig = Readonly<{
@@ -143,12 +172,7 @@ export type Config = Readonly<{
   /** Token intern opțional pentru `/api/health` detaliat fără JWT Access (monitorizare). */
   healthToken: string | null;
   auth: AuthConfig;
-  ai: Readonly<{
-    /** Documente procesate cu AI pe zi, per gospodărie. */
-    dailyDocumentLimit: number;
-    /** Bugetul lunar global pentru furnizorii AI externi (0 = fără AI extern). */
-    monthlyBudget: Money;
-  }>;
+  ai: AiConfig;
   notify: Readonly<{
     telegram: Readonly<{ botToken: string; chatId: string }> | null;
     smtp: Readonly<{
@@ -261,6 +285,43 @@ const envSchema = z.object({
   AI_DAILY_DOCUMENT_LIMIT: nonNegativeInt,
   AI_MONTHLY_BUDGET: z.string().max(40).optional(),
   AI_MONTHLY_BUDGET_CURRENCY: z.enum(CURRENCIES).optional(),
+  AI_BASE_URL: z
+    .url({ protocol: /^https?$/ })
+    .max(300)
+    .optional(),
+  AI_ALLOWED_HOSTS: z
+    .string()
+    .max(1000)
+    .regex(/^[a-z0-9.:\-]+(?:,[a-z0-9.:\-]+)*$/)
+    .optional(),
+  AI_API_KEY: z
+    .string()
+    .min(8)
+    .max(512)
+    .regex(/^[\x21-\x7e]+$/)
+    .optional(),
+  AI_VISION_MODEL: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9._:/-]{0,99}$/)
+    .optional(),
+  AI_TEXT_MODEL: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9._:/-]{0,99}$/)
+    .optional(),
+  AI_TIMEOUT_MS: z
+    .string()
+    .regex(/^[1-9]\d{2,5}$/)
+    .optional(),
+  AI_MAX_RETRIES: z
+    .string()
+    .regex(/^[0-3]$/)
+    .optional(),
+  AI_CONFIDENCE_THRESHOLD: z
+    .string()
+    .regex(/^(?:100|[1-9]?\d)$/)
+    .optional(),
+  AI_PRICE_INPUT_PER_MTOK: z.string().max(40).optional(),
+  AI_PRICE_OUTPUT_PER_MTOK: z.string().max(40).optional(),
 
   NOTIFY_TELEGRAM_BOT_TOKEN: optionalString,
   NOTIFY_TELEGRAM_CHAT_ID: z
@@ -312,6 +373,16 @@ const DEFAULTS = {
   // 0 = fără furnizori AI externi până când operatorul alege altfel (Faza 6).
   aiMonthlyBudget: "0",
   aiMonthlyBudgetCurrency: "USD",
+  // Furnizorul AI (F6-B, ADR 0014): LiteLLM-ul de pe gazdă, pe rețeaua `apps`.
+  aiAllowedHosts: "172.88.88.4:4000",
+  aiVisionModel: "finet-vision-external",
+  aiTextModel: "finet-text-external",
+  aiTimeoutMs: 60_000,
+  aiMaxRetries: 2,
+  aiConfidenceThreshold: 80,
+  // Tarife pesimiste (decizia mea), în moneda bugetului per 1M tokeni; operatorul le ajustează.
+  aiPriceInputPerMTok: "0.50",
+  aiPriceOutputPerMTok: "3.00",
   smtpPort: 587,
   // Limitele de autentificare (decizia mea, ADR 0003): încercări pe fereastră.
   loginMax: 5,
@@ -381,6 +452,10 @@ export function parseConfig(
       if (variable !== ROLE_DATABASE_VARIABLE[knownRole]) {
         forbidden.set(variable, `nu e permisă când FINET_ROLE=${knownRole}`);
       }
+    }
+    // Cheia AI (F6-B): doar workerul apelează furnizorul; celelalte roluri nu deschid fișierul.
+    if (knownRole !== "worker") {
+      forbidden.set("AI_API_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
     }
   }
   const secrets = knownRole
@@ -546,6 +621,49 @@ export function parseConfig(
     issues.push({ variable: "AI_MONTHLY_BUDGET", problem: "nu e o sumă validă" });
   }
 
+  // Furnizorul AI (F6-B, ADR 0014). Cheia: DOAR din fișier (`AI_API_KEY_FILE`, secretul Docker
+  // `finet_litellm_key`) și doar în rolul worker; valoarea în clar în mediu e refuzată.
+  if (e.AI_API_KEY !== undefined) {
+    if (!secrets.fromFile.has("AI_API_KEY")) {
+      issues.push({ variable: "AI_API_KEY", problem: "se dă doar prin AI_API_KEY_FILE" });
+    } else if (role !== "worker") {
+      issues.push({ variable: "AI_API_KEY_FILE", problem: `nu e permisă când FINET_ROLE=${role}` });
+    }
+  }
+  const aiAllowedHosts = (e.AI_ALLOWED_HOSTS ?? DEFAULTS.aiAllowedHosts).split(",");
+  if (e.AI_BASE_URL !== undefined) {
+    let host: string | null = null;
+    try {
+      const u = new URL(e.AI_BASE_URL);
+      if (u.username === "" && u.password === "" && u.search === "" && u.hash === "") {
+        host = u.host.toLowerCase();
+      }
+    } catch {
+      host = null;
+    }
+    if (host === null || !aiAllowedHosts.includes(host)) {
+      issues.push({ variable: "AI_BASE_URL", problem: "gazda nu e în AI_ALLOWED_HOSTS" });
+    }
+  }
+  const pricing: { inputPerMTokMinor: bigint; outputPerMTokMinor: bigint } = {
+    inputPerMTokMinor: 0n,
+    outputPerMTokMinor: 0n,
+  };
+  for (const [variable, key, fallback] of [
+    ["AI_PRICE_INPUT_PER_MTOK", "inputPerMTokMinor", DEFAULTS.aiPriceInputPerMTok],
+    ["AI_PRICE_OUTPUT_PER_MTOK", "outputPerMTokMinor", DEFAULTS.aiPriceOutputPerMTok],
+  ] as const) {
+    try {
+      pricing[key] = parseAmount(e[variable] ?? fallback, budgetCurrency).amountMinor;
+    } catch {
+      issues.push({ variable, problem: "nu e o sumă validă" });
+    }
+  }
+  const aiTimeoutMs = e.AI_TIMEOUT_MS ? Number.parseInt(e.AI_TIMEOUT_MS, 10) : DEFAULTS.aiTimeoutMs;
+  if (aiTimeoutMs < 1000 || aiTimeoutMs > 300_000) {
+    issues.push({ variable: "AI_TIMEOUT_MS", problem: "în afara intervalului 1000–300000" });
+  }
+
   // Notificări: Telegram cere ambele variabile; SMTP cere gazda și expeditorul.
   if ((e.NOTIFY_TELEGRAM_BOT_TOKEN === undefined) !== (e.NOTIFY_TELEGRAM_CHAT_ID === undefined)) {
     issues.push({
@@ -656,6 +774,15 @@ export function parseConfig(
     ai: Object.freeze({
       dailyDocumentLimit: int(e.AI_DAILY_DOCUMENT_LIMIT, DEFAULTS.aiDailyDocumentLimit),
       monthlyBudget,
+      baseUrl: e.AI_BASE_URL ?? null,
+      allowedHosts: Object.freeze(aiAllowedHosts),
+      apiKey: role === "worker" ? (e.AI_API_KEY ?? null) : null,
+      visionModel: e.AI_VISION_MODEL ?? DEFAULTS.aiVisionModel,
+      textModel: e.AI_TEXT_MODEL ?? DEFAULTS.aiTextModel,
+      timeoutMs: aiTimeoutMs,
+      maxRetries: int(e.AI_MAX_RETRIES, DEFAULTS.aiMaxRetries),
+      confidenceThreshold: int(e.AI_CONFIDENCE_THRESHOLD, DEFAULTS.aiConfidenceThreshold),
+      pricing: Object.freeze(pricing),
     }),
     notify: Object.freeze({
       telegram:

@@ -5,11 +5,17 @@ import { TEST_ADMIN_URL } from "@/db/testing";
 import { createAccount } from "@/modules/accounts/accounts.service";
 import { type AuthFixture, createAuthFixture } from "@/modules/auth/testing";
 import { type LedgerFixture, createLedgerFixture } from "@/modules/ledger/testing";
+import { LocalStorage } from "@/lib/storage";
 import { createRecurringRule } from "@/modules/recurring/recurring.service";
 
 import { bossOptions } from "./boss";
 import { GENERATE_CRON, JOB_GENERATE } from "./jobs";
 import { enqueueGenerateNow, startWorker } from "./main";
+import {
+  JOB_RECEIPT_PROCESS,
+  JOB_RECEIPT_SWEEP,
+  RECEIPT_SWEEP_CRON,
+} from "./receipts/receipt-jobs";
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
@@ -132,5 +138,49 @@ describe.skipIf(!TEST_ADMIN_URL)("startWorker (pg-boss real, finet_app)", () => 
     );
     expect(logs.filter((l) => l.event === "boss_error")).toEqual([]);
     expect(JSON.stringify(logs)).not.toContain("Spotify");
+  });
+});
+
+/** Faza 6 (F6-B): cozile bonurilor pe schema reală pg-boss, ca `finet_app`. */
+describe.skipIf(!TEST_ADMIN_URL)("startWorker cu bonurile (pg-boss real)", () => {
+  let fx: AuthFixture;
+  beforeAll(async () => {
+    fx = await createAuthFixture("finet_it_worker_rcpt");
+  });
+  afterAll(async () => {
+    await fx?.close();
+  });
+
+  it("receipt.sweep programat la minut; receipt.process `exclusive`: același document o singură dată în coadă", async () => {
+    const w = await startWorker({
+      databaseUrl: fx.scratch.appUrl,
+      databaseCa: null,
+      allowInsecure: true,
+      log: () => {},
+      receipts: {
+        storage: new LocalStorage("/tmp/finet-nu-exista", { readOnly: true }),
+        limits: {
+          maxImagePixels: 50_000_000,
+          maxPdfPages: 6,
+          timeoutMs: 30_000,
+          duplicateMaxDistance: 6,
+        },
+        ai: null,
+      },
+    });
+    try {
+      const schedules = await w.boss.getSchedules(JOB_RECEIPT_SWEEP);
+      expect(schedules.map((s) => s.cron)).toEqual([RECEIPT_SWEEP_CRON]);
+      const queue = await w.boss.getQueue(JOB_RECEIPT_PROCESS);
+      expect(queue?.policy).toBe("exclusive");
+      // Fără workerul pornit pe coadă între cele două trimiteri: a doua e respinsă (null).
+      await w.boss.offWork(JOB_RECEIPT_PROCESS);
+      const key = "00000000-0000-4000-8000-00000000abcd";
+      const data = { documentId: key, householdId: key };
+      expect(await w.boss.send(JOB_RECEIPT_PROCESS, data, { singletonKey: key })).not.toBeNull();
+      expect(await w.boss.send(JOB_RECEIPT_PROCESS, data, { singletonKey: key })).toBeNull();
+    } finally {
+      await w.stop();
+    }
   });
 });

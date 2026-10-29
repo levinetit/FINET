@@ -115,7 +115,7 @@ export async function categorizeLines(input: CategorizeInput): Promise<LineCateg
   if (pending.length === 0 || input.llm === null || input.categories.length === 0) return out;
 
   const categories = input.categories.slice(0, MAX_LLM_CATEGORIES);
-  const codeToId = new Map(categories.map((c, k) => [`c${k + 1}`, c.id] as const));
+  const codeToId = new Map<string, string>(categories.map((c, k) => [`c${k + 1}`, c.id] as const));
   const asked = pending.slice(0, MAX_LLM_ITEMS);
   const request: CategorizeRequest = {
     items: asked.map((idx) => ({

@@ -167,3 +167,23 @@ export async function selectQueuedDocuments(
     actorUserId: r.actor_user_id,
   }));
 }
+
+/**
+ * Un singur document de procesat (funcția SECURITY DEFINER `queued_document` din 0009): jobul
+ * `receipt.process` re-derivă aici gospodăria și membrul, nu le ia din datele jobului.
+ */
+export async function selectQueuedDocument(
+  tx: DbOrTx,
+  documentId: string,
+): Promise<QueuedDocument | null> {
+  const rows = await tx.execute<{
+    document_id: string;
+    household_id: string;
+    actor_user_id: string;
+  }>(sql`select document_id, household_id, actor_user_id
+           from finet.queued_document(${documentId}::uuid)`);
+  const r = rows[0];
+  return r
+    ? { documentId: r.document_id, householdId: r.household_id, actorUserId: r.actor_user_id }
+    : null;
+}

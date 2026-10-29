@@ -666,3 +666,84 @@ describe("DATABASE_CA_FILE", () => {
     expect(c.database.ca).toBe(PEM);
   });
 });
+
+describe("furnizorul AI (F6-B, ADR 0014)", () => {
+  let dir: string;
+  let KEY_FILE: string;
+  const WORKER = {
+    ...DEV,
+    FINET_ROLE: "worker",
+    WORKER_DATABASE_URL: "postgres://finet_app:p@db.exemplu.invalid:5432/postgres",
+    FINET_ALLOW_INSECURE_DB: "1",
+  } as const;
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "finet-ai-key-"));
+    KEY_FILE = join(dir, "finet_litellm_key");
+    writeFileSync(KEY_FILE, "sk-cheie-virtuala-fictiva-0123\n");
+  });
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("valori implicite: LiteLLM de pe gazdă în listă, aliasurile externe, AI neconfigurat fără URL", () => {
+    const c = parseConfig(DEV);
+    expect(c.ai).toMatchObject({
+      baseUrl: null,
+      apiKey: null,
+      allowedHosts: ["172.88.88.4:4000"],
+      visionModel: "finet-vision-external",
+      textModel: "finet-text-external",
+      timeoutMs: 60_000,
+      maxRetries: 2,
+      confidenceThreshold: 80,
+      pricing: { inputPerMTokMinor: 50n, outputPerMTokMinor: 300n },
+    });
+  });
+
+  it("cheia DOAR din AI_API_KEY_FILE și doar în rolul worker", () => {
+    const c = parseConfig({
+      ...WORKER,
+      AI_BASE_URL: "http://172.88.88.4:4000/v1",
+      AI_API_KEY_FILE: KEY_FILE,
+    });
+    expect(c.ai.apiKey).toBe("sk-cheie-virtuala-fictiva-0123");
+    expect(c.ai.baseUrl).toBe("http://172.88.88.4:4000/v1");
+    expect(issuesOf({ ...WORKER, AI_API_KEY: "sk-cheie-in-clar-0123456" })).toEqual(["AI_API_KEY"]);
+    expect(issuesOf({ ...DEV, AI_API_KEY_FILE: KEY_FILE })).toEqual(["AI_API_KEY_FILE"]);
+    // Valoarea cheii nu apare în mesaj.
+    try {
+      parseConfig({ ...WORKER, AI_API_KEY: "sk-cheie-in-clar-0123456" });
+    } catch (e) {
+      expect(String(e)).not.toContain("sk-cheie-in-clar");
+    }
+  });
+
+  it("AI_BASE_URL doar către o gazdă permisă (anti-SSRF); limitele numerice", () => {
+    expect(issuesOf({ ...DEV, AI_BASE_URL: "http://169.254.169.254/latest" })).toEqual([
+      "AI_BASE_URL",
+    ]);
+    expect(issuesOf({ ...DEV, AI_BASE_URL: "http://172.88.88.4:4001/v1" })).toEqual([
+      "AI_BASE_URL",
+    ]);
+    expect(issuesOf({ ...DEV, AI_BASE_URL: "http://u:p@172.88.88.4:4000/v1" })).toEqual([
+      "AI_BASE_URL",
+    ]);
+    expect(issuesOf({ ...DEV, AI_BASE_URL: "ftp://172.88.88.4:4000/" })).toEqual(["AI_BASE_URL"]);
+    expect(
+      parseConfig({
+        ...DEV,
+        AI_ALLOWED_HOSTS: "litellm-apps:4000",
+        AI_BASE_URL: "http://litellm-apps:4000/v1",
+      }).ai.baseUrl,
+    ).toBe("http://litellm-apps:4000/v1");
+    expect(issuesOf({ ...DEV, AI_TIMEOUT_MS: "500" })).toEqual(["AI_TIMEOUT_MS"]);
+    expect(issuesOf({ ...DEV, AI_MAX_RETRIES: "4" })).toEqual(["AI_MAX_RETRIES"]);
+    expect(issuesOf({ ...DEV, AI_CONFIDENCE_THRESHOLD: "101" })).toEqual([
+      "AI_CONFIDENCE_THRESHOLD",
+    ]);
+    expect(issuesOf({ ...DEV, AI_VISION_MODEL: "Model Cu Spatii" })).toEqual(["AI_VISION_MODEL"]);
+    expect(issuesOf({ ...DEV, AI_PRICE_INPUT_PER_MTOK: "0.001" })).toEqual([
+      "AI_PRICE_INPUT_PER_MTOK",
+    ]);
+  });
+});
