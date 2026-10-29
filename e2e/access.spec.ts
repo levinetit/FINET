@@ -182,6 +182,12 @@ test("Faza 9: fișierele PWA și ruta Android cer Access (403 fără JWT, fără
     "/help",
     "/settings/android",
     "/api/v1/app/android/latest",
+    // F9-B (ADR 0021): GDPR și statistici.
+    "/settings/privacy",
+    "/settings/statistics",
+    "/api/v1/me/export",
+    "/api/v1/me/deletion",
+    "/api/v1/admin/stats",
   ]) {
     const response = await request.get(path, { maxRedirects: 0 });
     expect(response.status(), path).toBe(403);

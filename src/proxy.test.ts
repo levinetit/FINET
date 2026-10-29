@@ -333,6 +333,13 @@ describe("FAIL-CLOSED", () => {
         "/settings",
         "/settings/android",
         "/api/v1/app/android/latest",
+        // F9-B (ADR 0021): GDPR și statistici, tot prin Access.
+        "/settings/privacy",
+        "/settings/statistics",
+        "/api/v1/me/export",
+        "/api/v1/me/deletion",
+        "/api/v1/me/delete",
+        "/api/v1/admin/stats",
       ]) {
         await expectForbidden(await call(path));
       }

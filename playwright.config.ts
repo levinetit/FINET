@@ -166,6 +166,19 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL, serviceWorkers: "allow" },
     },
     {
+      // GDPR și statistici (Faza 9, F9-B, ADR 0021): exportul, ștergerea contului (utilizatorul
+      // `gdpr2` dispare), „Statistici” (administratorul = `main` din modul personal).
+      name: "gdpr",
+      testMatch: /gdpr\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      // Accesibilitatea (Faza 9, F9-B): axe-core pe paginile principale, utilizatorul `a11y`.
+      name: "a11y",
+      testMatch: /a11y\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // Doar fixture-ul `request`: nu pornește niciun browser.
       name: "access",
       testMatch: /access\.spec\.ts$/,
