@@ -294,6 +294,26 @@ export const ro = {
         document_rejected: "Fișierul a fost refuzat și nu se poate reciti. Încarcă o poză nouă.",
         export_too_large:
           "Exportul are prea multe rânduri (peste 50.000). Restrânge filtrele, de exemplu la un interval de date mai scurt.",
+        // Faza 8: familia (ADR 0016).
+        last_owner:
+          "Gospodăria trebuie să aibă un proprietar: transferă întâi rolul de proprietar.",
+        household_full: "Gospodăria are deja numărul maxim de membri (6).",
+        sole_member: "Ești singurul membru: gospodăria nu se părăsește, se șterge.",
+        use_leave: "Pentru tine folosește „Părăsește gospodăria”.",
+        same_member: "Alege alt membru.",
+        balance_not_settled: "Există solduri nedecontate: înregistrează întâi decontările.",
+        invite_limit: "Ai creat prea multe invitații azi. Încearcă mâine.",
+        invite_not_active: "Invitația nu mai e activă.",
+        account_owner_change:
+          "Un cont comun nu devine personal, iar unul personal nu trece la alt membru.",
+        transaction_split:
+          "Cheltuiala e împărțită între membri: modifică sau elimină întâi împărțirea.",
+        split_sum_mismatch: "Părțile nu însumează totalul cheltuielii.",
+        split_not_expense: "Doar cheltuielile se împart.",
+        split_requires_personal_account:
+          "Se împart doar cheltuielile plătite din contul tău personal.",
+        split_not_payer: "Doar cine a plătit modifică împărțirea.",
+        settlement_already_cancelled: "Decontarea e deja anulată.",
       } as Record<string, string>,
     },
   },

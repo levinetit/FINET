@@ -10,7 +10,11 @@ import { createAccount } from "@/modules/accounts/accounts.service";
 import { currentHouseholdIdOf } from "@/modules/auth/audit";
 import { resetCleanupForTests } from "@/modules/auth/rate-limit";
 import { sqlState } from "@/modules/ledger/testing";
-import { createTransaction, updateTransaction } from "@/modules/transactions/transactions.service";
+import {
+  createTransaction,
+  deleteTransaction,
+  updateTransaction,
+} from "@/modules/transactions/transactions.service";
 
 import { balancesToJson, splitToJson } from "./family.schema";
 import {
@@ -89,6 +93,17 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
       const list = await listInvites(deps(), users[0]!, hh);
       expect(JSON.stringify(list)).not.toContain(created.token);
       expect(JSON.stringify(list)).not.toContain(row!.token_hash);
+    });
+
+    it("valabilitatea maximă (168 h) se acceptă: expirarea e socotită din ceasul bazei", async () => {
+      const { hh, users } = await family(["Inv168"]);
+      // Ceasul aplicației înaintea bazei nu contează (expirarea o calculează baza).
+      const ahead = { db: f.db, now: () => new Date(Date.now() + 60_000) };
+      const created = await createInvite(ahead, users[0]!, hh, { expiresInHours: 168 });
+      const [row] = await f.admin<{ ok: boolean }[]>`
+        select expires_at = created_at + interval '168 hours' as ok
+          from finet.household_invites where id = ${created.invite.id}`;
+      expect(row?.ok).toBe(true);
     });
 
     it("acceptarea: intră ca membru, invitația e consumată, gospodăria devine activă", async () => {
@@ -498,6 +513,10 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
         (await updateTransaction(deps(), a, hh, transactionId, { description: "Cumpărături" }))
           .description,
       ).toBe("Cumpărături");
+      // Ștergerea unei cheltuieli împărțite: refuzată (ar schimba în tăcere soldurile tuturor).
+      await expect(deleteTransaction(deps(), a, hh, transactionId)).rejects.toMatchObject({
+        reason: "transaction_split",
+      });
       // Ștergerea împărțirii: doar plătitorul.
       await expect(clearTransactionSplit(deps(), b, hh, transactionId)).rejects.toMatchObject({
         reason: "split_not_payer",
@@ -510,6 +529,7 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
       expect(
         (await updateTransaction(deps(), a, hh, transactionId, { amountMinor: 500 })).amountMinor,
       ).toBe(500n);
+      await deleteTransaction(deps(), a, hh, transactionId);
     });
 
     it("reguli: doar cheltuieli din contul PERSONAL al plătitorului, participanți membri", async () => {

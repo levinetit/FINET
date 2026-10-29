@@ -101,14 +101,14 @@ export async function createInvite(
       throw new ConflictError("invite_limit", "Ai creat prea multe invitații azi.");
     }
     const token = generateInviteToken();
-    // `created_at` îl pune baza (now()); expirarea se calculează din ceasul bazei, ca CHECK-ul
+    // `created_at` și `expires_at` le calculează baza (`now()` + ore), ca CHECK-ul
     // `expires_at <= created_at + 168 h` să nu depindă de diferența dintre ceasuri.
     const row = await insertInvite(tx, {
       householdId: m.householdId,
       tokenHash: hashInviteToken(token),
       role,
       createdByUserId: actor.userId,
-      expiresAt: new Date(now.getTime() + hours * 3600 * 1000),
+      hours,
     });
     await insertAudit(tx, actor.userId, m.householdId, {
       action: "household.invite_created",

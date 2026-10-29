@@ -248,6 +248,14 @@ export async function deleteTransaction(
   await inHousehold(deps, actor, householdId, async (tx, m) => {
     const current = await selectTransaction(tx, m.householdId, id, true);
     if (!current) throw new NotFoundError();
+    // Faza 8: ștergerea unei cheltuieli împărțite ar schimba în tăcere soldurile tuturor
+    // (inclusiv după decontări): întâi se elimină împărțirea.
+    if (await hasSplits(tx, m.householdId, id)) {
+      throw new ConflictError(
+        "transaction_split",
+        "Tranzacția e împărțită între membri: elimină întâi împărțirea.",
+      );
+    }
     if (current.transferGroupId) {
       await deleteTransactionRows(tx, m.householdId, { transferGroupId: current.transferGroupId });
       await insertAudit(tx, actor.userId, m.householdId, {

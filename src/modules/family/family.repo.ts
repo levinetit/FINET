@@ -69,7 +69,8 @@ export async function insertInvite(
     tokenHash: string;
     role: HouseholdRole;
     createdByUserId: string;
-    expiresAt: Date;
+    /** Valabilitatea, în ore întregi (1..168), socotită din ceasul BAZEI. */
+    hours: number;
   }>,
 ): Promise<InviteRow> {
   // INSERT cu listă explicită de coloane: aplicația are drept de INSERT doar pe ele (`created_at`
@@ -78,7 +79,7 @@ export async function insertInvite(
     insert into finet.household_invites
       (household_id, token_hash, role, created_by_user_id, expires_at)
     values (${values.householdId}, ${values.tokenHash}, ${values.role},
-            ${values.createdByUserId}, ${values.expiresAt.toISOString()})
+            ${values.createdByUserId}, now() + make_interval(hours => ${values.hours}::int))
     returning id`);
   const [row] = await tx
     .select(inviteColumns)

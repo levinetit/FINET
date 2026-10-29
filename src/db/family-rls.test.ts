@@ -1,17 +1,22 @@
+import { randomUUID } from "node:crypto";
+
 import { type SQL, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { NotFoundError } from "@/lib/authz";
 import { ConflictError } from "@/lib/errors";
 import { createAccount, listAccounts } from "@/modules/accounts/accounts.service";
+import { testConfig } from "@/modules/auth/testing";
 import { createBudget, getBudgetStatuses } from "@/modules/budgets/budgets.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { collectCsv, exportTransactionsCsv } from "@/modules/exports/exports.service";
 import { leaveHousehold } from "@/modules/family/members.service";
+import { createGoal, updateGoal } from "@/modules/goals/goals.service";
 import { type FamilyFixture, createFamilyFixture } from "@/modules/family/testing";
 import { sqlState, systemCategoryId } from "@/modules/ledger/testing";
 import { createRecurringRule, listRecurringRules } from "@/modules/recurring/recurring.service";
 import { selectDueRules } from "@/modules/recurring/recurring.repo";
+import { confirmReceipt } from "@/modules/receipts/receipts.service";
 import { getMonthlyReport } from "@/modules/reports/reports.service";
 import { createTag, getTransactionTagIds } from "@/modules/tags/tags.service";
 import {
@@ -297,6 +302,51 @@ describe.skipIf(!TEST_ADMIN_URL)(
       expect(n?.n).toBe(2);
       // C (vede ambele): transferul e întreg.
       expect((await getTransfer(f.deps, f.C, f.HA, t.id)).id).toBe(t.id);
+    });
+
+    it("obiectivele și bonurile nu se pot lega de contul personal al altuia (404)", async () => {
+      await expect(
+        createGoal(f.deps, f.A, f.HA, {
+          name: "Vacanța",
+          targetMinor: 100_000,
+          currency: "RON",
+          accountId: personalC,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      const goal = await createGoal(f.deps, f.A, f.HA, {
+        name: "Vacanța comună",
+        targetMinor: 100_000,
+        currency: "RON",
+        accountId: common,
+      });
+      await expect(
+        updateGoal(f.deps, f.A, f.HA, goal.id, { accountId: personalC }),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      // Un bon „De verificat” (ca de worker), confirmat de A pe contul personal al lui C: 404.
+      const docId = randomUUID();
+      const [doc] = await f.admin<{ id: string }[]>`
+      insert into finet.documents (id, household_id, uploaded_by_user_id, status, storage_key,
+        detected_mime, size_bytes, sha256)
+      values (${docId}, ${f.HA}, ${f.A.userId}, 'needs_review',
+        ${`households/${f.HA}/documents/${docId}`}, 'image/jpeg', 10, repeat('f', 64))
+      returning id`;
+      const [receipt] = await f.admin<{ id: string }[]>`
+      insert into finet.receipts (household_id, document_id, merchant_name, occurred_on,
+        total_minor, currency, status, confidence, provider_used)
+      values (${f.HA}, ${doc!.id}, 'Magazin', ${day}, 1234, 'RON', 'needs_review', 90, 'external')
+      returning id`;
+      const receiptDeps = { db: f.db, config: testConfig() };
+      await expect(
+        confirmReceipt(receiptDeps, f.A, f.HA, receipt!.id, { accountId: personalC }),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      const [still] = await f.admin<{ transaction_id: string | null }[]>`
+      select transaction_id from finet.receipts where id = ${receipt!.id}`;
+      expect(still?.transaction_id).toBeNull();
+      // Pe contul comun: merge.
+      const ok = await confirmReceipt(receiptDeps, f.A, f.HA, receipt!.id, { accountId: common });
+      const [saved] = await f.admin<{ account_id: string }[]>`
+      select account_id from finet.transactions where id = ${ok.transactionId}`;
+      expect(saved?.account_id).toBe(common);
     });
 
     it("regulile recurente pe contul personal: invizibile altora; generate în numele proprietarului; omise după plecarea lui", async () => {
