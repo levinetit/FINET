@@ -34,9 +34,8 @@ import {
  *    salvează `pages`, `perceptual_hash` și legătura „posibil duplicat” (distanța Hamming ≤
  *    prag; nu blochează nimic). Un document refuzat trece în `rejected` cu un cod stabil.
  *
- * Jobul pg-boss care leagă pașii de AI (F6-B) NU e încă înregistrat în `src/worker/main.ts`:
- * fără pasul următor, un document ar rămâne în `processing`. Funcțiile sunt apelate direct în
- * teste.
+ * Din F6-B, pașii sunt folosiți de pipeline-ul bonului (`receipt-job.ts`), legat de jobul pg-boss
+ * `receipt.process` în `src/worker/main.ts` (ADR 0014).
  */
 
 export type DocumentJobDeps = LedgerDeps &

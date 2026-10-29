@@ -143,6 +143,23 @@ describe("clientul AI pe serverul fals", () => {
     mock.setHandler(() => ({ kind: "status", status: 500 }));
   });
 
+  it("response_format: json_schema strict implicit, json_object sau nimic la cerere", async () => {
+    const schema = { name: "x", schema: { type: "object" } };
+    for (let i = 0; i < 3; i++) mock.enqueue({ kind: "content", content: "{}" });
+    await client().chat({ ...req, jsonSchema: schema });
+    await client().chat({ ...req, jsonSchema: schema, responseFormat: "json_object" });
+    await client().chat({ ...req, jsonSchema: schema, responseFormat: "none" });
+    const types = mock.requests.map(
+      (r) => (r.body?.response_format as { type?: string } | undefined)?.type ?? null,
+    );
+    expect(types).toEqual(["json_schema", "json_object", null]);
+  });
+
+  it("termenul apelantului oprește încercările (fără cerere după termen)", async () => {
+    expect(await code(client().chat(req, { deadline: Date.now() - 1 }))).toMatch(/^timeout/);
+    expect(mock.requests).toHaveLength(0);
+  });
+
   it("buget: o eroare din cârlig oprește apelul înainte de a trimite ceva", async () => {
     const r = client().chat(req, {
       beforeAttempt: async () => {

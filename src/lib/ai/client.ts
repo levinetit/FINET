@@ -43,6 +43,11 @@ export type ChatRequest = Readonly<{
   maxTokens: number;
   /** Schema JSON a răspunsului (`response_format: json_schema`, strict). */
   jsonSchema?: Readonly<{ name: string; schema: Readonly<Record<string, unknown>> }>;
+  /**
+   * Cum se cere JSON-ul (`AI_RESPONSE_FORMAT`): `json_schema` (implicit, structurat strict),
+   * `json_object` (doar JSON) sau `none`. Validarea reală o face oricum Zod, în apelant.
+   */
+  responseFormat?: "json_schema" | "json_object" | "none";
 }>;
 
 export type ChatUsage = Readonly<{ promptTokens: number; completionTokens: number }>;
@@ -138,6 +143,8 @@ export type AiClient = Readonly<{
 export type ChatHooks = Readonly<{
   /** Înaintea fiecărei încercări (rezervarea bugetului); o eroare oprește apelul. */
   beforeAttempt?: (info: AttemptInfo) => Promise<void>;
+  /** Termen absolut (ms epoch) al apelantului, de exemplu termenul documentului. */
+  deadline?: number;
 }>;
 
 export function createAiClient(options: AiClientOptions): AiClient {
@@ -291,7 +298,10 @@ export function createAiClient(options: AiClientOptions): AiClient {
         temperature: 0,
         stream: false,
       };
-      if (request.jsonSchema) {
+      const format = request.responseFormat ?? "json_schema";
+      if (request.jsonSchema && format === "json_object") {
+        payload.response_format = { type: "json_object" };
+      } else if (request.jsonSchema && format === "json_schema") {
         payload.response_format = {
           type: "json_schema",
           json_schema: {
@@ -303,7 +313,10 @@ export function createAiClient(options: AiClientOptions): AiClient {
       }
       const body = JSON.stringify(payload);
       const started = now();
-      const deadline = started + totalTimeoutMs;
+      const deadline = Math.min(
+        started + totalTimeoutMs,
+        hooks.deadline ?? Number.POSITIVE_INFINITY,
+      );
       let last: AiError = new AiError("provider_error");
       for (let i = 0; i <= options.maxRetries; i++) {
         if (i > 0) {

@@ -81,5 +81,6 @@ export function aiRuntimeFromConfig(config: Pick<Config, "ai">): AiRuntime | nul
     pricing: ai.pricing,
     monthlyBudget: ai.monthlyBudget,
     confidenceThreshold: ai.confidenceThreshold,
+    responseFormat: ai.responseFormat,
   };
 }

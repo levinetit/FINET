@@ -26,6 +26,7 @@ import {
   providerOf,
 } from "@/lib/ai";
 import { type Actor, NotFoundError } from "@/lib/authz";
+import { ConflictError } from "@/lib/errors";
 import { localDateOf } from "@/lib/calendar";
 import type { Money } from "@/lib/money";
 import { selectCategories } from "@/modules/categories/categories.repo";
@@ -98,13 +99,30 @@ export type AiRuntime = Readonly<{
   pricing: Pricing;
   monthlyBudget: Money;
   confidenceThreshold: number;
+  /** `AI_RESPONSE_FORMAT` (implicit `json_schema`). */
+  responseFormat?: "json_schema" | "json_object" | "none";
 }>;
+
+/**
+ * Termenul de lucru al unui document (sau al unui bon lung): preprocesarea și toate apelurile AI
+ * se opresc la el (decizia mea: 12 minute, sub termenul de reluare `PROCESSING_STALE_SECONDS` și
+ * sub expirarea jobului, ambele 15 minute): documentul nu e revendicat a doua oară cât timp
+ * primul worker încă lucrează, deci nu se plătește de două ori.
+ */
+export const DOCUMENT_DEADLINE_MS = 12 * 60_000;
+const MAX_UNITS = 100_000_000;
+const MAX_COST_MINOR = 10_000_000_000_000n;
+/** CHECK-ul `receipt_lines_position_range` (un bon lung unit poate avea până la 4 × 500). */
+const MAX_STORED_LINES = 500;
+const MAX_REPORTED_REMOVED = 100;
 
 export type ReceiptJobDeps = DocumentJobDeps &
   Readonly<{
     /** `null` = AI neconfigurat (bonul ajunge „De verificat” pentru introducere manuală). */
     ai: AiRuntime | null;
     now?: () => Date;
+    /** Doar teste: alt termen al documentului (implicit `DOCUMENT_DEADLINE_MS`). */
+    documentDeadlineMs?: number;
   }>;
 
 export type ReceiptOutcome =
@@ -186,9 +204,10 @@ async function recordAiCall(
       task: row.task,
       modelAlias: row.model,
       provider: providerOf(row.model),
-      units: row.units,
+      // Tokenii raportați de furnizor sunt neîncrezători: plafonați la CHECK-ul tabelului.
+      units: row.units === null ? null : Math.min(MAX_UNITS, Math.max(0, Math.trunc(row.units))),
       unitsKind: row.units === null ? null : "tokens",
-      costEstimateMinor: row.costMinor,
+      costEstimateMinor: row.costMinor > MAX_COST_MINOR ? MAX_COST_MINOR : row.costMinor,
       costCurrency: row.currency,
       durationMs: Math.min(3_600_000, Math.max(0, Math.round(row.durationMs))),
       result: row.result,
@@ -215,9 +234,12 @@ async function callAi<T>(
     images: number;
     /** Parsarea + validarea conținutului (aruncă la date invalide); rezultatul în `ai_calls`. */
     validate: (content: string) => T;
+    /** Termenul absolut al documentului (ms epoch). */
+    deadline: number;
   }>,
 ): Promise<Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; code: AiError["code"] }>> {
   const maxCost = maxCostOf(ai.pricing, call.textChars, call.images, call.maxTokens);
+  if (Date.now() >= call.deadline) return { ok: false, code: "timeout" };
   let attempts = 0;
   const started = Date.now();
   try {
@@ -227,8 +249,10 @@ async function callAi<T>(
         messages: call.messages,
         maxTokens: call.maxTokens,
         jsonSchema: call.schema,
+        responseFormat: ai.responseFormat,
       },
       {
+        deadline: call.deadline,
         beforeAttempt: async () => {
           if (!(await reserveAiBudget(deps.db, maxCost, ai.monthlyBudget))) {
             throw new AiError("budget_exceeded");
@@ -286,6 +310,7 @@ async function extractPart(
   ref: QueuedDocument,
   documentId: string,
   pre: Preprocessed,
+  deadline: number,
 ): Promise<PartResult> {
   const text = pre.kind === "text" ? pdfTextForPrompt(pre.text) : "";
   const call =
@@ -306,6 +331,7 @@ async function extractPart(
     textChars: text.length + 2000,
     images: call.images,
     validate: (content) => toExtractedReceipt(parseModelReceipt(parseModelJson(content))),
+    deadline,
   });
   if (!r.ok) {
     deps.log?.({ job: "receipt.process", step: "extract", error: r.code });
@@ -346,6 +372,7 @@ async function prepareBatch(
   deps: ReceiptJobDeps,
   ref: QueuedDocument,
   batchId: string,
+  deadline: number,
 ): Promise<
   Readonly<{ ok: true; parts: Prepared[] }> | Readonly<{ ok: false; outcome: ReceiptOutcome }>
 > {
@@ -374,7 +401,7 @@ async function prepareBatch(
     );
   };
   for (const d of docs) {
-    const r = await prepareDocument(deps, { ...ref, documentId: d.id });
+    const r = await prepareDocument(withDeadline(deps, deadline), { ...ref, documentId: d.id });
     if (r.outcome === "skipped") {
       await release("queued", null);
       return { ok: false, outcome: { outcome: "skipped" } };
@@ -404,6 +431,15 @@ async function prepareBatch(
   return { ok: true, parts };
 }
 
+/** Preprocesarea primește cel mult timpul rămas până la termenul documentului. */
+function withDeadline(deps: ReceiptJobDeps, deadline: number): ReceiptJobDeps {
+  const remaining = Math.max(1000, deadline - Date.now());
+  return {
+    ...deps,
+    limits: { ...deps.limits, timeoutMs: Math.min(deps.limits.timeoutMs, remaining) },
+  };
+}
+
 type Draft = Readonly<{
   receipt: ExtractedReceipt | null;
   issues: ReceiptIssue[];
@@ -425,6 +461,7 @@ export async function processReceiptDocument(
     if (error instanceof NotFoundError) return { outcome: "skipped" };
     throw error;
   }
+  const deadline = Date.now() + (deps.documentDeadlineMs ?? DOCUMENT_DEADLINE_MS);
   if (gate === "skip") return { outcome: "skipped" };
   if (gate === "no_consent") {
     deps.log?.({ job: "receipt.process", outcome: "awaiting_consent" });
@@ -442,7 +479,7 @@ export async function processReceiptDocument(
 
   let parts: Prepared[];
   if (batchId === null) {
-    const r = await prepareDocument(deps, ref);
+    const r = await prepareDocument(withDeadline(deps, deadline), ref);
     if (r.outcome === "skipped") return { outcome: "skipped" };
     if (r.outcome === "rejected") return { outcome: "rejected", code: r.code };
     parts = [
@@ -453,13 +490,29 @@ export async function processReceiptDocument(
       },
     ];
   } else {
-    const r = await prepareBatch(deps, ref, batchId);
+    const r = await prepareBatch(deps, ref, batchId, deadline);
     if (!r.ok) return r.outcome;
     parts = r.parts;
   }
 
-  const draft = await extractAll(deps, ref, parts, batchId !== null);
-  return persist(deps, ref, parts, batchId, draft);
+  const draft = await extractAll(deps, ref, parts, batchId !== null, deadline);
+  try {
+    return await persist(deps, ref, parts, batchId, draft, deadline);
+  } catch (error) {
+    // Datele extrase încalcă o constrângere a bazei (CHECK/cheie): apelurile AI sunt deja
+    // plătite, deci NU se aruncă (ar urma reîncercarea jobului și încă o extragere), ci se
+    // salvează bonul gol „De verificat” (introducere manuală).
+    if (!(error instanceof ConflictError) || draft.receipt === null) throw error;
+    deps.log?.({ job: "receipt.process", step: "persist", fallback: error.reason });
+    return persist(
+      deps,
+      ref,
+      parts,
+      batchId,
+      { ...draft, receipt: null, issues: [{ code: "extraction_failed" }], mergeReport: null },
+      deadline,
+    );
+  }
 }
 
 async function extractAll(
@@ -467,6 +520,7 @@ async function extractAll(
   ref: QueuedDocument,
   parts: readonly Prepared[],
   isBatch: boolean,
+  deadline: number,
 ): Promise<Draft> {
   const ai = deps.ai;
   if (ai === null) {
@@ -480,7 +534,7 @@ async function extractAll(
   }
   const extracted: ExtractedReceipt[] = [];
   for (const p of parts) {
-    const r = await extractPart(deps, ai, ref, p.documentId, p.pre);
+    const r = await extractPart(deps, ai, ref, p.documentId, p.pre, deadline);
     if (!r.ok) {
       return r.reason === "budget_exceeded" && extracted.length === 0
         ? {
@@ -526,13 +580,19 @@ async function extractAll(
     receipt = merged.receipt;
     if (merged.mismatch) issues.push({ code: "long_receipt_mismatch" });
     mergeReport = {
-      removed: merged.removed.map((r) => ({
+      // Plafonat (CHECK: ≤ 32 KB): primele 100 de linii eliminate + numărul total.
+      removed: merged.removed.slice(0, MAX_REPORTED_REMOVED).map((r) => ({
         part: r.part + 1,
         position: r.position,
         reason: r.reason,
       })),
+      removedCount: merged.removed.length,
       difference: merged.difference === null ? null : merged.difference.toString(),
     };
+  }
+  if (receipt.lines.length > MAX_STORED_LINES) {
+    receipt = { ...receipt, lines: receipt.lines.slice(0, MAX_STORED_LINES) };
+    issues.push({ code: "too_many_lines", field: "lines" });
   }
   receipt = { ...receipt, lines: applyKindRules(receipt.lines) };
   return { receipt, issues, providerUsed: provider, fallbackReason, mergeReport };
@@ -552,6 +612,7 @@ async function persist(
   parts: readonly Prepared[],
   batchId: string | null,
   draft: Draft,
+  deadline: number,
 ): Promise<ReceiptOutcome> {
   const now = (deps.now ?? (() => new Date()))();
   const today = localDateOf(now);
@@ -615,6 +676,7 @@ async function persist(
                   if (!v.success) throw new AiError("failed_validation", "schema");
                   return v.data;
                 },
+                deadline,
               });
               if (!r.ok) throw new AiError(r.code);
               return r.value;
@@ -702,7 +764,8 @@ async function persist(
           position: i + 1,
           rawName: l.rawName,
           normalizedName: l.normalizedName,
-          quantity: l.quantity,
+          // Cantitatea 0 (citită greșit) nu încape în CHECK (> 0): goală + problema `quantity_invalid`.
+          quantity: l.quantity === null || /^0+\.0+$/.test(l.quantity) ? null : l.quantity,
           unitPriceMinor: l.unitPriceMinor,
           lineTotalMinor: l.lineTotalMinor,
           vatRate: vatRateText(l.vatRateBp),

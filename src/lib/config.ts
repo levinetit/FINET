@@ -110,6 +110,8 @@ export type AiConfig = Readonly<{
   maxRetries: number;
   /** Sub acest scor (0..100), bonul trece „De verificat” (`AI_CONFIDENCE_THRESHOLD`, implicit 80). */
   confidenceThreshold: number;
+  /** `AI_RESPONSE_FORMAT`: `json_schema` (implicit), `json_object` sau `none`. */
+  responseFormat: "json_schema" | "json_object" | "none";
   /** Tarifele pentru estimarea costului, în unități minore ale monedei bugetului per 1M tokeni. */
   pricing: Readonly<{ inputPerMTokMinor: bigint; outputPerMTokMinor: bigint }>;
 }>;
@@ -320,6 +322,7 @@ const envSchema = z.object({
     .string()
     .regex(/^(?:100|[1-9]?\d)$/)
     .optional(),
+  AI_RESPONSE_FORMAT: z.enum(["json_schema", "json_object", "none"]).optional(),
   AI_PRICE_INPUT_PER_MTOK: z.string().max(40).optional(),
   AI_PRICE_OUTPUT_PER_MTOK: z.string().max(40).optional(),
 
@@ -782,6 +785,7 @@ export function parseConfig(
       timeoutMs: aiTimeoutMs,
       maxRetries: int(e.AI_MAX_RETRIES, DEFAULTS.aiMaxRetries),
       confidenceThreshold: int(e.AI_CONFIDENCE_THRESHOLD, DEFAULTS.aiConfidenceThreshold),
+      responseFormat: e.AI_RESPONSE_FORMAT ?? "json_schema",
       pricing: Object.freeze(pricing),
     }),
     notify: Object.freeze({

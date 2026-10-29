@@ -502,6 +502,7 @@ describe.skipIf(!TEST_ADMIN_URL)(
           { part: 2, position: 1, reason: "overlap" },
           { part: 3, position: 1, reason: "overlap" },
         ],
+        removedCount: 2,
         difference: "0",
       });
       const lines = await f.admin<
@@ -528,6 +529,119 @@ describe.skipIf(!TEST_ADMIN_URL)(
         tx.execute(sql`select id from finet.receipts`),
       );
       expect([...own]).toHaveLength(1);
+    });
+
+    it("cantitate 0 citită de model: linia se salvează fără cantitate (CHECK > 0), cu quantity_invalid; fără reîncercare", async () => {
+      await grant(f.A.userId);
+      extract.push({
+        kind: "content",
+        content: receiptJson({
+          total: "15.00",
+          vatTotal: null,
+          lines: [
+            {
+              name: "LAPTE",
+              quantity: "0",
+              unitPrice: "7.50",
+              lineTotal: "15.00",
+              vatRate: "11",
+              type: "item",
+            },
+          ],
+        }),
+      });
+      await upload([["files", await receiptLikeImage({ seed: 50 })]]);
+      const [out] = await processAll();
+      expect(out).toMatchObject({ outcome: "needs_review" });
+      const [l] = await f.admin<
+        { quantity: string | null }[]
+      >`select quantity::text from finet.receipt_lines`;
+      expect(l!.quantity).toBeNull();
+      const [r] = await f.admin<
+        { issues: { code: string }[] }[]
+      >`select issues from finet.receipts`;
+      expect(r!.issues.map((i) => i.code)).toContain("quantity_invalid");
+      expect(mock.requests.filter((q) => schemaName(q) === "receipt")).toHaveLength(1);
+    });
+
+    it("bon lung unit cu peste 500 de linii: primele 500 salvate, too_many_lines; raportul unirii plafonat", async () => {
+      await grant(f.A.userId);
+      const many = (prefix: string, n: number) =>
+        Array.from({ length: n }, (_, i) => ({
+          name: `${prefix} ${i}`,
+          quantity: null,
+          unitPrice: null,
+          lineTotal: "1.00",
+          vatRate: null,
+          type: "item",
+        }));
+      const base = {
+        storeAddress: null,
+        receiptNumber: null,
+        date: null,
+        paymentMethod: null,
+        currency: "RON",
+        vatTotal: null,
+      };
+      extract.push(
+        {
+          kind: "content",
+          content: JSON.stringify({
+            ...base,
+            merchantName: "LIDL",
+            merchantTaxId: "RO22891860",
+            total: null,
+            lines: many("A", 250),
+          }),
+        },
+        {
+          kind: "content",
+          content: JSON.stringify({
+            ...base,
+            merchantName: null,
+            merchantTaxId: null,
+            total: "600.00",
+            lines: many("B", 350),
+          }),
+        },
+      );
+      await upload([
+        ["longReceipt", "true"],
+        ["files", await receiptLikeImage({ seed: 51 }), "1.jpg"],
+        ["files", await receiptLikeImage({ seed: 52 }), "2.jpg"],
+      ]);
+      const outs = await processAll();
+      expect(outs.filter((o) => o.outcome === "needs_review")).toHaveLength(1);
+      const [n] = await f.admin<
+        { n: number }[]
+      >`select count(*)::int as n from finet.receipt_lines`;
+      expect(n!.n).toBe(500);
+      const [r] = await f.admin<
+        { issues: { code: string }[] }[]
+      >`select issues from finet.receipts`;
+      expect(r!.issues.map((i) => i.code)).toContain("too_many_lines");
+    });
+
+    it("termenul documentului expirat înainte de extragere: nimic nu pleacă, extraction_failed", async () => {
+      await grant(f.A.userId);
+      await upload([["files", await receiptLikeImage({ seed: 53 })]]);
+      const [out] = await processAll(deps({ documentDeadlineMs: 0 }));
+      expect(out).toMatchObject({ outcome: "needs_review", confidence: 0 });
+      expect(mock.requests).toHaveLength(0);
+    });
+
+    it("două procesări paralele ale aceluiași document: un singur bon, o singură extragere", async () => {
+      await grant(f.A.userId);
+      await upload([["files", await receiptLikeImage({ seed: 54 })]]);
+      const [ref] = await listQueuedDocuments(f.db);
+      const outs = await Promise.all([
+        processReceiptDocument(deps(), ref!),
+        processReceiptDocument(deps(), ref!),
+      ]);
+      expect(outs.map((o) => o.outcome).sort()).toEqual(["needs_review", "skipped"]);
+      const [n] = await f.admin<{ n: number }[]>`select count(*)::int as n from finet.receipts`;
+      expect(n!.n).toBe(1);
+      expect(mock.requests.filter((q) => schemaName(q) === "receipt")).toHaveLength(1);
     });
 
     it("AI neconfigurat → ai_unavailable, ai_unconfigured, 0 cereri", async () => {
