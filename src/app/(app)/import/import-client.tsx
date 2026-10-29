@@ -222,7 +222,11 @@ export function ImportClient({
           <p className="font-semibold" data-testid="import-usage">
             {t.usage(usage.used, usage.limit)}
           </p>
-          <p className="text-sm text-muted-foreground">{t.statementsLater}</p>
+          <p className="text-sm text-muted-foreground">
+            <Link href="/import?tip=extras" className="text-primary underline">
+              {t.statementsLater}
+            </Link>
+          </p>
         </div>
       </Card>
 

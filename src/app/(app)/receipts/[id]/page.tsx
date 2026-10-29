@@ -6,12 +6,17 @@ import { buttonClasses } from "@/components/ui/button";
 import { getStorage } from "@/lib/storage";
 import { ro } from "@/messages/ro";
 import { getDocumentWithReceipt } from "@/modules/documents/documents.service";
+import { matchesToJson } from "@/app/api/v1/_lib/matching-handlers";
+import { Card } from "@/components/ui/card";
+import { getReceiptMatches } from "@/modules/matching/matching.service";
 import { receiptDetailToJson } from "@/modules/receipts/receipts.schema";
 import { getReceipt } from "@/modules/receipts/receipts.service";
 
 import { formOptions } from "../../../_lib/ledger-options";
 import { load, requireLedgerPage } from "../../../_lib/ledger-page";
 import { PageHeader } from "../../page-header";
+
+import { MatchPanel } from "../match-panel";
 
 import { ReceiptReview, type ReviewDocument } from "./receipt-review";
 
@@ -56,13 +61,15 @@ export default async function ReceiptPage({ params }: Readonly<{ params: Params 
   const result = await load(async () => {
     const deps = { db, config, storage: getStorage() };
     const receipt = await getReceipt(deps, page.actor, householdId, id);
-    const [options, docs] = await Promise.all([
+    const [options, docs, matches] = await Promise.all([
       formOptions(db, page.actor, householdId),
       Promise.all(
         receipt.documentIds.map((docId) =>
           getDocumentWithReceipt(deps, page.actor, householdId, docId),
         ),
       ),
+      // F7-B: tranzacțiile din extras propuse (sub RLS: doar cele vizibile).
+      getReceiptMatches({ db }, page.actor, householdId, id).catch(() => null),
     ]);
     const documents: ReviewDocument[] = docs.map((d) => ({
       id: d.id,
@@ -70,6 +77,7 @@ export default async function ReceiptPage({ params }: Readonly<{ params: Params 
       fileDeleted: d.fileDeleted,
     }));
     return {
+      matches: matches ? matchesToJson(matches) : null,
       receipt: receiptDetailToJson(receipt),
       documents,
       accounts: options.accounts,
@@ -86,10 +94,20 @@ export default async function ReceiptPage({ params }: Readonly<{ params: Params 
       </>
     );
   }
+  const { matches, ...review } = result.value;
   return (
     <>
       {header}
-      <ReceiptReview {...result.value} />
+      {matches ? (
+        <Card className="mb-4">
+          <MatchPanel
+            receiptId={matches.receiptId}
+            ambiguous={matches.ambiguous}
+            candidates={matches.candidates}
+          />
+        </Card>
+      ) : null}
+      <ReceiptReview {...review} />
     </>
   );
 }

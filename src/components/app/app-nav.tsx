@@ -41,6 +41,7 @@ const ITEMS = [
     mobile: true,
   },
   { href: "/receipts", label: ro.nav.receipts, icon: ReceiptIcon, mobile: false },
+  { href: "/statements", label: ro.nav.statements, icon: ListIcon, mobile: false },
   { href: "/accounts", label: ro.nav.accounts, icon: WalletIcon, mobile: false },
   { href: "/categories", label: ro.nav.categories, icon: FolderIcon, mobile: false },
   { href: "/tags", label: ro.nav.tags, icon: TagIcon, mobile: false },
