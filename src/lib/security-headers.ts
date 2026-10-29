@@ -32,6 +32,16 @@ export const STATIC_SECURITY_HEADERS: Readonly<Record<string, string>> = Object.
   "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
 });
 
+/**
+ * Faza 8 (revizuirea F8-B): pe `/join/<token>` browserul nu trimite deloc antetul Referer, ca
+ * tokenul invitației să nu plece nicăieri. Pe `/login?next=/join/<token>` rămâne implicitul
+ * `strict-origin-when-cross-origin` (spre alte origini pleacă doar originea; CSP permite doar
+ * `'self'`); canalul e documentat ca risc acceptat (SECURITY_CHECKLIST §20).
+ */
+export function referrerPolicyFor(pathname: string): string | null {
+  return pathname.startsWith("/join/") ? "no-referrer" : null;
+}
+
 /** Un nonce nou: 16 octeți aleatori, base64 (128 de biți). */
 export function createNonce(): string {
   const bytes = new Uint8Array(16);

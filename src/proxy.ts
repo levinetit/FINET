@@ -3,7 +3,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isRequestAllowed } from "@/lib/access";
 import { verifierFor } from "@/lib/access-guard";
 import { getConfig } from "@/lib/config";
-import { NONCE_HEADER, applySecurityHeaders, buildCsp, createNonce } from "@/lib/security-headers";
+import {
+  NONCE_HEADER,
+  applySecurityHeaders,
+  buildCsp,
+  createNonce,
+  referrerPolicyFor,
+} from "@/lib/security-headers";
 
 /**
  * Proxy Next.js 16 (fostul `middleware.ts`; rulează în runtime-ul Node): protecția Cloudflare
@@ -41,9 +47,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   const nonce = createNonce();
   const csp = buildCsp(nonce, { development: process.env.NODE_ENV === "development" });
+  const referrer = referrerPolicyFor(request.nextUrl.pathname);
   if (!allowed) {
     const response = forbidden();
     applySecurityHeaders(response.headers, csp);
+    if (referrer) response.headers.set("Referrer-Policy", referrer);
     return response;
   }
   // Valorile venite de la client pentru aceste antete interne se înlocuiesc, nu se păstrează.
@@ -52,6 +60,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   applySecurityHeaders(response.headers, csp);
+  if (referrer) response.headers.set("Referrer-Policy", referrer);
   return response;
 }
 

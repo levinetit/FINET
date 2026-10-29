@@ -26,6 +26,7 @@ import {
 } from "@/lib/access";
 import { guardAccess } from "@/lib/access-guard";
 import { resetConfigForTests } from "@/lib/config";
+import { referrerPolicyFor } from "@/lib/security-headers";
 import { config as proxyConfig, proxy } from "@/proxy";
 
 // Toate cheile și tokenurile sunt generate în test; nimic real.
@@ -288,6 +289,29 @@ describe("FAIL-CLOSED", () => {
         error: { code: "forbidden", message: "Acces interzis." },
       });
     }
+
+    it("Faza 8: `Referrer-Policy: no-referrer` pe /join/<token>, implicitul în rest", async () => {
+      prodEnv();
+      for (const path of ["/join/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]) {
+        const res = await call(path);
+        expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+      }
+      for (const path of [
+        "/",
+        "/family",
+        "/joinx",
+        "/login?next=%2Fjoin%2Fx",
+        "/api/v1/invites/accept",
+      ]) {
+        expect((await call(path)).headers.get("referrer-policy")).toBe(
+          "strict-origin-when-cross-origin",
+        );
+      }
+      // Ramura permisă (sondă locală de dezvoltare): același antet.
+      expect(referrerPolicyFor("/join/abc")).toBe("no-referrer");
+      expect(referrerPolicyFor("/login")).toBeNull();
+      expect(referrerPolicyFor("/dashboard")).toBeNull();
+    });
 
     it("antet lipsă → 403", async () => {
       prodEnv();
