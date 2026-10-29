@@ -120,6 +120,100 @@ describe("inventarul pe octeți: fail-closed la fiecare ocolire", () => {
       expect(scan(pdf)).toBe("pdf_image_unverifiable");
     });
 
+    it("spații albe PDF (NUL, FF) în definiție și corp → acceptat; VT/NBSP (nu sunt spații PDF) → refuz", () => {
+      expect(
+        scanPdfImages(
+          pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [num("\f400\u0000")]),
+          LIMITS,
+        ),
+      ).toEqual([{ width: 10, height: 400 }]);
+      expect(
+        scanPdfImages(
+          pdfWithImageDict(`${BASE} /Width 10 /Height\u00006\f0\u0000R`, [num("400")]),
+          LIMITS,
+        ),
+      ).toEqual([{ width: 10, height: 400 }]);
+      expect(scan(pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [num("\u000b400")]))).toBe(
+        "pdf_image_unverifiable",
+      );
+      expect(scan(pdfWithImageDict(`${BASE} /Width 10 /Height 6\u00a00 R`, [num("400")]))).toBe(
+        "pdf_image_unverifiable",
+      );
+    });
+
+    it("comentariu în corpul obiectului sau în altă parte a structurii → refuz", () => {
+      expect(scan(pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [num("400 % x")]))).toBe(
+        "pdf_image_unverifiable",
+      );
+      expect(
+        scan(
+          pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [
+            num("400"),
+            num("% 6 0 obj 9 endobj\n<< >>"),
+          ]),
+        ),
+      ).toBe("pdf_image_unverifiable");
+    });
+
+    it("un comentariu fără cuvinte structurale (linia producătorului după antet) → acceptat", () => {
+      const pdf = pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [num("400")]).toString(
+        "latin1",
+      );
+      // Același număr de octeți ca markerul binar (offseturile xref rămân valide).
+      const marker = "%\xe2\xe3\xcf\xd3";
+      const withComment = pdf.replace(marker, "%Gen1");
+      expect(withComment).not.toBe(pdf);
+      expect(scanPdfImages(Buffer.from(withComment, "latin1"), LIMITS)).toEqual([
+        { width: 10, height: 400 },
+      ]);
+      expect(scan(Buffer.from(pdf.replace(marker, "%obj "), "latin1"))).toBe(
+        "pdf_image_unverifiable",
+      );
+    });
+
+    it("comentariu în dicționarul imaginii cu referința → refuz", () => {
+      expect(scan(pdfWithImageDict(`${BASE} /Width 10 % x\n /Height 6 0 R`, [num("400")]))).toBe(
+        "pdf_image_unverifiable",
+      );
+    });
+
+    it("token `obj` în afara unei definiții stricte → refuz", () => {
+      expect(
+        scan(
+          pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [
+            num("400"),
+            num("<< /T (x obj y) >>"),
+          ]),
+        ),
+      ).toBe("pdf_image_unverifiable");
+    });
+
+    it("două secțiuni xref (actualizare incrementală) → refuz pentru indirect; dimensiunile directe rămân acceptate", () => {
+      const update = latin1(
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 7 /Prev 9 >>\nstartxref\n9\n%%EOF\n",
+      );
+      expect(
+        scan(
+          Buffer.concat([
+            pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [num("400")]),
+            update,
+          ]),
+        ),
+      ).toBe("pdf_image_unverifiable");
+      expect(scan(Buffer.concat([pdfWithImageDict(`${BASE} /Width 10 /Height 400`), update]))).toBe(
+        "acceptat",
+      );
+    });
+
+    it("xref care indică alt offset decât definiția → refuz", () => {
+      const pdf = pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [num("400")]).toString(
+        "latin1",
+      );
+      const at = pdf.indexOf("xref\n0 7\n") + "xref\n0 7\n".length + 6 * 20;
+      const broken = pdf.slice(0, at) + "0000000009" + pdf.slice(at + 10);
+      expect(scan(Buffer.from(broken, "latin1"))).toBe("pdf_image_unverifiable");
+    });
+
     it("plafoanele se aplică valorii rezolvate", () => {
       expect(scan(pdfWithImageDict(`${BASE} /Width 40000 /Height 6 0 R`, [num("40000")]))).toBe(
         "image_too_large",
