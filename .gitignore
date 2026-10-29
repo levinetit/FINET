@@ -32,3 +32,6 @@ playwright/.cache/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# bonuri sintetice generate (scripts/make-receipt-fixtures.mjs) și raportul evaluării
+fixtures/receipts/generated/

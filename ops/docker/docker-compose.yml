@@ -53,6 +53,10 @@ secrets:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_worker_database_url
   finet_migrate_database_url:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_migrate_database_url
+  # Cheia virtuală LiteLLM a FINET (F6-B, ADR 0014; cheie per aplicație, cu buget în LiteLLM),
+  # DOAR pentru finet-worker (config.ts o refuză în orice alt rol și în clar).
+  finet_litellm_key:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_litellm_key
   # Secretul Better Auth (F1-B): `openssl rand -base64 32`, doar pentru finet-web.
   finet_better_auth_secret:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_better_auth_secret
@@ -196,9 +200,13 @@ services:
         required: true
     secrets:
       - finet_worker_database_url
+      - finet_litellm_key
     environment:
       FINET_ROLE: worker
       WORKER_DATABASE_URL_FILE: /run/secrets/finet_worker_database_url
+      # Faza 6 (F6-B, ADR 0014): LiteLLM-ul de pe gazdă (`litellm-apps`, rețeaua `apps`); URL-ul
+      # și lista de gazde permise vin din finet.worker.env (AI_BASE_URL, AI_ALLOWED_HOSTS).
+      AI_API_KEY_FILE: /run/secrets/finet_litellm_key
       DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
       NODE_ENV: production
       APP_MODE: personal

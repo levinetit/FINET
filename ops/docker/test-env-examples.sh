@@ -115,6 +115,19 @@ check_role finet-migrate MIGRATOR_DATABASE_URL_FILE finet_migrate_database_url m
 # CLI-ul de administrare (F1-B): drepturile aplicației (DATABASE_URL, finet_app).
 check_role finet-admin DATABASE_URL_FILE finet_database_url admin
 
+# Cheia LiteLLM (F6-B): DOAR finet-worker o montează (ca AI_API_KEY_FILE); niciun alt serviciu.
+for svc in finet-web finet-migrate finet-admin finet-backup; do
+  if service_block "$svc" | grep -Eq 'finet_litellm_key|AI_API_KEY'; then
+    fail "$svc primește cheia LiteLLM"
+  else
+    ok "$svc fără cheia LiteLLM"
+  fi
+done
+WK=$(service_block finet-worker)
+echo "$WK" | grep -Eq '^[[:space:]]+-[[:space:]]+finet_litellm_key[[:space:]]*$' && ok "finet-worker montează finet_litellm_key" || fail "finet-worker nu montează finet_litellm_key"
+echo "$WK" | grep -Eq '^[[:space:]]+AI_API_KEY_FILE:[[:space:]]*/run/secrets/finet_litellm_key[[:space:]]*$' && ok "finet-worker are AI_API_KEY_FILE" || fail "finet-worker nu are AI_API_KEY_FILE"
+echo "$WK" | grep -Eq '^[[:space:]]+AI_API_KEY:' && fail "finet-worker are AI_API_KEY în clar" || ok "finet-worker fără AI_API_KEY în clar"
+
 # Backup-ul (F3-D): finet-backup NU primește niciun URL al aplicației, tokenul de sănătate sau
 # secretul Better Auth; are doar secretele lui (parola restic, adresa repository-ului, fișierul
 # de servicii libpq al rolului finet_backup), storage-ul DOAR citire, rulează ca uid 1000.
