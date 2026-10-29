@@ -42,7 +42,6 @@ export function assertEntryName(name: string): void {
     name.length > 255 ||
     name.startsWith("/") ||
     name.includes("\\") ||
-    // eslint-disable-next-line no-control-regex
     /[\u0000-\u001f\u007f]/.test(name) ||
     name.split("/").some((p) => p === "" || p === "." || p === "..")
   ) {

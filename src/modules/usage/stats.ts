@@ -22,12 +22,22 @@ import type { AndroidRelease } from "@/modules/app-release/android";
  * (6.5: în `saas` administratorul vede implicit doar agregate).
  */
 
-export type PlatformCount = Readonly<{ platform: string; daily: number; weekly: number; monthly: number }>;
+export type PlatformCount = Readonly<{
+  platform: string;
+  daily: number;
+  weekly: number;
+  monthly: number;
+}>;
 
 export type UsageStats = Readonly<{
   generatedAt: string;
   activeUsers: PlatformCount[];
-  sessionUsers: Readonly<{ daily: number; weekly: number; monthly: number; expiredSessions: number }>;
+  sessionUsers: Readonly<{
+    daily: number;
+    weekly: number;
+    monthly: number;
+    expiredSessions: number;
+  }>;
   installations: Readonly<{
     platform: string;
     appVersion: string | null;
@@ -44,10 +54,14 @@ export type UsageStats = Readonly<{
   screens: Readonly<{ screen: string; count: number }>[];
   errors: Readonly<{ errorCode: string; appVersion: string | null; count: number }>[];
   ai: Readonly<{ provider: string; result: string; count: number; avgDurationMs: number }>[];
-  /** Costul estimat al apelurilor AI pe lună (unități minore, ca șir: sumă de operare). */
-  aiCost: Readonly<{ month: string; currency: string; costMinor: string }>[];
+  /** Costul estimat al apelurilor AI pe lună (unități minore: costul de operare, nu o dată a utilizatorilor). */
+  aiCost: Readonly<{ month: string; currency: string; costMinor: number }>[];
   archivedEvents: number;
-  latestAndroid: Readonly<{ versionName: string; versionCode: number; minSupportedVersionCode: number }> | null;
+  latestAndroid: Readonly<{
+    versionName: string;
+    versionCode: number;
+    minSupportedVersionCode: number;
+  }> | null;
   members:
     | Readonly<{
         userId: string;

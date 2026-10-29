@@ -8,6 +8,7 @@ import * as M from "./me-handlers";
 import * as P from "./planning-handlers";
 import * as D from "./documents-handlers";
 import * as F from "./family-handlers";
+import * as G from "./gdpr-handlers";
 import * as RC from "./receipts-handlers";
 import * as R from "./recurring-handlers";
 
@@ -170,6 +171,10 @@ const OPERATION_OF = new Map<unknown, string>([
   [F.putSplitHandler, "putTransactionSplit"],
   [F.deleteSplitHandler, "deleteTransactionSplit"],
   [F.eventsHandler, "getLiveEvents"],
+  [G.dataExportHandler, "exportMyData"],
+  [G.deletionPreviewHandler, "getDeletionPreview"],
+  [G.deleteAccountHandler, "deleteMyAccount"],
+  [G.usageStatsHandler, "getUsageStats"],
 ]);
 
 /** Antetele obligatorii ale unui export CSV (F3-B). */
@@ -204,7 +209,7 @@ export async function assertContract(handler: unknown, response: Response): Prom
     const h = response.headers;
     const problems = [
       op.success.binary.includes(h.get("content-type") ?? "") ? null : "content-type",
-      /^attachment; filename="bon-[0-9a-f-]{36}\.(jpg|png|webp|pdf)"$/.test(
+      /^attachment; filename="(bon-[0-9a-f-]{36}\.(jpg|png|webp|pdf)|finet-export\.zip)"$/.test(
         h.get("content-disposition") ?? "",
       )
         ? null

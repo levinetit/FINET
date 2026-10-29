@@ -59,6 +59,8 @@ export type ApiLimits = Readonly<{
   receiptReprocess: RateLimitRule;
   /** Acceptarea invitațiilor (Faza 8), pe utilizator, consumată și pentru tokenurile greșite. */
   inviteAccept: RateLimitRule;
+  /** Exportul GDPR complet (Faza 9), pe utilizator: arhivă mare, deci rar. */
+  gdprExport: RateLimitRule;
 }>;
 
 /** Limitele implicite (decizia mea): generoase pentru un client real, mici pentru un abuz. */
@@ -75,6 +77,8 @@ export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
   receiptReprocess: Object.freeze({ max: 10, windowSeconds: 600 }),
   // F8-A (ADR 0016): 10 încercări de acceptare la 15 minute per utilizator.
   inviteAccept: Object.freeze({ ...DEFAULT_ACCEPT_LIMIT }),
+  // F9-B (decizia mea): 3 exporturi GDPR pe oră per utilizator.
+  gdprExport: Object.freeze({ max: 3, windowSeconds: 3600 }),
 });
 
 export type ApiDeps = Readonly<{
@@ -346,7 +350,8 @@ export async function enforceRateLimit(
     | "api_export"
     | "api_recurring_generate"
     | "api_document_upload"
-    | "api_receipt_reprocess",
+    | "api_receipt_reprocess"
+    | "gdpr_export",
   rule: RateLimitRule,
 ): Promise<void> {
   const result = await hitRateLimit(

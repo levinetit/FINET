@@ -9,9 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { type ZipEntryOptions, type ZipSource, assertEntryName, zipStream } from "./zip";
 
-async function build(
-  entries: (readonly [string, ZipSource, ZipEntryOptions?])[],
-): Promise<Buffer> {
+async function build(entries: (readonly [string, ZipSource, ZipEntryOptions?])[]): Promise<Buffer> {
   async function* gen() {
     for (const e of entries) yield e;
   }

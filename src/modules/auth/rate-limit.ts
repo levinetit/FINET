@@ -40,7 +40,10 @@ export type RateLimitKind =
   // F6-C: reprocesarea unui bon (un nou apel AI plătit).
   | "api_receipt_reprocess"
   // F8-A: acceptarea unei invitații în gospodărie (contra ghicirii tokenurilor), pe utilizator.
-  | "invite_accept";
+  | "invite_accept"
+  // F9-B (GDPR): ștergerea contului (reautentificare cu parola) și exportul complet, pe utilizator.
+  | "account_delete"
+  | "gdpr_export";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

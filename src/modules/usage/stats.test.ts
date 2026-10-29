@@ -35,7 +35,11 @@ describe.skipIf(!TEST_ADMIN_URL)("statisticile și retenția (Postgres real, fin
     // A = administratorul platformei (doar operatorul/CLI-ul îl poate face; aici superuser).
     await f.admin`update finet.users set is_platform_admin = true where id = ${f.A.userId}`;
     // Date financiare care NU au voie să apară în statistici.
-    const acc = await createAccount(f.deps, f.A, f.HA, { name: "Cont", type: "cash", currency: "RON" });
+    const acc = await createAccount(f.deps, f.A, f.HA, {
+      name: "Cont",
+      type: "cash",
+      currency: "RON",
+    });
     await createTransaction(f.deps, f.A, f.HA, {
       accountId: acc.id,
       type: "expense",
@@ -105,9 +109,8 @@ describe.skipIf(!TEST_ADMIN_URL)("statisticile și retenția (Postgres real, fin
     expect(s.screens).toEqual([{ screen: "dashboard", count: 1 }]);
     expect(s.errors).toEqual([{ errorCode: "network_error", appVersion: "1.0.5", count: 1 }]);
     expect(s.logins).toEqual([expect.objectContaining({ platform: "android", count: 1 })]);
-    expect(s.ai).toEqual([
-      { provider: "external", result: "ok", count: 1, avgDurationMs: 1200 },
-    ]);
+    expect(s.ai).toEqual([{ provider: "external", result: "ok", count: 1, avgDurationMs: 1200 }]);
+    expect(s.aiCost).toEqual([expect.objectContaining({ currency: "RON", costMinor: 3 })]);
     expect(s.members?.map((m) => m.name).sort()).toEqual(["A", "B", "C"]);
     const c = s.members!.find((m) => m.userId === f.C.userId)!;
     expect(c).toMatchObject({ platform: "android", appVersion: "1.0.5", belowMinimum: true });
@@ -139,9 +142,7 @@ describe.skipIf(!TEST_ADMIN_URL)("statisticile și retenția (Postgres real, fin
     const cols = await f.admin<{ column_name: string }[]>`
       select column_name from information_schema.columns
        where table_schema = 'finet' and table_name = 'app_event_daily'`;
-    expect(cols.map((c) => c.column_name)).not.toEqual(
-      expect.arrayContaining(["user_id"]),
-    );
+    expect(cols.map((c) => c.column_name)).not.toEqual(expect.arrayContaining(["user_id"]));
     const s = await getUsageStats(f.db, f.A.userId, { appMode: "personal", latestAndroid: null });
     expect(s.archivedEvents).toBe(3);
   });
@@ -155,13 +156,17 @@ describe.skipIf(!TEST_ADMIN_URL)("statisticile și retenția (Postgres real, fin
       ),
     ).toBe("42501");
     const rows = await withRlsOn(f.db, { userId: f.A.userId }, (tx) =>
-      tx.execute<{ n: number }>(sql`select count(*)::int as n from finet.app_events where user_id <> ${f.A.userId}`),
+      tx.execute<{ n: number }>(
+        sql`select count(*)::int as n from finet.app_events where user_id <> ${f.A.userId}`,
+      ),
     );
     expect(rows[0]?.n).toBe(0);
     // Variabila de scope setată de aplicație nu deschide nimic (politicile sunt doar ale proprietarului).
     const leaked = await withRlsOn(f.db, { userId: f.A.userId }, async (tx) => {
       await tx.execute(sql`select set_config('finet.definer_scope', 'usage_stats', true)`);
-      return tx.execute<{ n: number }>(sql`select count(*)::int as n from finet.app_events where user_id <> ${f.A.userId}`);
+      return tx.execute<{ n: number }>(
+        sql`select count(*)::int as n from finet.app_events where user_id <> ${f.A.userId}`,
+      );
     });
     expect(leaked[0]?.n).toBe(0);
   });

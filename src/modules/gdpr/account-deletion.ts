@@ -104,8 +104,7 @@ async function householdState(
     .from(householdMembers)
     .where(eq(householdMembers.householdId, id));
   const owners = members.filter((m) => m.role === "owner").length;
-  const unsettled =
-    members.length > 1 && !isSettled(await loadHouseholdBalances(tx, id), userId);
+  const unsettled = members.length > 1 && !isSettled(await loadHouseholdBalances(tx, id), userId);
   return { id, name: h?.name ?? "", role, members: members.length, owners, unsettled };
 }
 
@@ -178,9 +177,7 @@ async function deleteSoleHousehold(tx: Tx, id: string): Promise<string[]> {
       "O gospodărie nu poate fi ștearsă. Contactează administratorul.",
     );
   }
-  return keys
-    .map((k) => k.key)
-    .filter((k): k is string => k !== null && isKeyOfHousehold(k, id));
+  return keys.map((k) => k.key).filter((k): k is string => k !== null && isKeyOfHousehold(k, id));
 }
 
 async function leaveHousehold(tx: Tx, userId: string, s: HouseholdState): Promise<void> {

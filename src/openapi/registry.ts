@@ -28,6 +28,12 @@ import {
 } from "@/modules/transactions/transactions.schema";
 import { transferCreateSchema, transferUpdateSchema } from "@/modules/transfers/transfers.schema";
 import { appEventsBatchSchema, consentsPutSchema } from "@/modules/usage/usage.schema";
+import { usageStatsSchema } from "@/modules/usage/stats.schema";
+import {
+  deleteAccountSchema,
+  deletionPreviewSchema,
+  deletionResultSchema,
+} from "@/modules/gdpr/gdpr.schema";
 import { DOCUMENT_STATUSES, RECEIPT_STATUSES } from "@/db/schema";
 import { receiptConfirmSchema, receiptPatchSchema } from "@/modules/receipts/receipts.schema";
 import {
@@ -319,6 +325,65 @@ export const OPERATIONS: readonly Operation[] = [
       description: "Starea nouă.",
     },
     errors: [...MUTATION_ERRORS],
+  },
+  // --- GDPR (Faza 9, ADR 0021) ---------------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/me/export",
+    operationId: "exportMyData",
+    tag: "me",
+    summary: "Exportul complet al datelor contului: arhivă ZIP în flux.",
+    description:
+      "JSON (profil, preferințe, consimțăminte, sesiuni fără tokenuri, instalări, evenimente; pe fiecare gospodărie: conturi, categorii, etichete, tranzacții și în CSV, bugete, obiective, recurențe, bonurile încărcate de utilizator cu liniile lor, împărțirile și decontările în care e parte, acțiunile lui din audit) și fișierele originale ale bonurilor lui. Doar ce vede utilizatorul (RLS: conturile personale ale altor membri nu apar). Fără parole, tokenuri sau chei. Cu cookie: doar `Sec-Fetch-Site: same-origin` sau `none` (altfel 403); 3 exporturi pe oră.",
+    success: {
+      status: 200,
+      schema: null,
+      binary: ["application/zip"],
+      description: "Arhiva `finet-export.zip`.",
+    },
+    errors: [VALIDATION, FORBIDDEN],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/me/deletion",
+    operationId: "getDeletionPreview",
+    tag: "me",
+    summary: "Ce s-ar întâmpla la ștergerea contului (fără sume).",
+    description:
+      "`deletedHouseholds`: gospodăriile în care utilizatorul e singurul membru (se șterg cu toate datele și fișierele). `leftHouseholds`: cele din care iese (`unsettled`: are solduri nedecontate, care rămân în istoricul celorlalți). `blockedHouseholds`: cele în care e ultimul proprietar și mai există alți membri — ștergerea e refuzată până transferă rolul.",
+    success: {
+      status: 200,
+      schema: dataOf(deletionPreviewSchema),
+      description: "Previzualizarea.",
+    },
+    errors: [VALIDATION],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/me/delete",
+    operationId: "deleteMyAccount",
+    tag: "me",
+    summary: "Șterge contul (ireversibil): parola curentă + confirmarea `ȘTERGE`.",
+    description:
+      "Conturile fără parolă (doar magic link) cer o sesiune creată în ultimele 15 minute (altfel 403 `reauth_required`). 400 `invalid_password` la parola greșită; 409 `last_owner` dacă e ultimul proprietar al unei gospodării cu alți membri. Conturile personale ale utilizatorului se șterg (nu devin comune); rândul utilizatorului se șterge sau, dacă e referit de împărțiri/decontări din istoricul altora, se anonimizează (`outcome: anonymized`). Sesiunile se închid.",
+    body: { schema: deleteAccountSchema },
+    success: {
+      status: 200,
+      schema: dataOf(deletionResultSchema),
+      description: "Contul a fost șters.",
+    },
+    errors: [...MUTATION_ERRORS, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/admin/stats",
+    operationId: "getUsageStats",
+    tag: "admin",
+    summary: "Statisticile de utilizare (6.5), doar pentru administratorul platformei.",
+    description:
+      "Utilizatori activi (zi/săptămână/lună, pe platformă; din instalări și sesiuni), instalări pe versiune (cu `belowMinimum`/`outdated` față de ultima versiune Android), descărcări, login-uri pe zi, evenimente și ecrane, erori pe versiune, apeluri AI și costul lunar de operare, evenimentele arhivate (agregate după 13 luni). `members` (nume, ultima activitate, platformă, versiune) doar în modul `personal`. Nicio informație financiară a utilizatorilor. Altcineva decât administratorul: 403.",
+    success: { status: 200, schema: dataOf(usageStatsSchema), description: "Statisticile." },
+    errors: [VALIDATION, FORBIDDEN],
   },
   // --- Statistici de utilizare (6.5) ---------------------------------------------------------
   {

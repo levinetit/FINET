@@ -39,3 +39,20 @@ export type DeletionResult = Readonly<{
   deletedHouseholds: number;
   leftHouseholds: number;
 }>;
+
+// --- Schemele răspunsurilor (OpenAPI și contractul testat) ------------------------------------
+
+const householdRef = z.strictObject({ id: z.uuid(), name: z.string() });
+
+export const deletionPreviewSchema = z.strictObject({
+  hasPassword: z.boolean(),
+  deletedHouseholds: z.array(householdRef),
+  leftHouseholds: z.array(householdRef.extend({ unsettled: z.boolean() })),
+  blockedHouseholds: z.array(householdRef),
+});
+
+export const deletionResultSchema = z.strictObject({
+  outcome: z.enum(["deleted", "anonymized"]),
+  deletedHouseholds: z.number().int(),
+  leftHouseholds: z.number().int(),
+});

@@ -398,7 +398,7 @@ create function finet.usage_stats(p_include_members boolean) returns jsonb
           select jsonb_build_object(
                    'month', to_char(c.created_at at time zone 'Europe/Bucharest', 'YYYY-MM'),
                    'currency', c.cost_currency,
-                   'costMinor', sum(c.cost_estimate_minor)::text) as x
+                   'costMinor', sum(c.cost_estimate_minor)::bigint) as x
             from finet.ai_calls c
            where c.cost_currency is not null
              and c.created_at >= date_trunc('month', v_now) - interval '2 months'

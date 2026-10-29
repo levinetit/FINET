@@ -345,7 +345,9 @@ describe("readMigrations (fără bază)", () => {
     expect(definers).toEqual(["erase_current_user", "aggregate_app_events", "usage_stats"]);
     expect([...code.matchAll(/security\s+definer/gi)]).toHaveLength(3);
     const policies = [
-      ...code.matchAll(/create policy (\w+) on finet\.\w+\s+for (\w+) to (\w+)\s+(?:using|with check) \(([^\n]*)/g),
+      ...code.matchAll(
+        /create policy (\w+) on finet\.\w+\s+for (\w+) to (\w+)\s+(?:using|with check) \(([^\n]*)/g,
+      ),
     ];
     expect(policies.length).toBeGreaterThan(0);
     for (const p of policies) {
@@ -358,7 +360,9 @@ describe("readMigrations (fără bază)", () => {
     );
     // Administratorul e verificat în funcția statisticilor; ștergerea cere utilizatorul fără apartenențe.
     expect(code).toMatch(/u\.is_platform_admin and u\.status = 'active'/);
-    expect(code).toMatch(/exists \(select 1 from finet\.household_members m where m\.user_id = v_user\)/);
+    expect(code).toMatch(
+      /exists \(select 1 from finet\.household_members m where m\.user_id = v_user\)/,
+    );
   });
 
   it("0009_receipt_pipeline: RLS ENABLE + FORCE pe tabelele noi; 3 funcții SECURITY DEFINER; bugetul fără drepturi directe", () => {

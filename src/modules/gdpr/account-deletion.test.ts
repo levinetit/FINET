@@ -311,7 +311,9 @@ describe.skipIf(!TEST_ADMIN_URL)("ștergerea contului (Postgres real, finet_app)
     // Fără context: refuzată.
     expect(
       await sqlState(() =>
-        withRlsOn(f.db, { userId: null }, (tx) => tx.execute(sql`select finet.erase_current_user()`)),
+        withRlsOn(f.db, { userId: null }, (tx) =>
+          tx.execute(sql`select finet.erase_current_user()`),
+        ),
       ),
     ).toBe("42501");
   });

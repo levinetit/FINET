@@ -35,19 +35,10 @@ export const appEventDaily = finet.table(
       columns: [t.day, t.name, t.platform, t.appVersion, t.screen, t.errorCode],
     }),
     check("app_event_daily_name_format", sql`${t.name} ~ '^[a-z][a-z0-9_.]{1,63}$'`),
-    check(
-      "app_event_daily_platform_valid",
-      sql`${t.platform} in ('android', 'web', 'unknown')`,
-    ),
-    check(
-      "app_event_daily_app_version_format",
-      sql`${t.appVersion} ~ '^[0-9A-Za-z.+_-]{0,32}$'`,
-    ),
+    check("app_event_daily_platform_valid", sql`${t.platform} in ('android', 'web', 'unknown')`),
+    check("app_event_daily_app_version_format", sql`${t.appVersion} ~ '^[0-9A-Za-z.+_-]{0,32}$'`),
     check("app_event_daily_screen_format", sql`${t.screen} ~ '^([a-z][a-z0-9_.]{0,63})?$'`),
-    check(
-      "app_event_daily_error_code_format",
-      sql`${t.errorCode} ~ '^([a-z][a-z0-9_.]{0,63})?$'`,
-    ),
+    check("app_event_daily_error_code_format", sql`${t.errorCode} ~ '^([a-z][a-z0-9_.]{0,63})?$'`),
     check("app_event_daily_count_min", sql`${t.count} >= 1`),
     check("app_event_daily_day_min", sql`${t.day} >= date '2020-01-01'`),
     check("app_event_daily_day_max", sql`${t.day} <= date '2999-12-31'`),
