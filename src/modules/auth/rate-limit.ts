@@ -38,7 +38,9 @@ export type RateLimitKind =
   // Încărcarea documentelor (F6-A), pe utilizator.
   | "api_document_upload"
   // F6-C: reprocesarea unui bon (un nou apel AI plătit).
-  | "api_receipt_reprocess";
+  | "api_receipt_reprocess"
+  // F8-A: acceptarea unei invitații în gospodărie (contra ghicirii tokenurilor), pe utilizator.
+  | "invite_accept";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;
