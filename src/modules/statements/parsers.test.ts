@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -335,17 +335,23 @@ describe("fixture-urile nu conțin IBAN-uri valide (mod-97)", () => {
     return m === 1n;
   };
 
-  it("niciun șir de forma unui IBAN din fixtures/statements și din generator nu trece mod-97", () => {
+  it("niciun șir de forma unui IBAN din fixtures, generator și testele extraselor nu trece mod-97", () => {
     const texts = [
       readFileSync(join(process.cwd(), "scripts/make-statement-fixtures.mjs"), "utf8"),
     ];
     for (const bank of BANKS) texts.push(readFileSync(join(DIR, bank, "items.json"), "utf8"));
+    // Și fișierele `.ts` ale modulului (revizuirea F7-B, m4), fără deosebire de majuscule.
+    const mod = join(process.cwd(), "src/modules/statements");
+    for (const f of readdirSync(mod).filter((n) => n.endsWith(".ts"))) {
+      texts.push(readFileSync(join(mod, f), "utf8"));
+    }
     const found = texts.flatMap(
-      (t) => t.match(/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,4})?\b/g) ?? [],
+      (t) => t.match(/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,4})?\b/gi) ?? [],
     );
     expect(found.length).toBeGreaterThan(3);
     expect(found.filter(valid)).toEqual([]);
-    // Controlul funcției: un IBAN de exemplu public (valid) trece.
-    expect(valid("GB82 WEST 1234 5698 7654 32")).toBe(true);
+    // Controlul funcției: un IBAN public de exemplu (valid) trece; compus din bucăți, ca textul
+    // acestui fișier să nu conțină un IBAN valid.
+    expect(valid(["GB82", "WEST", "1234", "5698", "7654", "32"].join(" "))).toBe(true);
   });
 });

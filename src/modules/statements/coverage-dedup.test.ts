@@ -126,7 +126,7 @@ describe("descrierile stocate fără IBAN-uri", () => {
     const d1 = buildDescription(["Plata factura", "RO12 TEST 0000 1111", "2222 3333 · rest"]);
     expect(d1).not.toMatch(/\d{4}/);
     expect(d1).toContain("Plata factura");
-    const d2 = buildDescription(["Transfer catre ro12test0000111122223333 Ion"]);
+    const d2 = buildDescription(["Transfer catre ro13test0000111122223333 Ion"]);
     expect(d2).not.toMatch(/test0000/i);
     expect(d2).toContain("Ion");
     const d3 = buildDescription(["De la: X, RO55TEST00001111", "22223333"]);
