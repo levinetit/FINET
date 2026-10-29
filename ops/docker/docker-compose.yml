@@ -354,6 +354,60 @@ services:
     networks:
       - default
 
+  finet-cleanup:
+    <<: *common
+    # Retenția bonurilor (F6-C, ADR 0015): `admin cleanup-documents` șterge originalele cu
+    # `expires_at` trecut (RECEIPT_IMAGE_RETENTION_DAYS) și fișierele temporare orfane `*.tmp-*`.
+    # Separat de finet-admin (decizia mea, privilegiul minim): DOAR acest one-shot are storage-ul
+    # în SCRIERE; create-user/reset-password nu-l văd. Aceleași drepturi în bază ca finet-admin
+    # (finet_database_url, finet_app; documentele se aleg prin `finet.expired_documents`, 0011).
+    # Ieșirea: doar contoare (`expired=… failed=… temp=…`). Programat zilnic de operator
+    # (docs/INFRA.md, „Faza 6 pe producție”):
+    #   docker compose ... --profile cleanup run --rm -T finet-cleanup
+    image: ${FINET_TOOLS_IMAGE:-finet:tools}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: tools
+    hostname: finet-cleanup
+    profiles: [cleanup]
+    restart: "no"
+    env_file:
+      - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.admin.env
+        required: true
+    secrets:
+      - finet_database_url
+    environment:
+      FINET_ROLE: admin
+      DATABASE_URL_FILE: /run/secrets/finet_database_url
+      DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
+      NODE_ENV: production
+      APP_MODE: personal
+      STORAGE_DIR: /data/storage
+      NODE_OPTIONS: --max-old-space-size=128
+    entrypoint: ["node", "dist/tools/admin.mjs"]
+    command: ["cleanup-documents"]
+    volumes:
+      - *ca-volume
+      # Storage-ul în SCRIERE (ștergerea originalelor); create_host_path: false → fără director
+      # creat din greșeală (CLI-ul refuză oricum un storage nemontat, fără `households/`).
+      - type: bind
+        source: ${FINET_DATA_DIR:-/srv/finet}/storage
+        target: /data/storage
+        read_only: false
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 192m
+    memswap_limit: 192m
+    cpus: 0.5
+    pids_limit: 64
+    healthcheck:
+      disable: true
+    networks:
+      - default
+
   finet-backup:
     <<: *common
     # Backup-ul zilnic (F3-D, ADR 0009, docs/BACKUP.md): pg_dump al schemei `finet` + fișierele
