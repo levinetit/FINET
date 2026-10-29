@@ -58,6 +58,8 @@ describe("extracția elementelor dintr-un extras PDF (proces copil)", () => {
       expect(s.bank).toBe(bank);
       expect(s.lines).toHaveLength(f.expected.lines.length);
       expect(s.closingBalanceMinor).toBe(BigInt(f.expected.closingBalanceMinor));
+      // Tranzacțiile în așteptare se numără și când pdf.js unește „-” cu suma (BT).
+      expect(s.pendingCount).toBe(f.expected.pendingCount);
       expect(checkBalances(s).status).toBe("ok");
       expect(activeStatementPdfChildren()).toBe(0);
     },

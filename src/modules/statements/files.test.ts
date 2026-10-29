@@ -348,4 +348,11 @@ describe("ZIP malițios", () => {
     expect(parts[0]).toMatchObject({ kind: "table", format: "csv" });
     expect(code(() => readStatementUpload(Buffer.alloc(21 * 1024 * 1024)))).toBe("file_too_large");
   });
+
+  it("un ZIP cu o arhivă imbricată dă `zip_unsafe` (nu eroarea XLSX), ca mesajul afișat să fie corect", () => {
+    const nested = buildZip([
+      { name: "inner.zip", data: buildZip([{ name: "a.csv", data: "x" }]) },
+    ]);
+    expect(code(() => readStatementUpload(nested))).toBe("zip_unsafe");
+  });
 });

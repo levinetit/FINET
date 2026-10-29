@@ -175,9 +175,8 @@ export function parseBt(raw: readonly TextItem[]): ParsedStatement {
 
     if (mode === "pending") {
       // `- | 31.00 RON | aferenta tranzactiei | …` = o tranzacție în așteptare.
-      if (row.items[0]?.s.trim() === "-" && /RON|EUR|USD/.test(row.items[1]?.s ?? "")) {
-        pendingCount++;
-      }
+      // pdf.js poate uni „-” cu suma într-un singur fragment: se citește textul rândului.
+      if (/^- ?\d[\d.,]* (RON|EUR|USD)\b/.test(rowText(row).trim())) pendingCount++;
       continue;
     }
     if (mode !== "tx" || !cols || !currency) continue;

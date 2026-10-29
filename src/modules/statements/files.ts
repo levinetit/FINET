@@ -70,6 +70,10 @@ export function readStatementUpload(input: Uint8Array): UploadPart[] {
     } catch (e) {
       // Un XLSX are propriile plafoane: dacă arhiva arată ca un pachet OOXML, îl citim ca XLSX.
       if (e instanceof StatementError && e.code === "zip_unsafe") {
+        // Doar o arhivă care pare pachet OOXML (numele `[Content_Types].xml` în directorul central,
+        // necomprimat) se reîncearcă ca XLSX; altfel rămâne eroarea ZIP (mesajul corect pentru un
+        // ZIP cu arhive imbricate). Ambele căi refuză: alegerea privește doar codul afișat.
+        if (!bytes.includes("[Content_Types].xml")) throw e;
         try {
           return [single(bytes, 0, false)];
         } catch (inner) {
