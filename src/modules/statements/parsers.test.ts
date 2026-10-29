@@ -244,3 +244,108 @@ describe("formatele explicite de sumă și dată", () => {
     expect(code(() => parseRoDate("3 foo. 2026"))).toBe("invalid_date");
   });
 });
+
+/**
+ * Revizuirea F7-A: marcajele de secțiune scrise de plătitor în DETALIILE unei tranzacții (rânduri
+ * de continuare, la x-ul descrierii) nu schimbă modul, perioada, moneda sau soldurile: rămân text
+ * al descrierii. Pentru fiecare bancă se înlocuiește un rând de detalii cu fiecare marcaj.
+ */
+describe("marcaje de secțiune în descrierea controlată de plătitor", () => {
+  const CASES: Record<(typeof BANKS)[number], { target: string; markers: string[] }> = {
+    bt: {
+      target: "tranzactie: 87.14 RON",
+      markers: [
+        "SUME BLOCATE",
+        "RULAJ ZI",
+        "SOLD FINAL ZI",
+        "SOLD FINAL CONT",
+        "SOLD ANTERIOR",
+        "RULAJ TOTAL CONT",
+        "TOTAL DISPONIBIL",
+        "EXTRAS CONT din 01/01/2020",
+        "Cod IBAN: RO00TEST",
+      ],
+    },
+    brd: {
+      target: "EXEMPLU SOFT SRL",
+      markers: [
+        "Sold final / End balance",
+        "Sold initial / Start balance",
+        "Total debit / Total credit",
+        "De la / From 01/01/2020 La / To 02/01/2020",
+        "Valuta / Currency EUR",
+        "Data oper. Debit Credit",
+      ],
+    },
+    raiffeisen: {
+      target: "EXEMPLU ANA",
+      markers: [
+        "Sold final 1.00",
+        "Soldul zilei: 01.11.2026 1.00",
+        "Perioada: de la 01.01.2020 la 02.01.2020",
+        "Valuta: EUR",
+        "Prezentul extras are valoare",
+      ],
+    },
+    revolut: {
+      target: "Către: Spotify, Stockholm, SWE",
+      markers: [
+        "Tranzacții în așteptare",
+        "Tranzacții din cont de la 1 ianuarie 2020 până la 2 ianuarie 2020",
+        "Extras EUR",
+        "Total 1,00 RON 1,00 RON",
+        "Revolut Bank UAB este autorizată",
+      ],
+    },
+  };
+
+  for (const bank of BANKS) {
+    const { target, markers } = CASES[bank];
+    it.each(markers)(`${bank}: „%s” rămâne descriere`, (marker) => {
+      const { items, expected } = load(bank);
+      expect(items.some((i) => i.s === target)).toBe(true);
+      const s = parsePdfItems(items.map((i) => (i.s === target ? { ...i, s: marker } : i)));
+      expect(s.lines.length).toBe(expected.lines.length);
+      expect(s.periodStart).toBe(expected.periodStart);
+      expect(s.periodEnd).toBe(expected.periodEnd);
+      expect(s.currency).toBe(expected.currency);
+      expect(String(s.openingBalanceMinor)).toBe(expected.openingBalanceMinor);
+      expect(String(s.closingBalanceMinor)).toBe(expected.closingBalanceMinor);
+      expect(s.pendingCount).toBe(expected.pendingCount);
+      expect(checkBalances(s).status).toBe("ok");
+    });
+  }
+
+  it("Revolut: un PDF cu a doua secțiune în altă monedă → `multi_currency_statement`", () => {
+    const { items } = load("revolut");
+    const second = items.map((i) => ({ ...i, p: 2, s: i.s === "Extras RON" ? "Extras EUR" : i.s }));
+    expect(code(() => parsePdfItems([...items, ...second]))).toBe("multi_currency_statement");
+  });
+});
+
+describe("fixture-urile nu conțin IBAN-uri valide (mod-97)", () => {
+  const valid = (iban: string) => {
+    const s = iban.replace(/\s/g, "").toUpperCase();
+    const r = s.slice(4) + s.slice(0, 4);
+    let m = 0n;
+    for (const ch of r) {
+      const v = /\d/.test(ch) ? ch : String(ch.charCodeAt(0) - 55);
+      m = BigInt(`${m}${v}`) % 97n;
+    }
+    return m === 1n;
+  };
+
+  it("niciun șir de forma unui IBAN din fixtures/statements și din generator nu trece mod-97", () => {
+    const texts = [
+      readFileSync(join(process.cwd(), "scripts/make-statement-fixtures.mjs"), "utf8"),
+    ];
+    for (const bank of BANKS) texts.push(readFileSync(join(DIR, bank, "items.json"), "utf8"));
+    const found = texts.flatMap(
+      (t) => t.match(/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,4})?\b/g) ?? [],
+    );
+    expect(found.length).toBeGreaterThan(3);
+    expect(found.filter(valid)).toEqual([]);
+    // Controlul funcției: un IBAN de exemplu public (valid) trece.
+    expect(valid("GB82 WEST 1234 5698 7654 32")).toBe(true);
+  });
+});

@@ -1,6 +1,13 @@
 import type { Currency } from "@/lib/money";
 
-import { type Columns, amountItems, columnOf, findColumns, stripSuffix } from "../table";
+import {
+  type Columns,
+  amountItems,
+  columnOf,
+  findColumns,
+  isContinuation,
+  stripSuffix,
+} from "../table";
 import {
   centre,
   fold,
@@ -27,6 +34,15 @@ export const REVOLUT_PARSER_VERSION = 1;
 const STYLE = "dot_comma" as const;
 const SUFFIX = /\s?(RON|EUR|USD|GBP|CHF|[€$£])$/;
 const FX_AMOUNT_RE = /^(?:[€$]\s?)?(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})\s?(?:€|\$|RON|EUR|USD)?$/;
+
+/** Detaliile unei tranzacții: `ID tranzacție` = referința; cardul și IBAN-urile nu se rețin. */
+function appendDetail(current: Draft, t: string): void {
+  const id = /^ID tranzac(?:ț|t)ie:\s*(\S+)$/i.exec(t);
+  if (id) current.reference = id[1]!;
+  else if (/^Card:/i.test(t)) return;
+  else if (/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/i.test(t.replace(/\s/g, ""))) return;
+  else current.parts.push(t);
+}
 
 export function parseRevolut(raw: readonly TextItem[]): ParsedStatement {
   const rows = groupRows(raw);
@@ -55,10 +71,20 @@ export function parseRevolut(raw: readonly TextItem[]): ParsedStatement {
     const row = rows[i]!;
     const text = fold(rowText(row));
 
+    // Rândurile de continuare ale tranzacției deschise (detaliile, controlate de plătitor): niciun
+    // marcaj de secțiune sau de antet nu se caută pe ele (revizuirea F7-A: o descriere „SUME
+    // BLOCATE” / „RULAJ ZI” / „Sold final …” nu schimbă modul, perioada sau soldurile).
+    if (current && !pending && isContinuation(row, current.descX, STYLE)) {
+      appendDetail(current, rowText(row));
+      continue;
+    }
+
     const title = /^extras ([a-z]{3})$/.exec(text);
     if (title) {
       const c = currencyFrom(title[1]!);
-      if (currency && currency !== c) throw new StatementError("currency_mismatch");
+      // Un PDF Revolut cu MAI MULTE monede (câte o secțiune „Extras XXX” pe cont) se refuză:
+      // fiecare monedă e un cont separat în FINET; utilizatorul exportă câte un extras pe monedă.
+      if (currency && currency !== c) throw new StatementError("multi_currency_statement");
       currency = c;
       continue;
     }
@@ -89,7 +115,8 @@ export function parseRevolut(raw: readonly TextItem[]): ParsedStatement {
       continue;
     }
     const period = /^tranzactii din cont de la (.+) pana la (.+)$/.exec(text);
-    if (period) {
+    // Perioada se citește O SINGURĂ dată (antetul); o repetare nu o mai schimbă.
+    if (period && periodStart === null) {
       periodStart = parseRoDate(period[1]!);
       periodEnd = parseRoDate(period[2]!);
       pending = false;
@@ -160,11 +187,7 @@ export function parseRevolut(raw: readonly TextItem[]): ParsedStatement {
       continue;
     }
     if (!row.items[0] || Math.abs(row.items[0].x - current.descX) > 6) continue;
-    const id = /^ID tranzac(?:ț|t)ie:\s*(\S+)$/i.exec(t);
-    if (id) current.reference = id[1]!;
-    else if (/^Card:/i.test(t)) continue;
-    else if (/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/.test(t.replace(/\s/g, ""))) continue;
-    else current.parts.push(t);
+    appendDetail(current, t);
   }
 
   if (!currency || opening === null || closing === null || !cols) {

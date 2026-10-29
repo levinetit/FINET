@@ -71,8 +71,16 @@ export function parseRaiffeisen(raw: readonly TextItem[]): ParsedStatement {
     const row = rows[i]!;
     const text = fold(rowText(row));
 
+    // Rândurile de continuare ale tranzacției deschise (detaliile, controlate de plătitor): niciun
+    // marcaj de secțiune sau de antet nu se caută pe ele (revizuirea F7-A: o descriere „SUME
+    // BLOCATE” / „RULAJ ZI” / „Sold final …” nu schimbă modul, perioada sau soldurile).
+    if (current && isContinuation(row, current.descX, STYLE)) {
+      current.parts.push(rowText(row));
+      continue;
+    }
+
     const period = /^perioada: de la (\d{2}\.\d{2}\.\d{4}) la (\d{2}\.\d{2}\.\d{4})$/.exec(text);
-    if (period) {
+    if (period && periodStart === null) {
       periodStart = parseDmy(period[1]!, ".");
       periodEnd = parseDmy(period[2]!, ".");
       continue;
@@ -83,7 +91,9 @@ export function parseRaiffeisen(raw: readonly TextItem[]): ParsedStatement {
     }
     const curIdx = row.items.findIndex((it) => fold(it.s) === "valuta:");
     if (curIdx >= 0) {
-      currency = currencyFrom(row.items[curIdx + 1]?.s ?? "");
+      const c = currencyFrom(row.items[curIdx + 1]?.s ?? "");
+      if (currency && currency !== c) throw new StatementError("currency_mismatch");
+      currency = c;
       continue;
     }
     if (row.items.some((it) => fold(it.s) === "rulaj debitor")) {

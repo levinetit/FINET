@@ -67,6 +67,7 @@ export type StatementErrorCode =
   | "too_many_lines"
   | "empty_statement"
   | "currency_mismatch"
+  | "multi_currency_statement"
   | "csv_invalid"
   | "csv_mapping_required"
   | "csv_mapping_invalid"

@@ -36,6 +36,14 @@ const SUMMARY_LABELS = [
   "din care",
 ];
 
+/** Detaliile unei tranzacții (`REF:` = referința băncii). */
+function appendContinuation(current: Draft, row: Row): void {
+  const t = rowText(row);
+  const ref = /^REF:\s*(\S+)$/i.exec(t);
+  if (ref) current.reference = ref[1]!;
+  else current.parts.push(t);
+}
+
 /** Eticheta de sumar a rândului (fără data din față), dacă există. */
 function summaryLabel(row: Row): string | null {
   const text = fold(rowText(row)).replace(/^\d{2}\/\d{2}\/\d{4} /, "");
@@ -72,6 +80,14 @@ export function parseBt(raw: readonly TextItem[]): ParsedStatement {
     if (used.has(i)) continue;
     const row = rows[i]!;
     const text = fold(rowText(row));
+
+    // Rândurile de continuare ale tranzacției deschise (detaliile, controlate de plătitor): niciun
+    // marcaj de secțiune sau de antet nu se caută pe ele (revizuirea F7-A: o descriere „SUME
+    // BLOCATE” / „RULAJ ZI” / „Sold final …” nu schimbă modul, perioada sau soldurile).
+    if (mode === "tx" && current && isContinuation(row, current.descX, STYLE)) {
+      appendContinuation(current, row);
+      continue;
+    }
 
     // Antetul extrasului: `EXTRAS CONT | Numarul: N | din dd/mm/yyyy`.
     if (text.startsWith("extras cont")) {
@@ -192,12 +208,6 @@ export function parseBt(raw: readonly TextItem[]): ParsedStatement {
     }
     // Două sume pe un rând cu descriere = rând corupt; fără descriere = valorile unui rulaj.
     if (amounts.length > 1 && desc) throw new StatementError("corrupt_row");
-    if (current && isContinuation(row, current.descX, STYLE)) {
-      const t = rowText(row);
-      const ref = /^REF:\s*(\S+)$/i.exec(t);
-      if (ref) current.reference = ref[1]!;
-      else current.parts.push(t);
-    }
   }
 
   if (block.length) throw new StatementError("corrupt_row");

@@ -46,6 +46,16 @@ export function parseBrd(raw: readonly TextItem[]): ParsedStatement {
     const row = rows[i]!;
     const text = fold(rowText(row));
 
+    // Rândurile de continuare ale tranzacției deschise (detaliile, controlate de plătitor): niciun
+    // marcaj de secțiune sau de antet nu se caută pe ele (revizuirea F7-A: o descriere „SUME
+    // BLOCATE” / „RULAJ ZI” / „Sold final …” nu schimbă modul, perioada sau soldurile).
+    if (current && opening !== null && isContinuation(row, current.descX, STYLE)) {
+      const t = rowText(row);
+      if (current.reference === null && REFERENCE_RE.test(t)) current.reference = t;
+      else current.parts.push(t);
+      continue;
+    }
+
     if (text.includes("de la / from") && periodStart === null) {
       const dates = row.items.filter((it) => isDmy(it.s, "/"));
       if (dates.length !== 2) throw new StatementError("header_missing");
@@ -59,7 +69,9 @@ export function parseBrd(raw: readonly TextItem[]): ParsedStatement {
     }
     if (text.startsWith("valuta / currency")) {
       const cur = row.items[row.items.length - 1];
-      currency = currencyFrom(cur?.s ?? "");
+      const c = currencyFrom(cur?.s ?? "");
+      if (currency && currency !== c) throw new StatementError("currency_mismatch");
+      currency = c;
       continue;
     }
     const header = findColumns(row, ["debit"], ["credit"]);
