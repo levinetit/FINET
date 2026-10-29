@@ -28,6 +28,18 @@ const UNIQUE_REASONS: Readonly<Record<string, string>> = {
   receipts_household_dedup_key: "duplicate_receipt",
 };
 
+/**
+ * Numele constrângerilor ridicate de triggerele scrise de mână (`RAISE ... CONSTRAINT = ...`,
+ * 0012_family) → motivul conflictului. Fără mesajul Postgres (poate conține valori).
+ */
+const CHECK_REASONS: Readonly<Record<string, string>> = {
+  transaction_splits_sum: "split_sum_mismatch",
+  household_members_last_owner: "last_owner",
+  accounts_owner_change: "account_owner_change",
+  household_invites_final: "invite_not_active",
+  settlements_cancel_once: "settlement_already_cancelled",
+};
+
 export function translateDbError(error: unknown): never {
   if (
     error instanceof NotFoundError ||
@@ -45,7 +57,11 @@ export function translateDbError(error: unknown): never {
       // folosit (ștergere): ambele sunt conflicte de stare, nu erori interne.
       throw new ConflictError("reference_conflict");
     case "23514":
-      throw new ConflictError("integrity_check_failed");
+      throw new ConflictError(CHECK_REASONS[info.constraint ?? ""] ?? "integrity_check_failed");
+    case "54000":
+      // Plafonul de membri ai gospodăriei (0012, triggerul household_members_check_cap).
+      if (info.constraint === "household_members_cap") throw new ConflictError("household_full");
+      throw error;
     case "22021":
       // Caracter invalid în text (de exemplu NUL, `\u0000`, sau UTF-8 invalid): 400 cu mesaj fix,
       // fără parametrii interogării sau conținutul primit (mesajul Postgres le-ar cita).

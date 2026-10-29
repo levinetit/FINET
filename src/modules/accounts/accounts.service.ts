@@ -14,7 +14,6 @@ import {
   accountHasTransactions,
   deleteAccountRow,
   insertAccount,
-  isHouseholdMember,
   selectAccount,
   selectAccountSums,
   selectAccounts,
@@ -130,11 +129,29 @@ export async function getAccount(
   );
 }
 
-async function checkOwner(tx: Tx, householdId: string, ownerUserId: string | null | undefined) {
-  if (ownerUserId && !(await isHouseholdMember(tx, householdId, ownerUserId))) {
+/**
+ * Proprietarul unui cont (Faza 8, ADR 0016): `null` = cont COMUN (îl văd toți membrii), altfel
+ * cont PERSONAL, vizibil DOAR proprietarului. De aceea un cont personal se creează doar pentru
+ * tine (unul „personal” al altui membru ar dispărea din ochii creatorului), un cont comun nu
+ * devine personal (ar ascunde de ceilalți istoricul lui) și un cont personal nu trece la alt
+ * membru; personal → comun e permis. Aceleași reguli în bază (RLS + triggerul
+ * `accounts_check_owner_change`).
+ */
+function checkOwnerOnCreate(actor: Actor, ownerUserId: string | null | undefined) {
+  if (ownerUserId && ownerUserId !== actor.userId.toLowerCase()) {
     throw new ValidationError({
-      ownerUserId: "Proprietarul trebuie să fie membru al gospodăriei.",
+      ownerUserId: "Un cont personal poate fi doar al tău.",
     });
+  }
+}
+
+function checkOwnerOnUpdate(current: AccountRow, ownerUserId: string | null | undefined): void {
+  if (ownerUserId === undefined || ownerUserId === null) return;
+  if (ownerUserId !== current.ownerUserId) {
+    throw new ConflictError(
+      "account_owner_change",
+      "Un cont comun nu devine personal, iar unul personal nu trece la alt membru.",
+    );
   }
 }
 
@@ -155,7 +172,7 @@ export async function createAccount(
           true,
         );
   return inHousehold(deps, actor, householdId, async (tx, m) => {
-    await checkOwner(tx, m.householdId, input.ownerUserId);
+    checkOwnerOnCreate(actor, input.ownerUserId);
     const row = await insertAccount(tx, {
       householdId: m.householdId,
       name: input.name,
@@ -189,7 +206,7 @@ export async function updateAccount(
         "Moneda unui cont cu tranzacții nu se schimbă.",
       );
     }
-    await checkOwner(tx, m.householdId, patch.ownerUserId);
+    checkOwnerOnUpdate(current, patch.ownerUserId);
     const opening =
       patch.openingBalanceMinor === undefined && patch.openingBalance === undefined
         ? undefined

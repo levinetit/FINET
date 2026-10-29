@@ -131,7 +131,8 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS și drepturi pe tabelele planificării (fi
         ),
       ),
     ).toBe("23503");
-    // Tranzacția lui B cu household_id-ul lui A: cheia compusă (id, household_id) nu există.
+    // Tranzacția lui B cu household_id-ul lui A: din 0012 politica cere o tranzacție VIZIBILĂ,
+    // deci refuzul vine înaintea cheii compuse (id, household_id): 42501.
     const [own] = await as(
       A(),
       f.HA,
@@ -145,7 +146,7 @@ describe.skipIf(!TEST_ADMIN_URL)("RLS și drepturi pe tabelele planificării (fi
           sql`insert into finet.transaction_tags (transaction_id, tag_id, household_id) values (${txB}, ${own!.id}, ${f.HA})`,
         ),
       ),
-    ).toBe("23503");
+    ).toBe("42501");
     // Eticheta de sistem pe tranzacția proprie: ok; vizibilitatea doar pentru cele de sistem.
     await as(
       A(),
