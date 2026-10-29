@@ -11,8 +11,9 @@ dist/
 next-env.d.ts
 *.tsbuildinfo
 
-# teste
-coverage/
+# teste (raportul de acoperire al vitest doar la rădăcină: `coverage/` ignora și rutele
+# `/statements/coverage`, Faza 7)
+/coverage/
 playwright-report/
 test-results/
 bundle-size.json
