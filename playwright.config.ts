@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Teste E2E, în șapte proiecte, pe două servere:
+ * Teste E2E, în mai multe proiecte, pe două servere (Faza 9: `pwa`, scanarea offline):
  * - `smoke`, `auth`, `ledger` și `planning` (browser): `pnpm dev` cu Access dezactivat DOAR pentru test
  *   (NODE_ENV=development, CF_ACCESS_REQUIRED=false; `src/lib/config.ts` refuză asta în
  *   producție și nu e slăbit). `auth` cere un Postgres de test migrat (`DATABASE_URL` = rolul
@@ -157,6 +157,13 @@ export default defineConfig({
       name: "family",
       testMatch: /family\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
+      // PWA și offline (Faza 9, ADR 0020): același server și aceeași bază, utilizatorii `pwa` și
+      // `pwa2`; service worker-ul permis explicit (implicit oricum).
+      name: "pwa",
+      testMatch: /pwa\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL, serviceWorkers: "allow" },
     },
     {
       // Doar fixture-ul `request`: nu pornește niciun browser.

@@ -168,3 +168,25 @@ test("fără JWT Access, încărcarea și lista documentelor dau 403 (ruta exclu
     expect((await request.get(path, { maxRedirects: 0 })).status(), path).toBe(403);
   }
 });
+
+test("Faza 9: fișierele PWA și ruta Android cer Access (403 fără JWT, fără conținut)", async ({
+  request,
+}) => {
+  for (const path of [
+    "/sw.js",
+    "/manifest.webmanifest",
+    "/icons/icon-192.png",
+    "/icons/apple-touch-icon.png",
+    "/offline",
+    "/pwa/offline.js",
+    "/help",
+    "/settings/android",
+    "/api/v1/app/android/latest",
+  ]) {
+    const response = await request.get(path, { maxRedirects: 0 });
+    expect(response.status(), path).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: "forbidden", message: "Acces interzis." },
+    });
+  }
+});
