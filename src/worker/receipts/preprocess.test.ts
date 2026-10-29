@@ -21,7 +21,7 @@ import {
   preprocessDocument,
 } from "./preprocess";
 import { scanPdfImages } from "./pdf-scan";
-import { activePdfWorkers, spawnedPdfWorkers } from "./pdf-worker";
+import { activePdfChildren, spawnedPdfChildren } from "./pdf-sandbox";
 
 const LIMITS: PreprocessLimits = { maxImagePixels: 50_000_000, maxPdfPages: 6, timeoutMs: 30_000 };
 
@@ -174,60 +174,62 @@ describe("preprocesarea PDF-urilor", () => {
     expect(await codeOf(preprocessDocument(broken, "application/pdf", LIMITS))).toBe("pdf_invalid");
   });
 
-  it("bombă în PDF (imagine declarată 20000×20000): refuzată ÎNAINTE de pdf.js (fără fir pornit)", async () => {
-    const before = spawnedPdfWorkers();
+  it("bombă în PDF (imagine declarată 20000×20000): refuzată rapid, fără proces copil", async () => {
+    const before = spawnedPdfChildren();
     expect(
       await codeOf(
         preprocessDocument(pdfWithDeclaredImage(20000, 20000), "application/pdf", LIMITS),
       ),
     ).toBe("image_too_large");
-    expect(spawnedPdfWorkers()).toBe(before);
+    expect(spawnedPdfChildren()).toBe(before);
   });
 
   it("dimensiune prin referință indirectă → pdf_image_unverifiable (fără decodare)", async () => {
-    const before = spawnedPdfWorkers();
+    const before = spawnedPdfChildren();
     expect(
       await codeOf(
         preprocessDocument(pdfWithDeclaredImage(300, 300, true), "application/pdf", LIMITS),
       ),
     ).toBe("pdf_image_unverifiable");
-    expect(spawnedPdfWorkers()).toBe(before);
+    expect(spawnedPdfChildren()).toBe(before);
   });
 
-  it("timeout pe PDF: firul pdf.js e oprit efectiv, nicio muncă rămasă", async () => {
+  it("timeout pe PDF: procesul copil e ucis (SIGKILL), nicio muncă rămasă", async () => {
     expect(
       await codeOf(preprocessDocument(textPdf(), "application/pdf", { ...LIMITS, timeoutMs: 20 })),
     ).toBe("preprocess_timeout");
-    expect(activePdfWorkers()).toBe(0);
+    expect(activePdfChildren()).toBe(0);
   });
 
-  it("după o citire reușită, firul PDF e închis", async () => {
+  it("după o citire reușită, procesul copil s-a terminat", async () => {
     await preprocessDocument(textPdf(), "application/pdf", LIMITS);
-    expect(activePdfWorkers()).toBe(0);
+    expect(activePdfChildren()).toBe(0);
   });
 });
 
 describe("inventarul imaginilor din PDF (fără decodare)", () => {
   it("citește dimensiunile; plafon pe imagine și însumat pe document", async () => {
     const pdf = await scannedPdf();
-    expect(scanPdfImages(pdf, { maxImagePixels: 1_000_000, maxTotalPixels: 1_000_000 })).toEqual([
-      { width: 300, height: 500 },
-    ]);
+    expect(
+      scanPdfImages(pdf, { maxImagePixels: 1_000_000, maxTotalPixels: 1_000_000, maxImages: 10 }),
+    ).toEqual([{ width: 300, height: 500 }]);
     expect(() =>
-      scanPdfImages(pdf, { maxImagePixels: 100_000, maxTotalPixels: 1_000_000 }),
+      scanPdfImages(pdf, { maxImagePixels: 100_000, maxTotalPixels: 1_000_000, maxImages: 10 }),
     ).toThrow(expect.objectContaining({ code: "image_too_large" }));
     expect(() =>
-      scanPdfImages(pdf, { maxImagePixels: 1_000_000, maxTotalPixels: 100_000 }),
+      scanPdfImages(pdf, { maxImagePixels: 1_000_000, maxTotalPixels: 100_000, maxImages: 10 }),
     ).toThrow(expect.objectContaining({ code: "image_too_large" }));
-    expect(scanPdfImages(textPdf(), { maxImagePixels: 1, maxTotalPixels: 1 })).toEqual([]);
+    expect(
+      scanPdfImages(textPdf(), { maxImagePixels: 1, maxTotalPixels: 1, maxImages: 1 }),
+    ).toEqual([]);
   });
 
   it("`/Subtype /Image` în afara unui dicționar de flux → pdf_image_unverifiable", () => {
     const odd = Buffer.from(
       "%PDF-1.4\n1 0 obj\n<< /Subtype /Image /Width 10 /Height 10 >>\nendobj\n",
     );
-    expect(() => scanPdfImages(odd, { maxImagePixels: 1e9, maxTotalPixels: 1e9 })).toThrow(
-      expect.objectContaining({ code: "pdf_image_unverifiable" }),
-    );
+    expect(() =>
+      scanPdfImages(odd, { maxImagePixels: 1e9, maxTotalPixels: 1e9, maxImages: 10 }),
+    ).toThrow(expect.objectContaining({ code: "pdf_image_unverifiable" }));
   });
 });

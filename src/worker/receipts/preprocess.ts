@@ -8,7 +8,7 @@ import {
 } from "@/modules/documents/content";
 
 import { PdfScanError, scanPdfImages } from "./pdf-scan";
-import { PdfWorkerError, readPdfIsolated } from "./pdf-worker";
+import { PDF_CHILD_LIMITS, PdfChildError, readPdfInChild } from "./pdf-sandbox";
 
 /**
  * Preprocesarea documentelor în WORKER (Faza 6; master prompt 3.6, 6.3; ADR 0013). Rezultatul
@@ -22,14 +22,15 @@ import { PdfWorkerError, readPdfIsolated } from "./pdf-worker";
  *
  * PDF (unpdf = pdf.js fără canvas): ÎNAINTE de orice decodare, dimensiunile imaginilor declarate
  * se citesc din octeții bruți (`pdf-scan.ts`) și se aplică plafoanele (pe imagine și însumat);
- * apoi pdf.js rulează într-un fir izolat cu heap plafonat, oprit efectiv la timeout
- * (`pdf-worker.ts`): numărul de pagini (plafon), textul pe pagini; dacă PDF-ul nu are text
+ * (doar fail-fast, fail-closed); apoi pdf.js rulează într-un PROCES COPIL limitat de sistem
+ * (`prlimit`: adrese, CPU, fără fișiere) și ucis cu SIGKILL la timeout (`pdf-sandbox.ts`;
+ * acesta e controlul real): numărul de pagini (plafon), textul pe pagini; dacă PDF-ul nu are text
  * (scanat), imaginea cea mai mare de pe fiecare pagină e extrasă (fără randare, deci fără
  * `@napi-rs/canvas`) și trece prin același traseu ca o poză. Un PDF fără text și fără imagini
  * (desene vectoriale) e respins cu `pdf_no_content`.
  *
  * Timpul: un termen (`deadline`) pentru tot documentul, verificat între pași; sharp primește
- * `timeout` (libvips oprește singur procesarea), firul PDF e terminat. Nicio muncă nu rămâne
+ * `timeout` (libvips oprește singur procesarea), procesul copil PDF e ucis. Nicio muncă nu rămâne
  * în fundal după ce funcția a întors eroarea (revizuirea de securitate F6-A, M2).
  *
  * Erorile devin `PreprocessError` cu un cod stabil, fără ecou din conținut.
@@ -60,6 +61,7 @@ export type PreprocessErrorCode =
   | "pdf_no_content"
   | "pdf_image_unverifiable"
   | "pdf_too_complex"
+  | "pdf_sandbox_unavailable"
   | "preprocess_timeout";
 
 export class PreprocessError extends Error {
@@ -190,21 +192,26 @@ async function preprocessPdf(
   // 1. Dimensiunile imaginilor, fără decodare (bombele sunt refuzate înainte de pdf.js).
   const perImage = Math.min(limits.maxImagePixels, MAX_PDF_IMAGE_PIXELS);
   try {
-    scanPdfImages(input, { maxImagePixels: perImage, maxTotalPixels: 2 * limits.maxImagePixels });
+    scanPdfImages(input, {
+      maxImagePixels: perImage,
+      maxTotalPixels: 2 * limits.maxImagePixels,
+      maxImages: limits.maxPdfPages * PDF_CHILD_LIMITS.maxImagesPerPage,
+    });
   } catch (error) {
     if (error instanceof PdfScanError) throw new PreprocessError(error.code);
     throw error;
   }
-  // 2. pdf.js în firul izolat (heap plafonat, terminat la termen).
+  // 2. pdf.js în procesul copil limitat (ucis la termen).
   let read;
   try {
-    read = await readPdfIsolated(input, {
+    read = await readPdfInChild(input, {
       maxPages: limits.maxPdfPages,
       minTextChars: MIN_PDF_TEXT_CHARS,
       deadline,
+      maxOutputPixels: 2 * limits.maxImagePixels,
     });
   } catch (error) {
-    if (error instanceof PdfWorkerError) throw new PreprocessError(error.code);
+    if (error instanceof PdfChildError) throw new PreprocessError(error.code);
     throw error;
   }
   if (read.images === null) return { kind: "text", pages: read.pages, text: read.text };
@@ -214,7 +221,7 @@ async function preprocessPdf(
   for (const image of read.images) {
     if (image.width * image.height > perImage) throw new PreprocessError("image_too_large");
     try {
-      const raw = Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength);
+      const raw = image.data;
       images.push(
         await prepare(
           sharpInput(raw, limits, deadline, {

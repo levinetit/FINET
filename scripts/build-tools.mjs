@@ -4,11 +4,13 @@
 // externe și vin din node_modules-ul de producție al imaginii.
 // `server-only` e împachetat cu condiția `react-server` (varianta goală): uneltele rulează doar
 // pe server, iar varianta implicită a pachetului ar arunca la import.
+import { copyFileSync, mkdirSync } from "node:fs";
+
 import { build } from "esbuild";
 
 // pg-boss (și `pg`, dependența lui) rămân externe: vin din node_modules-ul de producție.
-// sharp (binar nativ libvips), unpdf (pdf.js, încărcat și de firul izolat `pdf-worker.ts` prin
-// `import("unpdf")`) și busboy rămân și ele externe (Faza 6, ADR 0013): dependențe de producție.
+// sharp (binar nativ libvips), unpdf (pdf.js, încărcat de procesul copil `pdf-child.mjs`) și
+// busboy rămân și ele externe (Faza 6, ADR 0013): dependențe de producție.
 const EXTERNAL = ["postgres", "drizzle-orm", "zod", "pg-boss", "pg", "sharp", "unpdf", "busboy"];
 
 const TOOLS = {
@@ -36,3 +38,9 @@ for (const [name, entry] of Object.entries(TOOLS)) {
   });
   console.log(`build-tools: dist/tools/${name}.mjs`);
 }
+
+// Procesul copil care citește PDF-urile (ADR 0013): JavaScript simplu, copiat neschimbat lângă
+// `worker.mjs` (îl caută acolo `src/worker/receipts/pdf-sandbox.ts`, prin `import.meta.url`).
+mkdirSync("dist/tools", { recursive: true });
+copyFileSync("src/worker/receipts/pdf-child.mjs", "dist/tools/pdf-child.mjs");
+console.log("build-tools: dist/tools/pdf-child.mjs");
