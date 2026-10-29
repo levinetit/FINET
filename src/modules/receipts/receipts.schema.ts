@@ -225,7 +225,7 @@ export type ReceiptPage = Readonly<{ data: ReceiptView[]; nextCursor: string | n
 
 /** `bigint` → număr JSON exact (sumele bonului ≤ 10^13; suma liniilor ≤ 5 · 10^15 < 2^53). */
 function safe(n: bigint): number {
-  if (n > MAX_JSON_SAFE_MINOR || n < -MAX_JSON_SAFE_MINOR) throw new MoneyOverflowError();
+  if (n > MAX_JSON_SAFE_MINOR || n < -MAX_JSON_SAFE_MINOR) throw new MoneyOverflowError(n);
   return Number(n);
 }
 const safeOrNull = (n: bigint | null) => (n === null ? null : safe(n));

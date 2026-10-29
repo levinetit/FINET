@@ -6,7 +6,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TEST_ADMIN_URL } from "@/db/testing";
 import { LocalStorage } from "@/lib/storage";
-import { type AuthFixture, authEnv, createAuthFixture, testConfig } from "@/modules/auth/testing";
+import {
+  type AuthEnv,
+  type AuthFixture,
+  authEnv,
+  createAuthFixture,
+  testConfig,
+} from "@/modules/auth/testing";
 import { createUserWithHousehold } from "@/modules/auth/users.service";
 import { multipartRequest, receiptLikeImage } from "@/modules/documents/testing";
 import { systemCategoryId } from "@/modules/ledger/testing";
@@ -55,6 +61,7 @@ type Receipt = {
 
 describe.skipIf(!TEST_ADMIN_URL)("API documente + bonuri (F6-C) pe PostgreSQL real", () => {
   let fx: AuthFixture;
+  let auth: AuthEnv;
   let env: DocumentsApiDeps;
   let root: string;
   let A: Sessions;
@@ -141,11 +148,12 @@ describe.skipIf(!TEST_ADMIN_URL)("API documente + bonuri (F6-C) pe PostgreSQL re
   beforeAll(async () => {
     fx = await createAuthFixture("finet_it_receipts_api");
     root = await realpath(await mkdtemp(join(tmpdir(), "finet-receipts-api-")));
+    auth = authEnv(fx.db, {
+      config: testConfig({ AI_DAILY_DOCUMENT_LIMIT: "8" }),
+      now: () => Date.parse("2026-10-28T10:00:00Z"),
+    });
     env = {
-      ...authEnv(fx.db, {
-        config: testConfig({ AI_DAILY_DOCUMENT_LIMIT: "8" }),
-        now: () => Date.parse("2026-10-28T10:00:00Z"),
-      }),
+      ...auth,
       storage: new LocalStorage(root),
       limits: {
         mutations: { max: 100_000, windowSeconds: 60 },
@@ -165,8 +173,8 @@ describe.skipIf(!TEST_ADMIN_URL)("API documente + bonuri (F6-C) pe PostgreSQL re
         emailVerified: true,
       });
     }
-    A = await sessionsFor(env, "ana@exemplu.ro", PASS);
-    B = await sessionsFor(env, "bogdan@exemplu.ro", PASS);
+    A = await sessionsFor(auth, "ana@exemplu.ro", PASS);
+    B = await sessionsFor(auth, "bogdan@exemplu.ro", PASS);
     const acc = async (currency: string) => {
       const r = await call(L.createAccountHandler, "/api/v1/accounts", {
         bearer: A.bearer,
@@ -595,10 +603,9 @@ describe.skipIf(!TEST_ADMIN_URL)("API documente + bonuri (F6-C) pe PostgreSQL re
   });
 
   it("ștergerea bonului: documentul și fișierul dispar, tranzacția rămâne fără legătură", async () => {
-    const [{ transaction_id }] = (await fx.scratch.admin<{ transaction_id: string }[]>`
-      select transaction_id from finet.receipts where id = ${receiptId}`) as [
-      { transaction_id: string },
-    ];
+    const [saved] = await fx.scratch.admin<{ transaction_id: string }[]>`
+      select transaction_id from finet.receipts where id = ${receiptId}`;
+    const transaction_id = saved!.transaction_id;
     expect(
       (
         await call(

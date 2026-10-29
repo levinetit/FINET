@@ -46,6 +46,7 @@ async function receiptImage(width: number): Promise<Buffer> {
       width,
       height: 1100,
       channels: 3,
+      background: { r: 230, g: 230, b: 230 },
       noise: { type: "gaussian", mean: 200, sigma: 40 },
     },
   })
