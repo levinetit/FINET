@@ -11,7 +11,7 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 | **VPS-ul docker-apps** (operatorul) | Containerele FINET, fișierele temporare și, cu `STORAGE_DRIVER=local`, fișierele în `/srv/finet/storage`; secretele ca fișiere în `/srv/finet/secrets/` (`1000:1000 0400`, director root 700), montate prin `secrets:` | Locația VPS-ului: de completat de operator | `/srv/finet/` e în afara backup-ului hostului (vezi mai jos); din T7 secretele FINET nu mai ajung în configurația containerelor din arhiva necriptată a `/home/docker` |
 | **Google Drive** (backup-ul hostului, rclone) | Tot `/home`, zilnic: o copie criptată (`GdriveCrypt:home`) și una **necriptată** (`Gdrive:vpnde/home`), plus duminica o arhivă necriptată a `/home/docker` | Google (global) | FINET nu mai are date sub `/home`; vezi „Backup-ul hostului” |
 | **Telegram** sau furnizorul SMTP | Doar textul notificărilor operaționale (fără sume, fără date ale familiei) | Furnizorul ales | Canalul nu e configurat |
-| **Google (Gemini) prin LiteLLM-ul de pe gazdă** (`litellm-apps`, alias-urile `finet-vision-external`, `finet-text-external`) | Doar cu consimțământul `external_ai` activ al celui care încarcă: **imaginea preprocesată a bonului** (JPEG re-encodat, fără EXIF/GPS/metadate, max. 2048 px) sau, pentru PDF cu text, **textul bonului**. Niciodată: originalul, numele fișierului, emailul, id-uri, alte tranzacții. LiteLLM (pe VPS) vede aceleași date în tranzit. | Google (regiunea modelului, de confirmat de operator); LiteLLM pe VPS | Decis în F6-COMUN; apelurile vin în F6-B; `AI_MONTHLY_BUDGET=0` până la decizia operatorului |
+| **Google (Gemini) prin LiteLLM-ul de pe gazdă** (`litellm-apps`, alias-urile `finet-vision-external`, `finet-text-external`) | Doar cu consimțământul `external_ai` activ al celui care încarcă și în bugetul lunar: **imaginea preprocesată a bonului** (JPEG re-encodat, fără EXIF/GPS/metadate, max. 2048 px) sau, pentru PDF cu text, **textul bonului** (≤ 12 000 de caractere); pentru categorisire, **numele normalizate ale produselor** și **numele categoriilor** gospodăriei. Niciodată: originalul, numele fișierului, emailul, id-uri, alte tranzacții. LiteLLM (pe VPS) vede aceleași date în tranzit. | Google (regiunea modelului, de confirmat de operator); LiteLLM pe VPS | Implementat în F6-B (ADR 0014); `AI_MONTHLY_BUDGET=0` (nimic nu pleacă) până la decizia operatorului |
 
 ## Măsuri existente în cod (Faza 0)
 - Fără Data API Supabase și fără chei `anon`/`service_role` în FINET (configurare: `ops/supabase/`).
@@ -41,6 +41,15 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Ștergerea** (5.6): rândul și bonul extras, apoi fișierul; tranzacțiile create din bon rămân, fără legătură. Auditul nu conține nume de fișiere sau conținut.
 - **Jurnalul AI** (`ai_calls`): doar metadate (sarcina, modelul, durata, costul estimat, rezultatul), fără imagini sau text.
 - **Backup:** fișierele din `/srv/finet/storage` intră în backup-ul restic criptat al FINET (ADR 0009), nu în backup-ul `/home` al hostului.
+
+## Pipeline-ul AI (Faza 6, F6-B; ADR 0014)
+- **Ce pleacă, către cine:** Google (Gemini), prin LiteLLM-ul de pe gazdă (`litellm-apps`, cheie virtuală per aplicație, `finet_litellm_key`). Pleacă:
+  - poza preprocesată (fără metadate);
+  - sau textul unui PDF, plafonat la 12 000 de caractere. **Atenție:** un bon electronic poate avea tipărite date personale (numele clientului, numărul cardului de fidelitate, ultimele cifre ale cardului bancar); pleacă așa cum sunt pe bon;
+  - pentru categorisire, numele normalizate ale produselor și numele categoriilor de cheltuieli ale gospodăriei.
+- **Condiții:** consimțământul `external_ai` al celui care a încărcat (verificat la procesare, sub lock; retragerea oprește trimiterile următoare), bugetul lunar global `AI_MONTHLY_BUDGET` > 0 și neepuizat, plus AI configurat (`AI_BASE_URL` + cheia).
+- **Ce rămâne local:** bonul extras (`receipts`, `receipt_lines`, `ocr_text`: textul PDF-ului sau numele citite, pentru căutare) în Supabase. `ai_calls` și `ai_budget_usage` țin doar metadate (sarcină, model, tokeni, cost estimat, durată, rezultat), fără conținut. Logurile workerului au doar coduri și contoare.
+- **Retenția la furnizor:** după termenii Google/LiteLLM. De confirmat de operator: dacă LiteLLM înregistrează corpurile cererilor (jurnalele/spend logs cu conținut), opțiunea trebuie oprită pentru cheia FINET.
 
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere în F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.

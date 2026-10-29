@@ -62,7 +62,7 @@ Ordinea din `uploadDocuments` / `registerUpload` (`src/modules/documents/`):
 - **Timpul**: un termen pentru tot documentul (`timeoutMs`, implicit 60 s), verificat între pași; sharp primește `timeout` (libvips oprește procesarea); copilul PDF e ucis. Fără `Promise.race` care să lase muncă în fundal (revizuirea de securitate, M2).
 - Erorile → `rejected` cu cod stabil (`unsupported_type`, `heic_unsupported`, `markup_content`, `invalid_image`, `image_too_large`, `mime_mismatch`, `too_many_pages`, `pdf_invalid`, `pdf_encrypted`, `pdf_no_content`, `pdf_image_unverifiable`, `pdf_too_complex`, `pdf_sandbox_unavailable`, `preprocess_timeout`, `file_missing`, `file_changed` — fișierul de pe disc e mai mare decât cel înregistrat, citit plafonat), fără ecou din conținut.
 - **Rezultatul stă doar în memorie**; workerul are storage-ul **doar citire** (montaj `read_only` + driver read-only). Încercarea se numără la revendicare (`attempts + 1`, angajat imediat), deci un document care omoară workerul iese din coadă după 10 încercări.
-- **Jobul nu e încă înregistrat** în `src/worker/main.ts` (decizia mea): fără pasul AI (F6-B), un document ar rămâne în `processing`. `listQueuedDocuments`, `claimDocument`, `prepareDocument` sunt apelate direct în teste; F6-B le leagă de un job pg-boss.
+- **Jobul**: în F6-A pașii erau apelați doar din teste. Din F6-B îi leagă pipeline-ul bonului (`receipt-job.ts`), cu joburile pg-boss `receipt.sweep` și `receipt.process` (ADR 0014).
 
 ### Deduplicarea
 

@@ -349,6 +349,25 @@ Agentul nu a rulat nimic din această secțiune. F6-A singur nu schimbă comport
 6. **Încărcările mari prin proxy (F6-C):** cu `src/proxy.ts` pe ruta de încărcare, Next 16 trunchiază corpul la 10 MB (`proxyClientMaxBodySize`); F6-C exclude ruta din proxy sau ridică limita (ADR 0013). Limita de corp a Cloudflare (100 MB pe planul gratuit) și a Traefik sunt peste plafonul FINET (~41 MB).
 7. **Spațiul pe disc:** cota implicită e 5000 MB pe gospodărie (`STORAGE_QUOTA_MB`); discul VPS-ului are ~60 GB liberi. `/api/health` raportează `diskFreePercent`.
 
+### 4h-bis. F6-B (pipeline-ul AI) pe producție
+
+Agentul nu a rulat nimic din această secțiune și nu a atins LiteLLM-ul real.
+
+1. **Migrația `0009_receipt_pipeline`** (după `0008`, același mod): „aplicate acum 1”, apoi 0. Atinge doar `finet.receipts`, gol pe producție, plus două tabele noi (`vat_rates` cu seed, `ai_budget_usage`) și trei funcții SECURITY DEFINER. Rollback: antetul fișierului.
+2. **Alias-urile în LiteLLM** (stack 262). Pe gazdă, modelele nu stau în `config.yaml`: le adaugi din UI/API-ul LiteLLM, cu masterkey-ul, ca orice model.
+   - `finet-vision-external` → de exemplu `gemini/gemini-3.8-flash` (vision);
+   - `finet-text-external` → același model sau `gemini/gemini-3.7-flash`.
+
+   Verificare: `curl -s -m 240 -H "Authorization: Bearer $K" localhost:4000/health`.
+3. **Cheia virtuală FINET** (per aplicație, cu buget în LiteLLM și doar cele două alias-uri permise): `/srv/finet/secrets/finet_litellm_key`, `1000:1000`, mod 400 (`sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_litellm_key`). Compose-ul o montează DOAR în `finet-worker` (`AI_API_KEY_FILE`). Recomandat: jurnalele LiteLLM fără corpurile cererilor pentru această cheie (PRIVACY_NOTES).
+4. **`/srv/finet/env/finet.worker.env`:** `AI_BASE_URL=http://172.88.88.4:4000/v1`, `AI_ALLOWED_HOSTS=172.88.88.4:4000`, modelele, `AI_TIMEOUT_MS`, `AI_MAX_RETRIES`, `AI_CONFIDENCE_THRESHOLD`, `AI_PRICE_INPUT_PER_MTOK`/`AI_PRICE_OUTPUT_PER_MTOK` (tarifele reale ale modelului ales, în moneda bugetului), `AI_RESPONSE_FORMAT=json_schema`. **`AI_MONTHLY_BUDGET` rămâne 0** (nimic nu pleacă) până după pasul 6.
+5. **Rețeaua:** `finet-worker` e pe `apps` (`172.88.88.131`), ca `litellm-apps` (`172.88.88.4`). Firewall-ul gazdei (`LEVINETIT-FW` în `DOCKER-USER`) privește porturile publicate; traficul între containerele de pe `apps` merge deja (open-webui → openclaw). Verificare: `sudo docker exec finet-worker node -e "fetch('http://172.88.88.4:4000/health/liveliness').then(r=>console.log(r.status))"` → 200.
+6. **Prima verificare reală, înainte de buget > 0:** din imaginea de unelte sau dintr-un clone, `AI_EVAL=1 AI_BASE_URL=… AI_API_KEY_FILE=… pnpm eval:receipts` (8 bonuri sintetice, sub 1 cent la tarifele Flash).
+   - Dacă primul apel dă HTTP 400 (schema refuzată), pune `AI_RESPONSE_FORMAT=json_object` și repetă.
+   - Rezultatul pe bonuri sintetice NU e o evaluare reală: evaluează apoi pe 20–30 de bonuri reale proprii, cu `ground-truth` scris de mână, și notează modelul ales într-un ADR (3.6).
+7. **Bugetul:** `AI_MONTHLY_BUDGET` (de exemplu `5.00`) + `AI_MONTHLY_BUDGET_CURRENCY=USD`, apoi recrearea `finet-worker`. Ce s-a consumat luna aceasta: `select month, currency, reserved_minor, calls from finet.ai_budget_usage` (ca `finet_migrator`). Rezervarea e pesimistă, deci consumul raportat e peste costul real.
+8. **Verificare:** logul workerului are `{"event":"receipts","enabled":true,"ai":true}` la pornire. Un bon încărcat cu consimțământ trece în ≤ 1 minut în `needs_review` (`select status, confidence, issues from finet.receipts order by created_at desc limit 5`).
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

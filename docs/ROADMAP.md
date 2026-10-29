@@ -12,7 +12,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C, F3-D în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI), F3-C (UI, E2E `planning`) și F3-D (backup restic, restaurare testată pe Postgres efemer) gata; rămân instalarea backup-ului și restaurarea de probă pe producție (operatorul), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
 | 4 — Stabilizare | **parțial** (implementat în repo) | recuperarea după deploy, `global-error`, date `zz.ll.aaaa`, `tagMatch=all`, accesibilitate de bază, bugetul JS, `0005_perf_indexes`, testele de regresie; rămân prima rulare CI (build, buget, E2E `regressions`), `0005` pe Supabase, cron-ul de curățare și revizuirea `security` — vezi mai jos și `docs/reports/faza-4.md` |
 | 5 — Recurențe | **parțial** (F5-A, F5-B în repo) | date, servicii, worker pg-boss (F5-A); API `/api/v1/recurring`, UI `/recurring`, E2E `recurring` (F5-B); rămân migrațiile `0006`/`0007` și workerul pe producție (operatorul), prima rulare CI completă și revizuirea `security` — vezi mai jos și `docs/reports/faza-5.md` |
-| 6 — Ingestia bonurilor | **parțial** (F6-A în repo) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat); rămân F6-B (AI prin LiteLLM, validări, categorisire, evaluare), F6-C (API, UI, E2E), `0008` pe Supabase și revizuirea `security` — ADR 0013 |
+| 6 — Ingestia bonurilor | **parțial** (F6-A, F6-B în repo) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat) — ADR 0013. F6-B: migrația `0009_receipt_pipeline`, clientul LiteLLM, jobul `receipt.process`, verificările 5.5 și scorul, categorisirea, bonul lung, bugetul global, fixtures sintetice și `pnpm eval:receipts` — ADR 0014. Rămân F6-C (API, UI, E2E), `0008`/`0009` pe Supabase, evaluarea pe bonuri reale și revizuirea `security` |
 | 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
 | 8 — Familie | neimplementat | |
 | 9 — Hardening, PWA, offline | neimplementat | |
@@ -169,7 +169,16 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - încărcarea (`src/modules/documents/`, handlerul `documents-handlers.ts` fără rută publică): busboy în flux, tipul după conținut, HEIC refuzat, limite, deduplicare SHA-256, cotă, limită zilnică, consimțământ `external_ai`, bon lung 2–4 poze;
 - preprocesarea în worker (`src/worker/receipts/`): sharp (EXIF eliminat, rotire, 2048 px, JPEG), dHash și „posibil duplicat”, PDF prin pdf.js într-un proces copil sub `prlimit`.
 
-**Rămâne:** F6-B (jobul pg-boss + AI, validările 5.5, categorisirea, fixtures sintetice, `pnpm eval:receipts`), F6-C (`POST /api/v1/documents` și restul API-ului, excluderea rutei din `src/proxy.ts` sau `proxyClientMaxBodySize`, servirea fișierelor, UI, E2E, ștergerea la retenție și programarea `cleanupTemp`), `0008` pe Supabase, revizuirea `security`.
+**F6-B (pipeline-ul AI), gata în repo, verificat local pe PostgreSQL 17 efemer și cu serverul AI fals (subseturi; suita completă și build-ul în CI):** migrația `0009` (problemele bonului, legătura de duplicat, `vat_rates`, `ai_budget_usage` + `ai_budget_reserve`/`ai_budget_spent`, `queued_document`), `src/lib/ai/`, `src/modules/receipts/`, joburile `receipt.sweep`/`receipt.process`, fixtures sintetice și evaluarea — ADR 0014.
+
+**Amânate din F6-B (motiv):**
+- salvarea automată a bonurilor fără probleme (3.6, setare): decizia de siguranță din Faza 6, nimic nu se salvează fără confirmare; poate veni după evaluarea pe bonuri reale;
+- notificarea administratorului la epuizarea bugetului AI (3.6): canalul de notificări nu e configurat (`ops/notify`);
+- unirea automată a două încărcări separate cu același CUI și număr de bon: ține de fluxul din UI (F6-C);
+- evaluarea pe bonuri reale și alegerea modelelor (3.6): de făcut de operator cu `AI_EVAL=1`;
+- verificarea `json_schema` pe LiteLLM-ul real (`AI_RESPONSE_FORMAT`): la primul deploy (INFRA 4h).
+
+**Rămâne:** F6-C (`POST /api/v1/documents` și restul API-ului, excluderea rutei din `src/proxy.ts` sau `proxyClientMaxBodySize`, servirea fișierelor, UI, E2E, ștergerea la retenție și programarea `cleanupTemp`), `0008`/`0009` pe Supabase, revizuirea `security`.
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:

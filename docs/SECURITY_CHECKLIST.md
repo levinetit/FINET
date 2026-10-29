@@ -300,3 +300,25 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Originalele cu EXIF stau pe disc până la retenție; ștergerea automată la `expires_at` | TODO | F6-C / ROADMAP | — |
 | Audit fără nume de fișiere sau conținut (`document.uploaded` doar contoare, `document.deleted` doar id) | DONE (test) | `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
 | Revizuirea `security` a F6-A | TODO (revizuirile automate tratate: M1, M2, M3, „parser differential”) | agentul `security` | — |
+
+## 17. Pipeline-ul AI al bonurilor (F6-B, 2026-10-29)
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| `AI_BASE_URL` doar `http(s)`, `host:port` exact din `AI_ALLOWED_HOSTS`, fără utilizator/query/fragment; URL-ul final re-verificat; redirecționări refuzate (anti-SSRF) | DONE (teste) | `client.ts`, `client.test.ts`, `config.test.ts` | 2026-10-29 · programmer (F6-B) |
+| Cheia LiteLLM doar din `AI_API_KEY_FILE`, doar în rolul worker (în clar sau în alt rol → refuz la pornire); doar în `Authorization`; niciodată în loguri, erori sau `ai_calls` | DONE (teste) | `config.ts`, `secret-files.ts`, `test-env-examples.sh`, `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
+| Timeout care oprește efectiv munca (`AbortController` pe încercare, termen total, termenul documentului de 12 min peste preprocesare și apeluri); reîncercări limitate doar la timeout/429/5xx | DONE (teste) | `client.ts`, `receipt-job.ts` | 2026-10-29 · programmer (F6-B) |
+| Răspunsul AI plafonat ÎNAINTE de alocare/parsare: `Content-Length`, citire în flux cu plafon (512 KB), conținut ≤ 128 000 de caractere, adâncime și număr de valori verificate înainte de `JSON.parse` | DONE (teste) | `client.ts`, `json-guard.ts`, `client.test.ts` | 2026-10-29 · programmer (F6-B) |
+| Ieșirea modelului = date neîncrezătoare: Zod strict (chei în plus respinse, ≤ 500 de linii), sume doar șiruri → bigint (fără float), plafon 10^13, text curățat (control/bidi/lățime zero); fără `tools`, nimic executat, nicio tranzacție automată | DONE (teste) | `extraction.schema.ts`, `normalize.ts`, `receipts.test.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
+| Injecția de prompt pe textul bonului: delimitare + „date, nu instrucțiuni”; controlul real = ieșire validată + verificări în cod + `needs_review` mereu | DONE (test) | `prompts.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
+| Consimțământ `external_ai` al celui care a încărcat, verificat sub lock înaintea oricărui apel; fără el, 0 cereri | DONE (PG17 + server fals) | `receipt-job.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
+| Bugetul global dintr-un contor care doar crește (`ai_budget_usage`), independent de gospodării, fără drepturi directe pentru `finet_app`, rezervare atomică pesimistă înaintea fiecărei încercări; buget 0 = nimic nu pleacă | DONE (PG17: atomicitate cu 10 rezervări paralele) | `0009_receipt_pipeline.sql`, `ai-budget.ts`, `grants.test.ts` | 2026-10-29 · programmer (F6-B) |
+| `ai_calls` fără conținut; tokenii raportați de furnizor plafonați | DONE (test) | `receipt-job.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
+| `queued_document`, `ai_budget_reserve`, `ai_budget_spent`: SECURITY DEFINER, proprietar `finet_migrator`, `search_path = pg_catalog`, EXECUTE doar `finet_app`; jobul re-derivă gospodăria și membrul din bază | DONE (PG17) | `grants.test.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
+| `vat_rates`: RLS ENABLE + FORCE, doar SELECT; `receipts` noi: GRANT-uri pe coloane | DONE (PG17) | `grants.test.ts`, `migrate.test.ts` | 2026-10-29 · programmer (F6-B) |
+| Izolarea între gospodării în job (A nu vede bonul lui B; job cu gospodărie străină → fără efect); idempotența (de 2 ori, prin job, în paralel → un bon) | DONE (PG17) | `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
+| O constrângere a bazei nu declanșează o nouă extragere plătită (bon gol „De verificat” în loc de reîncercare) | DONE (teste: cantitate 0, > 500 de linii) | `receipt-job.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
+| `json_schema` acceptat de LiteLLM → Gemini (tipuri reuniune, `pattern`) | TODO (operator, primul deploy; plasă: `AI_RESPONSE_FORMAT=json_object`) | INFRA 4h, ADR 0014 | — |
+| Jurnalele LiteLLM fără corpurile cererilor pentru cheia FINET | TODO (operator) | PRIVACY_NOTES | — |
+| Revizuirea `security` a F6-B | TODO | agentul `security` | — |
+
