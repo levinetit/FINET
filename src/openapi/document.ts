@@ -305,7 +305,15 @@ export function buildOpenApiDocument(): Json {
         name: "matching",
         description: "Potrivirea bon ↔ tranzacție din extras și propunerile de recurențe (Faza 7).",
       },
-      { name: "reports", description: "Dashboard-ul și raportul lunar (Faza 3)." },
+      {
+        name: "reports",
+        description:
+          "Dashboard-ul, raportul lunar (Faza 3) și rapoartele de micro-cheltuieli (Faza 10).",
+      },
+      {
+        name: "prices",
+        description: "Prețurile pe produs și comerciant, inflația personală (Faza 10).",
+      },
       { name: "exports", description: "Exporturile CSV (Faza 3)." },
     ],
     paths,
