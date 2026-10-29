@@ -186,5 +186,19 @@ curl -sN https://finet.example/api/v1/events -H 'authorization: Bearer tokenFict
 
 Reîncercarea EXACTĂ a unui bon lung deja încărcat (aceleași poze, aceeași ordine) întoarce acum `200` cu documentele existente (`duplicate: true`, același `batchId`), ca la încărcarea simplă; orice altă suprapunere rămâne `409 long_receipt_duplicate`.
 
+## GDPR și statistici (F9-B, ADR 0021)
+
+- `GET /api/v1/me/export` → `200 application/zip` (`finet-export.zip`, în flux): profil, gospodării, tranzacții (JSON și CSV), bonurile utilizatorului cu fișierele, împărțirile și decontările în care e parte. Doar ce vede utilizatorul (RLS). Cu cookie: doar `Sec-Fetch-Site: same-origin|none` (altfel 403); 3 pe oră (429).
+- `GET /api/v1/me/deletion` → `{ data: { hasPassword, platformAdmin, deletedHouseholds, leftHouseholds, blockedHouseholds } }` (fără sume).
+- `POST /api/v1/me/delete` cu `{ "password": "…", "confirm": "ȘTERGE" }` (fără `password` pentru conturile doar cu magic link, cu o sesiune de cel mult 15 minute) → `200 { data: { outcome: "deleted"|"anonymized", deletedHouseholds, leftHouseholds } }`. Erori: `400 invalid_password`, `400 invalid_request` (confirmare greșită, câmpuri în plus), `403 reauth_required`, `409 last_owner`, `409 platform_admin`, `429`.
+- `GET /api/v1/admin/stats` → statisticile (6.5), doar pentru administratorul platformei (altfel 403): `activeUsers`, `sessionUsers`, `installations`, `downloads`, `logins`, `features`, `screens`, `errors`, `ai`, `aiCost` (`costMinor`: costul de operare), `archivedEvents`, `latestAndroid`, `members` (doar în `personal`, altfel `null`).
+
+```bash
+curl -s https://finet.example/api/v1/me/deletion -H 'authorization: Bearer tokenFictiv.semnatura'
+curl -s -X POST https://finet.example/api/v1/me/delete -H 'authorization: Bearer tokenFictiv.semnatura' \
+  -H 'content-type: application/json' -d '{"password":"parola-fictiva","confirm":"ȘTERGE"}'
+curl -s -o finet-export.zip https://finet.example/api/v1/me/export -H 'authorization: Bearer tokenFictiv.semnatura'
+```
+
 ## Evenimente de utilizare
 Lista fixă de nume: `app_open`, `login`, `logout`, `session_expired`, `screen_view`, `receipt_scan_started`, `receipt_uploaded`, `receipt_confirmed`, `statement_imported`, `transaction_created`, `share_import`, `update_prompt_shown`, `update_started`, `error_shown`, iar din Faza 3 `dashboard_viewed`, `report_viewed`, `budget_created`, `goal_created`, `goal_contribution_added`, `tag_created`, `export_downloaded`, iar din Faza 5 `recurring_created`, `recurring_generated` (ecranul nou: `recurring`) (doar numele, fără sume sau alte câmpuri). Ecranele și codurile de eroare: listele din `src/modules/usage/usage.schema.ts` (și din `docs/openapi.json`). Orice alt câmp (sumă, descriere, comerciant, text liber) respinge lotul cu 400. Cel mult 20 de evenimente pe lot; `occurredAt` cel mult 30 de zile în urmă.

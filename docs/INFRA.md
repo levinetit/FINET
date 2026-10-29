@@ -496,6 +496,33 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 
 **Rollback:** imaginea anterioară a `finet-web`. Service worker-ul deja instalat rămâne în browsere până la următoarea verificare: scriptul vechi lipsește (404) → browserul îl dezînregistrează singur; pentru o oprire imediată, utilizatorii pot șterge datele site-ului.
 
+## 4m. Faza 9 (F9-B): GDPR, statistici, retenție — pe producție (după revizuiri, după 4l)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0021. **O migrație (`0016_gdpr_stats`), fără variabilă de mediu nouă, fără secret nou.** La merge cu Faza 7 (migrațiile 0013–0015), jurnalul `meta/_journal.json` se reconciliază: `0016` rămâne ultima (`when` 1794600000000), cu `idx` după 0015.
+
+1. **Verificarea dinainte (doar citire, Supabase SQL Editor sau `psql` ca `finet_migrator`):**
+   ```sql
+   -- câte evenimente intră în prima agregare (mai vechi de 13 luni); orientativ, fără date personale
+   select count(*) from finet.app_events where occurred_at < now() - interval '13 months';
+   -- administratorul platformei (nu își poate șterge contul din aplicație)
+   select count(*) from finet.users where is_platform_admin;
+   ```
+   Nimic de corectat: migrația nu rescrie date și nu adaugă coloane pe tabelele existente.
+2. **Backup propriu verificat** (`run-backup.sh` reușit chiar înainte), apoi **migrația**: `docker compose … --profile migrate run --rm finet-migrate` → `aplicată: 0016_gdpr_stats`; a doua rulare: `aplicate acum 0`.
+3. **Imaginea** `finet` pentru commit-ul aprobat, apoi redeploy `finet-web` (paginile `/settings/privacy`, `/settings/statistics` și rutele `GET /api/v1/me/export`, `GET /api/v1/me/deletion`, `POST /api/v1/me/delete`, `GET /api/v1/admin/stats`) și imaginea `tools` (comanda `aggregate-events`). Workerul nu se schimbă. **Cloudflare Access: nimic de schimbat** (toate căile cer Access).
+4. **Retenția evenimentelor:** prima rulare manuală, apoi zilnic, cu `sudo crontab -e` (NU `crontab -`, NU redirectări care suprascriu crontab-ul), la 04:35 (după `cleanup-idempotency` 04:15 și `finet-cleanup` 04:25):
+   ```cron
+   35 4 * * *  cd /srv/finet/src && docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile admin run --rm -T finet-admin aggregate-events >> /var/log/finet-cleanup.log 2>&1
+   ```
+   Ieșirea: doar numărul de evenimente agregate (prima dată poate fi mare; loturi de 10 000). Verificare: a doua zi `sudo tail -n 3 /var/log/finet-cleanup.log`.
+5. **Verificări prin Access (browser):**
+   - ca administrator: `Setări → Statistici` arată tabelele (utilizatori activi, instalări, login-uri), fără sume sau descrieri; ca alt membru: 404;
+   - `Setări → Datele mele → Descarcă arhiva` → `finet-export.zip` se deschide (README, `profil.json`, `gospodarii/<n>/…`);
+   - ștergerea: doar pe un cont de test creat pentru asta (`finet-admin create-user`), niciodată pe un cont real; după ștergere, login-ul eșuează. Logul `finet-web` are o linie `[gdpr] cont șters; … fișiere=N eșuate=M`. Dacă `eșuate` > 0: fișierele rămase sunt în `households/<id>/` pentru gospodării care nu mai există; se găsesc cu `select id from finet.households` (lista existentă) comparată cu directoarele din volumul de storage, și se șterg manual (risc acceptat, ADR 0021 §1).
+6. **HSTS `preload`:** rămâne oprit. Consecințele sunt în `docs/SECURITY_CHECKLIST.md`, secțiunea 22.
+
+**Rollback:** imaginile anterioare ale `finet-web` și `tools`; migrația se poate lăsa aplicată (nimic din aplicația veche nu o folosește). Rollback-ul complet al 0016 e în antetul fișierului și pierde agregatele zilnice.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|
@@ -524,7 +551,16 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 
 ## 7. Upgrade PostgreSQL (master prompt 3.5)
 1. Jobul săptămânal anunță versiunea nouă (`ops/postgres/version-check.md`, **neimplementat**), sau operatorul o vede în panou.
-2. PR care rulează testele pe `postgres:<versiunea nouă>-alpine` (local sau în CI, schimbând temporar `ops/postgres/VERSION` pe branch).
+2. Compatibilitatea: workflow-ul săptămânal `.github/workflows/pg-next.yml` (din Faza 9) rulează testele pe `postgres:<VERSION+1>-alpine` și încercarea upgrade-ului (`ops/postgres/upgrade-test.sh`: dump pe versiunea curentă → restaurare pe cea următoare, amprenta identică, migrațiile „aplicate acum 0”). Trebuie să fie verde înainte de pasul 6. Manual (pe host, doar containere efemere pe o rețea privată, cu `--memory=256m`):
+   ```bash
+   # serverul vechi (VERSION) migrat + datele de control; serverul nou gol; apoi:
+   docker run --rm --network <rețea> -v "$PWD/ops/postgres:/ops:ro" -e FINET_UPGRADE_TEST=1 \
+     -e OLD_URL=postgres://finet:<fictiv>@<vechi>:5432/finet_upgrade \
+     -e NEW_URL=postgres://finet:<fictiv>@<nou>:5432/finet_upgrade \
+     -e NEW_MIGRATOR_URL=postgres://finet_migrator:finet_migrator_ci@<nou>:5432/finet_upgrade \
+     --entrypoint sh postgres:<nou>-alpine /ops/upgrade-test.sh
+   ```
+   Rezultatul încercării 17 → 18 (Faza 9): `docs/reports/faza-9.md`, F9-B.
 3. Backup propriu verificat (`pg_dump` + fișiere, restic; `docs/BACKUP.md`): un `run-backup.sh` reușit chiar înainte. Pentru o versiune majoră nouă, imaginea de backup trebuie să aibă `pg_dump` cel puțin de acea versiune (`postgresql<N>-client` în `ops/backup/Dockerfile`), altfel pg_dump refuză serverul mai nou.
 4. Notează valorile de control: numărul și suma tranzacțiilor pe gospodărie (interogare din Faza 3).
 5. Anunț către familie; fereastră de noapte.
