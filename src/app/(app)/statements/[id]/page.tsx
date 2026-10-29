@@ -102,6 +102,13 @@ export default async function StatementPage({ params }: Readonly<{ params: Param
             <dd>{money(imp.computedClosingMinor)}</dd>
           </dl>
           <div className="mt-3 flex flex-col gap-2">
+            {/* După confirmare pagina se reîncarcă de pe server (panoul de confirmare dispare):
+                rezultatul stă aici, nu în starea clientului. */}
+            {imp.status === "imported" ? (
+              <Alert tone="ok" data-testid="statement-confirmed">
+                {t.imported(imp.importedCount)}
+              </Alert>
+            ) : null}
             <Alert
               tone={imp.balanceStatus === "mismatch" ? "error" : "info"}
               data-testid="statement-balance"

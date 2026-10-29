@@ -269,8 +269,10 @@ export function ConfirmPanel({
         </Button>
         <StatementActions id={id} status="previewed" />
       </div>
-      <Alert className="mt-2">{error}</Alert>
-      <Alert tone="ok" className="mt-2" data-testid="statement-confirmed">
+      <Alert className="mt-2" data-testid="statement-confirm-error">
+        {error}
+      </Alert>
+      <Alert tone="ok" className="mt-2" data-testid="statement-confirm-result">
         {info}
       </Alert>
     </Card>

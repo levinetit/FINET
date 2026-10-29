@@ -89,9 +89,15 @@ function csv(rows: readonly [string, string, string][]): Buffer {
   return Buffer.from(["Data;Descriere;Suma", ...rows.map((r) => r.join(";"))].join("\r\n"), "utf8");
 }
 
+/** Rezultatele acțiunilor (prima cerere compilează ruta în `next dev`): plafon generos. */
+const ACT = { timeout: 60_000 };
+
 async function uploadStatement(page: Page, accountId: string, file: Buffer, name: string) {
   await page.goto("/import?tip=extras");
+  // Controalele sunt inerte până la hidratare: abia apoi alegerea contului ajunge în stare.
+  await expect(page.getByTestId("statement-account")).toBeEnabled(ACT);
   await page.getByTestId("statement-account").selectOption(accountId);
+  await expect(page.getByTestId("statement-account")).toHaveValue(accountId);
   await page
     .getByTestId("statement-file")
     .setInputFiles({ name, mimeType: "application/octet-stream", buffer: file });
@@ -101,11 +107,21 @@ async function uploadStatement(page: Page, accountId: string, file: Buffer, name
 /** CSV → maparea propusă (Data/Descriere/Suma) → previzualizare. */
 async function importCsv(page: Page, accountId: string, file: Buffer): Promise<string> {
   await uploadStatement(page, accountId, file, "extras.csv");
-  await expect(page.getByTestId("mapping-editor")).toBeVisible();
+  await expect(page.getByTestId("mapping-editor")).toBeVisible(ACT);
   await page.getByTestId("mapping-amount").selectOption("2");
   await page.getByTestId("mapping-apply").click();
-  await expect(page).toHaveURL(/\/statements\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/statements\/[0-9a-f-]{36}$/, ACT);
   return page.url().split("/").pop()!;
+}
+
+/** Confirmarea: rezultatul vine din pagina reîncărcată de pe server (nu din starea clientului). */
+async function confirmImport(page: Page, fresh: number): Promise<void> {
+  await page.getByTestId("statement-confirm").click();
+  await expect(page.getByTestId("statement-confirm-error")).toHaveText("");
+  await expect(page.getByTestId("statement-confirmed")).toContainText(
+    `${fresh} tranzacții noi`,
+    ACT,
+  );
 }
 
 async function meId(page: Page, baseURL: string): Promise<string> {
@@ -134,14 +150,13 @@ test.describe(`extrasele bancare (${MODE})`, () => {
     await expect(lines).toHaveCount(2);
     await expect(page.getByTestId("statement-lines")).toContainText("15,00 lei");
     await expect(page.getByTestId("statement-balance")).toHaveAttribute("data-balance", "unknown");
-    await page.getByTestId("statement-confirm").click();
-    await expect(page.getByTestId("statement-confirmed")).toContainText("2 tranzacții noi");
+    await confirmImport(page, 2);
 
     // Același fișier din nou: „deja importat”, nimic nou.
     await uploadStatement(page, acc, file, "extras.csv");
     await page.getByTestId("mapping-amount").selectOption("2");
     await page.getByTestId("mapping-apply").click();
-    await expect(page.getByTestId("statement-info")).toContainText("deja importat");
+    await expect(page.getByTestId("statement-info")).toContainText("deja importat", ACT);
 
     // Anularea din listă (confirmare în doi pași).
     await page.goto("/statements");
@@ -151,7 +166,7 @@ test.describe(`extrasele bancare (${MODE})`, () => {
       .first();
     await row.getByRole("button", { name: "Anulează importul" }).click();
     await row.getByRole("button", { name: "Anulează importul" }).last().click();
-    await expect(row).toHaveAttribute("data-status", "cancelled");
+    await expect(row).toHaveAttribute("data-status", "cancelled", ACT);
 
     // Acoperirea: contul apare în tabel.
     await page.goto("/statements/coverage");
@@ -165,12 +180,12 @@ test.describe(`extrasele bancare (${MODE})`, () => {
     const page = await pageAs(browser, baseURL!, "statements");
     const acc = await account(page, baseURL!, "Banca refuz");
     await uploadStatement(page, acc, Buffer.from([0, 1, 2, 3, 0]), "x.csv");
-    await expect(page.getByTestId("statement-error")).toContainText("nu e un CSV");
+    await expect(page.getByTestId("statement-error")).toContainText("nu e un CSV", ACT);
     const nested = buildZip([
       { name: "inner.zip", data: buildZip([{ name: "a.csv", data: "x" }]) },
     ]);
     await uploadStatement(page, acc, nested, "extrase.zip");
-    await expect(page.getByTestId("statement-error")).toContainText("Arhiva ZIP e refuzată");
+    await expect(page.getByTestId("statement-error")).toContainText("Arhiva ZIP e refuzată", ACT);
   });
 
   test("(c) izolarea: altă gospodărie și contul PERSONAL al altui membru sunt invizibile", async ({
@@ -229,16 +244,15 @@ test.describe(`extrasele bancare (${MODE})`, () => {
       if (d <= now) rows.push([dmy(d), `STREAMING${RUN.toUpperCase()} Abonament`, "-49,99"]);
     }
     await importCsv(page, acc, csv(rows));
-    await page.getByTestId("statement-confirm").click();
-    await expect(page.getByTestId("statement-confirmed")).toBeVisible();
+    await confirmImport(page, rows.length);
     await page.goto("/recurring");
     const suggestion = page
       .getByTestId("suggestion-row")
       .filter({ hasText: `STREAMING${RUN.toUpperCase()}` });
-    await expect(suggestion).toHaveCount(1);
+    await expect(suggestion).toHaveCount(1, ACT);
     await expect(suggestion).toContainText("49,99 lei");
     await suggestion.getByTestId("suggestion-accept").click();
-    await expect(page.getByText("Regula recurentă a fost creată.")).toBeVisible();
+    await expect(page.getByText("Regula recurentă a fost creată.")).toBeVisible(ACT);
     await expect(page.getByTestId("recurring-list")).toContainText(`STREAMING${RUN.toUpperCase()}`);
   });
 
@@ -251,7 +265,8 @@ test.describe(`extrasele bancare (${MODE})`, () => {
     const page = await pageAs(browser, baseURL!, "statements");
     const acc = await account(page, baseURL!, "Banca PDF");
     await uploadStatement(page, acc, itemsToPdf(buildStatementFixtures().bt.items), "extras.pdf");
-    await expect(page.getByTestId("statement-info")).toContainText("coadă");
+    await expect(page.getByTestId("statement-error")).toHaveText("");
+    await expect(page.getByTestId("statement-info")).toContainText("coadă", ACT);
     await expect(page).toHaveURL(/\/statements\/[0-9a-f-]{36}$/, { timeout: WAIT });
     await expect(page.getByTestId("statement-balance")).toHaveAttribute("data-balance", "ok");
     await expect(page.getByTestId("statement-pending")).toBeVisible();
@@ -280,13 +295,12 @@ test.describe(`extrasele bancare (${MODE})`, () => {
     const receiptUrl = page.url();
     const card = await account(page, baseURL!, "Card potrivire");
     await importCsv(page, card, csv([["20.10.2026", `EPOS KAUFLAND RO ${RUN}`, "-20,48"]]));
-    await page.getByTestId("statement-confirm").click();
-    await expect(page.getByTestId("statement-confirmed")).toBeVisible();
+    await confirmImport(page, 1);
     await page.goto(receiptUrl);
     const candidate = page.getByTestId("match-candidate").filter({ hasText: RUN });
-    await expect(candidate).toHaveCount(1);
+    await expect(candidate).toHaveCount(1, ACT);
     await expect(candidate).toContainText("aceeași zi");
     await candidate.getByTestId("match-confirm").click();
-    await expect(page.getByTestId("match-done")).toContainText("legat");
+    await expect(page.getByTestId("match-done")).toContainText("legat", ACT);
   });
 });

@@ -1,4 +1,10 @@
-import { type Currency, InvalidAmountError, parseAmount } from "@/lib/money";
+import {
+  type Currency,
+  InvalidAmountError,
+  MoneyOverflowError,
+  parseAmount,
+  toJson,
+} from "@/lib/money";
 import { ro } from "@/messages/ro";
 
 import { formatDate } from "./planning-ui";
@@ -113,15 +119,17 @@ export function formFromSuggestion(m: Readonly<Record<string, unknown>>): Mappin
   };
 }
 
-/** Suma introdusă pentru cealaltă monedă a unui schimb (`10,00`) → unități minore, sau `null`. */
+/**
+ * Suma introdusă pentru cealaltă monedă a unui schimb (`10,00`) → unități minore (întreg JSON,
+ * prin `toJson`, care verifică plafonul 2^53), sau `null`. Fără aritmetică float.
+ */
 export function counterAmountMinor(text: string, currency: Currency): number | null {
   try {
     const m = parseAmount(text.trim(), currency);
-    return m.amountMinor > 0n && m.amountMinor <= BigInt(Number.MAX_SAFE_INTEGER)
-      ? Number(m.amountMinor)
-      : null;
+    if (m.amountMinor <= 0n) return null;
+    return toJson(m).amountMinor;
   } catch (error) {
-    if (error instanceof InvalidAmountError) return null;
+    if (error instanceof InvalidAmountError || error instanceof MoneyOverflowError) return null;
     throw error;
   }
 }

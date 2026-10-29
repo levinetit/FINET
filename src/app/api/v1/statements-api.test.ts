@@ -16,6 +16,7 @@ import { itemsToPdf } from "@/modules/statements/testing";
 import { tryAcquireUploadSlot } from "@/modules/statements/upload-slots";
 import { handleStatementParse } from "@/worker/statements/statement-jobs";
 
+import * as FH from "./_lib/family-handlers";
 import * as L from "./_lib/ledger-handlers";
 import * as MT from "./_lib/matching-handlers";
 import * as S from "./_lib/statements-handlers";
@@ -475,5 +476,49 @@ describe.skipIf(!TEST_ADMIN_URL)("API extrase + potrivire + propuneri (F7-B)", (
         )
       ).status,
     ).toBe(404);
+  });
+
+  it("membru al aceleiași gospodării: importul pe contul PERSONAL al proprietarului e invizibil (404)", async () => {
+    await createUserWithHousehold(fx.db, {
+      email: "dana@exemplu.ro",
+      name: "Dana",
+      password: PASS,
+      firstUserBecomesAdmin: false,
+      emailVerified: true,
+    });
+    const D = await sessionsFor(auth, "dana@exemplu.ro", PASS);
+    const hh = await householdOf("ana@exemplu.ro");
+    const [ids] = await fx.scratch.admin<{ a: string; d: string }[]>`
+      select (select id from finet.users where email = 'ana@exemplu.ro') as a,
+             (select id from finet.users where email = 'dana@exemplu.ro') as d`;
+    await fx.scratch.admin`insert into finet.household_members (household_id, user_id, role)
+      values (${hh}, ${ids!.d}, 'member')`;
+    const active = await call(FH.setActiveHouseholdHandler, "/api/v1/households/active", {
+      bearer: D.bearer,
+      method: "PUT",
+      body: { householdId: hh },
+    });
+    expect(active.status, JSON.stringify(active.body)).toBe(200);
+    const acc = await call(L.createAccountHandler, "/api/v1/accounts", {
+      bearer: A.bearer,
+      body: { name: "Personal Ana", type: "bank", currency: "RON", ownerUserId: ids!.a },
+    });
+    expect(acc.status, JSON.stringify(acc.body)).toBe(201);
+    const personal = (acc.body.data as { id: string }).id;
+    const up = await upload(A, Buffer.concat([CSV, Buffer.from("\r\n05.11.2026;Personal;-1,00")]), [
+      ["accountId", personal],
+      ["mapping", MAPPING],
+    ]);
+    expect(up.status, JSON.stringify(up.body)).toBe(201);
+    const id = (up.body.data as { parts: { import: { id: string } }[] }).parts[0]!.import.id;
+    expect(
+      (await call(S.getImportHandler, `/api/v1/statements/imports/${id}`, { bearer: D.bearer }, id))
+        .status,
+    ).toBe(404);
+    const list = await call(S.listImportsHandler, "/api/v1/statements/imports", {
+      bearer: D.bearer,
+    });
+    expect((list.body.data as { id: string }[]).map((x) => x.id)).not.toContain(id);
+    expect((await upload(D, CSV, [["accountId", personal]])).status).toBe(404);
   });
 });

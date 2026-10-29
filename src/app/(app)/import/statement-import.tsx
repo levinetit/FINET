@@ -196,6 +196,9 @@ export function StatementImport({ accounts }: Readonly<{ accounts: readonly Impo
               id={`${ids}-account`}
               className="h-11 rounded-md border border-border bg-card px-3"
               value={accountId}
+              // Inert până la hidratare: o alegere făcută înainte ar fi suprascrisă de starea
+              // inițială a componentei (și extrasul ar ajunge pe alt cont).
+              disabled={!hydrated}
               onChange={(e) => setAccountId(e.target.value)}
               data-testid="statement-account"
             >
@@ -213,6 +216,7 @@ export function StatementImport({ accounts }: Readonly<{ accounts: readonly Impo
               id={`${ids}-file`}
               type="file"
               accept={ACCEPT}
+              disabled={!hydrated}
               aria-describedby={`${ids}-hint`}
               className="text-sm"
               onChange={(e) => {
