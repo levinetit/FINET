@@ -239,6 +239,17 @@ describe.skipIf(!TEST_ADMIN_URL)("CLI admin pe PostgreSQL real", () => {
     expect(badRole.code).toBe(2);
   });
 
+  it("aggregate-events: scrie doar numărul de evenimente agregate (> 13 luni), idempotent", async () => {
+    const [u] = await fx.scratch.admin<{ id: string }[]>`
+      insert into finet.users (email, name) values ('agg@exemplu.ro', 'Agg') returning id`;
+    await fx.scratch.admin`insert into finet.app_events (user_id, name, occurred_at)
+      values (${u!.id}, 'app_open', now() - interval '14 months'), (${u!.id}, 'app_open', now())`;
+    const first = await run(["aggregate-events"]);
+    expect(first).toEqual({ code: 0, out: "1", err: "" });
+    expect((await run(["aggregate-events"])).out).toBe("0");
+    expect((await run(["aggregate-events", "--x", "1"])).code).toBe(2);
+  });
+
   it("refuză alt FINET_ROLE decât admin", async () => {
     const r = await run(["create-user", "--email", "x@exemplu.ro", "--name", "X"], "", {
       APP_MODE: "personal",

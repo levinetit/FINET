@@ -17,6 +17,7 @@ import {
 import { LocalStorage, type Storage } from "@/lib/storage";
 import { expireDocumentFiles } from "@/modules/documents/retention";
 import { purgeIdempotencyKeys } from "@/modules/idempotency/idempotency";
+import { aggregateOldAppEvents } from "@/modules/usage/stats";
 
 /**
  * CLI-ul de administrare (master prompt 3.3, Faza 1), împachetat în `dist/tools/admin.mjs`
@@ -26,6 +27,11 @@ import { purgeIdempotencyKeys } from "@/modules/idempotency/idempotency";
  *   admin.mjs reset-password --email <email> [--password-stdin]
  *   admin.mjs add-member --household <id> --email <email> [--role member|owner]
  *   admin.mjs cleanup-idempotency
+ *   admin.mjs aggregate-events
+ *
+ * `aggregate-events` (F9-B, ADR 0021): retenția evenimentelor de utilizare (6.5): cele mai vechi
+ * de 13 luni se agregă pe zi/versiune/platformă (`finet.aggregate_app_events`) și se șterg; scrie
+ * DOAR numărul de evenimente agregate. Idempotentă.
  *
  * `cleanup-idempotency` (F2-B, ADR 0005) șterge cheile `Idempotency-Key` mai vechi de 24 de ore
  * prin `finet.purge_idempotency_keys()` și scrie DOAR numărul de rânduri șterse (o linie), ca să
@@ -57,6 +63,7 @@ const USAGE = [
   "  admin add-member --household <id> --email <email> [--role member|owner]",
   "  admin cleanup-idempotency",
   "  admin cleanup-documents [--temp-hours <ore>]",
+  "  admin aggregate-events",
   "Parola se citește din stdin cu --password-stdin; altfel se generează și se afișează o dată.",
 ].join("\n");
 
@@ -74,6 +81,7 @@ const COMMANDS: Readonly<Record<string, readonly string[]>> = {
   "add-member": ["household", "email", "role"],
   "cleanup-idempotency": [],
   "cleanup-documents": ["temp-hours"],
+  "aggregate-events": [],
 };
 const BOOLEAN_FLAGS = new Set(["password-stdin"]);
 
@@ -255,6 +263,11 @@ export async function main(io: AdminIo): Promise<number> {
           (mounted ? "" : " storage=empty"),
       );
       return r.failed > 0 ? 1 : 0;
+    }
+
+    if (command === "aggregate-events") {
+      io.out(String(await aggregateOldAppEvents(db)));
+      return 0;
     }
 
     if (command === "cleanup-idempotency") {
