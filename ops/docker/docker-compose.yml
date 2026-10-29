@@ -53,6 +53,10 @@ secrets:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_worker_database_url
   finet_migrate_database_url:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_migrate_database_url
+  # Cheia virtuală LiteLLM a FINET (F6-B, ADR 0014; cheie per aplicație, cu buget în LiteLLM),
+  # DOAR pentru finet-worker (config.ts o refuză în orice alt rol și în clar).
+  finet_litellm_key:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_litellm_key
   # Secretul Better Auth (F1-B): `openssl rand -base64 32`, doar pentru finet-web.
   finet_better_auth_secret:
     file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_better_auth_secret
@@ -196,25 +200,45 @@ services:
         required: true
     secrets:
       - finet_worker_database_url
+      - finet_litellm_key
     environment:
       FINET_ROLE: worker
       WORKER_DATABASE_URL_FILE: /run/secrets/finet_worker_database_url
+      # Faza 6 (F6-B, ADR 0014): LiteLLM-ul de pe gazdă (`litellm-apps`, rețeaua `apps`); URL-ul
+      # și lista de gazde permise vin din finet.worker.env (AI_BASE_URL, AI_ALLOWED_HOSTS).
+      AI_API_KEY_FILE: /run/secrets/finet_litellm_key
       DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
       NODE_ENV: production
       APP_MODE: personal
-      # Măsurat (F5-A, Postgres efemer): RSS de vârf ~86 MB, cgroup ~97 MB.
-      NODE_OPTIONS: --max-old-space-size=96
+      # Faza 6 (ADR 0013): workerul CITEȘTE documentele încărcate (preprocesare cu sharp/pdf.js).
+      STORAGE_DRIVER: local
+      STORAGE_DIR: /data/storage
+      # Măsurat (F5-A, Postgres efemer): RSS de vârf ~86 MB, cgroup ~97 MB. Faza 6: heap 160 MB;
+      # pixelii decodați de sharp/libvips și firul pdf.js (heap propriu ≤ 96 MB, `pdf-worker.ts`)
+      # stau în afara lui, sub plafonul containerului de 384 MB.
+      NODE_OPTIONS: --max-old-space-size=160
     command: ["node", "dist/tools/worker.mjs"]
     # SIGTERM: pg-boss termină jobul curent (cel mult 25 s), apoi oprirea; 35 s înainte de SIGKILL.
     stop_grace_period: 35s
-    # Fără storage (revizuirea F5, I1): workerul recurențelor nu atinge fișierele; doar CA-ul.
-    # Documentele (Faza 6) îl vor monta din nou, cu motivul notat.
+    # Storage DOAR CITIRE (Faza 6, ADR 0013; minimul de privilegii): workerul citește originalele
+    # încărcate de finet-web și le preprocesează în memorie; nu scrie, nu șterge fișiere
+    # (ștergerea o face finet-web, retenția un job de administrare). Driverul local e deschis
+    # și el doar pentru citire (`getStorage()` pentru FINET_ROLE=worker).
     volumes:
       - *ca-volume
+      - type: bind
+        source: ${FINET_DATA_DIR:-/srv/finet}/storage
+        target: /data/storage
+        read_only: true
+        bind:
+          create_host_path: false
     tmpfs:
       - /tmp:size=32m,mode=1777
-    mem_limit: 150m
-    memswap_limit: 150m
+    # Faza 6: 384 MB (sharp + pdf.js; F6-COMUN). Preprocesarea are plafoane de pixeli, pagini și
+    # timp; un document care tot depășește memoria omoară doar containerul (repornit), iar
+    # contorul `attempts` (incrementat ÎNAINTE de lucru) îl scoate din coadă după 10 încercări.
+    mem_limit: 384m
+    memswap_limit: 384m
     cpus: 0.5
     pids_limit: 128
     # Fără HTTP: starea lui se vede în /api/health (`queue`, semnalul din
@@ -327,6 +351,60 @@ services:
     healthcheck:
       disable: true
     # Ca finet-migrate: doar ieșire spre Supabase, fără `apps` și fără IP static.
+    networks:
+      - default
+
+  finet-cleanup:
+    <<: *common
+    # Retenția bonurilor (F6-C, ADR 0015): `admin cleanup-documents` șterge originalele cu
+    # `expires_at` trecut (RECEIPT_IMAGE_RETENTION_DAYS) și fișierele temporare orfane `*.tmp-*`.
+    # Separat de finet-admin (decizia mea, privilegiul minim): DOAR acest one-shot are storage-ul
+    # în SCRIERE; create-user/reset-password nu-l văd. Aceleași drepturi în bază ca finet-admin
+    # (finet_database_url, finet_app; documentele se aleg prin `finet.expired_documents`, 0011).
+    # Ieșirea: doar contoare (`expired=… failed=… temp=…`). Programat zilnic de operator
+    # (docs/INFRA.md, „Faza 6 pe producție”):
+    #   docker compose ... --profile cleanup run --rm -T finet-cleanup
+    image: ${FINET_TOOLS_IMAGE:-finet:tools}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: tools
+    hostname: finet-cleanup
+    profiles: [cleanup]
+    restart: "no"
+    env_file:
+      - path: ${FINET_ENV_DIR:-/srv/finet/env}/finet.admin.env
+        required: true
+    secrets:
+      - finet_database_url
+    environment:
+      FINET_ROLE: admin
+      DATABASE_URL_FILE: /run/secrets/finet_database_url
+      DATABASE_CA_FILE: /run/finet/ca/${FINET_DATABASE_CA_NAME:-prod-ca-2021.crt}
+      NODE_ENV: production
+      APP_MODE: personal
+      STORAGE_DIR: /data/storage
+      NODE_OPTIONS: --max-old-space-size=128
+    entrypoint: ["node", "dist/tools/admin.mjs"]
+    command: ["cleanup-documents"]
+    volumes:
+      - *ca-volume
+      # Storage-ul în SCRIERE (ștergerea originalelor); create_host_path: false → fără director
+      # creat din greșeală (CLI-ul refuză oricum un storage nemontat, fără `households/`).
+      - type: bind
+        source: ${FINET_DATA_DIR:-/srv/finet}/storage
+        target: /data/storage
+        read_only: false
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 192m
+    memswap_limit: 192m
+    cpus: 0.5
+    pids_limit: 64
+    healthcheck:
+      disable: true
     networks:
       - default
 

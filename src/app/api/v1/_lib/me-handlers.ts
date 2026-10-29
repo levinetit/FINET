@@ -1,10 +1,13 @@
 import "server-only";
 
+import { withRlsOn } from "@/db";
+import { currentHouseholdIdOf } from "@/modules/auth/audit";
 import { changePasswordSchema } from "@/modules/auth/password.schema";
 import { PasswordChangeError, changePassword } from "@/modules/auth/password.service";
 import { hitRateLimit, rateLimitKey } from "@/modules/auth/rate-limit";
 import { CLIENT_HEADER, parseClientInfo, trustedClientIp } from "@/modules/auth/request";
 import { profilePatchSchema } from "@/modules/profile/profile.schema";
+import { queueAwaitingConsent } from "@/modules/documents/documents.service";
 import { getMe, updateMe } from "@/modules/profile/profile.service";
 import {
   listMySessions,
@@ -119,7 +122,16 @@ export function getConsentsHandler(request: Request, deps: ApiDeps): Promise<Res
 export function putConsentsHandler(request: Request, deps: ApiDeps): Promise<Response> {
   return handle(request, deps, async (ctx) => {
     const body = await readJsonBody(request);
-    return json({ data: await setConsents(deps.db, ctx.actor.userId, body) });
+    const states = await setConsents(deps.db, ctx.actor.userId, body);
+    // Faza 6: după acordul `externalAi`, documentele care îl așteptau intră în coadă (au fost
+    // deja numărate la încărcare: nu se mai numără o dată). `setConsents` a validat corpul.
+    if ((body as { externalAi?: unknown }).externalAi === true) {
+      const householdId = await withRlsOn(deps.db, { userId: ctx.actor.userId }, (tx) =>
+        currentHouseholdIdOf(tx, ctx.actor.userId),
+      );
+      if (householdId) await queueAwaitingConsent({ db: deps.db }, ctx.actor, householdId);
+    }
+    return json({ data: states });
   });
 }
 

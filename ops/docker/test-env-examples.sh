@@ -114,6 +114,21 @@ check_role finet-worker WORKER_DATABASE_URL_FILE finet_worker_database_url worke
 check_role finet-migrate MIGRATOR_DATABASE_URL_FILE finet_migrate_database_url migrate
 # CLI-ul de administrare (F1-B): drepturile aplicației (DATABASE_URL, finet_app).
 check_role finet-admin DATABASE_URL_FILE finet_database_url admin
+# Retenția bonurilor (F6-C): același rol ca finet-admin, plus storage-ul în scriere.
+check_role finet-cleanup DATABASE_URL_FILE finet_database_url admin
+
+# Cheia LiteLLM (F6-B): DOAR finet-worker o montează (ca AI_API_KEY_FILE); niciun alt serviciu.
+for svc in finet-web finet-migrate finet-admin finet-cleanup finet-backup; do
+  if service_block "$svc" | grep -Eq 'finet_litellm_key|AI_API_KEY'; then
+    fail "$svc primește cheia LiteLLM"
+  else
+    ok "$svc fără cheia LiteLLM"
+  fi
+done
+WK=$(service_block finet-worker)
+echo "$WK" | grep -Eq '^[[:space:]]+-[[:space:]]+finet_litellm_key[[:space:]]*$' && ok "finet-worker montează finet_litellm_key" || fail "finet-worker nu montează finet_litellm_key"
+echo "$WK" | grep -Eq '^[[:space:]]+AI_API_KEY_FILE:[[:space:]]*/run/secrets/finet_litellm_key[[:space:]]*$' && ok "finet-worker are AI_API_KEY_FILE" || fail "finet-worker nu are AI_API_KEY_FILE"
+echo "$WK" | grep -Eq '^[[:space:]]+AI_API_KEY:' && fail "finet-worker are AI_API_KEY în clar" || ok "finet-worker fără AI_API_KEY în clar"
 
 # Backup-ul (F3-D): finet-backup NU primește niciun URL al aplicației, tokenul de sănătate sau
 # secretul Better Auth; are doar secretele lui (parola restic, adresa repository-ului, fișierul
@@ -139,7 +154,7 @@ else
   echo "$block" | awk '/target: \/data\/storage/ { getline; print }' | grep -q 'read_only: true' &&
     ok "finet-backup: storage montat doar citire" || fail "finet-backup: storage nu e read_only"
 fi
-for svc in finet-web finet-worker finet-migrate finet-admin; do
+for svc in finet-web finet-worker finet-migrate finet-admin finet-cleanup; do
   if service_block "$svc" | grep -Eq "finet_restic_password|finet_backup_|RESTIC_|PGSERVICEFILE"; then
     fail "$svc primește secrete de backup"
   else
@@ -182,7 +197,7 @@ for file in "$ROOT"/ops/backup/*.env.example; do
 done
 
 # Tokenul de sănătate e doar al serverului web.
-for svc in finet-worker finet-migrate finet-admin; do
+for svc in finet-worker finet-migrate finet-admin finet-cleanup; do
   if service_block "$svc" | grep -Eq "finet_health_token|HEALTH_TOKEN_FILE"; then
     fail "$svc primește tokenul de sănătate"
   else
@@ -197,7 +212,7 @@ if service_block finet-web | grep -Eq "^[[:space:]]+-[[:space:]]+finet_better_au
 else
   fail "finet-web nu primește secretul Better Auth (finet_better_auth_secret + BETTER_AUTH_SECRET_FILE)"
 fi
-for svc in finet-worker finet-migrate finet-admin; do
+for svc in finet-worker finet-migrate finet-admin finet-cleanup; do
   if service_block "$svc" | grep -Eq "finet_better_auth_secret|BETTER_AUTH_SECRET"; then
     fail "$svc primește secretul Better Auth"
   else
@@ -205,12 +220,29 @@ for svc in finet-worker finet-migrate finet-admin; do
   fi
 done
 
+# Retenția (F6-C, ADR 0015): one-shot în profilul `cleanup`, comanda fixă, storage în scriere DOAR
+# aici (finet-admin nu montează storage-ul).
+CB=$(service_block finet-cleanup)
+echo "$CB" | grep -Eq '^[[:space:]]+profiles:[[:space:]]*\[cleanup\]' && ok "finet-cleanup doar în profilul cleanup" || fail "finet-cleanup nu e în profilul cleanup"
+echo "$CB" | grep -Eq '^[[:space:]]+restart:[[:space:]]*"no"' && ok "finet-cleanup nu repornește (one-shot)" || fail "finet-cleanup are restart"
+echo "$CB" | grep -Eq 'command:[[:space:]]*\["cleanup-documents"\]' && ok "finet-cleanup rulează cleanup-documents" || fail "finet-cleanup nu rulează cleanup-documents"
+echo "$CB" | grep -Eq '^[[:space:]]+STORAGE_DIR:[[:space:]]*/data/storage[[:space:]]*$' && ok "finet-cleanup are STORAGE_DIR" || fail "finet-cleanup fără STORAGE_DIR"
+service_block finet-admin | grep -q 'target: /data/storage' && fail "finet-admin montează storage-ul" || ok "finet-admin fără storage"
+
 # Workerul (Faza 5, ADR 0011): din imaginea de unelte (pg-boss nu e în ieșirea standalone a
-# Next.js), comanda workerului real, plafonul de memorie ≤ 150m, profilul `worker`.
+# Next.js), comanda workerului real, plafonul de memorie, storage doar citire, profilul `worker`.
 WB=$(service_block finet-worker)
 echo "$WB" | grep -Eq '^[[:space:]]+image:[[:space:]]*\$\{FINET_TOOLS_IMAGE' && ok "finet-worker din imaginea de unelte" || fail "finet-worker nu folosește FINET_TOOLS_IMAGE"
 echo "$WB" | grep -Eq 'dist/tools/worker\.mjs' && ok "finet-worker rulează dist/tools/worker.mjs" || fail "finet-worker nu rulează dist/tools/worker.mjs"
-echo "$WB" | grep -Eq '^[[:space:]]+mem_limit:[[:space:]]*(1[0-4][0-9]|150|[0-9]{2})m[[:space:]]*$' && ok "finet-worker: mem_limit ≤ 150m" || fail "finet-worker: mem_limit lipsește sau e prea mare"
+# Faza 6 (ADR 0013): plafonul urcă la ≤ 384m (sharp + pdf.js); storage montat DOAR citire.
+echo "$WB" | grep -Eq '^[[:space:]]+mem_limit:[[:space:]]*(3[0-7][0-9]|38[0-4]|[12][0-9]{2}|[0-9]{2})m[[:space:]]*$' && ok "finet-worker: mem_limit ≤ 384m" || fail "finet-worker: mem_limit lipsește sau e prea mare"
+echo "$WB" | grep -Eq '^[[:space:]]+memswap_limit:[[:space:]]*(3[0-7][0-9]|38[0-4]|[12][0-9]{2}|[0-9]{2})m[[:space:]]*$' && ok "finet-worker: memswap_limit ≤ 384m" || fail "finet-worker: memswap_limit lipsește sau e prea mare"
+if echo "$WB" | grep -q 'target: /data/storage'; then
+  echo "$WB" | awk '/target: \/data\/storage/ { getline; print }' | grep -q 'read_only: true' &&
+    ok "finet-worker: storage montat doar citire" || fail "finet-worker: storage nu e read_only"
+else
+  fail "finet-worker: storage-ul (doar citire) lipsește"
+fi
 echo "$WB" | grep -Eq '^[[:space:]]+profiles:[[:space:]]*\[worker\]' && ok "finet-worker doar în profilul worker" || fail "finet-worker nu e în profilul worker"
 if echo "$WB" | grep -Eq "finet_database_url|finet_migrate_database_url"; then
   fail "finet-worker primește URL-ul altui rol"

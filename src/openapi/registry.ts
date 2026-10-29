@@ -28,10 +28,19 @@ import {
 } from "@/modules/transactions/transactions.schema";
 import { transferCreateSchema, transferUpdateSchema } from "@/modules/transfers/transfers.schema";
 import { appEventsBatchSchema, consentsPutSchema } from "@/modules/usage/usage.schema";
+import { DOCUMENT_STATUSES, RECEIPT_STATUSES } from "@/db/schema";
+import { receiptConfirmSchema, receiptPatchSchema } from "@/modules/receipts/receipts.schema";
 
 import {
   accountSchema,
+  aiUsageSchema,
   budgetSchema,
+  documentSchema,
+  receiptConfirmResultSchema,
+  receiptDetailSchema,
+  receiptReprocessResultSchema,
+  receiptSchema,
+  uploadResultSchema,
   budgetStatusSchema,
   categorySchema,
   consentStateSchema,
@@ -78,6 +87,8 @@ export type Operation = Readonly<{
   query?: readonly QueryParam[];
   /** Corpul JSON (dacă există). `optional`: se poate trimite fără corp și fără Content-Type. */
   body?: Readonly<{ schema: z.ZodType; optional?: boolean }>;
+  /** Corpul `multipart/form-data` (încărcarea documentelor, Faza 6): câmpuri text + fișiere. */
+  multipart?: Readonly<{ fields: Readonly<Record<string, string>>; description: string }>;
   /**
    * Răspunsul de succes: status → schemă (`null` = fără corp, 204). `csv`: corpul e `text/csv`
    * (export), fără schemă JSON.
@@ -87,6 +98,10 @@ export type Operation = Readonly<{
     schema: z.ZodType | null;
     description: string;
     csv?: boolean;
+    /** Corpul e binar (fișierul unui document), cu tipul detectat; fără schemă JSON. */
+    binary?: readonly string[];
+    /** Alt status de succes cu aceeași schemă (încărcarea: 200 când toate fișierele erau deja). */
+    alsoStatus?: number;
   }>;
   /** Codurile de eroare posibile, în afară de 401/429/500 (comune). */
   errors: readonly number[];
@@ -770,6 +785,202 @@ export const OPERATIONS: readonly Operation[] = [
     body: { schema: z.strictObject({}), optional: true },
     success: { status: 200, schema: dataOf(goalSchema), description: "Obiectivul." },
     errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE],
+  },
+  // --- Documentele și bonurile (Faza 6) ------------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/documents",
+    operationId: "listDocuments",
+    tag: "documents",
+    summary: "Documentele gospodăriei (cele mai noi întâi), cu starea și bonul extras.",
+    query: [
+      { name: "status", schema: z.enum(DOCUMENT_STATUSES), description: "Doar o stare." },
+      {
+        name: "since",
+        schema: z.iso.datetime(),
+        description: "Doar documentele încărcate după acest moment (ISO 8601 UTC).",
+      },
+      { name: "limit", schema: intParam, description: "Câte (implicit 50, plafon 100)." },
+    ],
+    success: { status: 200, schema: dataOf(z.array(documentSchema)), description: "Documentele." },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/documents",
+    operationId: "uploadDocuments",
+    tag: "documents",
+    summary: "Încarcă 1–4 bonuri (poze JPEG/PNG/WebP sau PDF), opțional ca bon lung.",
+    description:
+      "`multipart/form-data`, citit în flux. Tipul se detectează după conținut (nu după extensie sau `Content-Type`); HEIC/HEIF → 415 `heic_unsupported`; SVG/HTML/alte tipuri → 415. Plafoane: `MAX_UPLOAD_MB` pe fișier (implicit 10), ≤ 4 fișiere, pixeli, pagini PDF. Același fișier (SHA-256) → documentul existent (`duplicate: true`, 200), fără limită. Limita zilnică (409 `daily_document_limit`), cota (409 `storage_quota_exceeded`), bon lung cu o poză deja încărcată (409 `long_receipt_duplicate`), extrase (400, Faza 7). Starea inițială: `queued` cu consimțământul `externalAi`, altfel `awaiting_consent`. Ruta e exclusă din proxy-ul Next (ca fluxul să nu fie copiat în memorie), cu aceeași verificare Cloudflare Access. Fără `Idempotency-Key`: idempotentă prin SHA-256. Limită proprie de cereri (429).",
+    multipart: {
+      description: "Câmpurile text înaintea fișierelor.",
+      fields: {
+        kind: "`receipt` (implicit). `statement` → 400 (extrasele vin în Faza 7).",
+        longReceipt: "`true` = bon lung în 2–4 poze, în ordine de sus în jos.",
+        files: "1–4 fișiere.",
+      },
+    },
+    success: {
+      status: 201,
+      alsoStatus: 200,
+      schema: dataOf(uploadResultSchema),
+      description: "Documentele create (200: toate fișierele existau deja, `duplicate: true`).",
+    },
+    errors: [VALIDATION, FORBIDDEN, CONFLICT, TOO_LARGE, MEDIA, 422],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/documents"),
+    operationId: "getDocument",
+    tag: "documents",
+    summary: "Starea unui document (cod de eroare stabil, bonul extras).",
+    success: { status: 200, schema: dataOf(documentSchema), description: "Documentul." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/documents"),
+    operationId: "deleteDocument",
+    tag: "documents",
+    summary: "Șterge documentul și fișierul (bonul extras dispare; tranzacția creată rămâne).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 204, schema: null, description: "Șters." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/documents", "/file"),
+    operationId: "getDocumentFile",
+    tag: "documents",
+    summary: "Fișierul original, în flux, doar pentru membrii gospodăriei.",
+    description:
+      "Tipul detectat după conținut, `Content-Disposition: attachment` cu nume generat de server, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`. Fișier șters la retenție → 404.",
+    success: {
+      status: 200,
+      schema: null,
+      binary: ["image/jpeg", "image/png", "image/webp", "application/pdf"],
+      description: "Fișierul.",
+    },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/ai/usage",
+    operationId: "getAiUsage",
+    tag: "documents",
+    summary: "Contorul zilei: „X din Y documente azi” (fără costuri).",
+    success: { status: 200, schema: dataOf(aiUsageSchema), description: "Contorul." },
+    errors: [VALIDATION],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/receipts",
+    operationId: "listReceipts",
+    tag: "receipts",
+    summary: "Bonurile gospodăriei (cele mai noi întâi), cu filtre și căutare.",
+    query: [
+      { name: "status", schema: z.enum(RECEIPT_STATUSES), description: "Doar o stare." },
+      {
+        name: "q",
+        schema: z.string().max(100),
+        description:
+          "Magazin, produs (nume brut sau normalizat) sau sumă (`45,90` / `45.90`: totalul sau o linie).",
+      },
+      {
+        name: "merchant",
+        schema: z.string().max(100),
+        description: "Comerciantul conține textul.",
+      },
+      { name: "dateFrom", schema: z.iso.date(), description: "Data bonului ≥ (inclusiv)." },
+      { name: "dateTo", schema: z.iso.date(), description: "Data bonului ≤ (inclusiv)." },
+      { name: "amountMinMinor", schema: intParam, description: "Totalul minim (unități minore)." },
+      { name: "amountMaxMinor", schema: intParam, description: "Totalul maxim (unități minore)." },
+      { name: "categoryId", schema: z.uuid(), description: "Bonurile cu o linie în categorie." },
+      {
+        name: "tagId",
+        schema: z.uuid(),
+        description: "Bonurile a căror tranzacție are eticheta (liniile nu au etichete).",
+      },
+      { name: "cursor", schema: z.string().max(400), description: "`nextCursor` anterior." },
+      { name: "limit", schema: intParam, description: "Rânduri (implicit 50, plafon 100)." },
+    ],
+    success: {
+      status: 200,
+      schema: z.strictObject({ data: z.array(receiptSchema), nextCursor: z.string().nullable() }),
+      description: "Pagina.",
+    },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/receipts"),
+    operationId: "getReceipt",
+    tag: "receipts",
+    summary:
+      "Bonul cu liniile, problemele (coduri stabile), furnizorul AI și motivul fallback-ului.",
+    success: { status: 200, schema: dataOf(receiptDetailSchema), description: "Bonul." },
+    errors: [VALIDATION, NOT_FOUND, REUSED],
+  },
+  {
+    method: "PATCH",
+    path: pathOf("/api/v1/receipts"),
+    operationId: "patchReceipt",
+    tag: "receipts",
+    summary: "Corectează câmpurile și liniile bonului (până la confirmare).",
+    description:
+      "Liniile se ÎNLOCUIESC integral (ordinea = poziția; `id` păstrează o linie existentă). Sumele doar ca întregi `…Minor`. Verificările din cod și scorul se recalculează; cheia de deduplicare la fel (coliziune → bonul devine „posibil duplicat”). O categorie aleasă pe o linie de produs actualizează alias-ul produsului (`product_aliases`), folosit la bonurile următoare. Bon salvat → 409 `receipt_saved`.",
+    body: { schema: receiptPatchSchema },
+    success: { status: 200, schema: dataOf(receiptDetailSchema), description: "Bonul." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT, REUSED],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/receipts"),
+    operationId: "deleteReceipt",
+    tag: "receipts",
+    summary: "Șterge bonul și documentele lui (fișierele); tranzacția creată rămâne.",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 204, schema: null, description: "Șters." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/receipts", "/confirm"),
+    operationId: "confirmReceipt",
+    tag: "receipts",
+    summary: "„Confirmă și salvează”: creează tranzacția de cheltuială a bonului.",
+    description:
+      "O tranzacție per bon: suma = totalul, moneda contului = moneda bonului (altfel 409 `currency_mismatch`), `source: receipt`, `documentId`; categoria = cea trimisă sau categoria cu cea mai mare sumă pe liniile de produs; categoriile liniilor rămân pe bon. 409: `receipt_already_saved`, `possible_duplicate` (fără `allowDuplicate: true`), `total_required`, `date_required`, `account_archived`. Garda 2^53 pe sold (422).",
+    body: { schema: receiptConfirmSchema },
+    success: {
+      status: 201,
+      schema: dataOf(receiptConfirmResultSchema),
+      description: "Bonul salvat și tranzacția.",
+    },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/receipts", "/reprocess"),
+    operationId: "reprocessReceipt",
+    tag: "receipts",
+    summary: "Citește din nou bonul (pune documentele în coadă; consumă limita zilnică).",
+    description:
+      "Bonul extras se șterge și documentele revin în coadă (workerul, în ≤ 1 minut; fără consimțământ → `awaiting_consent`). `order` (bon lung): pozele în ordinea nouă („Ordonează automat”). 409: `receipt_saved`, `file_deleted` (retenție), `document_rejected`, `daily_document_limit`. Limită proprie de cereri (429).",
+    body: {
+      schema: z.strictObject({
+        order: z.array(z.number().int().min(1).max(4)).min(2).max(4).optional(),
+      }),
+      optional: true,
+    },
+    success: {
+      status: 202,
+      schema: dataOf(receiptReprocessResultSchema),
+      description: "Documentele puse în coadă.",
+    },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
   },
   // --- Plățile recurente (Faza 5) ------------------------------------------------------------
   {

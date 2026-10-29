@@ -55,7 +55,10 @@ function saasNotImplemented(): never {
 /** Construiește implementarea pentru un mod și o configurație date (folosit și de teste). */
 export function createEntitlements(
   mode: AppMode,
-  limits: Pick<Config, "ai" | "storage">,
+  limits: Readonly<{
+    ai: Pick<Config["ai"], "dailyDocumentLimit" | "monthlyBudget">;
+    storage: Config["storage"];
+  }>,
 ): Entitlements {
   const values: LimitValues = {
     "ai.dailyDocuments": limits.ai.dailyDocumentLimit,

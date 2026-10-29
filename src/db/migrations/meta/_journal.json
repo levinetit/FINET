@@ -57,6 +57,34 @@
       "when": 1793500000000,
       "tag": "0007_pgboss",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793600000000,
+      "tag": "0008_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793700000000,
+      "tag": "0009_receipt_pipeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793800000000,
+      "tag": "0010_worker_queue_fairness",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793900000000,
+      "tag": "0011_document_retention",
+      "breakpoints": true
     }
   ]
 }

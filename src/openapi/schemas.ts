@@ -2,6 +2,14 @@ import { z } from "zod";
 
 import {
   ACCOUNT_TYPES,
+  AI_PROVIDERS_USED,
+  DOCUMENT_KINDS,
+  DOCUMENT_MIMES,
+  DOCUMENT_STATUSES,
+  FALLBACK_REASONS,
+  PAYMENT_METHODS,
+  RECEIPT_LINE_KINDS,
+  RECEIPT_STATUSES,
   BUDGET_PERIODS,
   BUDGET_SCOPES,
   CATEGORY_KINDS,
@@ -100,6 +108,10 @@ export const transactionSchema = z
     recurringRuleId: uuid
       .nullable()
       .meta({ description: "Regula recurentă care a generat-o (`source: recurring`, Faza 5)." }),
+    documentId: uuid.nullable().meta({
+      description:
+        "Documentul (bonul) din care a fost creată (`source: receipt`, Faza 6); `null` după ștergerea documentului.",
+    }),
     createdByUserId: uuid.nullable(),
     createdAt: instant,
     updatedAt: instant,
@@ -404,5 +416,150 @@ export const recurringGenerateResultSchema = z
     }),
   })
   .meta({ title: "RecurringGenerateResult" });
+
+// --- Documentele și bonurile (Faza 6) ---------------------------------------------------------
+
+const documentBase = {
+  id: uuid,
+  kind: z.enum(DOCUMENT_KINDS),
+  status: z.enum(DOCUMENT_STATUSES).meta({
+    description:
+      "`awaiting_consent` = fără consimțământul `externalAi` nimic nu pleacă la AI (bonul se poate introduce manual); `queued` → `processing` → `needs_review` (bonul „De verificat”) → `done` (salvat); `rejected` = fișierul a fost refuzat la preprocesare (`errorCode`).",
+  }),
+  mime: z.enum(DOCUMENT_MIMES).meta({ description: "Tipul DETECTAT după conținut." }),
+  sizeBytes: int,
+  pages: int.nullable(),
+  batchId: uuid.nullable().meta({ description: "Lotul bonului lung (2–4 poze)." }),
+  documentOrder: int.nullable().meta({ description: "Poziția în bonul lung (1 = sus)." }),
+  possibleDuplicateOfId: uuid
+    .nullable()
+    .meta({ description: "Poză aproape identică (hash perceptual): informativ, nu blochează." }),
+  errorCode: z
+    .string()
+    .nullable()
+    .meta({ description: "Cod stabil al refuzului (fără conținut), de exemplu `pdf_encrypted`." }),
+  createdAt: instant,
+  expiresAt: instant.nullable().meta({ description: "Ștergerea originalului (retenția)." }),
+  fileDeleted: z.boolean().meta({ description: "Originalul a fost șters la retenție." }),
+};
+
+export const uploadedDocumentSchema = z
+  .strictObject({
+    ...documentBase,
+    duplicate: z
+      .boolean()
+      .meta({ description: "Același fișier (SHA-256) exista deja: documentul existent." }),
+  })
+  .meta({ title: "UploadedDocument" });
+
+export const documentSchema = z
+  .strictObject({
+    ...documentBase,
+    receiptId: uuid.nullable().meta({ description: "Bonul extras din document (sau din lot)." }),
+  })
+  .meta({ title: "Document" });
+
+export const uploadResultSchema = z
+  .strictObject({
+    documents: z.array(uploadedDocumentSchema),
+    batchId: uuid.nullable(),
+    created: int.meta({ description: "Documente noi (fără duplicate)." }),
+  })
+  .meta({ title: "UploadResult" });
+
+export const aiUsageSchema = z
+  .strictObject({
+    used: int.meta({ description: "Documente încărcate azi (ziua din București)." }),
+    limit: int.meta({ description: "Limita zilnică a gospodăriei." }),
+    remaining: int,
+  })
+  .meta({ title: "AiUsage" });
+
+const receiptIssue = z.strictObject({
+  code: z.string().meta({ description: "Cod stabil (ADR 0014), tradus de UI." }),
+  field: z.string().optional(),
+  line: int.optional().meta({ description: "Poziția liniei (1..500)." }),
+});
+
+const receiptBase = {
+  id: uuid,
+  status: z.enum(RECEIPT_STATUSES),
+  documentIds: z.array(uuid).meta({ description: "Documentele (pozele) bonului, în ordine." }),
+  batchId: uuid.nullable(),
+  merchantName: z.string().nullable(),
+  merchantTaxId: z.string().nullable().meta({ description: "CUI (`RO` opțional + cifre)." }),
+  storeAddress: z.string().nullable(),
+  receiptNumber: z.string().nullable(),
+  occurredOn: date.nullable(),
+  paymentMethod: z.enum(PAYMENT_METHODS).nullable(),
+  totalMinor: minor.nullable(),
+  vatTotalMinor: minor.nullable(),
+  currency,
+  confidence: int
+    .nullable()
+    .meta({ description: "0–100, calculat DOAR din verificările din cod." }),
+  providerUsed: z.enum(AI_PROVIDERS_USED),
+  fallbackReason: z.enum(FALLBACK_REASONS).nullable(),
+  transactionId: uuid.nullable().meta({ description: "Tranzacția creată la confirmare." }),
+  duplicateOfReceiptId: uuid
+    .nullable()
+    .meta({ description: "Același bon (CUI + număr + dată + total) există deja." }),
+  issues: z.array(receiptIssue),
+  linesSumMinor: minor.nullable().meta({ description: "Suma liniilor cu semn (reducerile scad)." }),
+  categoryIds: z.array(uuid).meta({ description: "Categoriile distincte ale liniilor." }),
+  lineCount: int,
+  createdAt: instant,
+  updatedAt: instant,
+};
+
+export const receiptSchema = z.strictObject(receiptBase).meta({ title: "Receipt" });
+
+export const receiptLineSchema = z
+  .strictObject({
+    id: uuid,
+    position: int,
+    rawName: z.string(),
+    normalizedName: z.string().nullable(),
+    quantity: z
+      .string()
+      .nullable()
+      .meta({ description: 'Cantitatea ca text zecimal (`"1.500"`), fără float.' }),
+    unitPriceMinor: minor.nullable(),
+    lineTotalMinor: minor,
+    vatRate: z.string().nullable().meta({ description: 'Cota TVA în procente (`"21.00"`).' }),
+    categoryId: uuid.nullable(),
+    kind: z.enum(RECEIPT_LINE_KINDS),
+  })
+  .meta({ title: "ReceiptLine" });
+
+export const receiptDetailSchema = z
+  .strictObject({
+    ...receiptBase,
+    lines: z.array(receiptLineSchema),
+    removedLines: z
+      .array(
+        z.strictObject({
+          part: int,
+          position: int,
+          reason: z.literal("overlap"),
+          name: z.string().nullable(),
+        }),
+      )
+      .meta({ description: "Bonul lung: liniile eliminate la unire (poza 1..4, rândul)." }),
+    removedCount: int,
+    suggestedOrder: z
+      .array(int)
+      .nullable()
+      .meta({ description: "Bonul lung în ordine greșită: ordinea propusă a pozelor." }),
+  })
+  .meta({ title: "ReceiptDetail" });
+
+export const receiptConfirmResultSchema = z
+  .strictObject({ receipt: receiptDetailSchema, transactionId: uuid })
+  .meta({ title: "ReceiptConfirmResult" });
+
+export const receiptReprocessResultSchema = z
+  .strictObject({ documentIds: z.array(uuid), queued: int })
+  .meta({ title: "ReceiptReprocessResult" });
 
 export const dataOf = <T extends z.ZodType>(schema: T) => z.strictObject({ data: schema });

@@ -48,6 +48,10 @@ export type ApiLimits = Readonly<{
   exports: RateLimitRule;
   /** `POST /api/v1/recurring/generate`, pe utilizator (în plus față de `mutations`). */
   recurringGenerate: RateLimitRule;
+  /** Încărcarea documentelor (bonuri), pe utilizator (în plus față de `mutations`). */
+  documentUpload: RateLimitRule;
+  /** Reprocesarea unui bon (un nou apel AI), pe utilizator (în plus față de `mutations`). */
+  receiptReprocess: RateLimitRule;
 }>;
 
 /** Limitele implicite (decizia mea): generoase pentru un client real, mici pentru un abuz. */
@@ -58,6 +62,10 @@ export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
   exports: Object.freeze({ max: 10, windowSeconds: 60 }),
   // F5-B (decizia mea): 6 generări la cerere pe minut per utilizator; butonul e rar folosit.
   recurringGenerate: Object.freeze({ max: 6, windowSeconds: 60 }),
+  // F6-A (decizia mea): 30 de încărcări (cereri de până la 4 fișiere) la 10 minute per utilizator.
+  documentUpload: Object.freeze({ max: 30, windowSeconds: 600 }),
+  // F6-C (decizia mea): 10 reprocesări la 10 minute per utilizator (fiecare costă un apel AI).
+  receiptReprocess: Object.freeze({ max: 10, windowSeconds: 600 }),
 });
 
 export type ApiDeps = Readonly<{
@@ -312,7 +320,13 @@ export async function currentHousehold(ctx: ApiContext): Promise<string> {
 
 export async function enforceRateLimit(
   ctx: ApiContext,
-  kind: "api_mutation" | "app_events" | "api_export" | "api_recurring_generate",
+  kind:
+    | "api_mutation"
+    | "app_events"
+    | "api_export"
+    | "api_recurring_generate"
+    | "api_document_upload"
+    | "api_receipt_reprocess",
   rule: RateLimitRule,
 ): Promise<void> {
   const result = await hitRateLimit(

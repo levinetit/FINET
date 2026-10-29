@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Alert } from "@/components/ui/alert";
+import { buttonClasses } from "@/components/ui/button";
 import { ro } from "@/messages/ro";
 import { isValidId } from "@/modules/ledger/input";
+import { receiptIdsForTransactions } from "@/modules/receipts/receipts.service";
 import { getTransactionTagIds } from "@/modules/tags/tags.service";
 import { transactionToJson } from "@/modules/transactions/transactions.schema";
 import { getTransaction } from "@/modules/transactions/transactions.service";
@@ -45,7 +48,13 @@ export default async function TransactionPage({
       tx.type === "transfer" && tx.transferGroupId
         ? transferToJson(await getTransfer({ db }, page.actor, householdId, tx.transferGroupId))
         : null;
-    return { tx, options, transfer, tagIds };
+    // Faza 6: tranzacția creată dintr-un bon are legătura spre ecranul bonului.
+    const receiptId =
+      tx.source === "receipt"
+        ? ((await receiptIdsForTransactions({ db }, page.actor, householdId, [tx.id])).get(tx.id) ??
+          null)
+        : null;
+    return { tx, options, transfer, tagIds, receiptId };
   });
   if (!result.ok) {
     return (
@@ -55,7 +64,7 @@ export default async function TransactionPage({
       </>
     );
   }
-  const { tx, options, transfer, tagIds } = result.value;
+  const { tx, options, transfer, tagIds, receiptId } = result.value;
   if (transfer) {
     const name = (accountId: string) =>
       options.allAccounts.find((a) => a.id === accountId)?.name ?? "—";
@@ -80,6 +89,17 @@ export default async function TransactionPage({
         eyebrow={ro.transactions.title}
         title={ro.transactions.editTitle}
         usageStats={page.usageStats}
+        actions={
+          receiptId ? (
+            <Link
+              href={`/receipts/${receiptId}`}
+              className={buttonClasses("outline")}
+              data-testid="transaction-receipt-link"
+            >
+              {ro.transactions.viewReceipt}
+            </Link>
+          ) : undefined
+        }
       />
       <TransactionForm
         transaction={tx}

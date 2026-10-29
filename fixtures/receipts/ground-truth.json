@@ -1,0 +1,391 @@
+{
+  "note": "Bonuri SINTETICE (scripts/make-receipt-fixtures.mjs). Nu înlocuiesc evaluarea pe bonuri reale.",
+  "receipts": [
+    {
+      "id": "lidl-simplu",
+      "merchantName": "LIDL DISCOUNT SRL",
+      "merchantTaxId": "RO22891860",
+      "storeAddress": "Str. Exemplu 10, Cluj-Napoca",
+      "receiptNumber": "0142",
+      "date": "2026-10-12",
+      "paymentMethod": "card",
+      "lines": [
+        {
+          "name": "LAPTE ZUZU 1,5% 1L",
+          "quantity": "2",
+          "unitPrice": "7.49",
+          "lineTotal": "14.98",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "PAINE FELIATA 500G",
+          "quantity": "1",
+          "unitPrice": "5.99",
+          "lineTotal": "5.99",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "SAMPON HAIR 400ML",
+          "quantity": "1",
+          "unitPrice": "18.90",
+          "lineTotal": "18.90",
+          "vatRate": "21",
+          "type": "item",
+          "category": "Igienă și cosmetice"
+        },
+        {
+          "name": "GARANTIE SGR",
+          "quantity": "2",
+          "unitPrice": "0.50",
+          "lineTotal": "1.00",
+          "vatRate": "0",
+          "type": "deposit",
+          "category": null
+        }
+      ],
+      "currency": "RON",
+      "total": "40.87",
+      "vatTotal": "5.35",
+      "variant": {
+        "format": "jpeg"
+      }
+    },
+    {
+      "id": "kaufland-reducere-punga",
+      "merchantName": "KAUFLAND ROMANIA SCS",
+      "merchantTaxId": "RO15991149",
+      "storeAddress": "Bd. Exemplu 2, București",
+      "receiptNumber": "5531",
+      "date": "2026-10-18",
+      "paymentMethod": "cash",
+      "lines": [
+        {
+          "name": "CAFEA MACINATA 500G",
+          "quantity": "1",
+          "unitPrice": "32.99",
+          "lineTotal": "32.99",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "REDUCERE CARD",
+          "quantity": null,
+          "unitPrice": null,
+          "lineTotal": "5.00",
+          "vatRate": "11",
+          "type": "discount",
+          "category": null
+        },
+        {
+          "name": "DETERGENT VASE 1L",
+          "quantity": "1",
+          "unitPrice": "12.49",
+          "lineTotal": "12.49",
+          "vatRate": "21",
+          "type": "item",
+          "category": "Casă și reparații"
+        },
+        {
+          "name": "PUNGA RAFIE",
+          "quantity": "1",
+          "unitPrice": "0.50",
+          "lineTotal": "0.50",
+          "vatRate": "21",
+          "type": "bag",
+          "category": null
+        }
+      ],
+      "currency": "RON",
+      "total": "40.98",
+      "vatTotal": "5.03",
+      "variant": {
+        "format": "png"
+      }
+    },
+    {
+      "id": "rotit-7-grade",
+      "merchantName": "DEDEMAN SRL",
+      "merchantTaxId": "RO2816464",
+      "storeAddress": "Str. Exemplu 5, Bacău",
+      "receiptNumber": "77120",
+      "date": "2026-09-30",
+      "paymentMethod": "card",
+      "lines": [
+        {
+          "name": "SURUBELNITA SET 6 BUC",
+          "quantity": "1",
+          "unitPrice": "49.90",
+          "lineTotal": "49.90",
+          "vatRate": "21",
+          "type": "item",
+          "category": "Casă și reparații"
+        },
+        {
+          "name": "BEC LED E27 9W",
+          "quantity": "3",
+          "unitPrice": "8.99",
+          "lineTotal": "26.97",
+          "vatRate": "21",
+          "type": "item",
+          "category": "Casă și reparații"
+        }
+      ],
+      "currency": "RON",
+      "total": "76.87",
+      "vatTotal": "13.34",
+      "variant": {
+        "format": "jpeg",
+        "rotate": 7
+      }
+    },
+    {
+      "id": "zgomot-estompat",
+      "merchantName": "LIDL DISCOUNT SRL",
+      "merchantTaxId": "RO22891860",
+      "storeAddress": "Str. Exemplu 10, Cluj-Napoca",
+      "receiptNumber": "0177",
+      "date": "2026-10-21",
+      "paymentMethod": "card",
+      "lines": [
+        {
+          "name": "BANANE",
+          "quantity": "1.254",
+          "unitPrice": "6.99",
+          "lineTotal": "8.77",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "IAURT GRECESC 400G",
+          "quantity": "2",
+          "unitPrice": "6.49",
+          "lineTotal": "12.98",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "APA PLATA 2L",
+          "quantity": "6",
+          "unitPrice": "2.29",
+          "lineTotal": "13.74",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "GARANTIE SGR",
+          "quantity": "6",
+          "unitPrice": "0.50",
+          "lineTotal": "3.00",
+          "vatRate": "0",
+          "type": "deposit",
+          "category": null
+        }
+      ],
+      "currency": "RON",
+      "total": "38.49",
+      "vatTotal": "3.52",
+      "variant": {
+        "format": "jpeg",
+        "noise": true,
+        "blur": 1.2,
+        "quality": 55
+      }
+    },
+    {
+      "id": "mototolit",
+      "merchantName": "KAUFLAND ROMANIA SCS",
+      "merchantTaxId": "RO15991149",
+      "storeAddress": "Bd. Exemplu 2, București",
+      "receiptNumber": "5602",
+      "date": "2026-10-25",
+      "paymentMethod": "card",
+      "lines": [
+        {
+          "name": "PASTA DINTI 75ML",
+          "quantity": "1",
+          "unitPrice": "11.99",
+          "lineTotal": "11.99",
+          "vatRate": "21",
+          "type": "item",
+          "category": "Igienă și cosmetice"
+        },
+        {
+          "name": "ROSII CHERRY 250G",
+          "quantity": "2",
+          "unitPrice": "7.99",
+          "lineTotal": "15.98",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        }
+      ],
+      "currency": "RON",
+      "total": "27.97",
+      "vatTotal": "3.66",
+      "variant": {
+        "format": "jpeg",
+        "crumple": true
+      }
+    },
+    {
+      "id": "pdf-text",
+      "merchantName": "LIDL DISCOUNT SRL",
+      "merchantTaxId": "RO22891860",
+      "storeAddress": "Str. Exemplu 10, Cluj-Napoca",
+      "receiptNumber": "0199",
+      "date": "2026-10-27",
+      "paymentMethod": "card",
+      "lines": [
+        {
+          "name": "ULEI FLOAREA SOARELUI 1L",
+          "quantity": "1",
+          "unitPrice": "9.99",
+          "lineTotal": "9.99",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "HARTIE IGIENICA 10 ROLE",
+          "quantity": "1",
+          "unitPrice": "19.99",
+          "lineTotal": "19.99",
+          "vatRate": "21",
+          "type": "item",
+          "category": "Igienă și cosmetice"
+        }
+      ],
+      "currency": "RON",
+      "total": "29.98",
+      "vatTotal": "4.46",
+      "variant": {
+        "format": "pdf"
+      }
+    },
+    {
+      "id": "tva-vechi-19",
+      "merchantName": "LIDL DISCOUNT SRL",
+      "merchantTaxId": "RO22891860",
+      "storeAddress": "Str. Exemplu 10, Cluj-Napoca",
+      "receiptNumber": "0031",
+      "date": "2025-06-14",
+      "paymentMethod": "cash",
+      "lines": [
+        {
+          "name": "ZAHAR 1KG",
+          "quantity": "1",
+          "unitPrice": "4.99",
+          "lineTotal": "4.99",
+          "vatRate": "9",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "SAPUN LICHID 500ML",
+          "quantity": "1",
+          "unitPrice": "8.49",
+          "lineTotal": "8.49",
+          "vatRate": "19",
+          "type": "item",
+          "category": "Igienă și cosmetice"
+        }
+      ],
+      "currency": "RON",
+      "total": "13.48",
+      "vatTotal": "1.77",
+      "variant": {
+        "format": "jpeg"
+      }
+    },
+    {
+      "id": "bon-lung-3-parti",
+      "merchantName": "KAUFLAND ROMANIA SCS",
+      "merchantTaxId": "RO15991149",
+      "storeAddress": "Bd. Exemplu 2, București",
+      "receiptNumber": "5777",
+      "date": "2026-10-28",
+      "paymentMethod": "card",
+      "lines": [
+        {
+          "name": "LAPTE 3,5% 1L",
+          "quantity": "1",
+          "unitPrice": "8.49",
+          "lineTotal": "8.49",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "OUA M 10 BUC",
+          "quantity": "1",
+          "unitPrice": "13.99",
+          "lineTotal": "13.99",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "MERE GOLDEN 1KG",
+          "quantity": "1",
+          "unitPrice": "6.11",
+          "lineTotal": "6.11",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "SAMPON 250ML",
+          "quantity": "1",
+          "unitPrice": "15.49",
+          "lineTotal": "15.49",
+          "vatRate": "21",
+          "type": "item",
+          "category": "Igienă și cosmetice"
+        },
+        {
+          "name": "LAPTE 3,5% 1L",
+          "quantity": "1",
+          "unitPrice": "8.49",
+          "lineTotal": "8.49",
+          "vatRate": "11",
+          "type": "item",
+          "category": "Alimente"
+        },
+        {
+          "name": "SERVETELE 100 BUC",
+          "quantity": "1",
+          "unitPrice": "4.99",
+          "lineTotal": "4.99",
+          "vatRate": "21",
+          "type": "item",
+          "category": "Igienă și cosmetice"
+        },
+        {
+          "name": "GARANTIE SGR",
+          "quantity": "1",
+          "unitPrice": "0.50",
+          "lineTotal": "0.50",
+          "vatRate": "0",
+          "type": "deposit",
+          "category": null
+        }
+      ],
+      "currency": "RON",
+      "total": "58.06",
+      "vatTotal": "7.24",
+      "variant": {
+        "format": "jpeg",
+        "parts": 3,
+        "overlap": 1
+      }
+    }
+  ]
+}

@@ -337,6 +337,69 @@ Agentul nu a rulat nimic din această secțiune. Ordinea contează: schema `pgbo
 
 **Rollback:** `sudo docker compose … stop finet-worker` (regulile nu se mai generează; nimic nu se pierde: la repornire se recuperează cel mult 12 scadențe pe regulă pe rulare). Imaginea anterioară a `finet-web` funcționează și cu tabelele noi. Migrațiile: comenzile din antete (`0007`: `drop schema pgboss cascade`, cu workerul oprit).
 
+## 4h. Faza 6 (F6-A) pe producție (operatorul, după revizuiri și după F6-B/F6-C)
+
+Agentul nu a rulat nimic din această secțiune. F6-A singur nu schimbă comportamentul vizibil (fără rută publică de încărcare și fără job în worker); pașii se fac odată cu deploy-ul Fazei 6.
+
+1. **Imaginile** `finet` și `finet:tools` din workflow-ul `images` (`sudo sh ops/deploy/pull-images.sh <sha>`). `finet:tools` conține acum `sharp`, `unpdf`, `busboy` (dependențe de producție) și `dist/tools/pdf-child.mjs`; verifică `prlimit`: `sudo docker run --rm --network none --entrypoint sh finet:tools -c 'which prlimit'` → `/usr/bin/prlimit` (fără el, PDF-urile sunt refuzate, `pdf_sandbox_unavailable`).
+2. **Backup** al schemei `finet` (ca la 4g).
+3. **Migrația `0008_documents`** (rolul `migrate`, ca la 4g pasul 4): „aplicate acum 1”, apoi „aplicate acum 0”. Adaugă pe `transactions` cheia `transactions_document_fk` (`NOT VALID` + `VALIDATE`) și un index parțial (lock scurt). Rollback: comenzile din antetul fișierului (cu backup; fișierele din `/srv/finet/storage/households/*/documents/` se șterg separat).
+4. **Variabile noi (opționale, nesecrete)** în `/srv/finet/env/finet.env` și `finet.worker.env`: `MAX_UPLOAD_MB` (10), `MAX_PDF_PAGES` (6), `MAX_IMAGE_PIXELS` (50000000), `RECEIPT_IMAGE_RETENTION_DAYS` (180), `DOCUMENT_DUPLICATE_MAX_DISTANCE` (6). Variabilele AI (`AI_BASE_URL`, `AI_API_KEY_FILE` …) vin în F6-B.
+5. **Workerul**: compose-ul îi montează acum `${FINET_DATA_DIR}/storage` **doar citire** în `/data/storage` și fixează `STORAGE_DIR=/data/storage` (obligatoriu în producție pentru rolul `worker`), `mem_limit`/`memswap_limit` 384m, `NODE_OPTIONS=--max-old-space-size=160`. Directorul există din Faza 0 (`1000:1000`, mod 700): workerul rulează tot ca uid 1000, deci îl poate citi. `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile worker up -d finet-worker`, apoi `sudo docker inspect finet-worker --format '{{range .Mounts}}{{.Destination}} rw={{.RW}} {{end}}'` → `/data/storage rw=false`.
+6. **Încărcările mari prin proxy (F6-C):** cu `src/proxy.ts` pe ruta de încărcare, Next 16 trunchiază corpul la 10 MB (`proxyClientMaxBodySize`); F6-C exclude ruta din proxy sau ridică limita (ADR 0013). Limita de corp a Cloudflare (100 MB pe planul gratuit) și a Traefik sunt peste plafonul FINET (~41 MB).
+7. **Spațiul pe disc:** cota implicită e 5000 MB pe gospodărie (`STORAGE_QUOTA_MB`); discul VPS-ului are ~60 GB liberi. `/api/health` raportează `diskFreePercent`.
+
+### 4h-bis. F6-B (pipeline-ul AI) pe producție
+
+Agentul nu a rulat nimic din această secțiune și nu a atins LiteLLM-ul real.
+
+1. **Migrația `0009_receipt_pipeline`** (după `0008`, același mod): „aplicate acum 1”, apoi 0. Atinge doar `finet.receipts`, gol pe producție, plus două tabele noi (`vat_rates` cu seed, `ai_budget_usage`) și trei funcții SECURITY DEFINER. Rollback: antetul fișierului.
+2. **Alias-urile în LiteLLM** (stack 262). Pe gazdă, modelele nu stau în `config.yaml`: le adaugi din UI/API-ul LiteLLM, cu masterkey-ul, ca orice model.
+   - `finet-vision-external` → de exemplu `gemini/gemini-3.8-flash` (vision);
+   - `finet-text-external` → același model sau `gemini/gemini-3.7-flash`.
+
+   Verificare: `curl -s -m 240 -H "Authorization: Bearer $K" localhost:4000/health`.
+3. **Cheia virtuală FINET** (per aplicație, cu buget în LiteLLM și doar cele două alias-uri permise): `/srv/finet/secrets/finet_litellm_key`, `1000:1000`, mod 400 (`sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_litellm_key`). Compose-ul o montează DOAR în `finet-worker` (`AI_API_KEY_FILE`). Recomandat: jurnalele LiteLLM fără corpurile cererilor pentru această cheie (PRIVACY_NOTES).
+4. **`/srv/finet/env/finet.worker.env`:** `AI_BASE_URL=http://172.88.88.4:4000/v1`, `AI_ALLOWED_HOSTS=172.88.88.4:4000`, modelele, `AI_TIMEOUT_MS`, `AI_MAX_RETRIES`, `AI_CONFIDENCE_THRESHOLD`, `AI_PRICE_INPUT_PER_MTOK`/`AI_PRICE_OUTPUT_PER_MTOK` (tarifele reale ale modelului ales, în moneda bugetului), `AI_RESPONSE_FORMAT=json_schema`. **`AI_MONTHLY_BUDGET` rămâne 0** (nimic nu pleacă) până după pasul 6.
+5. **Rețeaua:** `finet-worker` e pe `apps` (`172.88.88.131`), ca `litellm-apps` (`172.88.88.4`). Firewall-ul gazdei (`LEVINETIT-FW` în `DOCKER-USER`) privește porturile publicate; traficul între containerele de pe `apps` merge deja (open-webui → openclaw). Verificare: `sudo docker exec finet-worker node -e "fetch('http://172.88.88.4:4000/health/liveliness').then(r=>console.log(r.status))"` → 200.
+6. **Prima verificare reală, înainte de buget > 0:** din imaginea de unelte sau dintr-un clone, `AI_EVAL=1 AI_BASE_URL=… AI_API_KEY_FILE=… pnpm eval:receipts` (8 bonuri sintetice, sub 1 cent la tarifele Flash).
+   - Dacă primul apel dă HTTP 400 (schema refuzată), pune `AI_RESPONSE_FORMAT=json_object` și repetă.
+   - Rezultatul pe bonuri sintetice NU e o evaluare reală: evaluează apoi pe 20–30 de bonuri reale proprii, cu `ground-truth` scris de mână, și notează modelul ales într-un ADR (3.6).
+7. **Bugetul:** `AI_MONTHLY_BUDGET` (de exemplu `5.00`) + `AI_MONTHLY_BUDGET_CURRENCY=USD`, apoi recrearea `finet-worker`. Ce s-a consumat luna aceasta: `select month, currency, reserved_minor, calls from finet.ai_budget_usage` (ca `finet_migrator`). Rezervarea e pesimistă, deci consumul raportat e peste costul real.
+8. **Verificare:** logul workerului are `{"event":"receipts","enabled":true,"ai":true}` la pornire. Un bon încărcat cu consimțământ trece în ≤ 1 minut în `needs_review` (`select status, confidence, issues from finet.receipts order by created_at desc limit 5`).
+
+## 4i. Faza 6 pe producție (ordinea completă, după revizuiri; F6-C)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins LiteLLM-ul real sau producția. Pașii 4h și 4h-bis rămân valabili; aici e ordinea întregii faze, cu ce adaugă F6-C (API-ul public, paginile `/import`, `/receipts`, retenția). ADR 0013, 0014, 0015.
+
+1. **Imaginile** `finet` și `finet:tools` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`); `prlimit` în `finet:tools` (4h, pasul 1).
+2. **Backup** al schemei `finet` (un `run-backup.sh` manual).
+3. **Migrațiile `0008`–`0011`** (rolul `migrate`; prima rulare „aplicate acum 4”, a doua „aplicate acum 0”):
+   - `0008_documents`, `0009_receipt_pipeline` (4h, 4h-bis);
+   - `0010_worker_queue_fairness` (F6-B: selecția echitabilă pe gospodării; doar funcții și o politică);
+   - `0011_document_retention` (F6-C: funcția `expired_documents`, SECURITY DEFINER, doar identificatori, și politica `documents_migrator_expired`; schema tabelelor nu se schimbă). Rollback: antetul fișierului.
+4. **LiteLLM**: alias-urile, cheia virtuală per aplicație cu buget (`/srv/finet/secrets/finet_litellm_key`, `1000:1000`, mod 400; montată DOAR în `finet-worker` ca `AI_API_KEY_FILE`), variabilele `AI_*` în `finet.worker.env`, **`AI_MONTHLY_BUDGET=0`** până după evaluare (4h-bis, pașii 2–6). Rețeaua: `finet-worker` (`172.88.88.131`) → `litellm-apps` (`172.88.88.4:4000`) pe `apps`; `AI_ALLOWED_HOSTS=172.88.88.4:4000` (anti-SSRF: orice altă gazdă e refuzată).
+5. **Workerul**: `mem_limit`/`memswap_limit` 384m, storage-ul DOAR citire, `STORAGE_DIR=/data/storage` (4h, pasul 5); `up -d finet-worker`, apoi `sudo docker stats --no-stream finet-worker` sub 384 MiB după primul bon.
+6. **Redeploy `finet-web`** (aceeași imagine aduce rutele `/api/v1/documents`, `/api/v1/receipts`, `/api/v1/ai/usage` și paginile). Variabile nesecrete opționale în `finet.env`: `MAX_UPLOAD_MB` (10), `MAX_PDF_PAGES` (6), `MAX_IMAGE_PIXELS`, `RECEIPT_IMAGE_RETENTION_DAYS` (180), `AI_DAILY_DOCUMENT_LIMIT` (contorul zilei de pe `/import`). Fără secrete noi pentru web. **Încărcarea și proxy-ul**: `/api/v1/documents` e exclusă din `src/proxy.ts` (fluxul nu mai e copiat în memorie și trunchiat la 10 MB), cu aceeași verificare Cloudflare Access în rută; Traefik și Cloudflare (100 MB pe planul gratuit) sunt peste plafonul FINET (~41 MB pe cerere).
+7. **Verificări prin Access (browser):**
+   - fără Access: `curl -s -o /dev/null -w '%{http_code}' -X POST https://finet.<domeniu>/api/v1/documents` → `403` (ruta exclusă din proxy refuză la fel);
+   - `/profile` → „Citirea bonurilor cu AI” pornit; `/import` → un bon de probă → „În coadă” → în ≤ 1–2 minute „De verificat” → „Vezi bonul”: poza se afișează, câmpurile se pot corecta, „Confirmă și salvează” creează tranzacția „din bon” (apoi o poți șterge);
+   - același fișier încă o dată → „deja încărcat”; o poză HEIC → mesajul de conversie;
+   - fără consimțământ (alt cont) → „Așteaptă acordul pentru AI” și nicio cerere în jurnalul LiteLLM.
+8. **Retenția originalelor** (`RECEIPT_IMAGE_RETENTION_DAYS`, implicit 180): serviciul one-shot `finet-cleanup` (profilul `cleanup`; storage-ul în SCRIERE doar aici; aceleași drepturi în bază ca `finet-admin`, `finet.admin.env` + `finet_database_url`). Prima rulare manuală:
+   ```bash
+   sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile cleanup run --rm -T finet-cleanup
+   # → expired=<n> failed=0 temp=<n>     (doar contoare; „storage=empty” = storage nemontat, nimic șters)
+   ```
+   Programarea zilnică, cu `sudo crontab -e` (NU `crontab -` și NU redirectări: ar suprascrie celelalte joburi root), la 04:25 (după backup-uri și după `cleanup-idempotency` de la 04:15):
+   ```cron
+   25 4 * * *  cd /srv/finet/src && docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile cleanup run --rm -T finet-cleanup >> /var/log/finet-cleanup.log 2>&1
+   ```
+   Același log ca la 4f (`0600`, `logrotate`). Codul de ieșire 1 = cel puțin un document n-a putut fi șters (se reia a doua zi). Oprire: linia se șterge cu `sudo crontab -e`. Fișierele temporare `*.tmp-*` mai vechi de 24 h (scrieri întrerupte, constatarea F9) se șterg la aceeași rulare (`--temp-hours <ore>`).
+9. **Bugetul AI > 0** abia după evaluarea pe bonuri reale (4h-bis, pașii 6–7).
+
+**Rollback:** imaginea anterioară a `finet-web` (paginile și rutele noi dispar; datele rămân); `stop finet-worker` (bonurile rămân `queued`); linia de cron a curățării se scoate. Migrațiile: comenzile din antete, doar cu backup și decizia operatorului.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

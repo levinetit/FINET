@@ -65,6 +65,14 @@
       "description": "Plățile recurente (Faza 5)."
     },
     {
+      "name": "documents",
+      "description": "Documentele încărcate (bonuri; Faza 6)."
+    },
+    {
+      "name": "receipts",
+      "description": "Bonurile extrase, verificarea și confirmarea (Faza 6)."
+    },
+    {
       "name": "reports",
       "description": "Dashboard-ul și raportul lunar (Faza 3)."
     },
@@ -685,6 +693,79 @@
           },
           "422": {
             "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/usage": {
+      "get": {
+        "operationId": "getAiUsage",
+        "tags": [
+          "documents"
+        ],
+        "summary": "Contorul zilei: „X din Y documente azi” (fără costuri).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contorul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "used": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Documente încărcate azi (ziua din București)."
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Limita zilnică a gospodăriei."
+                        },
+                        "remaining": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "used",
+                        "limit",
+                        "remaining"
+                      ],
+                      "additionalProperties": false,
+                      "title": "AiUsage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -2011,6 +2092,1095 @@
           },
           "422": {
             "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/documents": {
+      "get": {
+        "operationId": "listDocuments",
+        "tags": [
+          "documents"
+        ],
+        "summary": "Documentele gospodăriei (cele mai noi întâi), cu starea și bonul extras.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Doar o stare.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "uploaded",
+                "awaiting_consent",
+                "queued",
+                "processing",
+                "needs_review",
+                "done",
+                "failed",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Doar documentele încărcate după acest moment (ISO 8601 UTC).",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Câte (implicit 50, plafon 100).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documentele.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "receipt",
+                              "statement",
+                              "other"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "uploaded",
+                              "awaiting_consent",
+                              "queued",
+                              "processing",
+                              "needs_review",
+                              "done",
+                              "failed",
+                              "rejected"
+                            ],
+                            "description": "`awaiting_consent` = fără consimțământul `externalAi` nimic nu pleacă la AI (bonul se poate introduce manual); `queued` → `processing` → `needs_review` (bonul „De verificat”) → `done` (salvat); `rejected` = fișierul a fost refuzat la preprocesare (`errorCode`)."
+                          },
+                          "mime": {
+                            "type": "string",
+                            "enum": [
+                              "image/jpeg",
+                              "image/png",
+                              "image/webp",
+                              "application/pdf"
+                            ],
+                            "description": "Tipul DETECTAT după conținut."
+                          },
+                          "sizeBytes": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "pages": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "batchId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Lotul bonului lung (2–4 poze)."
+                          },
+                          "documentOrder": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Poziția în bonul lung (1 = sus)."
+                          },
+                          "possibleDuplicateOfId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Poză aproape identică (hash perceptual): informativ, nu blochează."
+                          },
+                          "errorCode": {
+                            "description": "Cod stabil al refuzului (fără conținut), de exemplu `pdf_encrypted`.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                            "description": "Moment ISO 8601 în UTC."
+                          },
+                          "expiresAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                "description": "Moment ISO 8601 în UTC."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Ștergerea originalului (retenția)."
+                          },
+                          "fileDeleted": {
+                            "type": "boolean",
+                            "description": "Originalul a fost șters la retenție."
+                          },
+                          "receiptId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Bonul extras din document (sau din lot)."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "status",
+                          "mime",
+                          "sizeBytes",
+                          "pages",
+                          "batchId",
+                          "documentOrder",
+                          "possibleDuplicateOfId",
+                          "errorCode",
+                          "createdAt",
+                          "expiresAt",
+                          "fileDeleted",
+                          "receiptId"
+                        ],
+                        "additionalProperties": false,
+                        "title": "Document"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadDocuments",
+        "tags": [
+          "documents"
+        ],
+        "summary": "Încarcă 1–4 bonuri (poze JPEG/PNG/WebP sau PDF), opțional ca bon lung.",
+        "description": "`multipart/form-data`, citit în flux. Tipul se detectează după conținut (nu după extensie sau `Content-Type`); HEIC/HEIF → 415 `heic_unsupported`; SVG/HTML/alte tipuri → 415. Plafoane: `MAX_UPLOAD_MB` pe fișier (implicit 10), ≤ 4 fișiere, pixeli, pagini PDF. Același fișier (SHA-256) → documentul existent (`duplicate: true`, 200), fără limită. Limita zilnică (409 `daily_document_limit`), cota (409 `storage_quota_exceeded`), bon lung cu o poză deja încărcată (409 `long_receipt_duplicate`), extrase (400, Faza 7). Starea inițială: `queued` cu consimțământul `externalAi`, altfel `awaiting_consent`. Ruta e exclusă din proxy-ul Next (ca fluxul să nu fie copiat în memorie), cu aceeași verificare Cloudflare Access. Fără `Idempotency-Key`: idempotentă prin SHA-256. Limită proprie de cereri (429).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Câmpurile text înaintea fișierelor.",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "description": "`receipt` (implicit). `statement` → 400 (extrasele vin în Faza 7)."
+                  },
+                  "longReceipt": {
+                    "type": "string",
+                    "description": "`true` = bon lung în 2–4 poze, în ordine de sus în jos."
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "1–4 fișiere."
+                  }
+                },
+                "required": [
+                  "files"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Documentele create (200: toate fișierele existau deja, `duplicate: true`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documents": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "receipt",
+                                  "statement",
+                                  "other"
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "uploaded",
+                                  "awaiting_consent",
+                                  "queued",
+                                  "processing",
+                                  "needs_review",
+                                  "done",
+                                  "failed",
+                                  "rejected"
+                                ],
+                                "description": "`awaiting_consent` = fără consimțământul `externalAi` nimic nu pleacă la AI (bonul se poate introduce manual); `queued` → `processing` → `needs_review` (bonul „De verificat”) → `done` (salvat); `rejected` = fișierul a fost refuzat la preprocesare (`errorCode`)."
+                              },
+                              "mime": {
+                                "type": "string",
+                                "enum": [
+                                  "image/jpeg",
+                                  "image/png",
+                                  "image/webp",
+                                  "application/pdf"
+                                ],
+                                "description": "Tipul DETECTAT după conținut."
+                              },
+                              "sizeBytes": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "pages": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "batchId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Lotul bonului lung (2–4 poze)."
+                              },
+                              "documentOrder": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Poziția în bonul lung (1 = sus)."
+                              },
+                              "possibleDuplicateOfId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Poză aproape identică (hash perceptual): informativ, nu blochează."
+                              },
+                              "errorCode": {
+                                "description": "Cod stabil al refuzului (fără conținut), de exemplu `pdf_encrypted`.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                "description": "Moment ISO 8601 în UTC."
+                              },
+                              "expiresAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                    "description": "Moment ISO 8601 în UTC."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Ștergerea originalului (retenția)."
+                              },
+                              "fileDeleted": {
+                                "type": "boolean",
+                                "description": "Originalul a fost șters la retenție."
+                              },
+                              "duplicate": {
+                                "type": "boolean",
+                                "description": "Același fișier (SHA-256) exista deja: documentul existent."
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "status",
+                              "mime",
+                              "sizeBytes",
+                              "pages",
+                              "batchId",
+                              "documentOrder",
+                              "possibleDuplicateOfId",
+                              "errorCode",
+                              "createdAt",
+                              "expiresAt",
+                              "fileDeleted",
+                              "duplicate"
+                            ],
+                            "additionalProperties": false,
+                            "title": "UploadedDocument"
+                          }
+                        },
+                        "batchId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "created": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Documente noi (fără duplicate)."
+                        }
+                      },
+                      "required": [
+                        "documents",
+                        "batchId",
+                        "created"
+                      ],
+                      "additionalProperties": false,
+                      "title": "UploadResult"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Documentele create (200: toate fișierele existau deja, `duplicate: true`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documents": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "receipt",
+                                  "statement",
+                                  "other"
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "uploaded",
+                                  "awaiting_consent",
+                                  "queued",
+                                  "processing",
+                                  "needs_review",
+                                  "done",
+                                  "failed",
+                                  "rejected"
+                                ],
+                                "description": "`awaiting_consent` = fără consimțământul `externalAi` nimic nu pleacă la AI (bonul se poate introduce manual); `queued` → `processing` → `needs_review` (bonul „De verificat”) → `done` (salvat); `rejected` = fișierul a fost refuzat la preprocesare (`errorCode`)."
+                              },
+                              "mime": {
+                                "type": "string",
+                                "enum": [
+                                  "image/jpeg",
+                                  "image/png",
+                                  "image/webp",
+                                  "application/pdf"
+                                ],
+                                "description": "Tipul DETECTAT după conținut."
+                              },
+                              "sizeBytes": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "pages": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "batchId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Lotul bonului lung (2–4 poze)."
+                              },
+                              "documentOrder": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Poziția în bonul lung (1 = sus)."
+                              },
+                              "possibleDuplicateOfId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Poză aproape identică (hash perceptual): informativ, nu blochează."
+                              },
+                              "errorCode": {
+                                "description": "Cod stabil al refuzului (fără conținut), de exemplu `pdf_encrypted`.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                "description": "Moment ISO 8601 în UTC."
+                              },
+                              "expiresAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                    "description": "Moment ISO 8601 în UTC."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Ștergerea originalului (retenția)."
+                              },
+                              "fileDeleted": {
+                                "type": "boolean",
+                                "description": "Originalul a fost șters la retenție."
+                              },
+                              "duplicate": {
+                                "type": "boolean",
+                                "description": "Același fișier (SHA-256) exista deja: documentul existent."
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "status",
+                              "mime",
+                              "sizeBytes",
+                              "pages",
+                              "batchId",
+                              "documentOrder",
+                              "possibleDuplicateOfId",
+                              "errorCode",
+                              "createdAt",
+                              "expiresAt",
+                              "fileDeleted",
+                              "duplicate"
+                            ],
+                            "additionalProperties": false,
+                            "title": "UploadedDocument"
+                          }
+                        },
+                        "batchId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "created": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Documente noi (fără duplicate)."
+                        }
+                      },
+                      "required": [
+                        "documents",
+                        "batchId",
+                        "created"
+                      ],
+                      "additionalProperties": false,
+                      "title": "UploadResult"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{id}": {
+      "get": {
+        "operationId": "getDocument",
+        "tags": [
+          "documents"
+        ],
+        "summary": "Starea unui document (cod de eroare stabil, bonul extras).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documentul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "receipt",
+                            "statement",
+                            "other"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "uploaded",
+                            "awaiting_consent",
+                            "queued",
+                            "processing",
+                            "needs_review",
+                            "done",
+                            "failed",
+                            "rejected"
+                          ],
+                          "description": "`awaiting_consent` = fără consimțământul `externalAi` nimic nu pleacă la AI (bonul se poate introduce manual); `queued` → `processing` → `needs_review` (bonul „De verificat”) → `done` (salvat); `rejected` = fișierul a fost refuzat la preprocesare (`errorCode`)."
+                        },
+                        "mime": {
+                          "type": "string",
+                          "enum": [
+                            "image/jpeg",
+                            "image/png",
+                            "image/webp",
+                            "application/pdf"
+                          ],
+                          "description": "Tipul DETECTAT după conținut."
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "pages": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "batchId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Lotul bonului lung (2–4 poze)."
+                        },
+                        "documentOrder": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Poziția în bonul lung (1 = sus)."
+                        },
+                        "possibleDuplicateOfId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Poză aproape identică (hash perceptual): informativ, nu blochează."
+                        },
+                        "errorCode": {
+                          "description": "Cod stabil al refuzului (fără conținut), de exemplu `pdf_encrypted`.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        },
+                        "expiresAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                              "description": "Moment ISO 8601 în UTC."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Ștergerea originalului (retenția)."
+                        },
+                        "fileDeleted": {
+                          "type": "boolean",
+                          "description": "Originalul a fost șters la retenție."
+                        },
+                        "receiptId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Bonul extras din document (sau din lot)."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "status",
+                        "mime",
+                        "sizeBytes",
+                        "pages",
+                        "batchId",
+                        "documentOrder",
+                        "possibleDuplicateOfId",
+                        "errorCode",
+                        "createdAt",
+                        "expiresAt",
+                        "fileDeleted",
+                        "receiptId"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Document"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteDocument",
+        "tags": [
+          "documents"
+        ],
+        "summary": "Șterge documentul și fișierul (bonul extras dispare; tranzacția creată rămâne).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Șters."
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{id}/file": {
+      "get": {
+        "operationId": "getDocumentFile",
+        "tags": [
+          "documents"
+        ],
+        "summary": "Fișierul original, în flux, doar pentru membrii gospodăriei.",
+        "description": "Tipul detectat după conținut, `Content-Disposition: attachment` cu nume generat de server, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`. Fișier șters la retenție → 404.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul.",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"bon-<id>.<ext>\"` (nume generat de server).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -3621,6 +4791,2475 @@
           },
           "404": {
             "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/receipts": {
+      "get": {
+        "operationId": "listReceipts",
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Bonurile gospodăriei (cele mai noi întâi), cu filtre și căutare.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Doar o stare.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "queued",
+                "needs_review",
+                "saved",
+                "failed"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Magazin, produs (nume brut sau normalizat) sau sumă (`45,90` / `45.90`: totalul sau o linie).",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "required": false,
+            "description": "Comerciantul conține textul.",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "description": "Data bonului ≥ (inclusiv).",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "description": "Data bonului ≤ (inclusiv).",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "amountMinMinor",
+            "in": "query",
+            "required": false,
+            "description": "Totalul minim (unități minore).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "amountMaxMinor",
+            "in": "query",
+            "required": false,
+            "description": "Totalul maxim (unități minore).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "description": "Bonurile cu o linie în categorie.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "tagId",
+            "in": "query",
+            "required": false,
+            "description": "Bonurile a căror tranzacție are eticheta (liniile nu au etichete).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "`nextCursor` anterior.",
+            "schema": {
+              "type": "string",
+              "maxLength": 400
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Rânduri (implicit 50, plafon 100).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pagina.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "needs_review",
+                              "saved",
+                              "failed"
+                            ]
+                          },
+                          "documentIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "description": "Documentele (pozele) bonului, în ordine."
+                          },
+                          "batchId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "merchantName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "merchantTaxId": {
+                            "description": "CUI (`RO` opțional + cifre).",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "storeAddress": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "receiptNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "occurredOn": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                "description": "Dată calendaristică `YYYY-MM-DD`."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "paymentMethod": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "cash",
+                                  "card",
+                                  "voucher",
+                                  "mixed",
+                                  "other"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "totalMinor": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "vatTotalMinor": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "currency": {
+                            "type": "string",
+                            "enum": [
+                              "RON",
+                              "EUR",
+                              "USD"
+                            ]
+                          },
+                          "confidence": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "0–100, calculat DOAR din verificările din cod."
+                          },
+                          "providerUsed": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "local",
+                              "external"
+                            ]
+                          },
+                          "fallbackReason": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "local_unavailable",
+                                  "local_timeout",
+                                  "local_failed_validation",
+                                  "low_confidence",
+                                  "no_local_model",
+                                  "consent_missing",
+                                  "budget_exceeded",
+                                  "daily_limit",
+                                  "external_failed",
+                                  "ai_unconfigured"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "transactionId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Tranzacția creată la confirmare."
+                          },
+                          "duplicateOfReceiptId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Același bon (CUI + număr + dată + total) există deja."
+                          },
+                          "issues": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "code": {
+                                  "type": "string",
+                                  "description": "Cod stabil (ADR 0014), tradus de UI."
+                                },
+                                "field": {
+                                  "type": "string"
+                                },
+                                "line": {
+                                  "description": "Poziția liniei (1..500).",
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "code"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "linesSumMinor": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Suma liniilor cu semn (reducerile scad)."
+                          },
+                          "categoryIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "description": "Categoriile distincte ale liniilor."
+                          },
+                          "lineCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                            "description": "Moment ISO 8601 în UTC."
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                            "description": "Moment ISO 8601 în UTC."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "documentIds",
+                          "batchId",
+                          "merchantName",
+                          "merchantTaxId",
+                          "storeAddress",
+                          "receiptNumber",
+                          "occurredOn",
+                          "paymentMethod",
+                          "totalMinor",
+                          "vatTotalMinor",
+                          "currency",
+                          "confidence",
+                          "providerUsed",
+                          "fallbackReason",
+                          "transactionId",
+                          "duplicateOfReceiptId",
+                          "issues",
+                          "linesSumMinor",
+                          "categoryIds",
+                          "lineCount",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false,
+                        "title": "Receipt"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/receipts/{id}": {
+      "get": {
+        "operationId": "getReceipt",
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Bonul cu liniile, problemele (coduri stabile), furnizorul AI și motivul fallback-ului.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bonul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "needs_review",
+                            "saved",
+                            "failed"
+                          ]
+                        },
+                        "documentIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "description": "Documentele (pozele) bonului, în ordine."
+                        },
+                        "batchId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "merchantName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "merchantTaxId": {
+                          "description": "CUI (`RO` opțional + cifre).",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "storeAddress": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "receiptNumber": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "occurredOn": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "paymentMethod": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "cash",
+                                "card",
+                                "voucher",
+                                "mixed",
+                                "other"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "totalMinor": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "vatTotalMinor": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "currency": {
+                          "type": "string",
+                          "enum": [
+                            "RON",
+                            "EUR",
+                            "USD"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "0–100, calculat DOAR din verificările din cod."
+                        },
+                        "providerUsed": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "local",
+                            "external"
+                          ]
+                        },
+                        "fallbackReason": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "local_unavailable",
+                                "local_timeout",
+                                "local_failed_validation",
+                                "low_confidence",
+                                "no_local_model",
+                                "consent_missing",
+                                "budget_exceeded",
+                                "daily_limit",
+                                "external_failed",
+                                "ai_unconfigured"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "transactionId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Tranzacția creată la confirmare."
+                        },
+                        "duplicateOfReceiptId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Același bon (CUI + număr + dată + total) există deja."
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "description": "Cod stabil (ADR 0014), tradus de UI."
+                              },
+                              "field": {
+                                "type": "string"
+                              },
+                              "line": {
+                                "description": "Poziția liniei (1..500).",
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "linesSumMinor": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Suma liniilor cu semn (reducerile scad)."
+                        },
+                        "categoryIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "description": "Categoriile distincte ale liniilor."
+                        },
+                        "lineCount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "position": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "rawName": {
+                                "type": "string"
+                              },
+                              "normalizedName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "quantity": {
+                                "description": "Cantitatea ca text zecimal (`\"1.500\"`), fără float.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "unitPriceMinor": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "lineTotalMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "vatRate": {
+                                "description": "Cota TVA în procente (`\"21.00\"`).",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "categoryId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "product",
+                                  "discount",
+                                  "deposit_sgr",
+                                  "bag",
+                                  "other"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "position",
+                              "rawName",
+                              "normalizedName",
+                              "quantity",
+                              "unitPriceMinor",
+                              "lineTotalMinor",
+                              "vatRate",
+                              "categoryId",
+                              "kind"
+                            ],
+                            "additionalProperties": false,
+                            "title": "ReceiptLine"
+                          }
+                        },
+                        "removedLines": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "part": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "position": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "reason": {
+                                "type": "string",
+                                "const": "overlap"
+                              },
+                              "name": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "part",
+                              "position",
+                              "reason",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "Bonul lung: liniile eliminate la unire (poza 1..4, rândul)."
+                        },
+                        "removedCount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "suggestedOrder": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Bonul lung în ordine greșită: ordinea propusă a pozelor."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "documentIds",
+                        "batchId",
+                        "merchantName",
+                        "merchantTaxId",
+                        "storeAddress",
+                        "receiptNumber",
+                        "occurredOn",
+                        "paymentMethod",
+                        "totalMinor",
+                        "vatTotalMinor",
+                        "currency",
+                        "confidence",
+                        "providerUsed",
+                        "fallbackReason",
+                        "transactionId",
+                        "duplicateOfReceiptId",
+                        "issues",
+                        "linesSumMinor",
+                        "categoryIds",
+                        "lineCount",
+                        "createdAt",
+                        "updatedAt",
+                        "lines",
+                        "removedLines",
+                        "removedCount",
+                        "suggestedOrder"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReceiptDetail"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchReceipt",
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Corectează câmpurile și liniile bonului (până la confirmare).",
+        "description": "Liniile se ÎNLOCUIESC integral (ordinea = poziția; `id` păstrează o linie existentă). Sumele doar ca întregi `…Minor`. Verificările din cod și scorul se recalculează; cheia de deduplicare la fel (coliziune → bonul devine „posibil duplicat”). O categorie aleasă pe o linie de produs actualizează alias-ul produsului (`product_aliases`), folosit la bonurile următoare. Bon salvat → 409 `receipt_saved`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "merchantName": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "merchantTaxId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "storeAddress": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 600
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "receiptNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "occurredOn": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "paymentMethod": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "cash",
+                          "card",
+                          "voucher",
+                          "mixed",
+                          "other"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "totalMinor": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000000000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "vatTotalMinor": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000000000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lines": {
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "rawName": {
+                          "type": "string",
+                          "maxLength": 400
+                        },
+                        "quantity": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 20
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "unitPriceMinor": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "lineTotalMinor": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000000000
+                        },
+                        "vatRate": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 10
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "categoryId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "product",
+                            "discount",
+                            "deposit_sgr",
+                            "bag",
+                            "other"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "rawName",
+                        "lineTotalMinor",
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bonul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "needs_review",
+                            "saved",
+                            "failed"
+                          ]
+                        },
+                        "documentIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "description": "Documentele (pozele) bonului, în ordine."
+                        },
+                        "batchId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "merchantName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "merchantTaxId": {
+                          "description": "CUI (`RO` opțional + cifre).",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "storeAddress": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "receiptNumber": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "occurredOn": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "paymentMethod": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "cash",
+                                "card",
+                                "voucher",
+                                "mixed",
+                                "other"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "totalMinor": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "vatTotalMinor": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "currency": {
+                          "type": "string",
+                          "enum": [
+                            "RON",
+                            "EUR",
+                            "USD"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "0–100, calculat DOAR din verificările din cod."
+                        },
+                        "providerUsed": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "local",
+                            "external"
+                          ]
+                        },
+                        "fallbackReason": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "local_unavailable",
+                                "local_timeout",
+                                "local_failed_validation",
+                                "low_confidence",
+                                "no_local_model",
+                                "consent_missing",
+                                "budget_exceeded",
+                                "daily_limit",
+                                "external_failed",
+                                "ai_unconfigured"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "transactionId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Tranzacția creată la confirmare."
+                        },
+                        "duplicateOfReceiptId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Același bon (CUI + număr + dată + total) există deja."
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "description": "Cod stabil (ADR 0014), tradus de UI."
+                              },
+                              "field": {
+                                "type": "string"
+                              },
+                              "line": {
+                                "description": "Poziția liniei (1..500).",
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "linesSumMinor": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Suma liniilor cu semn (reducerile scad)."
+                        },
+                        "categoryIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "description": "Categoriile distincte ale liniilor."
+                        },
+                        "lineCount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "position": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "rawName": {
+                                "type": "string"
+                              },
+                              "normalizedName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "quantity": {
+                                "description": "Cantitatea ca text zecimal (`\"1.500\"`), fără float.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "unitPriceMinor": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "lineTotalMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "vatRate": {
+                                "description": "Cota TVA în procente (`\"21.00\"`).",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "categoryId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "product",
+                                  "discount",
+                                  "deposit_sgr",
+                                  "bag",
+                                  "other"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "position",
+                              "rawName",
+                              "normalizedName",
+                              "quantity",
+                              "unitPriceMinor",
+                              "lineTotalMinor",
+                              "vatRate",
+                              "categoryId",
+                              "kind"
+                            ],
+                            "additionalProperties": false,
+                            "title": "ReceiptLine"
+                          }
+                        },
+                        "removedLines": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "part": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "position": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "reason": {
+                                "type": "string",
+                                "const": "overlap"
+                              },
+                              "name": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "part",
+                              "position",
+                              "reason",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "Bonul lung: liniile eliminate la unire (poza 1..4, rândul)."
+                        },
+                        "removedCount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "suggestedOrder": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Bonul lung în ordine greșită: ordinea propusă a pozelor."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "documentIds",
+                        "batchId",
+                        "merchantName",
+                        "merchantTaxId",
+                        "storeAddress",
+                        "receiptNumber",
+                        "occurredOn",
+                        "paymentMethod",
+                        "totalMinor",
+                        "vatTotalMinor",
+                        "currency",
+                        "confidence",
+                        "providerUsed",
+                        "fallbackReason",
+                        "transactionId",
+                        "duplicateOfReceiptId",
+                        "issues",
+                        "linesSumMinor",
+                        "categoryIds",
+                        "lineCount",
+                        "createdAt",
+                        "updatedAt",
+                        "lines",
+                        "removedLines",
+                        "removedCount",
+                        "suggestedOrder"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReceiptDetail"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteReceipt",
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Șterge bonul și documentele lui (fișierele); tranzacția creată rămâne.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Șters."
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/receipts/{id}/confirm": {
+      "post": {
+        "operationId": "confirmReceipt",
+        "tags": [
+          "receipts"
+        ],
+        "summary": "„Confirmă și salvează”: creează tranzacția de cheltuială a bonului.",
+        "description": "O tranzacție per bon: suma = totalul, moneda contului = moneda bonului (altfel 409 `currency_mismatch`), `source: receipt`, `documentId`; categoria = cea trimisă sau categoria cu cea mai mare sumă pe liniile de produs; categoriile liniilor rămân pe bon. 409: `receipt_already_saved`, `possible_duplicate` (fără `allowDuplicate: true`), `total_required`, `date_required`, `account_archived`. Garda 2^53 pe sold (422).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accountId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "categoryId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "notes": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "occurredOn": {
+                    "type": "string"
+                  },
+                  "allowDuplicate": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "accountId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bonul salvat și tranzacția.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "receipt": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "needs_review",
+                                "saved",
+                                "failed"
+                              ]
+                            },
+                            "documentIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "description": "Documentele (pozele) bonului, în ordine."
+                            },
+                            "batchId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "merchantName": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "merchantTaxId": {
+                              "description": "CUI (`RO` opțional + cifre).",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "storeAddress": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "receiptNumber": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "occurredOn": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "paymentMethod": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "cash",
+                                    "card",
+                                    "voucher",
+                                    "mixed",
+                                    "other"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "totalMinor": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991,
+                                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "vatTotalMinor": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991,
+                                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "currency": {
+                              "type": "string",
+                              "enum": [
+                                "RON",
+                                "EUR",
+                                "USD"
+                              ]
+                            },
+                            "confidence": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "0–100, calculat DOAR din verificările din cod."
+                            },
+                            "providerUsed": {
+                              "type": "string",
+                              "enum": [
+                                "none",
+                                "local",
+                                "external"
+                              ]
+                            },
+                            "fallbackReason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "local_unavailable",
+                                    "local_timeout",
+                                    "local_failed_validation",
+                                    "low_confidence",
+                                    "no_local_model",
+                                    "consent_missing",
+                                    "budget_exceeded",
+                                    "daily_limit",
+                                    "external_failed",
+                                    "ai_unconfigured"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "transactionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Tranzacția creată la confirmare."
+                            },
+                            "duplicateOfReceiptId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Același bon (CUI + număr + dată + total) există deja."
+                            },
+                            "issues": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string",
+                                    "description": "Cod stabil (ADR 0014), tradus de UI."
+                                  },
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "line": {
+                                    "description": "Poziția liniei (1..500).",
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "code"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "linesSumMinor": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991,
+                                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Suma liniilor cu semn (reducerile scad)."
+                            },
+                            "categoryIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "description": "Categoriile distincte ale liniilor."
+                            },
+                            "lineCount": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                              "description": "Moment ISO 8601 în UTC."
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                              "description": "Moment ISO 8601 în UTC."
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "position": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "rawName": {
+                                    "type": "string"
+                                  },
+                                  "normalizedName": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "quantity": {
+                                    "description": "Cantitatea ca text zecimal (`\"1.500\"`), fără float.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "unitPriceMinor": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991,
+                                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "lineTotalMinor": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                  },
+                                  "vatRate": {
+                                    "description": "Cota TVA în procente (`\"21.00\"`).",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "categoryId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "product",
+                                      "discount",
+                                      "deposit_sgr",
+                                      "bag",
+                                      "other"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "position",
+                                  "rawName",
+                                  "normalizedName",
+                                  "quantity",
+                                  "unitPriceMinor",
+                                  "lineTotalMinor",
+                                  "vatRate",
+                                  "categoryId",
+                                  "kind"
+                                ],
+                                "additionalProperties": false,
+                                "title": "ReceiptLine"
+                              }
+                            },
+                            "removedLines": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "part": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "position": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "const": "overlap"
+                                  },
+                                  "name": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "part",
+                                  "position",
+                                  "reason",
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "description": "Bonul lung: liniile eliminate la unire (poza 1..4, rândul)."
+                            },
+                            "removedCount": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "suggestedOrder": {
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Bonul lung în ordine greșită: ordinea propusă a pozelor."
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "status",
+                            "documentIds",
+                            "batchId",
+                            "merchantName",
+                            "merchantTaxId",
+                            "storeAddress",
+                            "receiptNumber",
+                            "occurredOn",
+                            "paymentMethod",
+                            "totalMinor",
+                            "vatTotalMinor",
+                            "currency",
+                            "confidence",
+                            "providerUsed",
+                            "fallbackReason",
+                            "transactionId",
+                            "duplicateOfReceiptId",
+                            "issues",
+                            "linesSumMinor",
+                            "categoryIds",
+                            "lineCount",
+                            "createdAt",
+                            "updatedAt",
+                            "lines",
+                            "removedLines",
+                            "removedCount",
+                            "suggestedOrder"
+                          ],
+                          "additionalProperties": false,
+                          "title": "ReceiptDetail"
+                        },
+                        "transactionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "receipt",
+                        "transactionId"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReceiptConfirmResult"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replay": {
+                "$ref": "#/components/headers/IdempotentReplay"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/receipts/{id}/reprocess": {
+      "post": {
+        "operationId": "reprocessReceipt",
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Citește din nou bonul (pune documentele în coadă; consumă limita zilnică).",
+        "description": "Bonul extras se șterge și documentele revin în coadă (workerul, în ≤ 1 minut; fără consimțământ → `awaiting_consent`). `order` (bon lung): pozele în ordinea nouă („Ordonează automat”). 409: `receipt_saved`, `file_deleted` (retenție), `document_rejected`, `daily_document_limit`. Limită proprie de cereri (429).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "order": {
+                    "minItems": 2,
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Documentele puse în coadă.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "documentIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "queued": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "documentIds",
+                        "queued"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReceiptReprocessResult"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -7206,7 +10845,7 @@
         }
       },
       "E413": {
-        "description": "Corpul depășește 16 KiB (`payload_too_large`).",
+        "description": "Corpul depășește 16 KiB (`payload_too_large`). La încărcarea documentelor: `payload_too_large`, `file_too_large`, `too_many_files`, `image_too_large`.",
         "content": {
           "application/json": {
             "schema": {
@@ -7216,7 +10855,7 @@
         }
       },
       "E415": {
-        "description": "Corpul nu e `application/json` (`unsupported_media_type`).",
+        "description": "Corpul nu e `application/json` (`unsupported_media_type`). La încărcarea documentelor: `unsupported_media_type` (nu e multipart), `unsupported_type`, `heic_unsupported`, `markup_content`.",
         "content": {
           "application/json": {
             "schema": {
@@ -7226,7 +10865,7 @@
         }
       },
       "E422": {
-        "description": "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`) sau un sold calculat care nu poate fi transmis exact (`amount_out_of_range`, peste 2^53 − 1).",
+        "description": "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`) sau un sold calculat care nu poate fi transmis exact (`amount_out_of_range`, peste 2^53 − 1). La încărcarea documentelor: `invalid_image` (imagine care nu poate fi citită).",
         "content": {
           "application/json": {
             "schema": {
@@ -8989,6 +12628,19 @@
             ],
             "description": "Regula recurentă care a generat-o (`source: recurring`, Faza 5)."
           },
+          "documentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Documentul (bonul) din care a fost creată (`source: receipt`, Faza 6); `null` după ștergerea documentului."
+          },
           "createdByUserId": {
             "anyOf": [
               {
@@ -9058,6 +12710,7 @@
           "transferGroupId",
           "transferDirection",
           "recurringRuleId",
+          "documentId",
           "createdByUserId",
           "createdAt",
           "updatedAt",

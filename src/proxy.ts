@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { createAccessVerifier, isRequestAllowed, type AccessVerifier } from "@/lib/access";
-import { getConfig, type AccessConfig } from "@/lib/config";
+import { isRequestAllowed } from "@/lib/access";
+import { verifierFor } from "@/lib/access-guard";
+import { getConfig } from "@/lib/config";
 import { NONCE_HEADER, applySecurityHeaders, buildCsp, createNonce } from "@/lib/security-headers";
 
 /**
@@ -14,20 +15,6 @@ import { NONCE_HEADER, applySecurityHeaders, buildCsp, createNonce } from "@/lib
  * cererii, ca Next.js să-l atașeze scripturilor la randare. Verificarea Access rămâne prima și
  * nu depinde de antete.
  */
-
-let verifier: { key: string; verify: AccessVerifier } | null = null;
-
-function verifierFor(access: AccessConfig): AccessVerifier | null {
-  if (!access.teamDomain || !access.aud) return null;
-  const key = `${access.teamDomain}\n${access.aud}`;
-  if (verifier?.key !== key) {
-    verifier = {
-      key,
-      verify: createAccessVerifier({ teamDomain: access.teamDomain, aud: access.aud }),
-    };
-  }
-  return verifier.verify;
-}
 
 function forbidden(): NextResponse {
   return NextResponse.json(
@@ -68,9 +55,15 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   return response;
 }
 
-// Rulează pe toate căile, mai puțin asset-urile statice Next (`/_next/static/`). Aceeași regulă e
-// verificată și în `isStaticAssetPath`, ca o modificare a matcher-ului să nu deschidă nimic.
+// Rulează pe toate căile, mai puțin:
+// - asset-urile statice Next (`/_next/static/`); aceeași regulă e verificată și în
+//   `isStaticAssetPath`, ca o modificare a matcher-ului să nu deschidă nimic;
+// - EXACT `/api/v1/documents` (Faza 6, ADR 0015): cu proxy, Next 16 copiază corpul în memorie și îl
+//   trunchiază fără eroare la `proxyClientMaxBodySize` (10 MB), deci încărcarea n-ar mai fi un flux.
+//   Ruta refăce aceeași verificare Access și aceleași antete (`guardAccess`, `src/lib/access-guard.ts`)
+//   înainte de sesiune și de corp, pe toate metodele ei. Sub-căile (`/api/v1/documents/<id>`,
+//   `/file`) trec în continuare prin proxy (testat în `src/proxy.test.ts`).
 // Valoarea trebuie să fie literală (Next o analizează static la build).
 export const config = {
-  matcher: ["/((?!_next/static/).*)"],
+  matcher: ["/((?!_next/static/|api/v1/documents$).*)"],
 };

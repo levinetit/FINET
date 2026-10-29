@@ -60,6 +60,22 @@ export type StorageConfig = Readonly<{
   s3: S3Config | null;
 }>;
 
+/** Limitele documentelor încărcate (Faza 6, master prompt 6.3; ADR 0013). */
+export type DocumentsConfig = Readonly<{
+  /** Dimensiunea maximă a unui fișier (`MAX_UPLOAD_MB`, implicit 10), în octeți. */
+  maxUploadBytes: number;
+  /** Fișiere pe cerere (fix: 4, cât un bon lung). */
+  maxFilesPerRequest: number;
+  /** Pagini maxime pe PDF (`MAX_PDF_PAGES`, implicit 6). */
+  maxPdfPages: number;
+  /** Pixeli maximi pe imagine (`MAX_IMAGE_PIXELS`): apărarea contra „bombelor” de decompresie. */
+  maxImagePixels: number;
+  /** Zile până la ștergerea fișierului original (`RECEIPT_IMAGE_RETENTION_DAYS`; 0 = niciodată). */
+  retentionDays: number;
+  /** Distanța Hamming maximă între dHash-uri pentru „posibil duplicat” (0..32). */
+  duplicateMaxDistance: number;
+}>;
+
 export type AccessConfig = Readonly<{
   /** Dacă `true`, orice cerere fără JWT Cloudflare Access valid primește 403. */
   required: boolean;
@@ -67,6 +83,37 @@ export type AccessConfig = Readonly<{
   teamDomain: string | null;
   /** Audiența (AUD tag) aplicației Access. */
   aud: string | null;
+}>;
+
+/**
+ * Furnizorul AI (Faza 6, F6-B; master prompt 3.6; ADR 0014): LiteLLM-ul de pe gazdă, compatibil
+ * OpenAI. Alias-urile modelelor stau în configurația LiteLLM, nu în cod.
+ */
+export type AiConfig = Readonly<{
+  /** Documente procesate cu AI pe zi, per gospodărie. */
+  dailyDocumentLimit: number;
+  /** Bugetul lunar global pentru furnizorii AI externi (0 = fără AI extern). */
+  monthlyBudget: Money;
+  /** `AI_BASE_URL` (de exemplu `http://172.88.88.4:4000/v1`); `null` = AI neconfigurat. */
+  baseUrl: string | null;
+  /** `AI_ALLOWED_HOSTS`: gazdele (`host` sau `host:port`) permise pentru `AI_BASE_URL`. */
+  allowedHosts: readonly string[];
+  /** Cheia virtuală LiteLLM, DOAR din `AI_API_KEY_FILE` și doar pentru `FINET_ROLE=worker`. */
+  apiKey: string | null;
+  /** `AI_VISION_MODEL` (implicit `finet-vision-external`). */
+  visionModel: string;
+  /** `AI_TEXT_MODEL` (implicit `finet-text-external`). */
+  textModel: string;
+  /** Termenul unei încercări (`AI_TIMEOUT_MS`, implicit 60 000). */
+  timeoutMs: number;
+  /** Reîncercări după prima încercare (`AI_MAX_RETRIES`, 0..3, implicit 2). */
+  maxRetries: number;
+  /** Sub acest scor (0..100), bonul trece „De verificat” (`AI_CONFIDENCE_THRESHOLD`, implicit 80). */
+  confidenceThreshold: number;
+  /** `AI_RESPONSE_FORMAT`: `json_schema` (implicit), `json_object` sau `none`. */
+  responseFormat: "json_schema" | "json_object" | "none";
+  /** Tarifele pentru estimarea costului, în unități minore ale monedei bugetului per 1M tokeni. */
+  pricing: Readonly<{ inputPerMTokMinor: bigint; outputPerMTokMinor: bigint }>;
 }>;
 
 export type RateLimitRule = Readonly<{ max: number; windowSeconds: number }>;
@@ -122,16 +169,12 @@ export type Config = Readonly<{
     allowInsecure: boolean;
   }>;
   storage: StorageConfig;
+  documents: DocumentsConfig;
   access: AccessConfig;
   /** Token intern opțional pentru `/api/health` detaliat fără JWT Access (monitorizare). */
   healthToken: string | null;
   auth: AuthConfig;
-  ai: Readonly<{
-    /** Documente procesate cu AI pe zi, per gospodărie. */
-    dailyDocumentLimit: number;
-    /** Bugetul lunar global pentru furnizorii AI externi (0 = fără AI extern). */
-    monthlyBudget: Money;
-  }>;
+  ai: AiConfig;
   notify: Readonly<{
     telegram: Readonly<{ botToken: string; chatId: string }> | null;
     smtp: Readonly<{
@@ -223,9 +266,65 @@ const envSchema = z.object({
   AUTH_LOGIN_EMAIL_MAX_ATTEMPTS: positiveInt,
   AUTH_LOGIN_EMAIL_WINDOW_SECONDS: positiveInt,
 
+  MAX_UPLOAD_MB: z
+    .string()
+    .regex(/^[1-9]\d{0,2}$/)
+    .optional(),
+  MAX_PDF_PAGES: z
+    .string()
+    .regex(/^[1-9]\d{0,1}$/)
+    .optional(),
+  MAX_IMAGE_PIXELS: positiveInt,
+  RECEIPT_IMAGE_RETENTION_DAYS: z
+    .string()
+    .regex(/^\d{1,5}$/)
+    .optional(),
+  DOCUMENT_DUPLICATE_MAX_DISTANCE: z
+    .string()
+    .regex(/^\d{1,2}$/)
+    .optional(),
+
   AI_DAILY_DOCUMENT_LIMIT: nonNegativeInt,
   AI_MONTHLY_BUDGET: z.string().max(40).optional(),
   AI_MONTHLY_BUDGET_CURRENCY: z.enum(CURRENCIES).optional(),
+  AI_BASE_URL: z
+    .url({ protocol: /^https?$/ })
+    .max(300)
+    .optional(),
+  AI_ALLOWED_HOSTS: z
+    .string()
+    .max(1000)
+    .regex(/^[a-z0-9.:\-]+(?:,[a-z0-9.:\-]+)*$/)
+    .optional(),
+  AI_API_KEY: z
+    .string()
+    .min(8)
+    .max(512)
+    .regex(/^[\x21-\x7e]+$/)
+    .optional(),
+  AI_VISION_MODEL: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9._:/-]{0,99}$/)
+    .optional(),
+  AI_TEXT_MODEL: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9._:/-]{0,99}$/)
+    .optional(),
+  AI_TIMEOUT_MS: z
+    .string()
+    .regex(/^[1-9]\d{2,5}$/)
+    .optional(),
+  AI_MAX_RETRIES: z
+    .string()
+    .regex(/^[0-3]$/)
+    .optional(),
+  AI_CONFIDENCE_THRESHOLD: z
+    .string()
+    .regex(/^(?:100|[1-9]?\d)$/)
+    .optional(),
+  AI_RESPONSE_FORMAT: z.enum(["json_schema", "json_object", "none"]).optional(),
+  AI_PRICE_INPUT_PER_MTOK: z.string().max(40).optional(),
+  AI_PRICE_OUTPUT_PER_MTOK: z.string().max(40).optional(),
 
   NOTIFY_TELEGRAM_BOT_TOKEN: optionalString,
   NOTIFY_TELEGRAM_CHAT_ID: z
@@ -266,9 +365,27 @@ const DEFAULTS = {
   storageDir: "./.data/storage",
   storageQuotaMb: 5000,
   aiDailyDocumentLimit: 50,
+  // Documentele (Faza 6; decizia mea, ADR 0013).
+  maxUploadMb: 10,
+  maxFilesPerRequest: 4,
+  maxPdfPages: 6,
+  // 50 MP: peste orice cameră de telefon obișnuită (48 MP), sub o „bombă” de decompresie.
+  maxImagePixels: 50_000_000,
+  retentionDays: 180,
+  duplicateMaxDistance: 6,
   // 0 = fără furnizori AI externi până când operatorul alege altfel (Faza 6).
   aiMonthlyBudget: "0",
   aiMonthlyBudgetCurrency: "USD",
+  // Furnizorul AI (F6-B, ADR 0014): LiteLLM-ul de pe gazdă, pe rețeaua `apps`.
+  aiAllowedHosts: "172.88.88.4:4000",
+  aiVisionModel: "finet-vision-external",
+  aiTextModel: "finet-text-external",
+  aiTimeoutMs: 60_000,
+  aiMaxRetries: 2,
+  aiConfidenceThreshold: 80,
+  // Tarife pesimiste (decizia mea), în moneda bugetului per 1M tokeni; operatorul le ajustează.
+  aiPriceInputPerMTok: "0.50",
+  aiPriceOutputPerMTok: "3.00",
   smtpPort: 587,
   // Limitele de autentificare (decizia mea, ADR 0003): încercări pe fereastră.
   loginMax: 5,
@@ -338,6 +455,10 @@ export function parseConfig(
       if (variable !== ROLE_DATABASE_VARIABLE[knownRole]) {
         forbidden.set(variable, `nu e permisă când FINET_ROLE=${knownRole}`);
       }
+    }
+    // Cheia AI (F6-B): doar workerul apelează furnizorul; celelalte roluri nu deschid fișierul.
+    if (knownRole !== "worker") {
+      forbidden.set("AI_API_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
     }
   }
   const secrets = knownRole
@@ -480,8 +601,8 @@ export function parseConfig(
 
   // Storage (migrarea și CLI-ul de administrare nu ating fișierele, deci nu cer STORAGE_DIR).
   const driver = e.STORAGE_DRIVER ?? "local";
-  // Workerul (Faza 5) nu atinge fișierele (revizuirea F5, I1); documentele (Faza 6) vor cere din nou.
-  if (isProduction && role === "web") need("STORAGE_DIR", "în producție");
+  // Workerul citește documentele încărcate (Faza 6; ADR 0013), doar citire.
+  if (isProduction && (role === "web" || role === "worker")) need("STORAGE_DIR", "în producție");
   if (driver === "s3") {
     for (const v of [
       "STORAGE_S3_ENDPOINT",
@@ -503,6 +624,49 @@ export function parseConfig(
     issues.push({ variable: "AI_MONTHLY_BUDGET", problem: "nu e o sumă validă" });
   }
 
+  // Furnizorul AI (F6-B, ADR 0014). Cheia: DOAR din fișier (`AI_API_KEY_FILE`, secretul Docker
+  // `finet_litellm_key`) și doar în rolul worker; valoarea în clar în mediu e refuzată.
+  if (e.AI_API_KEY !== undefined) {
+    if (!secrets.fromFile.has("AI_API_KEY")) {
+      issues.push({ variable: "AI_API_KEY", problem: "se dă doar prin AI_API_KEY_FILE" });
+    } else if (role !== "worker") {
+      issues.push({ variable: "AI_API_KEY_FILE", problem: `nu e permisă când FINET_ROLE=${role}` });
+    }
+  }
+  const aiAllowedHosts = (e.AI_ALLOWED_HOSTS ?? DEFAULTS.aiAllowedHosts).split(",");
+  if (e.AI_BASE_URL !== undefined) {
+    let host: string | null = null;
+    try {
+      const u = new URL(e.AI_BASE_URL);
+      if (u.username === "" && u.password === "" && u.search === "" && u.hash === "") {
+        host = u.host.toLowerCase();
+      }
+    } catch {
+      host = null;
+    }
+    if (host === null || !aiAllowedHosts.includes(host)) {
+      issues.push({ variable: "AI_BASE_URL", problem: "gazda nu e în AI_ALLOWED_HOSTS" });
+    }
+  }
+  const pricing: { inputPerMTokMinor: bigint; outputPerMTokMinor: bigint } = {
+    inputPerMTokMinor: 0n,
+    outputPerMTokMinor: 0n,
+  };
+  for (const [variable, key, fallback] of [
+    ["AI_PRICE_INPUT_PER_MTOK", "inputPerMTokMinor", DEFAULTS.aiPriceInputPerMTok],
+    ["AI_PRICE_OUTPUT_PER_MTOK", "outputPerMTokMinor", DEFAULTS.aiPriceOutputPerMTok],
+  ] as const) {
+    try {
+      pricing[key] = parseAmount(e[variable] ?? fallback, budgetCurrency).amountMinor;
+    } catch {
+      issues.push({ variable, problem: "nu e o sumă validă" });
+    }
+  }
+  const aiTimeoutMs = e.AI_TIMEOUT_MS ? Number.parseInt(e.AI_TIMEOUT_MS, 10) : DEFAULTS.aiTimeoutMs;
+  if (aiTimeoutMs < 1000 || aiTimeoutMs > 300_000) {
+    issues.push({ variable: "AI_TIMEOUT_MS", problem: "în afara intervalului 1000–300000" });
+  }
+
   // Notificări: Telegram cere ambele variabile; SMTP cere gazda și expeditorul.
   if ((e.NOTIFY_TELEGRAM_BOT_TOKEN === undefined) !== (e.NOTIFY_TELEGRAM_CHAT_ID === undefined)) {
     issues.push({
@@ -514,6 +678,26 @@ export function parseConfig(
   const smtpPort = e.SMTP_PORT ? Number.parseInt(e.SMTP_PORT, 10) : DEFAULTS.smtpPort;
   if (smtpPort < 1 || smtpPort > 65535) {
     issues.push({ variable: "SMTP_PORT", problem: "în afara intervalului 1–65535" });
+  }
+
+  const maxPdfPages = e.MAX_PDF_PAGES ? Number.parseInt(e.MAX_PDF_PAGES, 10) : DEFAULTS.maxPdfPages;
+  if (maxPdfPages > 50) issues.push({ variable: "MAX_PDF_PAGES", problem: "maximum 50" });
+  const maxUploadMb = e.MAX_UPLOAD_MB ? Number.parseInt(e.MAX_UPLOAD_MB, 10) : DEFAULTS.maxUploadMb;
+  if (maxUploadMb > 50) issues.push({ variable: "MAX_UPLOAD_MB", problem: "maximum 50" });
+  const duplicateMaxDistance = e.DOCUMENT_DUPLICATE_MAX_DISTANCE
+    ? Number.parseInt(e.DOCUMENT_DUPLICATE_MAX_DISTANCE, 10)
+    : DEFAULTS.duplicateMaxDistance;
+  if (duplicateMaxDistance > 32) {
+    issues.push({ variable: "DOCUMENT_DUPLICATE_MAX_DISTANCE", problem: "maximum 32" });
+  }
+  const maxImagePixels = e.MAX_IMAGE_PIXELS
+    ? Number.parseInt(e.MAX_IMAGE_PIXELS, 10)
+    : DEFAULTS.maxImagePixels;
+  if (maxImagePixels < 1_000_000 || maxImagePixels > 200_000_000) {
+    issues.push({
+      variable: "MAX_IMAGE_PIXELS",
+      problem: "în afara intervalului 1000000–200000000",
+    });
   }
 
   if (issues.length > 0 || monthlyBudget === null) throw new ConfigError(issues);
@@ -546,6 +730,14 @@ export function parseConfig(
               secretAccessKey: e.STORAGE_S3_SECRET_ACCESS_KEY!,
             })
           : null,
+    }),
+    documents: Object.freeze({
+      maxUploadBytes: maxUploadMb * 1024 * 1024,
+      maxFilesPerRequest: DEFAULTS.maxFilesPerRequest,
+      maxPdfPages,
+      maxImagePixels,
+      retentionDays: int(e.RECEIPT_IMAGE_RETENTION_DAYS, DEFAULTS.retentionDays),
+      duplicateMaxDistance,
     }),
     access: Object.freeze({
       required: accessRequired,
@@ -585,6 +777,16 @@ export function parseConfig(
     ai: Object.freeze({
       dailyDocumentLimit: int(e.AI_DAILY_DOCUMENT_LIMIT, DEFAULTS.aiDailyDocumentLimit),
       monthlyBudget,
+      baseUrl: e.AI_BASE_URL ?? null,
+      allowedHosts: Object.freeze(aiAllowedHosts),
+      apiKey: role === "worker" ? (e.AI_API_KEY ?? null) : null,
+      visionModel: e.AI_VISION_MODEL ?? DEFAULTS.aiVisionModel,
+      textModel: e.AI_TEXT_MODEL ?? DEFAULTS.aiTextModel,
+      timeoutMs: aiTimeoutMs,
+      maxRetries: int(e.AI_MAX_RETRIES, DEFAULTS.aiMaxRetries),
+      confidenceThreshold: int(e.AI_CONFIDENCE_THRESHOLD, DEFAULTS.aiConfidenceThreshold),
+      responseFormat: e.AI_RESPONSE_FORMAT ?? "json_schema",
+      pricing: Object.freeze(pricing),
     }),
     notify: Object.freeze({
       telegram:

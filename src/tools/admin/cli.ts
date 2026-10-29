@@ -1,6 +1,8 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 import { type Db, createDb } from "@/db";
 import { ConfigError, parseConfig } from "@/lib/config";
@@ -12,6 +14,8 @@ import {
   createUserWithHousehold,
   resetPasswordByEmail,
 } from "@/modules/auth/users.service";
+import { LocalStorage, type Storage } from "@/lib/storage";
+import { expireDocumentFiles } from "@/modules/documents/retention";
 import { purgeIdempotencyKeys } from "@/modules/idempotency/idempotency";
 
 /**
@@ -42,6 +46,8 @@ export type AdminIo = Readonly<{
   err: (line: string) => void;
   /** Doar pentru teste: baza de date dată direct (altfel din configurație). */
   db?: Db;
+  /** Doar pentru teste: storage-ul (altfel `STORAGE_DIR` din configurație). */
+  storage?: Storage & { cleanupTemp?: (olderThanMs: number) => Promise<number> };
 }>;
 
 const USAGE = [
@@ -50,10 +56,15 @@ const USAGE = [
   "  admin reset-password --email <email> [--password-stdin]",
   "  admin add-member --household <id> --email <email> [--role member|owner]",
   "  admin cleanup-idempotency",
+  "  admin cleanup-documents [--temp-hours <ore>]",
   "Parola se citește din stdin cu --password-stdin; altfel se generează și se afișează o dată.",
 ].join("\n");
 
 class UsageError extends Error {}
+
+function isDirectory(path: string): boolean {
+  return existsSync(path) && statSync(path).isDirectory();
+}
 
 type Flags = Record<string, string | true>;
 
@@ -62,6 +73,7 @@ const COMMANDS: Readonly<Record<string, readonly string[]>> = {
   "reset-password": ["email", "password-stdin"],
   "add-member": ["household", "email", "role"],
   "cleanup-idempotency": [],
+  "cleanup-documents": ["temp-hours"],
 };
 const BOOLEAN_FLAGS = new Set(["password-stdin"]);
 
@@ -207,6 +219,42 @@ export async function main(io: AdminIo): Promise<number> {
       );
       if (generated) io.out(`finet-admin: parola generată (afișată o singură dată): ${password}`);
       return 0;
+    }
+
+    if (command === "cleanup-documents") {
+      // Faza 6 (ADR 0015): originalele cu retenția expirată + fișierele temporare orfane. Doar
+      // contoare în ieșire (fără căi, chei sau nume).
+      const raw = flags["temp-hours"];
+      const hours = raw === undefined ? 24 : Number(raw);
+      // Minimum 1 oră (revizuirea F6-C): o scriere în curs are un fișier `*.tmp-*` proaspăt.
+      if (typeof raw === "string" && (!/^[0-9]{1,4}$/.test(raw) || Number(raw) < 1)) {
+        throw new UsageError("--temp-hours: un număr întreg de ore (1–9999)");
+      }
+      let storage = io.storage;
+      let mounted = true;
+      if (!storage) {
+        // Siguranța: fără STORAGE_DIR explicit sau cu directorul nemontat, NU se marchează nimic
+        // ca șters (lipsa unui fișier ar fi tratată drept „deja șters”, iar originalul ar rămâne
+        // pe disc fără evidență). `households/` există de la primul document încărcat.
+        const dir = io.env.STORAGE_DIR?.trim();
+        if (!dir || !isDirectory(dir)) {
+          io.err("finet-admin: STORAGE_DIR lipsește sau nu e montat (în scriere)");
+          return 1;
+        }
+        mounted = isDirectory(join(dir, "households"));
+        storage = new LocalStorage(dir);
+      }
+      const r = await expireDocumentFiles({
+        db,
+        storage,
+        tempOlderThanMs: hours * 3600 * 1000,
+        skipFiles: !mounted,
+      });
+      io.out(
+        `expired=${r.expired} failed=${r.failed} temp=${r.tempRemoved}` +
+          (mounted ? "" : " storage=empty"),
+      );
+      return r.failed > 0 ? 1 : 0;
     }
 
     if (command === "cleanup-idempotency") {

@@ -353,3 +353,218 @@ describe.skipIf(!TEST_ADMIN_URL)(
     });
   },
 );
+
+/** Faza 6 (0008): drepturile `finet_app` pe documente, bonuri, alias-uri și jurnalul AI. */
+describe.skipIf(!TEST_ADMIN_URL)("drepturile finet_app pe documente și bonuri (0008)", () => {
+  let fx: AuthFixture;
+  beforeAll(async () => {
+    fx = await createAuthFixture("finet_it_grants8");
+  });
+  afterAll(async () => {
+    await fx?.close();
+  });
+
+  const TABLES = [
+    "documents",
+    "processing_batches",
+    "receipts",
+    "receipt_lines",
+    "product_aliases",
+    "ai_calls",
+    "document_usage_daily",
+  ];
+
+  it("SELECT/INSERT/DELETE pe tabele; ai_calls doar SELECT + INSERT; UPDATE doar pe coloanele permise", async () => {
+    const rows = await fx.scratch.admin<{ table_name: string; privilege_type: string }[]>`
+      select table_name, privilege_type from information_schema.role_table_grants
+       where table_schema = 'finet' and grantee = 'finet_app' and table_name = any(${TABLES})
+       order by table_name, privilege_type`;
+    const by = (t: string) => rows.filter((r) => r.table_name === t).map((r) => r.privilege_type);
+    for (const t of TABLES.filter((t) => t !== "ai_calls" && t !== "document_usage_daily")) {
+      expect(by(t), t).toEqual(["DELETE", "INSERT", "SELECT"]);
+    }
+    expect(by("ai_calls")).toEqual(["INSERT", "SELECT"]);
+    // Contorul zilnic doar crește: fără DELETE (revizuirea F6-A, M3).
+    expect(by("document_usage_daily")).toEqual(["INSERT", "SELECT"]);
+    const cols = await fx.scratch.admin<{ table_name: string; column_name: string }[]>`
+      select table_name, column_name from information_schema.column_privileges
+       where table_schema = 'finet' and grantee = 'finet_app' and privilege_type = 'UPDATE'
+         and table_name = any(${TABLES})
+       order by table_name, column_name`;
+    const updatable = (t: string) =>
+      cols.filter((r) => r.table_name === t).map((r) => r.column_name);
+    expect(updatable("documents")).toEqual([
+      "attempts",
+      "batch_id",
+      "document_order",
+      "error_code",
+      "expires_at",
+      "file_deleted_at",
+      "kind",
+      "pages",
+      "perceptual_hash",
+      "possible_duplicate_of_id",
+      "processing_started_at",
+      "status",
+      "storage_key",
+      "updated_at",
+    ]);
+    expect(updatable("processing_batches")).toEqual(["status", "updated_at"]);
+    expect(updatable("product_aliases")).toEqual(["category_id", "tag_ids", "updated_at"]);
+    expect(updatable("ai_calls")).toEqual([]);
+    expect(updatable("document_usage_daily")).toEqual(["count", "updated_at"]);
+    expect(updatable("receipts")).not.toContain("household_id");
+    expect(updatable("receipts")).not.toContain("document_id");
+    expect(updatable("receipt_lines")).not.toContain("receipt_id");
+    expect(updatable("receipt_lines")).not.toContain("household_id");
+  });
+
+  it("câmpurile fixe și jurnalul AI nu se pot modifica (42501)", async () => {
+    for (const statement of [
+      sql`update finet.documents set household_id = household_id`,
+      sql`update finet.documents set sha256 = sha256`,
+      sql`update finet.documents set size_bytes = size_bytes`,
+      sql`update finet.documents set detected_mime = detected_mime`,
+      sql`update finet.documents set uploaded_by_user_id = null`,
+      sql`update finet.receipts set household_id = household_id`,
+      sql`update finet.receipts set document_id = document_id`,
+      sql`update finet.receipt_lines set receipt_id = receipt_id`,
+      sql`update finet.product_aliases set normalized_name = normalized_name`,
+      sql`update finet.ai_calls set result = 'ok'`,
+      sql`delete from finet.ai_calls`,
+      sql`delete from finet.document_usage_daily`,
+      sql`update finet.document_usage_daily set day = day`,
+      sql`update finet.document_usage_daily set household_id = household_id`,
+    ]) {
+      expect(await sqlState(() => fx.db.execute(statement))).toBe("42501");
+    }
+  });
+
+  it("anon/authenticated/PUBLIC: nimic; queued_documents doar pentru finet_app", async () => {
+    const [r] = await fx.scratch.admin<{ n: number }[]>`
+      select count(*)::int as n from information_schema.role_table_grants
+       where grantee in ('anon', 'authenticated', 'PUBLIC') and table_name = any(${TABLES})`;
+    expect(r?.n).toBe(0);
+    const [f] = await fx.scratch.admin<
+      { app: boolean; anon: boolean; auth: boolean; pub: boolean }[]
+    >`
+      select has_function_privilege('finet_app', 'finet.queued_documents(integer, integer)', 'EXECUTE') as app,
+             has_function_privilege('anon', 'finet.queued_documents(integer, integer)', 'EXECUTE') as anon,
+             has_function_privilege('authenticated', 'finet.queued_documents(integer, integer)', 'EXECUTE') as auth,
+             exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                      where p.proname = 'queued_documents' and a.grantee = 0) as pub`;
+    expect(f).toEqual({ app: true, anon: false, auth: false, pub: false });
+    const [owner] = await fx.scratch.admin<{ owner: string; definer: boolean; config: string[] }[]>`
+      select pg_get_userbyid(proowner) as owner, prosecdef as definer, proconfig as config
+        from pg_proc where proname = 'queued_documents'`;
+    expect(owner).toEqual({
+      owner: "finet_migrator",
+      definer: true,
+      config: ["search_path=pg_catalog"],
+    });
+  });
+});
+
+/** Faza 6 (0009): cotele TVA (doar citire), bugetul AI (doar prin funcții), `queued_document`. */
+describe.skipIf(!TEST_ADMIN_URL)(
+  "drepturile finet_app pe TVA, buget AI și coloanele noi (0009)",
+  () => {
+    let fx: AuthFixture;
+    beforeAll(async () => {
+      fx = await createAuthFixture("finet_it_grants9");
+    });
+    afterAll(async () => {
+      await fx?.close();
+    });
+
+    const FUNCTIONS = [
+      "finet.ai_budget_reserve(bigint, bigint, text)",
+      "finet.ai_budget_spent(text)",
+      "finet.queued_document(uuid)",
+    ];
+
+    it("vat_rates: doar SELECT; ai_budget_usage: niciun drept direct; receipts: coloanele noi actualizabile", async () => {
+      const rows = await fx.scratch.admin<{ table_name: string; privilege_type: string }[]>`
+      select table_name, privilege_type from information_schema.role_table_grants
+       where table_schema = 'finet' and grantee in ('finet_app', 'anon', 'authenticated', 'PUBLIC')
+         and table_name in ('vat_rates', 'ai_budget_usage')
+       order by table_name, privilege_type`;
+      expect(rows).toEqual([{ table_name: "vat_rates", privilege_type: "SELECT" }]);
+      const cols = await fx.scratch.admin<{ column_name: string }[]>`
+      select column_name from information_schema.column_privileges
+       where table_schema = 'finet' and grantee = 'finet_app' and privilege_type = 'UPDATE'
+         and table_name = 'receipts' and column_name in ('issues', 'duplicate_of_receipt_id', 'merge_report')
+       order by column_name`;
+      expect(cols.map((c) => c.column_name)).toEqual([
+        "duplicate_of_receipt_id",
+        "issues",
+        "merge_report",
+      ]);
+      for (const statement of [
+        sql`select * from finet.ai_budget_usage`,
+        sql`insert into finet.ai_budget_usage (month, currency) values (date '2026-10-01', 'USD')`,
+        sql`update finet.vat_rates set rate_bp = 0`,
+        sql`delete from finet.vat_rates`,
+        sql`insert into finet.vat_rates (rate_bp, valid_from) values (1, date '2026-01-01')`,
+      ]) {
+        expect(await sqlState(() => fx.db.execute(statement))).toBe("42501");
+      }
+      const [n] = (await fx.db.execute(
+        sql`select count(*)::int as n from finet.vat_rates`,
+      )) as unknown as { n: number }[];
+      expect(n?.n).toBe(7);
+    });
+
+    it("funcțiile: SECURITY DEFINER, proprietar finet_migrator, search_path fix, EXECUTE doar finet_app", async () => {
+      for (const fn of FUNCTIONS) {
+        const [f] = await fx.scratch.admin<{ app: boolean; anon: boolean; auth: boolean }[]>`
+        select has_function_privilege('finet_app', ${fn}, 'EXECUTE') as app,
+               has_function_privilege('anon', ${fn}, 'EXECUTE') as anon,
+               has_function_privilege('authenticated', ${fn}, 'EXECUTE') as auth`;
+        expect(f, fn).toEqual({ app: true, anon: false, auth: false });
+        const [o] = await fx.scratch.admin<
+          { owner: string; definer: boolean; config: string[]; pub: boolean }[]
+        >`
+        select pg_get_userbyid(p.proowner) as owner, p.prosecdef as definer, p.proconfig as config,
+               exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                        where a.grantee = 0) as pub
+          from pg_proc p where p.oid = ${fn}::regprocedure`;
+        expect(o, fn).toEqual({
+          owner: "finet_migrator",
+          definer: true,
+          config: ["search_path=pg_catalog"],
+          pub: false,
+        });
+      }
+    });
+
+    it("ai_budget_reserve: atomic, doar crește, refuză bugetul 0 și costurile invalide", async () => {
+      const reserve = async (cost: bigint, budget: bigint, cur = "USD") => {
+        const [r] = (await fx.db.execute(
+          sql`select finet.ai_budget_reserve(${cost.toString()}::bigint, ${budget.toString()}::bigint, ${cur}) as ok`,
+        )) as unknown as { ok: boolean }[];
+        return r!.ok;
+      };
+      const spent = async (cur = "USD") => {
+        const [r] = (await fx.db.execute(
+          sql`select finet.ai_budget_spent(${cur})::text as s`,
+        )) as unknown as { s: string }[];
+        return BigInt(r!.s);
+      };
+      expect(await reserve(1n, 0n)).toBe(false);
+      expect(await spent()).toBe(0n);
+      expect(await reserve(60n, 100n)).toBe(true);
+      expect(await reserve(40n, 100n)).toBe(true);
+      expect(await reserve(1n, 100n)).toBe(false);
+      expect(await spent()).toBe(100n);
+      expect(await spent("EUR")).toBe(0n);
+      expect(await sqlState(() => reserve(0n, 100n))).toBe("22023");
+      expect(await sqlState(() => reserve(-5n, 100n))).toBe("22023");
+      expect(await sqlState(() => reserve(1n, 100n, "XYZ"))).toBe("22023");
+      // 10 rezervări paralele de 10 dintr-un buget de 150 (100 deja consumat): exact 5 trec.
+      const results = await Promise.all(Array.from({ length: 10 }, () => reserve(10n, 150n)));
+      expect(results.filter(Boolean)).toHaveLength(5);
+      expect(await spent()).toBe(150n);
+    });
+  },
+);

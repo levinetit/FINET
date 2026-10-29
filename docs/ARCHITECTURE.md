@@ -1,4 +1,4 @@
-# FINET — arhitectura (ce există după Fazele 1–4 și F5-A)
+# FINET — arhitectura (ce există după Fazele 1–5 și F6-A)
 
 Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
 
@@ -104,8 +104,24 @@ Paginile `/dashboard`, `/tags`, `/budgets` (+ `new`, `[id]`), `/goals` (+ `new`,
 ## Recurențe și workerul (F5-A)
 `src/modules/recurring/` (schema/serviciu/repo, ca restul registrului): reguli cu stările `active|paused|completed`, generare idempotentă (ocurența `(rule_id, occurrence_date)` se revendică înaintea tranzacției, în aceeași tranzacție SQL; regula blocată `FOR UPDATE SKIP LOCKED`), recuperare limitată la 12 scadențe pe regulă pe rulare, reluare fără retroactiv; calendarul în `src/lib/calendar.ts`. Workerul (`src/worker/`, `FINET_ROLE=worker`, imaginea de unelte `dist/tools/worker.mjs`): pg-boss ca `finet_app` (schema `pgboss` din migrația 0007, fără DDL la rulare), jobul orar `recurring.generate` (scadențele tuturor gospodăriilor prin `finet.due_recurring_rules`, doar id-uri; generarea în contextul RLS al fiecărei gospodării) și `recurring.generate-now` (o gospodărie, un membru). Semnalul de viață în `finet.service_heartbeats`. Detalii: ADR 0011. API-ul (`src/app/api/v1/_lib/recurring-handlers.ts`, rutele `/api/v1/recurring/**`) și UI-ul (`src/app/(app)/recurring/**`, ajutoarele pure `src/app/_lib/recurring-ui.ts`): butonul „Generează scadentele” apelează serviciul direct, în serverul web (fără pg-boss în web), cu `Idempotency-Key` obligatoriu. Detalii: ADR 0012.
 
+## Documente (F6-A)
+`src/modules/documents/`: validarea după conținut (`content.ts`, fără dependențe), primirea `multipart/form-data` în flux (`multipart.ts`, busboy → `putStream`), înregistrarea (`documents.service.ts`: deduplicare SHA-256 înaintea limitelor, apoi sub lock limita zilnică din `document_usage_daily` și cota, consimțământul `external_ai` → `queued`/`awaiting_consent`, bon lung în `processing_batches`), ștergerea (rândul, apoi fișierul; tranzacțiile rămân). Rutele publice (F6-C, ADR 0015): `src/app/api/v1/documents/**`, `receipts/**`, `ai/usage` peste `documents-handlers.ts` și `receipts-handlers.ts`; `/api/v1/documents` exact e exclusă din `src/proxy.ts` și verificată de `src/lib/access-guard.ts` (aceeași decizie Access). Serviciul bonurilor: `src/modules/receipts/receipts.service.ts` (listă, corectare cu verificările recalculate și `product_aliases`, confirmare → tranzacție, reprocesare, ștergere); retenția: `src/modules/documents/retention.ts` (`admin cleanup-documents`, serviciul `finet-cleanup`). UI: `/import`, `/receipts`, `/receipts/[id]` (`src/app/(app)/import`, `receipts`, ajutoare pure în `src/app/_lib/receipts-ui.ts`). Workerul: `src/worker/receipts/` — `queued_documents` (SECURITY DEFINER, doar id-uri) → revendicare (`attempts + 1`) → preprocesare în memorie (`preprocess.ts`: sharp; PDF prin `pdf-sandbox.ts` = proces copil `pdf-child.mjs` sub `prlimit`, cu inventarul fail-closed `pdf-scan.ts` înainte) → `pages`, dHash, „posibil duplicat”. Detalii: ADR 0013.
+
+## Pipeline-ul AI al bonurilor (F6-B)
+- `src/lib/ai/`: clientul LiteLLM (compatibil OpenAI), cu `AI_BASE_URL` din lista permisă (exact `host:port`), fără redirecționări, `AbortController` pe încercare plus termen total, reîncercări doar la timeout/429/5xx, corpul citit plafonat, JSON parsat cu plafoane de adâncime și valori. Mai conține estimarea costului în bigint (`cost.ts`) și serverul AI fals pentru teste (`mock-server.ts`).
+- `src/modules/receipts/` (funcții pure):
+  - schema Zod strictă a răspunsului (sumele ca șiruri, convertite prin `parseAmount`);
+  - verificările 5.5 și scorul (`checks.ts`), CUI-ul (`cui.ts`), cotele TVA (`vat.ts`, valorile în `finet.vat_rates`);
+  - categorisirea (alias → reguli → LLM cu coduri închise), normalizarea numelor, unirea bonului lung (`merge.ts`) și prompturile fixe.
+- Workerul (`src/worker/receipts/receipt-job.ts`, `receipt-jobs.ts`):
+  - `receipt.sweep` la minut trimite `receipt.process` pe document (`exclusive`, `singletonKey`);
+  - jobul trece prin consimțământ, preprocesare (F6-A), extragere (bugetul global rezervat înaintea fiecărei încercări, prin `ai_budget_reserve` SECURITY DEFINER; `ai_calls` fără conținut), unire, reguli, verificări, scor și categorisire;
+  - bonul se salvează mereu „De verificat” (`needs_review`), cu cheia de deduplicare;
+  - termenul documentului e de 12 minute.
+- Detalii: ADR 0014.
+
 ## Storage
-Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath, `O_NOFOLLOW`, scriere atomică). Driverul `s3` aruncă `NotImplementedError` (Faza 6).
+Interfața `Storage` (`put`/`putStream`/`get`/`openRead`/`delete`/`exists`); cheile `<prefix>/<uuid>` și `households/<uuid>/documents/<uuid>` sunt generate de storage, validate strict la citire. Driverul `local` e confinat în `STORAGE_DIR` (realpath pe fiecare director, `O_NOFOLLOW`, scriere atomică, plafon `maxBytes`, `cleanupTemp`); în worker e doar citire. Driverul `s3` aruncă `NotImplementedError` (neimplementat nici în Faza 6, ADR 0013).
 
 ## Sănătatea
 `/api/health`: `db` (`select 1`, clientul comun din `src/lib/db-client.ts` cu o conexiune, `prepare: false`, TLS după `sslmode` și CA), `storage` (scriere/citire/ștergere), `diskFreePercent`; `queue` din semnalul workerului (`ok`, `degraded` peste 180 s, `unknown` dacă workerul e oprit sau n-a pornit; fără pg-boss în serverul web); `ai` = `unknown`. `down` (503) dacă oricare e `down`; `degraded` dacă oricare e `degraded`; `ok` doar dacă `db` și `storage` sunt `ok`; altfel `degraded`. Fără versiuni, căi sau mesaje de eroare în răspuns.
@@ -115,4 +131,4 @@ Interfața `Storage` (`put`/`get`/`delete`/`exists`); cheile `<prefix>/<uuid>` s
 - CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `smoke`, `auth`, `ledger` în `personal` apoi în `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
 
 ## Planificat (nu există încă)
-Cozile documentelor (Faza 6), driverul S3, `lib/ai/`, sharp (Faza 6), înregistrarea publică și modul `saas` (Faza 11). Graficele nu folosesc Recharts (SVG propriu, ADR 0008).
+Driverul S3, înregistrarea publică și modul `saas` (Faza 11). Graficele nu folosesc Recharts (SVG propriu, ADR 0008).

@@ -181,6 +181,8 @@ export type TransactionView = Readonly<{
   transferDirection: (typeof TRANSFER_DIRECTIONS)[number] | null;
   /** Regula recurentă care a generat tranzacția (Faza 5), dacă `source = recurring`. */
   recurringRuleId: string | null;
+  /** Documentul (bonul) din care a fost creată tranzacția (Faza 6), dacă `source = receipt`. */
+  documentId: string | null;
   createdByUserId: string | null;
   createdAt: Date;
   updatedAt: Date;

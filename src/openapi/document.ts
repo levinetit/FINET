@@ -107,9 +107,9 @@ const ERROR_DESCRIPTIONS: Readonly<Record<number, string>> = {
   403: "Interzis (`forbidden`): mutație cu cookie fără `Origin` corect (CSRF), export CSV cu cookie fără `Sec-Fetch-Site` `same-origin`/`none`, sau rol insuficient.",
   404: "Resursa nu există sau aparține altei gospodării (`not_found`, răspuns uniform).",
   409: "Conflict cu starea curentă (`conflict`, cu `reason`) sau `request_in_progress` (aceeași `Idempotency-Key` e în curs).",
-  413: "Corpul depășește 16 KiB (`payload_too_large`).",
-  415: "Corpul nu e `application/json` (`unsupported_media_type`).",
-  422: "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`) sau un sold calculat care nu poate fi transmis exact (`amount_out_of_range`, peste 2^53 − 1).",
+  413: "Corpul depășește 16 KiB (`payload_too_large`). La încărcarea documentelor: `payload_too_large`, `file_too_large`, `too_many_files`, `image_too_large`.",
+  415: "Corpul nu e `application/json` (`unsupported_media_type`). La încărcarea documentelor: `unsupported_media_type` (nu e multipart), `unsupported_type`, `heic_unsupported`, `markup_content`.",
+  422: "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`) sau un sold calculat care nu poate fi transmis exact (`amount_out_of_range`, peste 2^53 − 1). La încărcarea documentelor: `invalid_image` (imagine care nu poate fi citită).",
   429: "Prea multe cereri (`rate_limited`, antet `Retry-After`).",
   500: "Eroare internă (`internal_error`, fără detalii).",
 };
@@ -142,7 +142,18 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
 
   const responses: Json = {};
   const success: Json = { description: op.success.description };
-  if (op.success.csv) {
+  if (op.success.binary) {
+    success.content = Object.fromEntries(
+      op.success.binary.map((type) => [type, { schema: { type: "string", format: "binary" } }]),
+    );
+    success.headers = {
+      "Content-Disposition": {
+        description: '`attachment; filename="bon-<id>.<ext>"` (nume generat de server).',
+        schema: { type: "string" },
+      },
+      "X-Content-Type-Options": { description: "`nosniff`.", schema: { type: "string" } },
+    };
+  } else if (op.success.csv) {
     success.content = { "text/csv; charset=utf-8": { schema: { type: "string" } } };
     success.headers = {
       "Content-Disposition": {
@@ -158,6 +169,7 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
     success.headers = { "Idempotent-Replay": { $ref: "#/components/headers/IdempotentReplay" } };
   }
   responses[String(op.success.status)] = success;
+  if (op.success.alsoStatus !== undefined) responses[String(op.success.alsoStatus)] = success;
   for (const status of [...new Set([...op.errors, ...COMMON_ERRORS])].sort((a, b) => a - b)) {
     responses[String(status)] = { $ref: `#/components/responses/E${status}` };
   }
@@ -169,6 +181,30 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
     ...(op.description ? { description: op.description } : {}),
     parameters,
   };
+  if (op.multipart) {
+    result.requestBody = {
+      required: true,
+      description: op.multipart.description,
+      content: {
+        "multipart/form-data": {
+          schema: {
+            type: "object",
+            properties: {
+              ...Object.fromEntries(
+                Object.entries(op.multipart.fields).map(([name, description]) => [
+                  name,
+                  name === "files"
+                    ? { type: "array", items: { type: "string", format: "binary" }, description }
+                    : { type: "string", description },
+                ]),
+              ),
+            },
+            required: ["files"],
+          },
+        },
+      },
+    };
+  }
   if (op.body) {
     result.requestBody = {
       required: !op.body.optional,
@@ -232,6 +268,8 @@ export function buildOpenApiDocument(): Json {
       { name: "budgets", description: "Bugetele lunare și semaforul (Faza 3)." },
       { name: "goals", description: "Obiectivele de economisire (Faza 3)." },
       { name: "recurring", description: "Plățile recurente (Faza 5)." },
+      { name: "documents", description: "Documentele încărcate (bonuri; Faza 6)." },
+      { name: "receipts", description: "Bonurile extrase, verificarea și confirmarea (Faza 6)." },
       { name: "reports", description: "Dashboard-ul și raportul lunar (Faza 3)." },
       { name: "exports", description: "Exporturile CSV (Faza 3)." },
     ],

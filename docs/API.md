@@ -145,5 +145,23 @@ curl -s -X POST https://finet.example/api/v1/recurring/generate \
   -H 'authorization: Bearer tokenFictiv.semnatura' -H 'idempotency-key: 4c2a9e1f-7b3d-4e8a-9c1d-2e3f4a5b6c7d'
 ```
 
+## Documente și bonuri (F6-C, ADR 0015)
+- `POST /documents` (`multipart/form-data`, citit în flux; câmpurile text `kind=receipt`, `longReceipt=true|false` înaintea fișierelor; 1–4 `files`): tipul se detectează după conținut (JPEG, PNG, WebP, PDF; HEIC → `415 heic_unsupported`; SVG/HTML → `415`), `413 file_too_large` peste `MAX_UPLOAD_MB`. Același fișier (SHA-256) → documentul existent, `duplicate: true` (`200` dacă toate erau deja). `409`: `daily_document_limit`, `storage_quota_exceeded`, `long_receipt_duplicate`. Fără `Idempotency-Key` (idempotentă prin SHA-256). Calea exactă e exclusă din proxy-ul Next (fluxul nu se trunchiază la 10 MB), cu aceeași verificare Cloudflare Access în rută.
+- `GET /documents?status=&since=&limit=` → `{ data: [Document] }` (cu `receiptId`); `GET /documents/{id}` (starea, `errorCode` stabil); `GET /documents/{id}/file` → fișierul original în flux (tipul detectat, `Content-Disposition: attachment; filename="bon-<id>.<ext>"`, `nosniff`, `no-store`), 404 dacă a fost șters la retenție; `DELETE /documents/{id}` → 204 (bonul extras dispare, tranzacția rămâne).
+- `GET /ai/usage` → `{ data: { used, limit, remaining } }`: documentele încărcate azi (București); fără costuri.
+- `GET /receipts?status=&q=&merchant=&dateFrom=&dateTo=&amountMinMinor=&amountMaxMinor=&categoryId=&tagId=&cursor=&limit=` → `{ data: [Receipt], nextCursor }`. `q` caută în comerciant, în produse (nume brut sau normalizat) și, dacă e o sumă (`45,90`, `45.90`), în total sau în suma unei linii. `tagId` = eticheta tranzacției create din bon.
+- `GET /receipts/{id}` → `ReceiptDetail`: liniile, `issues` (coduri stabile, ADR 0014), `confidence` (din verificările din cod), `providerUsed`, `fallbackReason`, `linesSumMinor`, `removedLines` (bon lung), `suggestedOrder`, `duplicateOfReceiptId`.
+- `PATCH /receipts/{id}`: câmpurile (`merchantName`, `merchantTaxId`, `storeAddress`, `receiptNumber`, `occurredOn`, `paymentMethod`, `totalMinor`, `vatTotalMinor`) și `lines` (ÎNLOCUITE integral; `id` păstrează o linie a bonului; sumele întregi `…Minor`, `quantity`/`vatRate` text). Verificările, scorul și cheia de duplicat se recalculează; categoria aleasă pe un produs devine alias pentru bonurile următoare. Bon salvat → `409 receipt_saved`.
+- `POST /receipts/{id}/confirm` (`Idempotency-Key` recomandat): `{ accountId, categoryId?, description?, notes?, occurredOn?, allowDuplicate? }` → `201 { data: { receipt, transactionId } }`; o tranzacție de cheltuială (`source: "receipt"`, `documentId`), suma = totalul bonului. `409`: `receipt_already_saved`, `possible_duplicate`, `total_required`, `date_required`, `currency_mismatch`, `account_archived`.
+- `POST /receipts/{id}/reprocess` (corp gol sau `{ "order": [2, 1] }` pentru bonul lung) → `202 { data: { documentIds, queued } }`; consumă limita zilnică; limită proprie 10 / 10 min. `409`: `receipt_saved`, `file_deleted`, `document_rejected`, `daily_document_limit`.
+- `DELETE /receipts/{id}` → 204: bonul, documentele (fișierele) și lotul; tranzacția creată rămâne.
+- `PUT /me/consents` cu `externalAi: true` pune în coadă documentele care așteptau acordul.
+- `Transaction` are câmpul nou `documentId` (bonul din care a fost creată).
+
+```bash
+curl -s -X POST https://finet.example/api/v1/documents \
+  -H 'authorization: Bearer tokenFictiv.semnatura' -F kind=receipt -F files=@bon.jpg
+```
+
 ## Evenimente de utilizare
 Lista fixă de nume: `app_open`, `login`, `logout`, `session_expired`, `screen_view`, `receipt_scan_started`, `receipt_uploaded`, `receipt_confirmed`, `statement_imported`, `transaction_created`, `share_import`, `update_prompt_shown`, `update_started`, `error_shown`, iar din Faza 3 `dashboard_viewed`, `report_viewed`, `budget_created`, `goal_created`, `goal_contribution_added`, `tag_created`, `export_downloaded`, iar din Faza 5 `recurring_created`, `recurring_generated` (ecranul nou: `recurring`) (doar numele, fără sume sau alte câmpuri). Ecranele și codurile de eroare: listele din `src/modules/usage/usage.schema.ts` (și din `docs/openapi.json`). Orice alt câmp (sumă, descriere, comerciant, text liber) respinge lotul cu 400. Cel mult 20 de evenimente pe lot; `occurredAt` cel mult 30 de zile în urmă.

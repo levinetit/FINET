@@ -5,6 +5,8 @@ import { errorSchema } from "@/openapi/schemas";
 import * as L from "./ledger-handlers";
 import * as M from "./me-handlers";
 import * as P from "./planning-handlers";
+import * as D from "./documents-handlers";
+import * as RC from "./receipts-handlers";
 import * as R from "./recurring-handlers";
 
 /**
@@ -134,6 +136,18 @@ const OPERATION_OF = new Map<unknown, string>([
   [R.deleteRecurringHandler, "deleteRecurring"],
   [R.pauseRecurringHandler, "pauseRecurring"],
   [R.resumeRecurringHandler, "resumeRecurring"],
+  [D.uploadDocumentsHandler, "uploadDocuments"],
+  [D.listDocumentsHandler, "listDocuments"],
+  [D.getDocumentHandler, "getDocument"],
+  [D.deleteDocumentHandler, "deleteDocument"],
+  [D.documentFileHandler, "getDocumentFile"],
+  [D.aiUsageHandler, "getAiUsage"],
+  [RC.listReceiptsHandler, "listReceipts"],
+  [RC.getReceiptHandler, "getReceipt"],
+  [RC.patchReceiptHandler, "patchReceipt"],
+  [RC.deleteReceiptHandler, "deleteReceipt"],
+  [RC.confirmReceiptHandler, "confirmReceipt"],
+  [RC.reprocessReceiptHandler, "reprocessReceipt"],
 ]);
 
 /** Antetele obligatorii ale unui export CSV (F3-B). */
@@ -164,8 +178,23 @@ export async function assertContract(handler: unknown, response: Response): Prom
     }
     return;
   }
+  if (response.status === op.success.status && op.success.binary) {
+    const h = response.headers;
+    const problems = [
+      op.success.binary.includes(h.get("content-type") ?? "") ? null : "content-type",
+      /^attachment; filename="bon-[0-9a-f-]{36}\.(jpg|png|webp|pdf)"$/.test(
+        h.get("content-disposition") ?? "",
+      )
+        ? null
+        : "content-disposition",
+      h.get("x-content-type-options") === "nosniff" ? null : "x-content-type-options",
+      /no-store/.test(h.get("cache-control") ?? "") ? null : "cache-control",
+    ].filter((x) => x !== null);
+    if (problems.length > 0) throw new Error(`${id}: antete greșite: ${problems.join(", ")}`);
+    return;
+  }
   const text = await response.clone().text();
-  if (response.status === op.success.status) {
+  if (response.status === op.success.status || response.status === op.success.alsoStatus) {
     if (op.success.schema === null) {
       if (text !== "") throw new Error(`${id}: ${response.status} trebuia să fie fără corp`);
       return;
