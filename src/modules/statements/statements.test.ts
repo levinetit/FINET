@@ -425,6 +425,143 @@ describe.skipIf(!TEST_ADMIN_URL)("importul extraselor (Postgres real, finet_app)
     expect(ok.importedCount).toBe(1);
   });
 
+  // --- Revizuirea F7-A -------------------------------------------------------------------------
+  const mkAcc = async (actor: typeof f.A, name: string, currency: "RON" | "EUR", owner?: string) =>
+    (
+      await createAccount({ db: f.db }, actor, f.HA, {
+        name,
+        type: "bank",
+        currency,
+        ...(owner ? { ownerUserId: owner } : {}),
+      })
+    ).id;
+  const mv = (
+    rowNo: number,
+    direction: "debit" | "credit",
+    amountMinor: bigint,
+    over: Record<string, unknown> = {},
+  ) => ({
+    rowNo,
+    occurredOn: "2026-11-12",
+    direction,
+    amountMinor,
+    description: `Rand ${rowNo}`,
+    bankReference: null,
+    kind: "movement" as const,
+    fxAmountMinor: null,
+    fxCurrency: null,
+    balanceAfterMinor: null,
+    ...over,
+  });
+  const fxMv = (
+    rowNo: number,
+    direction: "debit" | "credit",
+    amt: bigint,
+    fxAmt: bigint,
+    c: "EUR" | "RON",
+  ) =>
+    mv(rowNo, direction, amt, {
+      kind: "fx" as const,
+      description: "Schimbat",
+      fxAmountMinor: fxAmt,
+      fxCurrency: c,
+    });
+  const plainBase = () => ({ ...revolut(), openingBalanceMinor: null, closingBalanceMinor: null });
+
+  it("un rând obișnuit de aceeași sumă/dată ca piciorul unui transfer valutar NU e duplicat", async () => {
+    const r = await mkAcc(f.A, "R1 RON", "RON");
+    const e = await mkAcc(f.A, "R1 EUR", "EUR");
+    const p = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: r,
+      sourceSha256: sha("r1-ron"),
+      parsed: { ...plainBase(), lines: [fxMv(1, "debit", 500n, 100n, "EUR")] },
+    });
+    await confirmStatementImport(deps(), f.A, f.HA, p.import.id, {
+      fx: [{ rowNo: 1, mode: "transfer", counterpartAccountId: e }],
+    });
+    // Extrasul EUR: o rambursare obișnuită de 1,00 EUR în aceeași zi + rândul de schimb.
+    const q = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: e,
+      sourceSha256: sha("r1-eur"),
+      parsed: {
+        ...plainBase(),
+        currency: "EUR",
+        lines: [
+          mv(1, "credit", 100n, { description: "Rambursare" }),
+          fxMv(2, "credit", 100n, 500n, "RON"),
+        ],
+      },
+    });
+    expect(q.import.lines!.map((l) => l.state)).toEqual(["new", "duplicate"]);
+    const before = await count(e);
+    const done = await confirmStatementImport(deps(), f.A, f.HA, q.import.id);
+    expect(done.importedCount).toBe(1);
+    expect(await count(e)).toBe(before + 1);
+  });
+
+  it("aceeași cheie de două ori în ACELAȘI fișier (ID Revolut repetat) → a doua e `duplicate` din previzualizare", async () => {
+    const r = await mkAcc(f.A, "R2 RON", "RON");
+    const p = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: r,
+      sourceSha256: sha("r2"),
+      parsed: {
+        ...plainBase(),
+        lines: [
+          mv(1, "debit", 700n, { bankReference: "same-id" }),
+          mv(2, "debit", 900n, { bankReference: "same-id" }),
+        ],
+      },
+    });
+    expect(p.import.lines!.map((l) => l.state)).toEqual(["new", "duplicate"]);
+    const done = await confirmStatementImport(deps(), f.A, f.HA, p.import.id);
+    expect(done).toMatchObject({ status: "imported", importedCount: 1 });
+  });
+
+  it("anularea: piciorul-pereche EDITAT al unui transfer valutar cere decizie (nu se șterge tăcut)", async () => {
+    const r = await mkAcc(f.A, "R3 RON", "RON");
+    const e = await mkAcc(f.A, "R3 EUR", "EUR");
+    const p = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: r,
+      sourceSha256: sha("r3"),
+      parsed: { ...plainBase(), lines: [fxMv(1, "debit", 500n, 100n, "EUR")] },
+    });
+    await confirmStatementImport(deps(), f.A, f.HA, p.import.id, {
+      fx: [{ rowNo: 1, mode: "transfer", counterpartAccountId: e }],
+    });
+    // Piciorul din contul EUR e modificat de mână (notă) după import.
+    await f.admin`update finet.transactions set notes = 'editat', updated_at = now() + interval '1 minute'
+                   where account_id = ${e}`;
+    await expect(cancelStatementImport(deps(), f.A, f.HA, p.import.id)).rejects.toMatchObject({
+      reason: "statement_import_has_edited",
+    });
+    const kept = await cancelStatementImport(deps(), f.A, f.HA, p.import.id, {
+      editedPolicy: "keep",
+    });
+    expect(kept.keptEdited).toBe(1);
+    expect(await count(e)).toBe(1);
+    expect(await count(r)).toBe(1);
+  });
+
+  it("anularea de către alt membru când piciorul valutar e într-un cont PERSONAL invizibil → conflict explicit", async () => {
+    const common = await mkAcc(f.C, "R4 RON comun", "RON");
+    const personal = await mkAcc(f.C, "R4 EUR personal", "EUR", f.C.userId);
+    const p = await createStatementPreview(deps(), f.C, f.HA, {
+      accountId: common,
+      sourceSha256: sha("r4"),
+      parsed: { ...plainBase(), lines: [fxMv(1, "debit", 500n, 100n, "EUR")] },
+    });
+    await confirmStatementImport(deps(), f.C, f.HA, p.import.id, {
+      fx: [{ rowNo: 1, mode: "transfer", counterpartAccountId: personal }],
+    });
+    await expect(cancelStatementImport(deps(), f.A, f.HA, p.import.id)).rejects.toMatchObject({
+      reason: "statement_import_counterpart_hidden",
+    });
+    // Proprietarul contului personal o poate anula.
+    const done = await cancelStatementImport(deps(), f.C, f.HA, p.import.id);
+    expect(done.status).toBe("cancelled");
+    expect(await count(personal)).toBe(0);
+  });
+
   it("izolare: altă gospodărie și contul PERSONAL al altui membru sunt invizibile (404)", async () => {
     const p = await createStatementPreview(deps(), f.C, f.HA, {
       accountId: personalC,

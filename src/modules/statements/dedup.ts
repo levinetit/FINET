@@ -37,9 +37,14 @@ export function fxKey(
   );
 }
 
-export type LineKeys = Readonly<{ key: string; fx: string }>;
+/** `fx` există DOAR pentru rândurile de schimb valutar (`kind = 'fx'`), altfel `null`. */
+export type LineKeys = Readonly<{ key: string; fx: string | null }>;
 
-/** Cheile fiecărui rând (aceeași ordine), plus cheia „fx” calculată pentru TOATE rândurile. */
+/**
+ * Cheile fiecărui rând (aceeași ordine). Cheia „fx” (și indicele ei de apariție) se calculează
+ * DOAR printre rândurile de schimb (revizuirea F7-A): un rând obișnuit (de exemplu o rambursare)
+ * cu aceeași dată, sens și sumă ca piciorul unui transfer valutar nu e un duplicat al lui.
+ */
 export function computeKeys(
   accountId: string,
   bank: StatementBank,
@@ -48,11 +53,14 @@ export function computeKeys(
   const seen = new Map<string, number>();
   const seenFx = new Map<string, number>();
   return lines.map((l) => {
-    const fxTuple = [l.occurredOn, l.direction, l.amountMinor].join("|");
-    const fxOcc = seenFx.get(fxTuple) ?? 0;
-    seenFx.set(fxTuple, fxOcc + 1);
-    const fx = fxKey(accountId, l.occurredOn, l.direction, l.amountMinor, fxOcc);
-    if (l.kind === "fx") return { key: fx, fx };
+    if (l.kind === "fx") {
+      const fxTuple = [l.occurredOn, l.direction, l.amountMinor].join("|");
+      const fxOcc = seenFx.get(fxTuple) ?? 0;
+      seenFx.set(fxTuple, fxOcc + 1);
+      const fx = fxKey(accountId, l.occurredOn, l.direction, l.amountMinor, fxOcc);
+      return { key: fx, fx };
+    }
+    const fx = null;
     if (bank === "revolut" && l.bankReference) {
       return { key: sha([DEDUP_VERSION, "id", accountId, l.bankReference].join("|")), fx };
     }

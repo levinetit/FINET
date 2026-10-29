@@ -107,4 +107,29 @@ describe("cheile de deduplicare", () => {
     ]);
     expect(fx!.key).toBe(fxKey(A, "2026-11-03", "debit", 1500n, 0));
   });
+
+  it("cheia fx DOAR pentru schimburi: un rând obișnuit de aceeași sumă/dată nu o primește și nu-i schimbă indicele", () => {
+    const keys = computeKeys(A, "bt", [
+      line({ description: "Rambursare" }),
+      line({ kind: "fx", fxCurrency: "EUR", description: "Schimb" }),
+    ]);
+    expect(keys[0]!.fx).toBeNull();
+    // Indicele de apariție al schimbului numără doar schimburile (0), nu și rândul obișnuit.
+    expect(keys[1]!.key).toBe(fxKey(A, "2026-11-03", "debit", 1500n, 0));
+    expect(keys[0]!.key).not.toBe(keys[1]!.key);
+  });
+});
+
+describe("descrierile stocate fără IBAN-uri", () => {
+  it("IBAN tăiat peste rânduri, cu spații sau litere mici, e eliminat după unire", async () => {
+    const { buildDescription } = await import("./text");
+    const d1 = buildDescription(["Plata factura", "RO12 TEST 0000 1111", "2222 3333 · rest"]);
+    expect(d1).not.toMatch(/\d{4}/);
+    expect(d1).toContain("Plata factura");
+    const d2 = buildDescription(["Transfer catre ro12test0000111122223333 Ion"]);
+    expect(d2).not.toMatch(/test0000/i);
+    expect(d2).toContain("Ion");
+    const d3 = buildDescription(["De la: X, RO55TEST00001111", "22223333"]);
+    expect(d3).not.toMatch(/1111|2222/);
+  });
 });

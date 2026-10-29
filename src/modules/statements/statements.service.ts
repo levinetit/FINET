@@ -283,11 +283,16 @@ export async function createStatementPreview(
       m.householdId,
       account.id,
       keys.map((k) => k.key),
-      keys.map((k) => k.fx),
+      keys.flatMap((k) => (k.fx ? [k.fx] : [])),
     );
-    const states = keys.map((k): "new" | "duplicate" =>
-      existing.has(k.key) || existing.has(k.fx) ? "duplicate" : "new",
-    );
+    // A doua apariție a aceleiași chei în ACELAȘI fișier (de exemplu un `ID tranzacție` Revolut
+    // repetat) e un duplicat încă din previzualizare (revizuirea F7-A), nu o eroare la confirmare.
+    const inFile = new Set<string>();
+    const states = keys.map((k): "new" | "duplicate" => {
+      const dup = existing.has(k.key) || (k.fx !== null && existing.has(k.fx)) || inFile.has(k.key);
+      inFile.add(k.key);
+      return dup ? "duplicate" : "new";
+    });
     const balance = checkBalances(parsed);
     const warnings = new Set(parsed.warnings);
     for (const r of balance.reasons) warnings.add(r);
@@ -414,9 +419,11 @@ export async function confirmStatementImport(
     const pending = lines.filter((l) => l.state === "new" && !skip.has(l.rowNo));
     const fxOf = (l: LineRow, occ: number) =>
       fxKey(account.id, l.occurredOn, l.direction, l.amountMinor, occ);
+    // Cheia `fx` și indicele ei: DOAR printre rândurile de schimb (ca în `computeKeys`).
     const fxOcc = new Map<string, number>();
     const fxKeys = new Map<number, string>();
     for (const l of lines) {
+      if (l.kind !== "fx") continue;
       const t = `${l.occurredOn}|${l.direction}|${l.amountMinor}`;
       const n = fxOcc.get(t) ?? 0;
       fxOcc.set(t, n + 1);
@@ -427,7 +434,10 @@ export async function confirmStatementImport(
       m.householdId,
       account.id,
       pending.map((l) => l.dedupKey),
-      pending.map((l) => fxKeys.get(l.rowNo)!),
+      pending.flatMap((l) => {
+        const k = fxKeys.get(l.rowNo);
+        return k ? [k] : [];
+      }),
     );
 
     // Indicele de apariție al picioarelor din conturile-pereche (două schimburi identice în
@@ -447,7 +457,8 @@ export async function confirmStatementImport(
         await setLineState(tx, l.id, "skipped", null);
         continue;
       }
-      if (existing.has(l.dedupKey) || existing.has(fxKeys.get(l.rowNo)!)) {
+      const lineFx = fxKeys.get(l.rowNo);
+      if (existing.has(l.dedupKey) || (lineFx !== undefined && existing.has(lineFx))) {
         await setLineState(tx, l.id, "duplicate", null);
         duplicates++;
         continue;
@@ -631,15 +642,36 @@ export async function cancelStatementImport(
     if (imp.status === "cancelled")
       return { ...toView(imp, await loadLines(tx, imp.id)), keptEdited: 0 };
     if (imp.status !== "imported") throw new ConflictError("statement_import_not_imported");
-    const rows = await tx.execute<{ id: string; group_id: string | null; touched: boolean }>(sql`
+    // „Modificată” se evaluează pe TOATE rândurile grupului unui transfer (revizuirea F7-A):
+    // piciorul din contul-pereche editat păstrează tot transferul. `visible_legs` < 2 = piciorul
+    // e într-un cont personal invizibil apelantului (anularea o poate face doar proprietarul).
+    const rows = await tx.execute<{
+      id: string;
+      group_id: string | null;
+      touched: boolean;
+      visible_legs: number;
+    }>(sql`
       select t.id, t.transfer_group_id as group_id,
-             (t.updated_at > t.created_at
-              or exists (select 1 from finet.transaction_tags g where g.transaction_id = t.id)
-              or exists (select 1 from finet.transaction_splits s where s.transaction_id = t.id)
-              or exists (select 1 from finet.receipts r where r.transaction_id = t.id)) as touched
+             exists (select 1 from finet.transactions x
+                      where (x.id = t.id or x.transfer_group_id = t.transfer_group_id)
+                        and (x.updated_at > x.created_at
+                             or exists (select 1 from finet.transaction_tags g
+                                         where g.transaction_id = x.id)
+                             or exists (select 1 from finet.transaction_splits s
+                                         where s.transaction_id = x.id)
+                             or exists (select 1 from finet.receipts r
+                                         where r.transaction_id = x.id))) as touched,
+             (select count(*)::int from finet.transactions y
+               where y.transfer_group_id = t.transfer_group_id) as visible_legs
         from finet.statement_lines l
         join finet.transactions t on t.id = l.transaction_id
        where l.import_id = ${imp.id} and l.state = 'imported'`);
+    if (rows.some((r) => r.group_id !== null && r.visible_legs < 2)) {
+      throw new ConflictError(
+        "statement_import_counterpart_hidden",
+        "Un transfer valutar al importului e legat de un cont pe care nu îl vezi; anularea o poate face proprietarul acelui cont.",
+      );
+    }
     const touched = rows.filter((r) => r.touched);
     if (touched.length > 0 && !input.editedPolicy) {
       throw new ConflictError(
