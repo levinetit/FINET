@@ -260,6 +260,9 @@ describe("readMigrations (fără bază)", () => {
     );
     // CHECK-uri / filtre plate (fără BETWEEN într-un lanț AND).
     expect(code).not.toMatch(/\bbetween\b/i);
+    // Fără `x in (col1, col2, ...)` în politici: Postgres îl stochează ca OR imbricat, iar pg_dump
+    // îl reafișează plat (amprenta restaurării diferă). Se scrie `x = a or x = b or x = c`.
+    expect(code).not.toMatch(/current_user_id\(\)\)\s+in\s+\(/i);
     // Politicile existente se schimbă doar prin ALTER POLICY, cu aceleași nume.
     expect([...code.matchAll(/alter policy (\w+) on/g)].map((x) => x[1])).toEqual([
       "accounts_household",

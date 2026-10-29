@@ -754,14 +754,19 @@ create policy settlements_insert on finet.settlements
               and (select finet.member_role(finet.current_household_id())) is not null
               and created_by_user_id = (select finet.current_user_id())
               and cancelled_at is null and cancelled_by_user_id is null
-              and ((select finet.current_user_id()) in (from_user_id, to_user_id)
+              and ((select finet.current_user_id()) = from_user_id
+                   or (select finet.current_user_id()) = to_user_id
                    or (select finet.member_role(finet.current_household_id())) = 'owner'));
 --> statement-breakpoint
 create policy settlements_cancel on finet.settlements
   for update to finet_app
   using (household_id = (select finet.current_household_id())
          and (select finet.member_role(finet.current_household_id())) is not null
-         and (select finet.current_user_id()) in (created_by_user_id, from_user_id, to_user_id))
+         -- OR plat, scris explicit: un `x in (a, b, c)` devine `((x = a) OR (x = b)) OR (x = c)`
+         -- în catalog, iar pg_dump îl reafișează aplatizat (amprenta restaurării ar diferi).
+         and ((select finet.current_user_id()) = created_by_user_id
+              or (select finet.current_user_id()) = from_user_id
+              or (select finet.current_user_id()) = to_user_id))
   with check (household_id = (select finet.current_household_id())
               and cancelled_by_user_id = (select finet.current_user_id()));
 --> statement-breakpoint
