@@ -14,7 +14,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 5 — Recurențe | **parțial** (F5-A, F5-B în repo) | date, servicii, worker pg-boss (F5-A); API `/api/v1/recurring`, UI `/recurring`, E2E `recurring` (F5-B); rămân migrațiile `0006`/`0007` și workerul pe producție (operatorul), prima rulare CI completă și revizuirea `security` — vezi mai jos și `docs/reports/faza-5.md` |
 | 6 — Ingestia bonurilor | **în repo** (F6-A, F6-B, F6-C; de revizuit și de aplicat pe producție) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat) — ADR 0013. F6-B: migrația `0009_receipt_pipeline`, clientul LiteLLM, jobul `receipt.process`, verificările 5.5 și scorul, categorisirea, bonul lung, bugetul global, fixtures sintetice și `pnpm eval:receipts` — ADR 0014. F6-C: API-ul public (`/api/v1/documents`, `/receipts`, `/ai/usage`), paginile `/import`, `/receipts`, `/receipts/[id]`, retenția originalelor (`0011`, `cleanup-documents`), E2E cu serverul AI fals și workerul — ADR 0015. Rămân `0008`–`0011` pe Supabase, evaluarea pe bonuri reale și revizuirea `security` |
 | 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
-| 8 — Familie | **parțial** (F8-A în repo) | F8-A: migrația `0012_family` (invitații, împărțiri cu verificare amânată a sumei, decontări, gospodăria activă, vizibilitatea personal/comun în RLS pe conturi, tranzacții, etichete, recurențe), serviciile `src/modules/family/` (invitații, membri, roluri, ultimul owner, comutator, împărțiri, solduri, decontări) — ADR 0016. Rămân F8-B (API, UI, actualizări live, E2E), `0012` pe Supabase și revizuirea `security` — vezi mai jos |
+| 8 — Familie | **parțial** (F8-A și F8-B în repo) | F8-A: migrația `0012_family` (invitații, împărțiri cu verificare amânată a sumei, decontări, gospodăria activă, vizibilitatea personal/comun în RLS pe conturi, tranzacții, etichete, recurențe), serviciile `src/modules/family/` (invitații, membri, roluri, ultimul owner, comutator, împărțiri, solduri, decontări) — ADR 0016. F8-B: API-ul `/api/v1` al familiei, `/family`, `/join/[token]`, comutatorul, împărțirea pe tranzacție, widgetul de pe Acasă, actualizările live (SSE, ADR 0017), E2E `family`. Rămân `0012` pe Supabase, deploy-ul (INFRA 4k) și revizuirea `security` — vezi mai jos |
 | 9 — Hardening, PWA, offline | neimplementat | |
 | 10 — Liste de cumpărături și prețuri | neimplementat | |
 | 11 — Fundația SaaS | neimplementat | |
@@ -203,9 +203,13 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - indexul unic al numelor de conturi pe proprietar (azi un nume de cont personal e „ocupat” pentru toată gospodăria, deci vizibil ca existent);
 - semantica bugetelor comune „doar din conturile comune” (azi: din tranzacțiile vizibile cititorului);
 - ștergerea contului de utilizator: `accounts.owner_user_id ON DELETE SET NULL` ar face conturile personale comune — funcția de ștergere a contului trebuie să le trateze;
-- API-ul, UI-ul, SSE și E2E: F8-B.
+- API-ul, UI-ul, SSE și E2E: F8-B (făcut, vezi mai jos).
 
-**Rămâne:** F8-B, `0012` pe Supabase (cu verificarea din INFRA 4j), revizuirea `security`.
+**F8-B (API, UI, live, E2E), gata în repo (ADR 0017):** endpointurile `/api/v1/family/*`, `/api/v1/invites/accept`, `/api/v1/households/active`, `/api/v1/transactions/{id}/split`, `GET /api/v1/events` (SSE în procesul web, cu rezervă pe interogare periodică); paginile `/family`, `/join/[token]`, comutatorul de gospodărie, cardul de împărțire, widgetul „Ai de dat / Ai de primit”, conturile personale în formular; E2E `family` (modul `personal`).
+
+**Amânate din F8-B (motiv):** evenimente live pentru schimbările făcute de worker/CLI (bon procesat, recurențe generate în fundal: alt proces, ADR 0017); împărțirea direct din formularul de creare a tranzacției (se face din pagina tranzacției după salvare); E2E-ul familiei în modul `saas` (logica nu depinde de mod; timpul job-ului); mai multe instanțe web (magistrala live e în memorie).
+
+**Rămâne:** `0012` pe Supabase (cu verificarea din INFRA 4j) și deploy-ul (INFRA 4k), revizuirea `security` pentru F8-B, verificarea SSE prin tunelul Cloudflare.
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
@@ -310,8 +314,8 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/receipts`, `/receipts/[id]` | `/receipts` | 6 | branch (F6-C) |
 | `/import` | `/import` | 6 (bonuri), 7 (extrase) | branch (F6-C, bonuri); extrasele în Faza 7 |
 | `/statements/coverage` (nume provizoriu) | „Evidență extrase & acoperire” | 7 | planificat |
-| `/join/[token]` | — | 8 | serviciile gata (F8-A: `acceptInvite`); pagina în F8-B |
-| `/family` (nume provizoriu) | membri, bugete comune, decontări | 8 | serviciile gata (F8-A); pagina în F8-B |
+| `/join/[token]` | — | 8 | branch (F8-B): acceptare prin buton (`POST`), mesaj uniform |
+| `/family` | membri, bugete comune, decontări | 8 | branch (F8-B): solduri, decontări, membri, invitații, împărțiri, comun vs personal; comutatorul în antet; împărțirea pe `/transactions/[id]`; widgetul pe `/dashboard` |
 | `/offline` | — (la finpulse dă 404) | 9 | planificat |
 | `/help` (ghid în aplicație) | `/help` | 9 | planificat |
 | `/admin/statistics` (nume provizoriu) | — | 9 | planificat; statistici de utilizare, doar administrator |

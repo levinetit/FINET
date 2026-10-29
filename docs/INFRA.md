@@ -435,6 +435,33 @@ Agentul nu a rulat nimic de aici. Pașii completi de deploy ai Fazei 8 vin în F
 2. Backup, apoi migrațiile (rolul `migrate`; „aplicate acum 1”, a doua rulare „aplicate acum 0”). Rollback: antetul `0012_family.sql`.
 3. Nicio variabilă și niciun secret nou pentru F8-A.
 
+## 4k. Faza 8 pe producție (ordinea completă, după revizuiri; F8-B)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0016, 0017.
+
+1. **Verificarea dinaintea migrației** (4j, obligatorie: conturile cu `owner_user_id` deja setat devin personale).
+2. **Imaginile** `finet` și `finet:tools` pentru commit-ul aprobat (`sudo sh ops/deploy/pull-images.sh <sha>`).
+3. **Backup** al schemei `finet` (un `run-backup.sh` manual), apoi **migrația `0012_family`** (rolul `migrate`; prima rulare „aplicate acum 1”, a doua „aplicate acum 0”). Rollback: antetul fișierului, doar cu backup.
+4. **Redeploy `finet-web`** (aduce `/api/v1/family/*`, `/api/v1/invites/accept`, `/api/v1/households/active`, `/api/v1/transactions/{id}/split`, `GET /api/v1/events` și paginile `/family`, `/join/[token]`). **Nicio variabilă și niciun secret nou.** Workerul nu se schimbă pentru Faza 8 (redeploy doar dacă imaginea e comună și vrei aceeași versiune).
+5. **Cloudflare Access:** fiecare membru invitat trebuie să aibă emailul în politica aplicației Access (altfel linkul `/join/<token>` dă 403 la margine, înaintea FINET). Contul FINET al membrului se creează în continuare cu CLI-ul (`admin create-user`, modul `personal`), apoi el acceptă invitația din aplicație (nu mai e nevoie de `admin add-member`).
+6. **Actualizările live prin tunel** (ADR 0017; pe producție NOT RUN de agent):
+   ```bash
+   # din browserul autentificat prin Access (DevTools → Network → events): tipul `eventsource`, statusul 200,
+   # `content-type: text/event-stream`, iar mesajul `ready` apare imediat (fără întârziere de bufferizare).
+   # Fără Access:
+   curl -s -o /dev/null -w '%{http_code}\n' https://finet.<domeniu>/api/v1/events   # → 403
+   ```
+   Cu două ferestre (doi membri) pe `/family`: o decontare înregistrată într-una apare în cealaltă în câteva secunde, fără reîncărcare. Dacă evenimentele întârzie până la închiderea fluxului (bufferizare la un proxy), aplicația trece singură pe reîncărcare la 60 s; de raportat ca defect (Traefik: fără middleware de compresie pe `text/event-stream`; tunelul Cloudflare nu bufferizează SSE).
+7. **Verificări funcționale (browser, prin Access):**
+   - `/family` → „Creează link de invitație” → linkul apare o singură dată (după reîncărcare nu mai e afișat);
+   - al doilea membru deschide linkul → „Acceptă invitația” → intră; comutatorul de gospodărie apare deasupra paginilor;
+   - un cont „personal” al membrului → o cheltuială → pagina tranzacției → „Împarte cheltuiala” (egal) → la amândoi soldurile pe `/family` și widgetul de pe Acasă;
+   - decontare parțială → soldul scade; anulare → revine;
+   - același link încă o dată → „Invitația nu mai este valabilă…”.
+8. **Jurnale:** linkul de invitație conține tokenul în cale; jurnalele Cloudflare/Traefik pot conține căi `/join/<token>`. Tokenul e de unică folosință și expiră (≤ 168 h); dacă jurnalele de acces sunt păstrate și partajate, revocă invitațiile neacceptate.
+
+**Rollback:** imaginea anterioară a `finet-web` (paginile și rutele familiei dispar; datele rămân). Migrația `0012`: comenzile din antet, doar cu backup și decizia operatorului (atenție: rollback-ul ei face din nou conturile personale vizibile tuturor).
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

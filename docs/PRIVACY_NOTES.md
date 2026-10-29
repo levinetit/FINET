@@ -61,6 +61,11 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Invitațiile:** în bază se păstrează doar hash-ul tokenului, cine a invitat, rolul și datele; nu se stochează emailul invitatului. Linkul în clar se arată o singură dată celui care invită.
 - **Plecarea / eliminarea:** nu sunt blocate de solduri; soldurile și decontările rămân în istoric, cu cel plecat marcat ca fost membru. Datele din conturile comune rămân gospodăriei; conturile personale ale celui plecat rămân în gospodărie, invizibile tuturor, și se șterg doar odată cu gospodăria (de revăzut la ștergerea contului, master prompt 5.6).
 
+## Familia în interfață și actualizările live (Faza 8, F8-B; ADR 0017)
+- **Ce vede fiecare membru pe `/family`:** numele și rolurile membrilor (fără emailuri), soldurile reciproce și decontările (cu notele), împărțirile (cine a plătit, cât datorează fiecare; fără descrierea cheltuielii), numele conturilor și bugetelor COMUNE și ale propriilor conturi/bugete personale. Foștii membri apar în solduri doar ca „fost membru”, fără nume.
+- **Invitațiile:** linkul se arată o singură dată celui care invită, doar în pagină (nu se salvează în browser); înainte de acceptare, pagina de invitație nu arată numele gospodăriei. Tokenul apare în calea URL-ului, deci poate rămâne în istoricul browserului și în jurnalele de acces ale Cloudflare/Traefik (unică folosință, expiră în ≤ 7 zile).
+- **Actualizările live (SSE):** evenimentele conțin doar tipul și id-ul obiectului, nu sume, nume sau descrieri; o tranzacție dintr-un cont personal nu generează eveniment pentru ceilalți membri. Evenimentele nu se stochează (memoria procesului web).
+
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 (Faza 2+) — **TODO**.

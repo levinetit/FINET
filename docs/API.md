@@ -163,5 +163,20 @@ curl -s -X POST https://finet.example/api/v1/documents \
   -H 'authorization: Bearer tokenFictiv.semnatura' -F kind=receipt -F files=@bon.jpg
 ```
 
+## Familia (F8-B, ADR 0016, 0017)
+Gospodăria e cea **curentă** (activă, dacă apartenența există încă; altfel cea mai veche). Sumele întregi `…Minor`.
+- `PUT /households/active` `{ householdId }` → `200 { data: HouseholdSummary }` (`current: true`); o gospodărie străină → 404.
+- `GET /family/members` → membrii (`userId`, `name`, `role`, `joinedAt`; fără emailuri). `PATCH /family/members/{userId}` `{ role }` (owner); `DELETE /family/members/{userId}` (owner) și `POST /family/leave` → `200 { data: { unsettledBalance } }` (`true` = rămăseseră solduri; avertisment, nu eroare); `POST /family/members/{userId}/transfer-ownership` (owner). `409`: `last_owner`, `sole_member`, `use_leave`, `same_member`.
+- `GET /family/invites` (owner) → invitațiile cu `status` (`active|used|revoked|expired`), FĂRĂ token. `POST /family/invites` (owner) `{ role?, expiresInHours? }` (implicit `member`, 72 h; 1–168) → `201 { data: { invite, token, joinPath } }`: **tokenul apare doar aici**; fără `Idempotency-Key` (400 dacă e trimis: răspunsul memorat ar conține tokenul). `409 invite_limit` (20 / 24 h). `POST /family/invites/{id}/revoke` → invitația; `409 invite_not_active`.
+- `POST /invites/accept` `{ token }` → `200 { data: { householdId, joined } }` (`joined: false` = erai deja membru; nimic consumat). Orice invitație inutilizabilă (inexistentă, malformată, expirată, folosită, revocată, creator care nu mai e owner) → **același** `404 invite_unavailable`. `429 rate_limited` + `Retry-After` după 10 încercări / 15 min (și tokenurile greșite contează). `409 household_full` (6 membri).
+- `GET /family/balances` → `{ currencies: [{ currency, pairs: [{ debtorUserId, creditorUserId, amountMinor }], members: [{ userId, netMinor }] }], formerMemberIds, me: [{ currency, owesMinor, owedMinor }] }`.
+- `GET /family/settlements?includeCancelled=&limit=`; `POST /family/settlements` (`Idempotency-Key` opțional) `{ fromUserId, toUserId, amountMinor | amount, currency, settledOn, note? }` → 201; `403` (member care nu e parte), `409 settlement_exceeds_debt`, `balance_limit`. `POST /family/settlements/{id}/cancel` → 200 (oricare parte sau creatorul); `409 settlement_already_cancelled`.
+- `GET /family/splits?limit=`; `GET /transactions/{id}/split` (orice membru; fără împărțire → 404); `PUT /transactions/{id}/split` (doar plătitorul, cont personal) cu `{ mode: "equal", userIds }`, `{ mode: "percent", shares: [{ userId, basisPoints }] }` (1% = 100, suma 10000) sau `{ mode: "fixed", shares: [{ userId, amountMinor }] }`; `DELETE /transactions/{id}/split` → 204. `409`: `split_not_expense`, `split_requires_personal_account`, `split_not_payer`, `balance_limit`. Cât timp există, `PATCH`/`DELETE /transactions/{id}` care schimbă suma, contul, tipul sau șterg → `409 transaction_split`.
+- `GET /events` → `text/event-stream`: `ready`, `change` (`data: {"type":"transaction|transfer|receipt|split|settlement|member","id":"<uuid>"}` — fără sume sau nume), `close`, `reconnect`; `: ping` la 25 s; cel mult 4 conexiuni per utilizator (429). Detalii: ADR 0017.
+
+```bash
+curl -sN https://finet.example/api/v1/events -H 'authorization: Bearer tokenFictiv.semnatura'
+```
+
 ## Evenimente de utilizare
 Lista fixă de nume: `app_open`, `login`, `logout`, `session_expired`, `screen_view`, `receipt_scan_started`, `receipt_uploaded`, `receipt_confirmed`, `statement_imported`, `transaction_created`, `share_import`, `update_prompt_shown`, `update_started`, `error_shown`, iar din Faza 3 `dashboard_viewed`, `report_viewed`, `budget_created`, `goal_created`, `goal_contribution_added`, `tag_created`, `export_downloaded`, iar din Faza 5 `recurring_created`, `recurring_generated` (ecranul nou: `recurring`) (doar numele, fără sume sau alte câmpuri). Ecranele și codurile de eroare: listele din `src/modules/usage/usage.schema.ts` (și din `docs/openapi.json`). Orice alt câmp (sumă, descriere, comerciant, text liber) respinge lotul cu 400. Cel mult 20 de evenimente pe lot; `occurredAt` cel mult 30 de zile în urmă.
