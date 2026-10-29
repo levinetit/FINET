@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { ConfirmButton } from "@/components/ledger/confirm-button";
 import { Field } from "@/components/ledger/field";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import {
 } from "../../../_lib/ledger-ui";
 import {
   type LinePayload,
+  confirmBlocker,
   formatTotal,
   highlighted,
   issueText,
@@ -114,6 +116,9 @@ export function ReceiptReview({
   const [info, setInfo] = useState<string | null>(null);
 
   const saved = receipt.status === "saved";
+  // Fără cont deschis în moneda bonului, confirmarea nu poate reuși: explicăm de ce (serverul
+  // refuză oricum), iar butonul rămâne focalizabil, cu `aria-disabled` și explicația asociată.
+  const blocker = confirmBlocker(accounts, receipt.currency);
   const marks = highlighted(receipt.issues);
   const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 
@@ -212,6 +217,7 @@ export function ReceiptReview({
   }
 
   async function confirm() {
+    if (blocker !== null || accountId === "") return;
     if (dirty && !(await saveCorrections())) return;
     setFormError(null);
     setInfo(null);
@@ -739,8 +745,15 @@ export function ReceiptReview({
           <CardHeader>
             <CardTitle id="confirm-title">{t.confirm}</CardTitle>
           </CardHeader>
-          {sameCurrency.length === 0 ? (
-            <Alert tone="info">{t.noAccounts}</Alert>
+          {blocker !== null ? (
+            <Alert tone="info" id="confirm-blocked" data-testid="confirm-blocked">
+              {blocker === "none"
+                ? t.noAccount(receipt.currency)
+                : t.noAccountInCurrency(receipt.currency)}{" "}
+              <Link href="/accounts" className="font-semibold text-primary underline">
+                {t.goToAccounts}
+              </Link>
+            </Alert>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field id="confirm-account" label={t.account}>
@@ -794,20 +807,25 @@ export function ReceiptReview({
           )}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button
-              disabled={disabled || accountId === ""}
+              disabled={disabled || (blocker === null && accountId === "")}
+              aria-disabled={blocker !== null ? true : undefined}
+              aria-describedby={blocker !== null ? "confirm-blocked" : undefined}
+              className={blocker !== null ? "cursor-not-allowed opacity-60" : undefined}
               onClick={() => void confirm()}
               data-testid="confirm-receipt"
             >
               {pending ? t.confirming : t.confirm}
             </Button>
-            <Button
-              variant="ghost"
-              disabled={disabled}
-              onClick={() => void reprocess()}
+            <ConfirmButton
+              label={t.reprocess}
+              question={t.reprocessConfirm}
+              confirmLabel={t.reprocess}
+              busyLabel={t.reprocessing}
               title={t.reprocessHint}
-            >
-              {t.reprocess}
-            </Button>
+              busy={pending}
+              disabled={disabled}
+              onConfirm={() => void reprocess()}
+            />
           </div>
         </Card>
       ) : null}

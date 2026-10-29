@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { ro } from "@/messages/ro";
+
 import {
+  confirmBlocker,
   documentErrorText,
   formatTotal,
   highlighted,
@@ -87,5 +90,27 @@ describe("ajutoarele UI pentru bonuri (F6-C)", () => {
       tagId: "7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f",
     });
     expect(receiptQueryOf({ status: "hack" })).toEqual({});
+  });
+});
+
+describe("confirmarea bonului fără cont potrivit", () => {
+  it("fără conturi deschise → `none`; conturi doar în altă monedă → `currency`; altfel null", () => {
+    expect(confirmBlocker([], "EUR")).toBe("none");
+    expect(confirmBlocker([{ currency: "RON" }], "EUR")).toBe("currency");
+    expect(confirmBlocker([{ currency: "RON" }, { currency: "EUR" }], "EUR")).toBeNull();
+  });
+
+  it("mesajele în română numesc moneda și cer crearea unui cont", () => {
+    expect(ro.receipts.noAccount("EUR")).toBe(
+      "Pentru a salva bonul ai nevoie de un cont în EUR. Creează mai întâi un cont.",
+    );
+    expect(ro.receipts.noAccountInCurrency("EUR")).toMatch(/conturile tale.*EUR.*creează/);
+  });
+
+  it("textul confirmării pentru „Reprocesează”", () => {
+    expect(ro.receipts.reprocessConfirm).toBe(
+      "Reprocesarea șterge rezultatul curent al bonului (inclusiv corecturile tale) și îl citește din nou. Continui?",
+    );
+    expect(ro.ledger.cancel).toBe("Anulează");
   });
 });

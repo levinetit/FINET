@@ -110,7 +110,10 @@ export type AiConfig = Readonly<{
   maxRetries: number;
   /** Sub acest scor (0..100), bonul trece „De verificat” (`AI_CONFIDENCE_THRESHOLD`, implicit 80). */
   confidenceThreshold: number;
-  /** `AI_RESPONSE_FORMAT`: `json_schema` (implicit), `json_object` sau `none`. */
+  /**
+   * `AI_RESPONSE_FORMAT`: `json_object` (implicit: schema exactă stă în prompt, validarea în cod),
+   * `json_schema` (Gemini prin LiteLLM refuză schema FINET cu HTTP 400) sau `none`.
+   */
   responseFormat: "json_schema" | "json_object" | "none";
   /** Tarifele pentru estimarea costului, în unități minore ale monedei bugetului per 1M tokeni. */
   pricing: Readonly<{ inputPerMTokMinor: bigint; outputPerMTokMinor: bigint }>;
@@ -785,7 +788,7 @@ export function parseConfig(
       timeoutMs: aiTimeoutMs,
       maxRetries: int(e.AI_MAX_RETRIES, DEFAULTS.aiMaxRetries),
       confidenceThreshold: int(e.AI_CONFIDENCE_THRESHOLD, DEFAULTS.aiConfidenceThreshold),
-      responseFormat: e.AI_RESPONSE_FORMAT ?? "json_schema",
+      responseFormat: e.AI_RESPONSE_FORMAT ?? "json_object",
       pricing: Object.freeze(pricing),
     }),
     notify: Object.freeze({
