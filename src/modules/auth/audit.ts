@@ -63,6 +63,11 @@ export type AuditAction =
   | "receipt.reprocessed"
   | "receipt.deleted"
   | "documents.expired"
+  // Extrasele (Faza 7): doar contoare și id-ul importului, fără sume, descrieri sau IBAN.
+  | "statement.previewed"
+  | "statement.imported"
+  | "statement.cancelled"
+  | "statement.discarded"
   | "consent.granted"
   | "consent.revoked";
 
@@ -84,7 +89,8 @@ export type AuditEvent = Readonly<{
     | "goal"
     | "recurring_rule"
     | "document"
-    | "receipt";
+    | "receipt"
+    | "statement_import";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;
