@@ -364,9 +364,9 @@ describe.skipIf(!TEST_ADMIN_URL)("rapoarte de micro-cheltuieli (Postgres real, f
     });
 
     it("plafonul de definiții pe gospodărie (100) → report_limit", async () => {
-      const [{ n }] = await f.admin<{ n: number }[]>`
+      const counted = await f.admin<{ n: number }[]>`
         select count(*)::int as n from finet.report_definitions where household_id = ${f.HB}`;
-      for (let i = n!; i < 100; i++) {
+      for (let i = counted[0]!.n; i < 100; i++) {
         await f.admin`insert into finet.report_definitions (household_id, name, rules, created_by_user_id)
           values (${f.HB}, ${`Umplutură ${i}`}, '{"v":1}'::jsonb, ${f.B.userId})`;
       }

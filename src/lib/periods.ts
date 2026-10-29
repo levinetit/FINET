@@ -30,6 +30,8 @@ export type ReportPeriod = (typeof REPORT_PERIODS)[number];
 
 /** Interval închis de zile locale; `null` = fără limită. */
 export type DateRange = Readonly<{ from: CalendarDate | null; to: CalendarDate | null }>;
+/** Interval închis, cu ambele capete. */
+export type ClosedRange = Readonly<{ from: CalendarDate; to: CalendarDate }>;
 
 export function periodRange(period: ReportPeriod, today: CalendarDate): DateRange {
   const month: Month = today.slice(0, 7);
@@ -72,7 +74,7 @@ export function inflationWindows(
   months: number,
   baseline: InflationBaseline,
   today: CalendarDate,
-): Readonly<{ base: Required<DateRange>; current: Required<DateRange> }> {
+): Readonly<{ base: ClosedRange; current: ClosedRange }> {
   const month: Month = today.slice(0, 7);
   const current = {
     from: monthBounds(addMonths(month, -(months - 1))).from,

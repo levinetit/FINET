@@ -7,7 +7,7 @@ import {
   comparisonQuantity,
   dimensionOf,
   divRound,
-  parseSize,
+  cachedSizeParser,
   productKeyOf,
   quantityMilli,
   unitPriceMinor,
@@ -74,9 +74,10 @@ export type Observations = Readonly<{ obs: PriceObs[]; excluded: number }>;
 export function toObservations(lines: readonly PriceLine[]): Observations {
   const obs: PriceObs[] = [];
   let excluded = 0;
+  const parse = cachedSizeParser();
   for (const l of lines) {
     const qty = quantityMilli(l.quantity);
-    const size: SizeInfo = parseSize(l.normalizedName, qty);
+    const size: SizeInfo = parse(l.normalizedName, qty);
     const key = productKeyOf(size);
     const unit = dimensionOf(size);
     if (key === null || unit === null || l.lineTotalMinor <= 0n || qty <= 0n) {

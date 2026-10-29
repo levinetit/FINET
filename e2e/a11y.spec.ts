@@ -90,6 +90,7 @@ test("paginile autentificate principale fără încălcări grave (WCAG 2.1 A/AA
     "/budgets",
     "/goals",
     "/reports",
+    "/insights",
     "/recurring",
     "/import",
     "/receipts",

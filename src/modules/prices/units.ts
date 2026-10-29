@@ -58,20 +58,27 @@ export function divRoundHalfAway(n: bigint, d: bigint): bigint {
   return neg ? -q : q;
 }
 
+const AMBIGUOUS: SizeCore = { size: { kind: "ambiguous" }, weighedMilli: null };
+
 function normalizeSpaces(name: string): string {
   // `6 x 0.5l` → `6x0.5l` (aceeași mărime scrisă cu spații).
   return name.replace(/(\d)\s+x\s+(\d)/g, "$1x$2");
 }
 
-/**
- * Mărimea unui ambalaj din numele normalizat. `quantity` (miimi) servește doar la detectarea
- * produselor cântărite (vezi mai sus).
- */
-export function parseSize(normalizedName: string, quantity: bigint): SizeInfo {
+/** Rezultatul analizei unui NUME (independent de cantitate), bun de ținut în cache. */
+export type SizeCore = Readonly<{
+  size: SizeInfo;
+  /** Mărimea (miimi) dacă e în kg sau l: candidat la „produs cântărit” (vezi `applyQuantity`). */
+  weighedMilli: bigint | null;
+}>;
+
+/** Analiza numelui: mărimea și, eventual, candidatul de produs cântărit. Fără cantitate. */
+export function parseSizeCore(normalizedName: string): SizeCore {
   const name = normalizeSpaces(normalizedName);
   const matches = [...name.matchAll(SIZE_TOKEN)];
-  if (matches.length === 0) return { kind: "unsized", baseName: name };
-  if (matches.length > 1) return { kind: "ambiguous" };
+  if (matches.length === 0)
+    return { size: { kind: "unsized", baseName: name }, weighedMilli: null };
+  if (matches.length > 1) return { size: { kind: "ambiguous" }, weighedMilli: null };
   const m = matches[0]!;
   const multiplier = m[1] === undefined ? 1n : BigInt(m[1]);
   const amountMilli = toMilli(m[2]!);
@@ -85,7 +92,7 @@ export function parseSize(normalizedName: string, quantity: bigint): SizeInfo {
       break;
     case "g":
       std = "kg";
-      if (amountMilli % 1000n !== 0n) return { kind: "ambiguous" };
+      if (amountMilli % 1000n !== 0n) return AMBIGUOUS;
       pack = amountMilli / 1000n;
       break;
     case "l":
@@ -94,12 +101,12 @@ export function parseSize(normalizedName: string, quantity: bigint): SizeInfo {
       break;
     case "cl":
       std = "l";
-      if (amountMilli % 100n !== 0n) return { kind: "ambiguous" };
+      if (amountMilli % 100n !== 0n) return AMBIGUOUS;
       pack = amountMilli / 100n;
       break;
     case "ml":
       std = "l";
-      if (amountMilli % 1000n !== 0n) return { kind: "ambiguous" };
+      if (amountMilli % 1000n !== 0n) return AMBIGUOUS;
       pack = amountMilli / 1000n;
       break;
     default:
@@ -108,22 +115,48 @@ export function parseSize(normalizedName: string, quantity: bigint): SizeInfo {
       pack = amountMilli;
   }
   pack *= multiplier;
-  if (pack <= 0n) return { kind: "ambiguous" };
-  // Produs cântărit: numele repetă greutatea vândută (cantitate zecimală egală cu mărimea).
-  if (
-    (std === "kg" || std === "l") &&
-    unit === std &&
-    quantity === amountMilli &&
-    quantity % 1000n !== 0n
-  ) {
-    return { kind: "ambiguous" };
-  }
+  if (pack <= 0n) return AMBIGUOUS;
   const at = m.index ?? 0;
   const baseName = `${name.slice(0, at)} ${name.slice(at + m[0].length)}`
     .replace(/ {2,}/g, " ")
     .trim();
-  if (baseName === "") return { kind: "ambiguous" };
-  return { kind: "sized", unit: std, packMilli: pack, baseName };
+  if (baseName === "") return AMBIGUOUS;
+  return {
+    size: { kind: "sized", unit: std, packMilli: pack, baseName },
+    weighedMilli: unit === std && (std === "kg" || std === "l") ? amountMilli : null,
+  };
+}
+
+/**
+ * Cantitatea poate transforma o mărime în ambiguitate: produsul cântărit are în nume greutatea
+ * vândută (cantitate zecimală egală cu mărimea, `banane 1.234kg` × 1,234).
+ */
+export function applyQuantity(core: SizeCore, quantity: bigint): SizeInfo {
+  if (core.weighedMilli !== null && quantity === core.weighedMilli && quantity % 1000n !== 0n) {
+    return { kind: "ambiguous" };
+  }
+  return core.size;
+}
+
+/**
+ * Mărimea unui ambalaj din numele normalizat. `quantity` (miimi) servește doar la detectarea
+ * produselor cântărite (vezi mai sus).
+ */
+export function parseSize(normalizedName: string, quantity: bigint): SizeInfo {
+  return applyQuantity(parseSizeCore(normalizedName), quantity);
+}
+
+/** Variantă cu cache pe nume (aceleași nume se repetă pe zeci de bonuri): pentru liste mari. */
+export function cachedSizeParser(): (normalizedName: string, quantity: bigint) => SizeInfo {
+  const cache = new Map<string, SizeCore>();
+  return (name, quantity) => {
+    let core = cache.get(name);
+    if (core === undefined) {
+      core = parseSizeCore(name);
+      cache.set(name, core);
+    }
+    return applyQuantity(core, quantity);
+  };
 }
 
 /** Dimensiunea cheii de produs: unitatea standard sau `unit` (fără mărime). */

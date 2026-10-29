@@ -162,3 +162,7 @@ export function runToJson(r: RunResult) {
     matchedLines: r.run.matchedLines,
   };
 }
+
+/** Forma JSON a unei rulări (pentru componentele de interfață). */
+export type RunJson = ReturnType<typeof runToJson>;
+export type DefinitionJson = ReturnType<typeof definitionToJson>;

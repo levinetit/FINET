@@ -156,14 +156,18 @@ export function termMatches(term: RuleTerm, normalizedName: string): boolean {
  * (filtrele se aplică la citirea liniilor).
  */
 export function matchesName(rules: ReportRules, normalizedName: string): boolean {
+  // Cuvintele numelui se despart o singură dată, doar dacă un termen `token` le cere.
+  let words: Set<string> | null = null;
+  const test = (term: RuleTerm): boolean => {
+    if (term.type !== "token") return termMatches(term, normalizedName);
+    words ??= new Set(tokensOf(normalizedName));
+    return words.has(term.value);
+  };
   if (rules.include.length > 0) {
-    const hit =
-      rules.combine === "all"
-        ? rules.include.every((t) => termMatches(t, normalizedName))
-        : rules.include.some((t) => termMatches(t, normalizedName));
+    const hit = rules.combine === "all" ? rules.include.every(test) : rules.include.some(test);
     if (!hit) return false;
   }
-  return !rules.exclude.some((t) => termMatches(t, normalizedName));
+  return !rules.exclude.some(test);
 }
 
 /** Aceleași reguli, ca JSON stabil (chei în ordine fixă) pentru comparații și stocare. */

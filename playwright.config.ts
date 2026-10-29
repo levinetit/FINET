@@ -188,6 +188,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
+      // Rapoartele inteligente (Faza 10, F10-B): utilizatorii `insights` și `insights2`; bonurile
+      // confirmate sunt SINTETICE, inserate direct în baza de test (fără worker sau AI).
+      name: "insights",
+      testMatch: /insights\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // Doar fixture-ul `request`: nu pornește niciun browser.
       name: "access",
       testMatch: /access\.spec\.ts$/,

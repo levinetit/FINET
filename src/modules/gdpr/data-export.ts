@@ -33,6 +33,7 @@ import {
   receiptLines,
   receipts,
   recurringRules,
+  reportDefinitions,
   settlements,
   statementImports,
   statementLines,
@@ -190,7 +191,7 @@ originale ale bonurilor încărcate de tine.
   autentificare (fără parolă), instalările și evenimentele de utilizare.
 - gospodarii/<n>/: câte un dosar pentru fiecare dintre cele ${n} gospodării din care faci parte:
   gospodăria, conturile, categoriile, etichetele, tranzacțiile (JSON și CSV), bugetele, obiectivele,
-  regulile recurente, bonurile încărcate de tine (cu liniile lor), importurile de extrase făcute de
+  regulile recurente, rapoartele de micro-cheltuieli create de tine, bonurile încărcate de tine (cu liniile lor), importurile de extrase făcute de
   tine (cu rândurile lor; fișierele extraselor nu se păstrează), împărțirile și decontările în
   care ești parte, acțiunile tale din jurnalul de audit și fișierele bonurilor (fisiere/).
 
@@ -406,6 +407,19 @@ export async function* dataExportEntries(
     yield [
       `${dir}/recurente.json`,
       exportJson(await rowsOf(db, userId, hh, recurringRules, eq(recurringRules.householdId, hh))),
+    ];
+    // Rapoartele de micro-cheltuieli create de el (F10-B); cele de sistem nu sunt datele lui.
+    yield [
+      `${dir}/rapoarte-micro-cheltuieli.json`,
+      exportJson(
+        await rowsOf(
+          db,
+          userId,
+          hh,
+          reportDefinitions,
+          and(eq(reportDefinitions.householdId, hh), eq(reportDefinitions.createdByUserId, userId)),
+        ),
+      ),
     ];
 
     // Bonurile încărcate de el: documentele (fără cheia de storage), bonurile, liniile.
