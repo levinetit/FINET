@@ -437,8 +437,11 @@ export async function selectAiRequest(
 
 /**
  * (Re)pune în coadă cererea pentru perechea (listă, bon): una nouă `queued`, sau una existentă
- * terminată (`done`/`failed`/`skipped`) readusă la `queued` cu încercările la 0. Una în lucru
- * (`queued`/`processing`) rămâne neschimbată.
+ * TERMINATĂ (`done`/`failed`/`skipped`) readusă la `queued` cu încercările la 0 și cu cel care cere
+ * acum ca solicitant. Una ACTIVĂ (`queued`/`processing`), a oricărui membru, rămâne neatinsă:
+ * `DO UPDATE … WHERE` nu emite nicio scriere pe ea (altfel noua versiune a rândului ar păstra
+ * `requested_by_user_id` al altui membru și ar pica `WITH CHECK`-ul politicii de UPDATE), iar
+ * funcția întoarce rândul existent (idempotent, fără eroare).
  */
 export async function upsertAiRequest(
   tx: Tx,
@@ -455,19 +458,17 @@ export async function upsertAiRequest(
     .onConflictDoUpdate({
       target: [shoppingListAiRequests.listId, shoppingListAiRequests.receiptId],
       set: {
-        status: sql`case when ${shoppingListAiRequests.status} in ('queued', 'processing')
-          then ${shoppingListAiRequests.status} else 'queued' end`,
-        attempts: sql`case when ${shoppingListAiRequests.status} in ('queued', 'processing')
-          then ${shoppingListAiRequests.attempts} else 0 end`,
-        errorCode: sql`case when ${shoppingListAiRequests.status} in ('queued', 'processing')
-          then ${shoppingListAiRequests.errorCode} else null end`,
-        processingStartedAt: sql`case when ${shoppingListAiRequests.status} in ('queued', 'processing')
-          then ${shoppingListAiRequests.processingStartedAt} else null end`,
-        requestedByUserId: sql`case when ${shoppingListAiRequests.status} in ('queued', 'processing')
-          then ${shoppingListAiRequests.requestedByUserId} else ${values.requestedByUserId}::uuid end`,
+        status: "queued",
+        attempts: 0,
+        errorCode: null,
+        processingStartedAt: null,
+        requestedByUserId: values.requestedByUserId,
         updatedAt: new Date(),
       },
+      setWhere: sql`${shoppingListAiRequests.status} not in ('queued', 'processing')`,
     })
     .returning();
-  return row!;
+  if (row) return row;
+  const existing = await selectAiRequest(tx, values.householdId, values.listId, values.receiptId);
+  return existing!;
 }

@@ -504,6 +504,25 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
     const [n] = await f.admin<{ n: number }[]>`
       select count(*)::int as n from finet.shopping_list_ai_requests where list_id = ${list.list.id}`;
     expect(n!.n).toBe(1);
+    // Doi membri: C reîncearcă cât timp cererea lui A e activă → fără eroare RLS, fără schimbarea
+    // solicitantului (A rămâne `requested_by`), răspuns fix.
+    await grantExternalAi(f.admin, f.C.userId);
+    const byC = await runComparison(f.deps, f.C, f.HA, list.list.id, { receiptId: rc.id });
+    expect(byC.view.ai.status).toBe("queued");
+    const [still] = await f.admin<{ status: string; requested_by_user_id: string }[]>`
+      select status, requested_by_user_id from finet.shopping_list_ai_requests
+       where list_id = ${list.list.id}`;
+    expect(still).toEqual({ status: "queued", requested_by_user_id: f.A.userId });
+    // În lucru (`processing`): la fel.
+    await f.admin`update finet.shopping_list_ai_requests set status = 'processing' where list_id = ${list.list.id}`;
+    expect((await runComparison(f.deps, f.C, f.HA, list.list.id, { receiptId: rc.id })).view.ai.status).toBe("processing");
+    // Terminată: C o poate pune din nou în coadă, în numele lui, cu încercările la 0.
+    await f.admin`update finet.shopping_list_ai_requests set status = 'failed', attempts = 3, error_code = 'timeout' where list_id = ${list.list.id}`;
+    expect((await runComparison(f.deps, f.C, f.HA, list.list.id, { receiptId: rc.id })).view.ai.status).toBe("queued");
+    const [requeued] = await f.admin<{ status: string; requested_by_user_id: string; attempts: number; error_code: string | null }[]>`
+      select status, requested_by_user_id, attempts, error_code from finet.shopping_list_ai_requests
+       where list_id = ${list.list.id}`;
+    expect(requeued).toEqual({ status: "queued", requested_by_user_id: f.C.userId, attempts: 0, error_code: null });
     // Fără perechi ambigue (potrivire sigură) nu se pune nimic în coadă.
     const rc2 = await seedReceipt(f.admin, f.HA, f.A.userId, [["PAINE FELIATA 500G"]]);
     const l2 = await createList(f.deps, f.A, f.HA, { name: "AI sigur", items: [{ name: "pâine" }] });
