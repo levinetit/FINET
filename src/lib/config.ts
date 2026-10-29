@@ -115,6 +115,13 @@ export type AiConfig = Readonly<{
    * `json_schema` (Gemini prin LiteLLM refuză schema FINET cu HTTP 400) sau `none`.
    */
   responseFormat: "json_schema" | "json_object" | "none";
+  /**
+   * `AI_LIST_MATCH` (Faza 10, F10-A, ADR 0022): pasul OPȚIONAL cu LLM al comparației listă ↔ bon
+   * (perechile ambigue). Implicit `false` (`0`): comparația merge doar din cod. Citit doar de
+   * worker (serverul web nu are cheia AI); cererile puse în coadă cât e oprit se marchează
+   * `skipped`.
+   */
+  listMatch: boolean;
   /** Tarifele pentru estimarea costului, în unități minore ale monedei bugetului per 1M tokeni. */
   pricing: Readonly<{ inputPerMTokMinor: bigint; outputPerMTokMinor: bigint }>;
 }>;
@@ -326,6 +333,7 @@ const envSchema = z.object({
     .regex(/^(?:100|[1-9]?\d)$/)
     .optional(),
   AI_RESPONSE_FORMAT: z.enum(["json_schema", "json_object", "none"]).optional(),
+  AI_LIST_MATCH: z.enum(["0", "1"]).optional(),
   AI_PRICE_INPUT_PER_MTOK: z.string().max(40).optional(),
   AI_PRICE_OUTPUT_PER_MTOK: z.string().max(40).optional(),
 
@@ -789,6 +797,7 @@ export function parseConfig(
       maxRetries: int(e.AI_MAX_RETRIES, DEFAULTS.aiMaxRetries),
       confidenceThreshold: int(e.AI_CONFIDENCE_THRESHOLD, DEFAULTS.aiConfidenceThreshold),
       responseFormat: e.AI_RESPONSE_FORMAT ?? "json_object",
+      listMatch: e.AI_LIST_MATCH === "1",
       pricing: Object.freeze(pricing),
     }),
     notify: Object.freeze({

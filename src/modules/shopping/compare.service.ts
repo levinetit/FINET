@@ -123,7 +123,7 @@ async function requireSavedReceipt(
   return header;
 }
 
-async function loadHistory(tx: Tx, householdId: string): Promise<PairHistory> {
+export async function loadHistory(tx: Tx, householdId: string): Promise<PairHistory> {
   const rows = await selectPairHistory(tx, householdId, HISTORY_LIMIT);
   const confirmed = new Set<string>();
   const rejected = new Set<string>();
@@ -136,7 +136,7 @@ async function loadHistory(tx: Tx, householdId: string): Promise<PairHistory> {
 }
 
 /** Starea de potrivire a unui rând, ignorând legăturile rupte (linia a dispărut împreună cu bonul). */
-function effective(row: ItemRow): ItemRow["matchStatus"] {
+export function effective(row: ItemRow): ItemRow["matchStatus"] {
   return row.matchedReceiptLineId === null ? "none" : row.matchStatus;
 }
 
@@ -236,6 +236,48 @@ type Desired = Readonly<{
 }>;
 
 /**
+ * Planul comparației (pur, fără bază): care articole intră în calcul (`pool`) și potrivirile
+ * propuse de cod. Se ignoră deciziile utilizatorului (articole confirmate sau respinse pentru acest
+ * bon) și alegerile pasului cu LLM nemodificate; liniile lor nu se mai oferă altor articole.
+ * Folosită și de worker, ca să refacă DIN DATE perechile ambigue (cererea AI nu poartă conținut).
+ */
+export function planComparison(
+  items: readonly ItemRow[],
+  allLines: readonly ReceiptLineRow[],
+  history: PairHistory,
+): { pool: ItemRow[]; plan: ReturnType<typeof planMatches> } {
+  const lineIds = new Set(allLines.map((l) => l.id));
+  const productLines = allLines.filter((l) => l.kind === "product");
+  const pool: ItemRow[] = [];
+  const taken = new Set<string>(); // linii deja decise pentru acest bon
+  for (const row of items) {
+    const status = effective(row);
+    const here = row.matchedReceiptLineId !== null && lineIds.has(row.matchedReceiptLineId);
+    if (status === "confirmed") {
+      if (here) taken.add(row.matchedReceiptLineId!);
+      continue; // confirmat (aici sau pe alt bon): nu se mai propune nimic
+    }
+    if (status === "rejected" && here) continue; // respins pentru acest bon: definitiv
+    if (status === "suggested" && row.matchSource === "ai" && here) {
+      // Alegerea pasului cu LLM rămâne până o confirmi, o respingi sau o corectezi: o nouă
+      // rulare a codului nu o suprascrie (și nu plătește un al doilea apel).
+      taken.add(row.matchedReceiptLineId!);
+      continue;
+    }
+    pool.push(row);
+  }
+  const matchLines: MatchLine[] = productLines
+    .filter((l) => !taken.has(l.id) && lineNormalized(l) !== "")
+    .map((l) => ({ id: l.id, normalizedName: lineNormalized(l), position: l.position }));
+  const matchItems: MatchItem[] = pool.map((r) => ({
+    id: r.id,
+    normalizedName: r.normalizedName,
+    position: r.position,
+  }));
+  return { pool, plan: planMatches({ items: matchItems, lines: matchLines, history }) };
+}
+
+/**
  * Rulează comparația: propune potrivirile (cod), le scrie pe articole (`suggested`) și, dacă există
  * perechi ambigue și utilizatorul a dat consimțământul `external_ai`, pune în coadă pasul opțional
  * cu LLM. Idempotentă: aceeași listă, același bon și aceleași date dau aceeași stare. Respectă
@@ -258,42 +300,10 @@ export async function runComparison(
     if (!list) throw new NotFoundError();
     const receipt = await requireSavedReceipt(tx, m.householdId, input.receiptId);
     const allLines = await selectReceiptLines(tx, m.householdId, receipt.id);
-    const productLines = allLines.filter((l) => l.kind === "product");
     const lineIds = new Set(allLines.map((l) => l.id));
     const items = await selectItems(tx, m.householdId, lid);
 
-    const pool: ItemRow[] = [];
-    const taken = new Set<string>(); // linii deja decise pentru acest bon
-    for (const row of items) {
-      const status = effective(row);
-      const here = row.matchedReceiptLineId !== null && lineIds.has(row.matchedReceiptLineId);
-      if (status === "confirmed") {
-        if (here) taken.add(row.matchedReceiptLineId!);
-        continue; // confirmat (aici sau pe alt bon): nu se mai propune nimic
-      }
-      if (status === "rejected" && here) continue; // respins pentru acest bon: definitiv
-      if (status === "suggested" && row.matchSource === "ai" && here) {
-        // Alegerea pasului cu LLM rămâne până o confirmi, o respingi sau o corectezi: o nouă
-        // rulare a codului nu o suprascrie (și nu plătește un al doilea apel).
-        taken.add(row.matchedReceiptLineId!);
-        continue;
-      }
-      pool.push(row);
-    }
-
-    const matchLines: MatchLine[] = productLines
-      .filter((l) => !taken.has(l.id) && lineNormalized(l) !== "")
-      .map((l) => ({ id: l.id, normalizedName: lineNormalized(l), position: l.position }));
-    const matchItems: MatchItem[] = pool.map((r) => ({
-      id: r.id,
-      normalizedName: r.normalizedName,
-      position: r.position,
-    }));
-    const plan = planMatches({
-      items: matchItems,
-      lines: matchLines,
-      history: await loadHistory(tx, m.householdId),
-    });
+    const { pool, plan } = planComparison(items, allLines, await loadHistory(tx, m.householdId));
     const desired = new Map<string, Desired>(
       plan.pairs.map((p) => [p.itemId, { lineId: p.lineId, score: p.score, source: p.source }]),
     );

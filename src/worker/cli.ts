@@ -58,6 +58,8 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
               ai: aiRuntimeFromConfig(config),
             }
           : undefined,
+      // Comparația listă ↔ bon (Faza 10): pasul opțional cu LLM, oprit implicit (AI_LIST_MATCH=0).
+      listMatch: { enabled: config.ai.listMatch, ai: aiRuntimeFromConfig(config) },
       // Extrasele PDF (Faza 7, F7-B): același storage doar-citire; FĂRĂ AI.
       statements:
         config.storage.driver === "local"
@@ -69,6 +71,7 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
       enabled: config.storage.driver === "local",
       ai: config.ai.baseUrl !== null && config.ai.apiKey !== null,
       statements: config.storage.driver === "local",
+      listMatch: config.ai.listMatch,
     });
     io.onSignal(worker.stop);
     return { code: 0, worker };

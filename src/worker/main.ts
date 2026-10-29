@@ -25,6 +25,13 @@ import {
 } from "./statements/statement-jobs";
 import type { AiRuntime } from "./receipts/receipt-job";
 import {
+  JOB_LIST_MATCH_PROCESS,
+  JOB_LIST_MATCH_SWEEP,
+  LIST_MATCH_SWEEP_CRON,
+  handleListMatchProcess,
+  handleListMatchSweep,
+} from "./shopping/list-match-jobs";
+import {
   JOB_RECEIPT_PROCESS,
   JOB_RECEIPT_SWEEP,
   RECEIPT_SWEEP_CRON,
@@ -50,6 +57,10 @@ import {
  * - extrasele PDF (Faza 7, F7-B; ADR 0018 §11), doar cu `statements` în opțiuni: `statement.sweep`
  *   (cron la fiecare minut, `singleton`) trimite `statement.parse` pe încărcare (`exclusive`,
  *   `singletonKey` = încărcarea, concurență 1: un singur proces copil PDF odată); fără AI;
+ * - comparația listă de cumpărături ↔ bon (Faza 10, F10-A; ADR 0022), doar cu `listMatch` în
+ *   opțiuni: `list-match.sweep` (cron la fiecare minut, `singleton`) trimite `list-match.process`
+ *   pe cerere (`exclusive`, `singletonKey` = cererea, concurență 1); cu `AI_LIST_MATCH=0`
+ *   (implicit) cererile se marchează `skipped`, fără apeluri AI;
  * - oprire grațioasă la SIGTERM/SIGINT: pg-boss termină jobul curent (cel mult 25 s), apoi
  *   semnalul `stopped_at`, apoi închiderea conexiunilor.
  */
@@ -92,6 +103,16 @@ export type ReceiptWorkerOptions = Readonly<{
   ai: AiRuntime | null;
 }>;
 
+/** Opțiunile cozii comparației listă ↔ bon: un apel text scurt, o reîncercare. */
+export const LIST_MATCH_QUEUE_OPTIONS = {
+  retryLimit: 1,
+  retryDelay: 120,
+  retryBackoff: true,
+  expireInSeconds: 600,
+  retentionSeconds: 7 * 24 * 3600,
+  deleteAfterSeconds: 7 * 24 * 3600,
+} as const;
+
 export type WorkerOptions = Readonly<{
   databaseUrl: string;
   databaseCa: string | null;
@@ -100,6 +121,11 @@ export type WorkerOptions = Readonly<{
   log: LogFn;
   /** Procesarea bonurilor (Faza 6); fără ea, workerul face doar recurențele. */
   receipts?: ReceiptWorkerOptions;
+  /**
+   * Pasul opțional cu LLM al comparației listă ↔ bon (Faza 10): `enabled` = `AI_LIST_MATCH=1`,
+   * `ai` = furnizorul (`null` dacă AI-ul nu e configurat; atunci cererile se marchează `skipped`).
+   */
+  listMatch?: Readonly<{ enabled: boolean; ai: AiRuntime | null }>;
   /** Citirea extraselor PDF (Faza 7); storage-ul doar pentru citire. */
   statements?: Readonly<{ storage: DocumentJobDeps["storage"] }>;
 }>;
@@ -250,6 +276,45 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       { localConcurrency: 1 },
       safeHandler(JOB_STATEMENT_PARSE, log, async ([job]: { data?: unknown }[]) => {
         const r = await handleStatementParse(statementDeps, job?.data);
+        if ("rejected" in r) return r;
+        return r.outcome === "failed"
+          ? { outcome: r.outcome, code: r.code }
+          : { outcome: r.outcome };
+      }),
+    );
+  }
+
+  const listMatch = options.listMatch;
+  if (listMatch) {
+    await boss.createQueue(JOB_LIST_MATCH_SWEEP, { policy: "singleton", ...QUEUE_OPTIONS });
+    await boss.createQueue(JOB_LIST_MATCH_PROCESS, {
+      policy: "exclusive",
+      ...LIST_MATCH_QUEUE_OPTIONS,
+    });
+    await boss.schedule(JOB_LIST_MATCH_SWEEP, LIST_MATCH_SWEEP_CRON, null, {
+      tz: GENERATE_TZ,
+      singletonKey: JOB_LIST_MATCH_SWEEP,
+    });
+    const listMatchDeps = { db, log, enabled: listMatch.enabled, ai: listMatch.ai };
+    await boss.work(
+      JOB_LIST_MATCH_SWEEP,
+      { localConcurrency: 1 },
+      safeHandler(JOB_LIST_MATCH_SWEEP, log, async () => {
+        const enqueued = await handleListMatchSweep(listMatchDeps, (requestId, householdId) =>
+          boss.send(
+            JOB_LIST_MATCH_PROCESS,
+            { requestId, householdId },
+            { singletonKey: requestId.toLowerCase() },
+          ),
+        );
+        return { enqueued };
+      }),
+    );
+    await boss.work(
+      JOB_LIST_MATCH_PROCESS,
+      { localConcurrency: 1 },
+      safeHandler(JOB_LIST_MATCH_PROCESS, log, async ([job]: { data?: unknown }[]) => {
+        const r = await handleListMatchProcess(listMatchDeps, job?.data);
         if ("rejected" in r) return r;
         return r.outcome === "failed"
           ? { outcome: r.outcome, code: r.code }
