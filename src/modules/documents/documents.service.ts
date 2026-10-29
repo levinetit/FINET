@@ -1,6 +1,9 @@
 import "server-only";
 
+import { z } from "zod";
+
 import type { Tx } from "@/db";
+import { DOCUMENT_STATUSES } from "@/db/schema";
 import { type Actor, NotFoundError } from "@/lib/authz";
 import { DEFAULT_TIME_ZONE, localDateOf } from "@/lib/calendar";
 import type { Config } from "@/lib/config";
@@ -22,6 +25,7 @@ import {
   queueAwaitingConsentRows,
   selectBySha256,
   selectDocument,
+  selectDocumentsWithReceipt,
   storedBytes,
   usageOfDay,
 } from "./documents.repo";
@@ -62,7 +66,7 @@ export type DocumentsDeps = LedgerDeps &
 
 const MB = 1024 * 1024;
 
-function entitlementsOf(deps: DocumentsDeps): Entitlements {
+export function entitlementsOf(deps: Pick<DocumentsDeps, "entitlements" | "config">): Entitlements {
   return deps.entitlements ?? createEntitlements(deps.config.appMode, deps.config);
 }
 
@@ -323,7 +327,7 @@ export async function dailyUsage(
  * trec în coadă. Fără consimțământ activ nu schimbă nimic.
  */
 export async function queueAwaitingConsent(
-  deps: DocumentsDeps,
+  deps: LedgerDeps,
   actor: Actor,
   householdId: string,
 ): Promise<number> {
@@ -331,4 +335,105 @@ export async function queueAwaitingConsent(
     if (!(await hasActiveConsent(tx, actor.userId, "external_ai"))) return 0;
     return queueAwaitingConsentRows(tx, householdId, actor.userId);
   });
+}
+
+// --- Lista, starea și fișierul (F6-C) -----------------------------------------------------------
+
+export type DocumentListItem = DocumentView & Readonly<{ receiptId: string | null }>;
+
+export const documentListSchema = z.strictObject({
+  status: z.enum(DOCUMENT_STATUSES).optional(),
+  /** Doar documentele încărcate după acest moment (pagina Import: „azi”). */
+  since: z.iso.datetime().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+/** Documentele gospodăriei, cele mai noi întâi, cu bonul extras din ele (dacă există). */
+export async function listDocuments(
+  deps: DocumentsDeps,
+  actor: Actor,
+  householdId: string,
+  rawQuery: unknown,
+): Promise<DocumentListItem[]> {
+  const q = parseInput(documentListSchema, rawQuery);
+  return inHousehold(deps, actor, householdId, async (tx) => {
+    const rows = await selectDocumentsWithReceipt(tx, householdId, {
+      status: q.status,
+      since: q.since === undefined ? undefined : new Date(q.since),
+      limit: q.limit ?? 50,
+    });
+    return rows.map((r) => ({ ...documentView(r.d), receiptId: r.receiptId }));
+  });
+}
+
+export async function getDocumentWithReceipt(
+  deps: DocumentsDeps,
+  actor: Actor,
+  householdId: string,
+  id: string,
+): Promise<DocumentListItem> {
+  if (!isValidId(id)) throw new NotFoundError();
+  return inHousehold(deps, actor, householdId, async (tx) => {
+    const [row] = await selectDocumentsWithReceipt(tx, householdId, { id: id.toLowerCase() });
+    if (!row) throw new NotFoundError();
+    return { ...documentView(row.d), receiptId: row.receiptId };
+  });
+}
+
+export type DocumentFile = Readonly<{
+  id: string;
+  mime: DocumentView["mime"];
+  sizeBytes: number;
+  body: ReadableStream<Uint8Array>;
+}>;
+
+/**
+ * Fișierul original al unui document, ca flux, doar pentru membri (RLS). Citirea e plafonată la
+ * dimensiunea înregistrată: un fișier schimbat pe disc (mai mare) e tăiat și fluxul se oprește cu
+ * eroare. Fișier lipsă sau șters la retenție → 404 uniform.
+ */
+export async function openDocumentFile(
+  deps: DocumentsDeps,
+  actor: Actor,
+  householdId: string,
+  id: string,
+): Promise<DocumentFile> {
+  const row = await inHousehold(deps, actor, householdId, async (tx) =>
+    documentIn(tx, householdId, id),
+  );
+  const key = row.storageKey;
+  if (key === null || !isStorageKey(key)) throw new NotFoundError();
+  let source: AsyncIterable<Uint8Array>;
+  try {
+    source = await deps.storage.openRead(key);
+  } catch {
+    throw new NotFoundError();
+  }
+  const limit = row.sizeBytes;
+  const iterator = source[Symbol.asyncIterator]();
+  let sent = 0;
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await iterator.next();
+        if (done) {
+          controller.close();
+          return;
+        }
+        sent += value.byteLength;
+        if (sent > limit) {
+          await iterator.return?.();
+          controller.error(new Error("documents: fișier mai mare decât cel înregistrat"));
+          return;
+        }
+        controller.enqueue(value);
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
+  return { id: row.id, mime: row.detectedMime, sizeBytes: row.sizeBytes, body };
 }

@@ -1,11 +1,29 @@
 import "server-only";
 
 import { type Storage, getStorage } from "@/lib/storage";
-import type { UploadedDocument } from "@/modules/documents/documents.schema";
-import { uploadDocuments } from "@/modules/documents/documents.service";
+import type { DocumentView, UploadedDocument } from "@/modules/documents/documents.schema";
+import {
+  type DocumentListItem,
+  dailyUsage,
+  deleteDocument,
+  getDocumentWithReceipt,
+  listDocuments,
+  openDocumentFile,
+  uploadDocuments,
+} from "@/modules/documents/documents.service";
 import { UploadError } from "@/modules/documents/multipart";
 
-import { ApiError, type ApiDeps, currentHousehold, enforceRateLimit, handle, json } from "./http";
+import {
+  ApiError,
+  type ApiDeps,
+  currentHousehold,
+  enforceRateLimit,
+  handle,
+  json,
+  readOptionalJsonBody,
+  readQuery,
+  routeId,
+} from "./http";
 
 /**
  * Handlerul încărcării documentelor (F6-A: pregătit și testat; ruta publică
@@ -40,7 +58,7 @@ const UPLOAD_MESSAGES: Readonly<Record<UploadError["reason"], string>> = {
   image_too_large: "Imaginea are prea mulți pixeli.",
 };
 
-function documentJson(d: UploadedDocument) {
+function viewJson(d: DocumentView) {
   return {
     id: d.id,
     kind: d.kind,
@@ -52,10 +70,18 @@ function documentJson(d: UploadedDocument) {
     documentOrder: d.documentOrder,
     possibleDuplicateOfId: d.possibleDuplicateOfId,
     errorCode: d.errorCode,
-    duplicate: d.duplicate,
     createdAt: d.createdAt.toISOString(),
     expiresAt: d.expiresAt?.toISOString() ?? null,
+    fileDeleted: d.fileDeleted,
   };
+}
+
+function documentJson(d: UploadedDocument) {
+  return { ...viewJson(d), duplicate: d.duplicate };
+}
+
+export function documentItemJson(d: DocumentListItem) {
+  return { ...viewJson(d), receiptId: d.receiptId };
 }
 
 export function uploadDocumentsHandler(request: Request, d: DocumentsApiDeps): Promise<Response> {
@@ -66,7 +92,7 @@ export function uploadDocumentsHandler(request: Request, d: DocumentsApiDeps): P
       const result = await uploadDocuments(
         {
           db: d.db,
-          storage: d.storage ?? getStorage(),
+          storage: storageOf(d),
           config: d.config,
           now: () => new Date(ctx.now),
         },
@@ -90,5 +116,107 @@ export function uploadDocumentsHandler(request: Request, d: DocumentsApiDeps): P
       }
       throw error;
     }
+  });
+}
+
+const storageOf = (d: DocumentsApiDeps): Storage => d.storage ?? getStorage();
+
+const docDeps = (d: DocumentsApiDeps, now: number) => ({
+  db: d.db,
+  storage: storageOf(d),
+  config: d.config,
+  now: () => new Date(now),
+});
+
+/** Documentele gospodăriei (cele mai noi întâi), cu starea și bonul extras din ele. */
+export function listDocumentsHandler(request: Request, d: DocumentsApiDeps): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const raw = readQuery(request, { status: "string", since: "string", limit: "int" });
+    const hh = await currentHousehold(ctx);
+    const list = await listDocuments(docDeps(d, ctx.now), ctx.actor, hh, raw);
+    return json({ data: list.map(documentItemJson) });
+  });
+}
+
+export function getDocumentHandler(
+  request: Request,
+  d: DocumentsApiDeps,
+  id: string,
+): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const docId = routeId(id);
+    readQuery(request, {});
+    const hh = await currentHousehold(ctx);
+    const doc = await getDocumentWithReceipt(docDeps(d, ctx.now), ctx.actor, hh, docId);
+    return json({ data: documentItemJson(doc) });
+  });
+}
+
+const EXTENSIONS: Readonly<Record<DocumentView["mime"], string>> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
+};
+
+/**
+ * Fișierul original, în flux, doar pentru membri (404 uniform altfel). Antete fixe: tipul DETECTAT
+ * după conținut (niciodată HTML/SVG), `Content-Disposition: attachment` cu un nume generat de
+ * server (id-ul), `nosniff`, `no-store`, un CSP care nu permite nimic (`sandbox`) și
+ * `Cross-Origin-Resource-Policy: same-origin`. `<img>` îl afișează (ignoră `attachment`).
+ */
+export function documentFileHandler(
+  request: Request,
+  d: DocumentsApiDeps,
+  id: string,
+): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const docId = routeId(id);
+    readQuery(request, {});
+    const hh = await currentHousehold(ctx);
+    const file = await openDocumentFile(docDeps(d, ctx.now), ctx.actor, hh, docId);
+    return new Response(file.body, {
+      status: 200,
+      headers: {
+        "Content-Type": file.mime,
+        "Content-Length": String(file.sizeBytes),
+        "Content-Disposition": `attachment; filename="bon-${file.id}.${EXTENSIONS[file.mime]}"`,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Cross-Origin-Resource-Policy": "same-origin",
+      },
+    });
+  });
+}
+
+/** Șterge documentul și fișierul (5.6); bonul extras dispare în cascadă, tranzacția rămâne. */
+export function deleteDocumentHandler(
+  request: Request,
+  d: DocumentsApiDeps,
+  id: string,
+): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const docId = routeId(id);
+    await readOptionalJsonBody(request);
+    const hh = await currentHousehold(ctx);
+    await deleteDocument(docDeps(d, ctx.now), ctx.actor, hh, docId);
+    return json(null, 204);
+  });
+}
+
+/** Contorul zilei („X din Y documente azi”), fără costuri sau bugete. */
+export function aiUsageHandler(request: Request, d: DocumentsApiDeps): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    readQuery(request, {});
+    const hh = await currentHousehold(ctx);
+    const usage = await dailyUsage(docDeps(d, ctx.now), ctx.actor, hh);
+    return json({
+      data: {
+        used: usage.used,
+        limit: usage.limit,
+        remaining: Math.max(0, usage.limit - usage.used),
+      },
+    });
   });
 }

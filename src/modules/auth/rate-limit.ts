@@ -36,7 +36,9 @@ export type RateLimitKind =
   // Generarea la cerere a scadențelor recurente (F5-B), pe utilizator.
   | "api_recurring_generate"
   // Încărcarea documentelor (F6-A), pe utilizator.
-  | "api_document_upload";
+  | "api_document_upload"
+  // F6-C: reprocesarea unui bon (un nou apel AI plătit).
+  | "api_receipt_reprocess";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

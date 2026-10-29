@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import type { DbOrTx, Tx } from "@/db";
 import { documentUsageDaily, documents, processingBatches } from "@/db/schema";
@@ -186,4 +186,28 @@ export async function selectQueuedDocument(
   return r
     ? { documentId: r.document_id, householdId: r.household_id, actorUserId: r.actor_user_id }
     : null;
+}
+
+/** Documentele cu id-ul bonului extras (din document sau din lotul lui), cele mai noi întâi. */
+export async function selectDocumentsWithReceipt(
+  tx: Tx,
+  householdId: string,
+  filter: Readonly<{ id?: string; status?: DocumentRow["status"]; since?: Date; limit?: number }>,
+): Promise<{ d: DocumentRow; receiptId: string | null }[]> {
+  const conds = [eq(documents.householdId, householdId)];
+  if (filter.id) conds.push(eq(documents.id, filter.id));
+  if (filter.status) conds.push(eq(documents.status, filter.status));
+  if (filter.since) conds.push(gt(documents.createdAt, filter.since));
+  return tx
+    .select({
+      d: documents,
+      receiptId: sql<string | null>`(select r.id::text from finet.receipts r
+         where r.household_id = finet.documents.household_id
+           and (r.document_id = finet.documents.id or r.batch_id = finet.documents.batch_id)
+         limit 1)`,
+    })
+    .from(documents)
+    .where(and(...conds))
+    .orderBy(desc(documents.createdAt), desc(documents.id))
+    .limit(filter.limit ?? 1);
 }

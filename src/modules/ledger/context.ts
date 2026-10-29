@@ -24,6 +24,8 @@ const UNIQUE_REASONS: Readonly<Record<string, string>> = {
   transactions_household_external_ref_key: "external_ref_taken",
   tags_household_name_key: "tag_name_taken",
   budgets_active_key: "budget_exists",
+  // Faza 6: aceeași cheie de bon (CUI + număr + dată + total) există deja în gospodărie.
+  receipts_household_dedup_key: "duplicate_receipt",
 };
 
 export function translateDbError(error: unknown): never {

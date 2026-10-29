@@ -44,6 +44,12 @@ export type AuditAction =
   // Documentele (Faza 6): doar contoare și id-ul documentului, fără nume de fișier sau conținut.
   | "document.uploaded"
   | "document.deleted"
+  // Bonurile (F6-C): doar contoare și id-uri, fără sume, nume de produse sau comercianți.
+  | "receipt.corrected"
+  | "receipt.confirmed"
+  | "receipt.reprocessed"
+  | "receipt.deleted"
+  | "documents.expired"
   | "consent.granted"
   | "consent.revoked";
 
@@ -62,7 +68,8 @@ export type AuditEvent = Readonly<{
     | "budget"
     | "goal"
     | "recurring_rule"
-    | "document";
+    | "document"
+    | "receipt";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;

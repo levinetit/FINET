@@ -184,6 +184,7 @@ describe("serializarea JSON (6.4)", () => {
     transferGroupId: null,
     transferDirection: null,
     recurringRuleId: null,
+    documentId: null,
     createdByUserId: null,
     createdAt: new Date(0),
     updatedAt: new Date(0),

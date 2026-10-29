@@ -24,6 +24,7 @@ import {
   isRequestAllowed,
   type AccessPolicy,
 } from "@/lib/access";
+import { guardAccess } from "@/lib/access-guard";
 import { resetConfigForTests } from "@/lib/config";
 import { config as proxyConfig, proxy } from "@/proxy";
 
@@ -372,6 +373,43 @@ describe("FAIL-CLOSED", () => {
       }
     });
 
+    it("ruta exclusă din matcher (/api/v1/documents): aceeași verificare Access, înainte de handler", async () => {
+      prodEnv();
+      const run = vi.fn(async () => Response.json({ ok: true }));
+      for (const method of ["GET", "POST", "PUT", "DELETE"]) {
+        const res = await guardAccess(
+          new Request("https://finet.exemplu.invalid/api/v1/documents", {
+            method,
+            headers: { "content-type": "multipart/form-data; boundary=x" },
+          }),
+          run,
+        );
+        await expectForbidden(res);
+        expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+        expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      }
+      const withJwt = await guardAccess(
+        new Request("https://finet.exemplu.invalid/api/v1/documents", {
+          method: "POST",
+          headers: { [ACCESS_JWT_HEADER]: await token({ iss: "https://echipa.invalid" }) },
+        }),
+        run,
+      );
+      await expectForbidden(withJwt);
+      // HEALTH_TOKEN nu deschide ruta de încărcare.
+      prodEnv({ HEALTH_TOKEN });
+      await expectForbidden(
+        await guardAccess(
+          new Request("https://finet.exemplu.invalid/api/v1/documents", {
+            method: "POST",
+            headers: { [HEALTH_TOKEN_HEADER]: HEALTH_TOKEN },
+          }),
+          run,
+        ),
+      );
+      expect(run).not.toHaveBeenCalled();
+    });
+
     describe("antetele de securitate (6.3)", () => {
       const nonceOf = (csp: string | null) => /'nonce-([A-Za-z0-9+/=]+)'/.exec(csp ?? "")?.[1];
 
@@ -577,8 +615,24 @@ describe("matcher-ul din src/proxy.ts", () => {
       "/favicon.ico.bak",
       "/_next/staticx",
       "/robots.txt",
+      // Faza 6: doar `/api/v1/documents` exact e exclus; tot restul trece prin proxy.
+      "/api/v1/documents/",
+      "/api/v1/documents/7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f",
+      "/api/v1/documents/7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f/file",
+      "/api/v1/documentsX",
+      "/api/v1/documents.json",
+      "/api/v1/documents%2Fx",
+      "/api/v1/Documents",
+      "/api/v1/receipts",
+      "/import",
+      "/receipts",
     ]) {
       expect(matches(path), path).toBe(true);
     }
+  });
+
+  it("exclude exact /api/v1/documents (încărcarea în flux; verificarea Access e în rută)", () => {
+    expect(matches("/api/v1/documents")).toBe(false);
+    expect(matches("/api/v1/documents?cursor=abc")).toBe(false);
   });
 });
