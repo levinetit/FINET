@@ -69,6 +69,10 @@ export type ApiLimits = Readonly<{
    * furată nu se poate distribui pe mai multe IP-uri.
    */
   accountDelete: RateLimitRule;
+  /** Rularea comparației listă ↔ bon (F10-A), pe utilizator (în plus față de `mutations`). */
+  shoppingCompare: RateLimitRule;
+  /** Sugestiile de produse frecvente (F10-A), pe utilizator: agregare pe liniile bonurilor. */
+  shoppingSuggest: RateLimitRule;
 }>;
 
 /** Limitele implicite (decizia mea): generoase pentru un client real, mici pentru un abuz. */
@@ -92,6 +96,10 @@ export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
   gdprExport: Object.freeze({ max: 3, windowSeconds: 3600 }),
   // Revizuirea F9: 5 încercări de ștergere a contului pe oră per utilizator.
   accountDelete: Object.freeze({ max: 5, windowSeconds: 3600 }),
+  // F10-A (decizia mea): 20 de comparații la 10 minute per utilizator (fiecare citește un bon
+  // întreg și poate pune în coadă un apel AI plătit); 60 de cereri de sugestii pe minut.
+  shoppingCompare: Object.freeze({ max: 20, windowSeconds: 600 }),
+  shoppingSuggest: Object.freeze({ max: 60, windowSeconds: 60 }),
 });
 
 export type ApiDeps = Readonly<{
@@ -365,7 +373,9 @@ export async function enforceRateLimit(
     | "api_document_upload"
     | "api_receipt_reprocess"
     | "api_statement_upload"
-    | "gdpr_export",
+    | "gdpr_export"
+    | "api_shopping_compare"
+    | "api_shopping_suggest",
   rule: RateLimitRule,
 ): Promise<void> {
   const result = await hitRateLimit(

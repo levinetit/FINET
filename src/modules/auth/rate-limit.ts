@@ -46,7 +46,10 @@ export type RateLimitKind =
   | "account_delete"
   // Revizuirea F9: și o limită DOAR pe utilizator (independentă de IP), la ștergerea contului.
   | "account_delete_user"
-  | "gdpr_export";
+  | "gdpr_export"
+  // F10-A: rularea comparației listă ↔ bon și sugestiile de produse, pe utilizator.
+  | "api_shopping_compare"
+  | "api_shopping_suggest";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

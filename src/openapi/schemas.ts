@@ -19,6 +19,10 @@ import {
   RECURRING_FREQUENCIES,
   RECURRING_STATUSES,
   RECURRING_TYPES,
+  SHOPPING_AI_REQUEST_STATUSES,
+  SHOPPING_LIST_STATUSES,
+  SHOPPING_MATCH_SOURCES,
+  SHOPPING_MATCH_STATUSES,
   STATEMENT_BALANCE_STATUSES,
   STATEMENT_BANKS,
   STATEMENT_DIRECTIONS,
@@ -882,3 +886,121 @@ export const recurringSuggestionSchema = z
     nextOn: date,
   })
   .meta({ title: "RecurringSuggestion" });
+
+// --- Listele de cumpărături (Faza 10, F10-A; ADR 0022) ------------------------------------------
+
+export const shoppingMatchSchema = z
+  .strictObject({
+    status: z.enum(SHOPPING_MATCH_STATUSES),
+    score: int.min(0).max(100).nullable().meta({ description: "Scorul codului (0–100)." }),
+    source: z.enum(SHOPPING_MATCH_SOURCES).nullable(),
+    receiptLineId: uuid.nullable(),
+  })
+  .meta({ title: "ShoppingMatch" });
+
+export const shoppingItemSchema = z
+  .strictObject({
+    id: uuid,
+    listId: uuid,
+    name: z.string(),
+    quantity: z
+      .string()
+      .regex(/^\d{1,6}(\.\d{1,3})?$/)
+      .meta({ description: "Cantitate zecimală ca TEXT (fără float), de exemplu `2` sau `0.5`." }),
+    unit: z.string().nullable(),
+    note: z.string().nullable(),
+    checked: z.boolean(),
+    checkedAt: instant.nullable(),
+    checkedByMe: z
+      .boolean()
+      .nullable()
+      .meta({ description: "`true`: bifat de tine; `false`: de alt membru; `null`: nebifat." }),
+    position: int,
+    match: shoppingMatchSchema,
+  })
+  .meta({ title: "ShoppingItem" });
+
+export const shoppingListSchema = z
+  .strictObject({
+    id: uuid,
+    name: z.string(),
+    shared: z
+      .boolean()
+      .meta({ description: "`true`: listă comună (toți membrii); `false`: personală (doar tu)." }),
+    status: z.enum(SHOPPING_LIST_STATUSES),
+    itemCount: int,
+    checkedCount: int,
+    createdAt: instant,
+    updatedAt: instant,
+  })
+  .meta({ title: "ShoppingList" });
+
+export const shoppingListDetailSchema = z
+  .strictObject({ list: shoppingListSchema, items: z.array(shoppingItemSchema) })
+  .meta({ title: "ShoppingListDetail" });
+
+export const shoppingSuggestionSchema = z
+  .strictObject({
+    name: z.string().meta({ description: "Nume normalizat al unui produs cumpărat des." }),
+    count: int,
+  })
+  .meta({ title: "ShoppingSuggestion" });
+
+export const shoppingReceiptChoiceSchema = z
+  .strictObject({
+    id: uuid,
+    merchantName: z.string().nullable(),
+    occurredOn: date.nullable(),
+    status: z.enum(RECEIPT_STATUSES),
+  })
+  .meta({ title: "ShoppingReceiptChoice" });
+
+const comparisonLineSchema = z.strictObject({
+  id: uuid,
+  name: z.string(),
+  quantity: z.string().nullable(),
+});
+
+export const shoppingComparisonSchema = z
+  .strictObject({
+    receipt: z.strictObject({
+      id: uuid,
+      merchantName: z.string().nullable(),
+      occurredOn: date.nullable(),
+    }),
+    list: z.strictObject({ id: uuid, name: z.string(), shared: z.boolean() }),
+    matched: z.array(
+      z.strictObject({
+        item: shoppingItemSchema,
+        line: comparisonLineSchema,
+        score: int.min(0).max(100).nullable(),
+        status: z.enum(["suggested", "confirmed"]),
+        source: z.enum(SHOPPING_MATCH_SOURCES),
+        uncertain: z
+          .boolean()
+          .meta({ description: "Propunere sub pragul „sigur” care nu a fost confirmată." }),
+      }),
+    ),
+    unplanned: z
+      .array(comparisonLineSchema)
+      .meta({ description: "Linii `product` ale bonului pe care nu le revendică niciun articol." }),
+    forgotten: z
+      .array(shoppingItemSchema)
+      .meta({ description: "Articole NEbifate fără linie pe acest bon." }),
+    checkedMissing: z
+      .array(shoppingItemSchema)
+      .meta({ description: "Articole bifate, dar fără linie pe acest bon." }),
+    boughtElsewhere: z
+      .array(shoppingItemSchema)
+      .meta({ description: "Articole confirmate deja pe alt bon." }),
+    ai: z.strictObject({
+      status: z.enum(["none", ...SHOPPING_AI_REQUEST_STATUSES]).meta({
+        description:
+          "Pasul opțional cu LLM pentru perechile ambigue: `none` (nu s-a cerut), `queued`/`processing` (în lucru), `done`, `failed`, `skipped` (dezactivat).",
+      }),
+    }),
+    lines: z.array(comparisonLineSchema).meta({
+      description: "Toate liniile `product` ale bonului (pentru corecția manuală).",
+    }),
+  })
+  .meta({ title: "ShoppingComparison" });

@@ -13,6 +13,7 @@ import * as RC from "./receipts-handlers";
 import * as R from "./recurring-handlers";
 import * as S from "./statements-handlers";
 import * as MT from "./matching-handlers";
+import * as SH from "./shopping-handlers";
 
 /**
  * Doar pentru testele de integrare ale API-ului `/api/v1`: construirea cererilor și sesiunile de
@@ -193,6 +194,21 @@ const OPERATION_OF = new Map<unknown, string>([
   [G.deletionPreviewHandler, "getDeletionPreview"],
   [G.deleteAccountHandler, "deleteMyAccount"],
   [G.usageStatsHandler, "getUsageStats"],
+  [SH.listShoppingListsHandler, "listShoppingLists"],
+  [SH.createShoppingListHandler, "createShoppingList"],
+  [SH.shoppingSuggestionsHandler, "getShoppingSuggestions"],
+  [SH.shoppingReceiptsHandler, "listShoppingReceipts"],
+  [SH.getShoppingListHandler, "getShoppingList"],
+  [SH.patchShoppingListHandler, "patchShoppingList"],
+  [SH.deleteShoppingListHandler, "deleteShoppingList"],
+  [SH.copyShoppingListHandler, "copyShoppingList"],
+  [SH.reorderShoppingItemsHandler, "reorderShoppingItems"],
+  [SH.addShoppingItemHandler, "addShoppingItem"],
+  [SH.patchShoppingItemHandler, "patchShoppingItem"],
+  [SH.deleteShoppingItemHandler, "deleteShoppingItem"],
+  [SH.matchShoppingItemHandler, "matchShoppingItem"],
+  [SH.runShoppingComparisonHandler, "runShoppingComparison"],
+  [SH.getShoppingComparisonHandler, "getShoppingComparison"],
 ]);
 
 /** Antetele obligatorii ale unui export CSV (F3-B). */

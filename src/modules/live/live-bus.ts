@@ -23,6 +23,9 @@ export const LIVE_EVENT_TYPES = [
   "split",
   "settlement",
   "member",
+  // Faza 10 (ADR 0022): o listă de cumpărături sau un articol s-a schimbat (id = lista). O listă
+  // personală ajunge doar la proprietar.
+  "shopping_list",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 
