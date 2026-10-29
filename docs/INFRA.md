@@ -463,15 +463,23 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 
 **Rollback:** imaginea anterioară a `finet-web` (paginile și rutele familiei dispar; datele rămân). Migrația `0012`: comenzile din antet, doar cu backup și decizia operatorului (atenție: rollback-ul ei face din nou conturile personale vizibile tuturor).
 
-## 4l. Faza 7 (F7-A) pe producție (operatorul, după revizuiri și după F7-B)
+## 4l. Faza 7 pe producție (ordinea completă, după revizuiri; F7-A + F7-B)
 
-Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0018.
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0018 (inclusiv §11, calea PDF) și ADR 0019.
 
 1. **Ordinea:** după ce `0012_family` e aplicată (4k). Imaginile `finet` și `finet:tools` pentru commit-ul aprobat.
-2. **Backup** al schemei `finet`, apoi **migrația `0013_statements`** (rolul `migrate`; prima rulare „aplicate acum 1”, a doua „aplicate acum 0”). Nu modifică tabelele existente și nu rescrie date. Rollback: antetul fișierului, doar cu backup.
-3. **Nicio variabilă și niciun secret nou.** Workerul (imaginea `tools`) conține acum și `dist/tools/pdf-items-child.mjs` (extracția extraselor PDF; folosește `prlimit`, deja prezent în imagine). Limita de memorie a workerului (≤ 384 MB, Faza 6) rămâne suficientă: procesul copil are propriul plafon de adrese.
-4. **Redeploy** `finet-web` și `finet-worker` odată cu F7-B (rutele și interfața extraselor); F7-A singur nu expune nimic nou.
-5. **Verificare după deploy (cu F7-B):** un extras CSV mic importat pe un cont de test → previzualizare, confirmare, reimport (0 tranzacții noi), anulare; jurnalele nu conțin conținut din extrase.
+2. **Verificarea dinaintea lui `0014`** (indexul unic „un bon per tranzacție” pe `receipts`): pe Supabase, ca `postgres`, cu psql (ca la `roles.sql`):
+   ```bash
+   psql "<url-postgres>?sslmode=verify-full&sslrootcert=<ca.crt>" -X -At -c \
+     "select transaction_id, count(*) from finet.receipts where transaction_id is not null group by 1 having count(*) > 1;"
+   ```
+   Rezultatul trebuie să fie GOL. Dacă apar rânduri (două bonuri legate de aceeași tranzacție), migrația ar eșua la crearea indexului (fără efecte: totul într-o tranzacție): se dezleagă manual bonul în plus (`update finet.receipts set transaction_id = null, status = 'needs_review' where id = '<id>'`), apoi se reia verificarea.
+3. **Backup** al schemei `finet`, apoi **migrațiile `0013_statements` și `0014_statement_uploads`** (rolul `migrate`; prima rulare „aplicate acum 2”, a doua „aplicate acum 0”). `0013` nu modifică tabelele existente. `0014` adaugă trei tabele noi, pe `receipts` indexul unic parțial `receipts_transaction_key` și triggerul `receipts_check_transaction`, pe `statement_usage_daily` triggerul care refuză scăderea contorului, plus 5 funcții SECURITY DEFINER (doar identificatori). Rollback: antetele fișierelor, doar cu backup.
+4. **Nicio variabilă și niciun secret nou.** PDF-urile de extras se scriu de `finet-web` în același `STORAGE_DIR` (sub `households/<id>/documents/`), le citește `finet-worker` (montajul doar-citire existent) și le șterge web-ul la confirmare/renunțare sau `finet-cleanup` la expirare (24 h). Workerul (imaginea `tools`) conține `dist/tools/pdf-items-child.mjs` (folosește `prlimit`, deja în imagine); limita de memorie (≤ 384 MB) rămâne: procesul copil are plafonul lui, iar extrasele se citesc unul câte unul (concurență 1).
+5. **Curățarea:** serviciul existent `finet-cleanup` (4i, `cleanup-documents`) șterge acum și PDF-urile de extras expirate sau eșuate și previzualizările neconfirmate mai vechi de 7 zile; ieșirea are în plus `statements=<n> statements_failed=<n> previews=<n>` (doar contoare). Fără cron nou dacă 4i e programat; altfel programarea din 4i e acum obligatorie (fără ea, PDF-urile neconfirmate rămân pe disc).
+6. **Proxy:** ruta exactă `/api/v1/statements/uploads` e exclusă din proxy-ul Next (extrase până la 20 MB, ca `/api/v1/documents`); ruta refăce verificarea Cloudflare Access. Dacă există un plafon al corpului în Traefik/tunel, trebuie să permită ≥ 21 MB pe această cale.
+7. **Redeploy** `finet-web` și `finet-worker`. Jurnalul workerului la pornire: `{"event":"receipts",…,"statements":true}`.
+8. **Verificare după deploy:** pe un cont de test, un CSV mic → alegerea coloanelor → previzualizare → confirmare → reîncărcare („deja importat”, 0 tranzacții noi) → anulare; un PDF de extras propriu → „în coadă” → previzualizare în ≤ 2 minute; `select count(*) from finet.statement_uploads where storage_key is not null` revine la 0 după confirmare/renunțare; jurnalele (`docker logs finet-worker`) conțin doar coduri și contoare.
 
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |

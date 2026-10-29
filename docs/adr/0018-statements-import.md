@@ -1,6 +1,6 @@
 # ADR 0018 — Importul extraselor bancare: parsere pe elemente poziționale, extracție în proces copil, deduplicare, schimb valutar, anulare
 
-- **Stare:** propus (F7-A, branch `phase/07-statements`). Migrația `0013_statements` și redeploy-ul: operatorul, după revizuiri (`docs/INFRA.md`, „4l”). API-ul `/api/v1`, interfața, potrivirea bon ↔ tranzacție, detectarea plăților recurente și E2E: F7-B (ADR 0019).
+- **Stare:** propus (F7-A + F7-B, branch `phase/07-statements`). Migrațiile `0013_statements` și `0014_statement_uploads` și redeploy-ul: operatorul, după revizuiri (`docs/INFRA.md`, „4l”). Potrivirea bon ↔ tranzacție și plățile recurente: ADR 0019.
 - **Legături:** master prompt Faza 7 (7), 3.6 (AI hibrid; `external_ai_statements`), 5.1 (bani), 5.2 (date), 5.6 (ștergere), 6.1 (`statements`, `statement_lines`), 6.2, 6.3; ADR 0004 (registrul, transferurile), 0013 (încărcări, proces copil pentru PDF), 0016 (conturi personale).
 
 ## Context
@@ -67,8 +67,20 @@ Doar pentru `imported`: rândurile trec în `cancelled`, se șterg DOAR tranzac�
 
 Fără AI pentru extrase în F7-A. Un PDF de la o bancă fără parser e refuzat (`unknown_bank`) cu recomandarea exportului CSV + maparea manuală. Calea `finet-text-local` (și extern doar cu `external_ai_statements`) rămâne amânată (ROADMAP).
 
+### 11. Calea PDF-urilor spre worker (F7-B; migrația 0014)
+
+Extracția PDF rulează DOAR în worker (procesul copil limitat). Calea:
+
+1. **Încărcarea** (`POST /api/v1/statements/uploads`, exclusă din proxy-ul Next ca `/api/v1/documents`, cu aceeași verificare Cloudflare Access pe calea fixă a rutei): contul trebuie să fie vizibil și deschis ÎNAINTE de orice citire; cota zilnică se consumă ÎNAINTE de parsare, într-o tranzacție proprie (un fișier necitibil consumă și el; un ZIP cu N fișiere = N); tipul după conținut. CSV/XLSX se citesc în web (JavaScript pur) cu maparea trimisă de utilizator (fără ea: sugestie + 15 rânduri de probă, nimic păstrat — cererea se retrimite cu maparea). PDF-ul se scrie în storage (`households/<gospodărie>/documents/<uuid>`) și se înregistrează în **`statement_uploads`** (cel mult 24 h).
+2. **Tabel separat, nu `documents` (decizia mea):** documentele sunt vizibile întregii gospodării (un extras pe un cont PERSONAL nu are voie), intră în coada AI a bonurilor (`queued_documents` nu filtrează pe `kind`) și au retenția bonurilor. `statement_uploads` are RLS ENABLE+FORCE cu vizibilitatea contului (ca `statement_imports`), stări `queued → processing → parsed | failed` impuse de trigger, încercări care nu scad (plafon 3), cheia de storage doar golită, legătura spre previzualizare o singură dată (cheie compusă pe același cont și monedă, `ON DELETE SET NULL (import_id)`).
+3. **Workerul:** `statement.sweep` (cron la minut, `singleton`) → `statement.parse` (coadă `exclusive`, `singletonKey` = încărcarea, **concurență 1: un singur proces copil PDF odată**, și pentru un ZIP cu 20 de PDF-uri). Funcțiile SECURITY DEFINER `queued_statement_uploads` / `queued_statement_upload` întorc doar identificatori; actorul = autorul încărcării, dacă e încă utilizator activ și membru (pentru un cont personal e chiar proprietarul). Revendicarea numără încercarea înainte de lucru; fișierul se citește plafonat la mărimea înregistrată; parserul băncii produce previzualizarea ca acel membru. În `pgboss.job` stau doar id-uri; erorile sunt coduri fixe. Fără AI.
+4. **Ștergerea fișierului:** imediat după confirmare sau renunțare (serverul web, cu storage-ul în scriere); restul (expirate la 24 h, eșuate, autori plecați) prin `finet-admin cleanup-documents` (`cleanable_statement_uploads` + `forget_statement_upload_file`, SECURITY DEFINER, doar pe rândurile de curățat: întâi fișierul, apoi cheia). Același job șterge previzualizările neconfirmate mai vechi de 7 zile (`purge_stale_statement_previews`; cota nu se eliberează).
+5. **Revolut cu mai multe monede într-un PDF:** refuzat cu `multi_currency_statement` (fiecare monedă e un cont separat; utilizatorul exportă câte un extras pe monedă).
+
+Revizuirea F7-A, aplicată tot în F7-B: cheia `fx` doar printre schimburi; marcajele de secțiune ignorate pe rândurile de continuare (controlate de plătitor); perioada citită o singură dată; cheile duplicate din același fișier marcate la previzualizare; anularea verifică tot grupul unui transfer și refuză explicit (`statement_import_counterpart_hidden`) când piciorul e într-un cont personal invizibil; contorul zilnic nu scade (trigger); IBAN-urile tăiate pe mai multe rânduri eliminate din descrieri.
+
 ## Consecințe
 
 - Migrație nouă fără efect pe datele existente; fără variabile de mediu sau secrete noi.
 - Parserele depind de structura actuală a extraselor: o schimbare de format a unei bănci dă refuz sau `mismatch`, nu date greșite tăcute.
-- F7-B: rutele (PDF prin worker), UI-ul, potrivirea, recurențele.
+- F7-B: rutele (PDF prin worker, §11), interfața, potrivirea și recurențele (ADR 0019).

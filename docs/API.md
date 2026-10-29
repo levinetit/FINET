@@ -163,6 +163,22 @@ curl -s -X POST https://finet.example/api/v1/documents \
   -H 'authorization: Bearer tokenFictiv.semnatura' -F kind=receipt -F files=@bon.jpg
 ```
 
+## Extrase bancare, potrivire, propuneri (F7-B, ADR 0018, 0019)
+Sumele întregi `…Minor`. Tot ce ține de un cont PERSONAL al altui membru e invizibil (404 uniform).
+- `POST /statements/uploads` (`multipart/form-data`: `accountId`, opțional `mapping` = JSON `ColumnMapping` ≤ 4 KB, apoi UN fișier `file` ≤ 20 MB; câmpul text înaintea fișierului). Tipul după conținut: PDF, CSV, XLSX, ZIP. Cota zilnică (50 de fișiere/gospodărie, `409 statement_daily_limit`) se consumă ÎNAINTE de citire, câte una pe fișier. Răspuns `{ data: { parts: [...] } }`, câte un rezultat pe fișier: `queued` (PDF în coada workerului, `upload` cu stare), `preview` (`import` + `alreadyImported`), `mapping_required` (CSV/XLSX fără `mapping`: `suggestion` + cel mult 15 rânduri `sample`; nimic păstrat — retrimite fișierul cu `mapping`), `rejected` (fișier necitibil dintr-un ZIP, `code`). `201` dacă s-a creat ceva, altfel `200`. Erori: `422` cu codul fix (`unknown_bank`, `multi_currency_statement`, `csv_invalid`, `xlsx_unsafe`, `zip_unsafe`, …), `413`, `415`, `400 invalid_field`, `404` (cont invizibil), `429` (20 / 10 min). Calea exactă e exclusă din proxy-ul Next, cu aceeași verificare Cloudflare Access în rută.
+- `GET /statements/uploads` · `GET /statements/uploads/{id}` → `StatementUpload` (`queued` → `processing` → `parsed` cu `importId` | `failed` cu `errorCode`); interfața interoghează la 3 s. `DELETE /statements/uploads/{id}` → fișierul se șterge imediat (`409 statement_upload_processing` dacă e citit chiar acum).
+- `GET /statements/imports?accountId=&limit=` · `GET /statements/imports/{id}` (cu `lines`: `state` `new|duplicate|imported|skipped|cancelled`, `kind` `movement|fx`) · `DELETE /statements/imports/{id}` (renunță la o previzualizare, cu fișierul sursă) → 204.
+- `POST /statements/imports/{id}/confirm` (`Idempotency-Key` recomandat) `{ acknowledgeBalanceMismatch?, skipRows?, fx?: [{ rowNo, mode: "transfer"|"plain"|"skip", counterpartAccountId?, counterAmountMinor? }] }` → `200 { data: StatementImport }`. Idempotentă. `409`: `statement_balance_mismatch`, `statement_import_not_previewed`, `statement_fx_counterpart_exists`, `account_archived`.
+- `POST /statements/imports/{id}/cancel` `{ editedPolicy?: "keep"|"delete" }` → `200` cu `keptEdited`; `409 statement_import_has_edited` (fără decizie), `statement_import_counterpart_hidden`, `statement_import_not_imported`.
+- `GET /statements/coverage?from=AAAA-LL&to=AAAA-LL` → conturile vizibile × luni (`complete` / `partial` cu `coveredUntil` / `missing`) și `missingMonths`.
+- `GET /receipts/{id}/matches` → `ReceiptMatches | null` (candidați cu `score`, `probable`, `reasons`, plus `ambiguous`); `POST /receipts/{id}/matches` `{ transactionId, decision: "confirm"|"reject" }` → `200 { data: { decision, removedTransactionId } }` (confirmarea leagă bonul FĂRĂ tranzacție nouă; un bon deja salvat își pierde tranzacția-duplicat; `409 receipt_transaction_edited`). `GET /matches?limit=` → coada.
+- `GET /recurring/suggestions` → `RecurringSuggestion[]` (`signature`, `frequency` `weekly|monthly|yearly`, `amountMinor`, `occurrences`, `nextOn`); `POST /recurring/suggestions/{signature}/accept` (`Idempotency-Key` opțional, `{ startOn? }`) → `201` regula; `POST /recurring/suggestions/{signature}/dismiss` → 204 (idempotent).
+
+```bash
+curl -s -X POST https://finet.example/api/v1/statements/uploads \
+  -H 'authorization: Bearer tokenFictiv.semnatura' -F accountId=<uuid> -F file=@extras.pdf
+```
+
 ## Familia (F8-B, ADR 0016, 0017)
 Gospodăria e cea **curentă** (activă, dacă apartenența există încă; altfel cea mai veche). Sumele întregi `…Minor`.
 - `PUT /households/active` `{ householdId }` → `200 { data: HouseholdSummary }` (`current: true`); o gospodărie străină → 404.
