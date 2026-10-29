@@ -518,7 +518,12 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 5. **Verificări prin Access (browser):**
    - ca administrator: `Setări → Statistici` arată tabelele (utilizatori activi, instalări, login-uri), fără sume sau descrieri; ca alt membru: 404;
    - `Setări → Datele mele → Descarcă arhiva` → `finet-export.zip` se deschide (README, `profil.json`, `gospodarii/<n>/…`);
-   - ștergerea: doar pe un cont de test creat pentru asta (`finet-admin create-user`), niciodată pe un cont real; după ștergere, login-ul eșuează. Logul `finet-web` are o linie `[gdpr] cont șters; … fișiere=N eșuate=M`. Dacă `eșuate` > 0: fișierele rămase sunt în `households/<id>/` pentru gospodării care nu mai există; se găsesc cu `select id from finet.households` (lista existentă) comparată cu directoarele din volumul de storage, și se șterg manual (risc acceptat, ADR 0021 §1).
+   - ștergerea: doar pe un cont de test creat pentru asta (`finet-admin create-user`), niciodată pe un cont real; după ștergere, login-ul eșuează. Logul `finet-web` are o linie `[gdpr] cont șters; … fișiere=N eșuate=M`. Dacă `eșuate` > 0 (sau periodic): fișierele orfane se găsesc și se șterg cu comanda dedicată, întâi în dry-run (doar contoare):
+     ```bash
+     sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile cleanup run --rm -T finet-cleanup cleanup-orphan-storage          # scanned=… orphans=… deleted=0 dry_run=1
+     sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile cleanup run --rm -T finet-cleanup cleanup-orphan-storage --yes    # șterge cel mult 100
+     ```
+     Rulează în serviciul `finet-cleanup` (singurul cu storage-ul montat în SCRIERE), cu aceeași regulă de siguranță ca `cleanup-documents`: fără `STORAGE_DIR` montat nu atinge nimic; refuză dacă niciun director nu are gospodărie în bază. Opțional, săptămânal (`sudo crontab -e`), DOAR în dry-run, ca semnal în log: `45 4 * * 1  cd /srv/finet/src && docker compose … --profile cleanup run --rm -T finet-cleanup cleanup-orphan-storage >> /var/log/finet-cleanup.log 2>&1`; ștergerea (`--yes`) rămâne manuală, după citirea raportului (ADR 0021 §1).
 6. **HSTS `preload`:** rămâne oprit. Consecințele sunt în `docs/SECURITY_CHECKLIST.md`, secțiunea 22.
 
 **Rollback:** imaginile anterioare ale `finet-web` și `tools`; migrația se poate lăsa aplicată (nimic din aplicația veche nu o folosește). Rollback-ul complet al 0016 e în antetul fișierului și pierde agregatele zilnice.

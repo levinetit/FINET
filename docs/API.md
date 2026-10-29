@@ -188,9 +188,9 @@ Reîncercarea EXACTĂ a unui bon lung deja încărcat (aceleași poze, aceeași 
 
 ## GDPR și statistici (F9-B, ADR 0021)
 
-- `GET /api/v1/me/export` → `200 application/zip` (`finet-export.zip`, în flux): profil, gospodării, tranzacții (JSON și CSV), bonurile utilizatorului cu fișierele, împărțirile și decontările în care e parte. Doar ce vede utilizatorul (RLS). Cu cookie: doar `Sec-Fetch-Site: same-origin|none` (altfel 403); 3 pe oră (429).
+- `GET /api/v1/me/export` → `200 application/zip` (`finet-export.zip`, în flux): profil, gospodării, tranzacții (JSON și CSV), bonurile utilizatorului cu fișierele, împărțirile și decontările în care e parte. Doar ce vede utilizatorul (RLS). Cu cookie: doar `Sec-Fetch-Site: same-origin|none` (altfel 403); 3 pe oră (429). Peste limitele ZIP (estimare de 4 GiB sau 65 535 de intrări) → `413 export_too_large`, înainte de flux.
 - `GET /api/v1/me/deletion` → `{ data: { hasPassword, platformAdmin, deletedHouseholds, leftHouseholds, blockedHouseholds } }` (fără sume).
-- `POST /api/v1/me/delete` cu `{ "password": "…", "confirm": "ȘTERGE" }` (fără `password` pentru conturile doar cu magic link, cu o sesiune de cel mult 15 minute) → `200 { data: { outcome: "deleted"|"anonymized", deletedHouseholds, leftHouseholds } }`. Erori: `400 invalid_password`, `400 invalid_request` (confirmare greșită, câmpuri în plus), `403 reauth_required`, `409 last_owner`, `409 platform_admin`, `429`.
+- `POST /api/v1/me/delete` cu `{ "password": "…", "confirm": "ȘTERGE" }` (fără `password` pentru conturile doar cu magic link, cu o sesiune de cel mult 15 minute) → `200 { data: { outcome: "deleted"|"anonymized", deletedHouseholds, leftHouseholds } }`. Erori: `400 invalid_password`, `400 invalid_request` (confirmare greșită, câmpuri în plus), `403 reauth_required`, `409 last_owner`, `409 platform_admin`, `429` (pe IP + utilizator și, separat, 5 încercări pe oră doar pe utilizator).
 - `GET /api/v1/admin/stats` → statisticile (6.5), doar pentru administratorul platformei (altfel 403): `activeUsers`, `sessionUsers`, `installations`, `downloads`, `logins`, `features`, `screens`, `errors`, `ai`, `aiCost` (`costMinor`: costul de operare), `archivedEvents`, `latestAndroid`, `members` (doar în `personal`, altfel `null`).
 
 ```bash

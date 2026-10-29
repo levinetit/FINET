@@ -225,7 +225,6 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 
 **Amânate din F9-B (motiv):**
 - fereastră de grație la ștergerea contului (decizia mea: ștergere imediată, ADR 0021);
-- reconcilierea storage ↔ bază pentru fișierele orfane după o ștergere eșuată (risc acceptat, procedură manuală în INFRA 4m);
 - eșecurile de autentificare agregate în „Statistici” (nu se înregistrează încă) și descărcările de pe GitHub (fără acces la API-ul GitHub);
 - detaliile pe utilizator în `saas` doar cu motiv în audit (Faza 11);
 - jobul care anunță versiunea majoră nouă oferită de Supabase (`ops/postgres/version-check.md`, cere tokenul Management API);
