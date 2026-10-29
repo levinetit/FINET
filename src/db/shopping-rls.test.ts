@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { type FamilyFixture, createFamilyFixture } from "@/modules/family/testing";
 import { sqlState } from "@/modules/ledger/testing";
+import { upsertAiRequest } from "@/modules/shopping/shopping.repo";
 import { grantExternalAi, seedReceipt } from "@/modules/shopping/testing";
 
 import { withRlsOn } from "./index";
@@ -448,6 +449,54 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
       [],
     );
     await f.admin`insert into finet.household_members (household_id, user_id, role) values (${f.HA}, ${f.C.userId}, 'member')`;
+  });
+
+  it("coada AI: al doilea membru care reîncearcă nu primește eroare de politică (cerere activă rămâne neatinsă, terminată e preluată)", async () => {
+    const list = await newList(f.A.userId, f.HA, false);
+    const rc = await seedReceipt(f.admin, f.HA, f.A.userId, [["LAPTE"]]);
+    const upsert = (user: string) =>
+      withRlsOn(f.db, { userId: user, householdId: f.HA }, (tx) =>
+        upsertAiRequest(tx, {
+          householdId: f.HA,
+          listId: list,
+          receiptId: rc.id,
+          requestedByUserId: user,
+        }),
+      );
+    const setStatus = (status: string) =>
+      f.admin`update finet.shopping_list_ai_requests set status = ${status}, attempts = 2
+               where list_id = ${list} and receipt_id = ${rc.id}`;
+
+    const first = await upsert(f.A.userId);
+    expect(first.status).toBe("queued");
+    expect(first.requestedByUserId).toBe(f.A.userId);
+
+    // `queued` și `processing` ale lui A: C reîncearcă, primește rândul lui A, fără scrieri.
+    for (const active of ["queued", "processing"]) {
+      await setStatus(active);
+      const again = await upsert(f.C.userId);
+      expect(again.id).toBe(first.id);
+      expect(again.status).toBe(active);
+      expect(again.attempts).toBe(2);
+      expect(again.requestedByUserId).toBe(f.A.userId);
+    }
+
+    // Cerere terminată: C o readuce la `queued`, devine solicitantul, încercările la 0.
+    for (const terminal of ["done", "failed", "skipped"]) {
+      await setStatus(terminal);
+      const taken = await upsert(f.C.userId);
+      expect(taken.id).toBe(first.id);
+      expect(taken.status).toBe("queued");
+      expect(taken.attempts).toBe(0);
+      expect(taken.requestedByUserId).toBe(f.C.userId);
+      // Revine la A pentru următoarea iterație.
+      await f.admin`update finet.shopping_list_ai_requests set requested_by_user_id = ${f.A.userId}
+                     where id = ${first.id}`;
+    }
+    expect(
+      await f.admin`select id from finet.shopping_list_ai_requests
+                     where list_id = ${list} and receipt_id = ${rc.id}`,
+    ).toHaveLength(1);
   });
 
   it("ștergerea contului: erase_user_shopping_lists șterge listele personale din TOATE gospodăriile", async () => {
