@@ -21,6 +21,8 @@ type Member = Readonly<{
   displayName: string;
   role: string;
   joinedAt: string;
+  /** Decontările active la care e parte (mitigarea din ADR 0016 §10). */
+  activeSettlements?: number;
 }>;
 
 /** După plecare: pagină completă la Acasă (gospodăria activă s-a schimbat). */
@@ -136,7 +138,11 @@ export function MembersPanel({
                     ) : null}
                     <ConfirmButton
                       label={t.remove}
-                      question={t.removeConfirm}
+                      question={
+                        m.activeSettlements
+                          ? `${t.removeConfirm} ${t.removeActiveSettlements(m.activeSettlements)}`
+                          : t.removeConfirm
+                      }
                       confirmLabel={t.removeYes}
                       busy={busy}
                       onConfirm={() =>

@@ -466,6 +466,9 @@ export const ro = {
       n === 0
         ? "Categoria a fost ștearsă."
         : `Categoria a fost ștearsă; ${n === 1 ? "o tranzacție a fost mutată" : `${n} tranzacții au fost mutate`}.`,
+    // Faza 8: în gospodăriile cu mai mulți membri categoria se ascunde (ADR 0016 §10).
+    hiddenInstead: (n: number) =>
+      `Categoria a fost ascunsă (gospodăria are mai mulți membri)${n === 0 ? "" : `; ${n === 1 ? "o tranzacție a fost mutată" : `${n} tranzacții au fost mutate`}`}. Numele rămâne ocupat: o poți reafișa sau redenumi.`,
     created: "Categoria a fost creată.",
     empty: "Nicio categorie.",
     invalidName: "Numele are între 1 și 60 de caractere.",
@@ -1009,6 +1012,8 @@ export const ro = {
     remove: "Scoate din gospodărie",
     removeConfirm:
       "Membrul nu va mai vedea datele gospodăriei. Conturile lui personale devin invizibile pentru toți; împărțirile și decontările rămân în istoric.",
+    removeActiveSettlements: (n: number) =>
+      `Are ${n === 1 ? "o decontare activă" : `${n} decontări active`}: după eliminare nu le mai poate anula. Verifică-le întâi în lista decontărilor.`,
     removeYes: "Da, scoate",
     removedUnsettled:
       "Membrul a fost scos. Atenție: avea solduri nedecontate, care rămân în istoric (apare ca „fost membru”).",

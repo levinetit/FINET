@@ -206,7 +206,16 @@ export default async function FamilyPage() {
         </Card>
 
         <MembersPanel
-          members={v.members.map((m) => ({ ...m, displayName: name(m.userId) }))}
+          members={v.members.map((m) => ({
+            ...m,
+            displayName: name(m.userId),
+            // Decontările ACTIVE la care membrul e parte: arătate în dialogul de eliminare (după
+            // eliminare nu le mai poate anula; risc acceptat, ADR 0016 §10).
+            activeSettlements: v.settlements.filter(
+              (s) =>
+                s.cancelledAt === null && (s.fromUserId === m.userId || s.toUserId === m.userId),
+            ).length,
+          }))}
           meUserId={me}
           isOwner={v.isOwner}
         />
