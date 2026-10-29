@@ -59,6 +59,7 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Împărțirile și decontările** (cine a plătit, cât datorează fiecare, decontările și notele lor) le văd toți membrii gospodăriei, ca soldurile să fie aceleași pentru toți; descrierea, comerciantul și contul cheltuielii împărțite rămân private plătitorului.
 - **Rămân vizibile tuturor membrilor (amânat):** documentele și bonurile încărcate (comerciant, total, produse), chiar dacă bonul a fost confirmat pe un cont personal; obiectivele; existența numelui unui cont personal (un nume deja folosit nu mai poate fi ales de alt membru). Recomandare: bonurile private nu se încarcă în gospodăria comună.
 - **Invitațiile:** în bază se păstrează doar hash-ul tokenului, cine a invitat, rolul și datele; nu se stochează emailul invitatului. Linkul în clar se arată o singură dată celui care invită.
+- **Decontările înregistrate de un owner** (risc acceptat, ADR 0016 §10): un owner poate stinge o datorie dintre alți doi membri; dacă apoi îl elimină pe creditor, acesta nu mai poate anula decontarea. Dialogul de eliminare arată decontările active ale membrului.
 - **Plecarea / eliminarea:** nu sunt blocate de solduri; soldurile și decontările rămân în istoric, cu cel plecat marcat ca fost membru. Datele din conturile comune rămân gospodăriei; conturile personale ale celui plecat rămân în gospodărie, invizibile tuturor, și se șterg doar odată cu gospodăria (de revăzut la ștergerea contului, master prompt 5.6).
 
 ## Familia în interfață și actualizările live (Faza 8, F8-B; ADR 0017)

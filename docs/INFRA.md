@@ -458,7 +458,8 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
    - un cont „personal” al membrului → o cheltuială → pagina tranzacției → „Împarte cheltuiala” (egal) → la amândoi soldurile pe `/family` și widgetul de pe Acasă;
    - decontare parțială → soldul scade; anulare → revine;
    - același link încă o dată → „Invitația nu mai este valabilă…”.
-8. **Jurnale:** linkul de invitație conține tokenul în cale; jurnalele Cloudflare/Traefik pot conține căi `/join/<token>`. Tokenul e de unică folosință și expiră (≤ 168 h); dacă jurnalele de acces sunt păstrate și partajate, revocă invitațiile neacceptate.
+8. **Jurnale:** linkul de invitație conține tokenul în cale; jurnalele Cloudflare/Traefik pot conține căi `/join/<token>`. Tokenul e de unică folosință și expiră (≤ 168 h); dacă jurnalele de acces sunt păstrate și partajate, revocă invitațiile neacceptate. Același token mai trece prin două canale (risc ACCEPTAT, SECURITY_CHECKLIST §20): `/login?next=/join/<token>` (cine deschide linkul fără sesiune) și, dacă e configurat SMTP, emailul magic-link (URL-ul de întoarcere conține `next`). Atenuări: unică folosință, expiră ≤ 168 h, cere Access + sesiune, destinatarul e invitatul, revocabil; pe `/join/*` răspunsurile au `Referrer-Policy: no-referrer`.
+9. **Bazele de dezvoltare/staging** care au aplicat o versiune ANTERIOARĂ a `0012_family` (din branch, înaintea revizuirilor) trebuie recreate: hash-ul migrației s-a schimbat, iar runner-ul refuză o migrație modificată după aplicare. Producția nu e afectată (`0012` nu e aplicată acolo).
 
 **Rollback:** imaginea anterioară a `finet-web` (paginile și rutele familiei dispar; datele rămân). Migrația `0012`: comenzile din antet, doar cu backup și decizia operatorului (atenție: rollback-ul ei face din nou conturile personale vizibile tuturor).
 
