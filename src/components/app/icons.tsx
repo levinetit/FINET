@@ -175,3 +175,24 @@ export function UsersIcon() {
     </Icon>
   );
 }
+
+/** Rotiță, pentru „Setări” (Faza 9). */
+export function SettingsIcon() {
+  return (
+    <Icon>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1" />
+    </Icon>
+  );
+}
+
+/** Semnul întrebării, pentru „Ajutor” (Faza 9). */
+export function HelpIcon() {
+  return (
+    <Icon>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14" />
+      <path d="M12 17.5h.01" />
+    </Icon>
+  );
+}
