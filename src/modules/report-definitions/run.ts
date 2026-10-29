@@ -102,15 +102,18 @@ function projectionOf(total: bigint, coverage: Coverage): Projection {
   };
 }
 
+/** Liniile care intră în raport: tipul din regulă ȘI potrivirea pe nume (verificate în cod). */
+export function matchLines(rules: ReportRules, candidates: readonly RunLine[]): RunLine[] {
+  const kinds = new Set<string>(rules.kinds);
+  return candidates.filter((l) => kinds.has(l.kind) && matchesName(rules, l.normalizedName));
+}
+
 export function runReport(
   rules: ReportRules,
   candidates: readonly RunLine[],
   coverage: Coverage,
 ): ReportRun {
-  const kinds = new Set<string>(rules.kinds);
-  const matched = candidates.filter(
-    (l) => kinds.has(l.kind) && matchesName(rules, l.normalizedName),
-  );
+  const matched = matchLines(rules, candidates);
   const mode = modeOf(rules);
   const currencies = [...new Set(matched.map((l) => l.currency))].sort();
   const runs: CurrencyRun[] = currencies.map((currency) => {
