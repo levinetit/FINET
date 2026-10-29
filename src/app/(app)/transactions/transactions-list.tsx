@@ -112,6 +112,14 @@ export function TransactionsList({
                         {ro.transactions.transferBadge}
                       </span>
                     ) : null}
+                    {r.source === "receipt" ? (
+                      <span
+                        className="rounded bg-accent-soft px-1.5 py-0.5 text-xs font-semibold"
+                        data-testid="receipt-badge"
+                      >
+                        {ro.transactions.receiptBadge}
+                      </span>
+                    ) : null}
                     {r.source === "recurring" ? (
                       <span
                         className="rounded bg-accent-soft px-1.5 py-0.5 text-xs font-semibold"

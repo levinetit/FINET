@@ -138,3 +138,28 @@ export function MoreIcon() {
     </Icon>
   );
 }
+
+/** Încadrare de cameră (scanarea unui bon). */
+export function ScanIcon() {
+  return (
+    <Icon>
+      <path d="M4 8V5a1 1 0 0 1 1-1h3" />
+      <path d="M16 4h3a1 1 0 0 1 1 1v3" />
+      <path d="M20 16v3a1 1 0 0 1-1 1h-3" />
+      <path d="M8 20H5a1 1 0 0 1-1-1v-3" />
+      <path d="M8 12h8" />
+    </Icon>
+  );
+}
+
+/** Bonul fiscal (hârtie cu marginea de jos zimțată). */
+export function ReceiptIcon() {
+  return (
+    <Icon>
+      <path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z" />
+      <path d="M9 8h6" />
+      <path d="M9 12h6" />
+      <path d="M9 16h3" />
+    </Icon>
+  );
+}

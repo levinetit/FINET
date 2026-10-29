@@ -17,20 +17,33 @@ import {
   LogoutIcon,
   MoreIcon,
   PieIcon,
+  ReceiptIcon,
   RepeatIcon,
+  ScanIcon,
   TagIcon,
   TargetIcon,
   UserIcon,
   WalletIcon,
 } from "./icons";
 
+// Faza 6 (ADR 0015): pe telefon, „Scanează” (`/import`) ia locul lui „Bugete” în bara de jos (bonurile
+// se fotografiază pe loc, în magazin; bugetele se consultă mai rar și rămân la un clic, în „Mai
+// mult”). Pe desktop: „Import” și „Bonuri” în meniul lateral.
 const ITEMS = [
   { href: "/dashboard", label: ro.nav.dashboard, icon: HomeIcon, mobile: true },
   { href: "/transactions", label: ro.nav.transactions, icon: ListIcon, mobile: true },
+  {
+    href: "/import",
+    label: ro.nav.import,
+    mobileLabel: ro.nav.scan,
+    icon: ScanIcon,
+    mobile: true,
+  },
+  { href: "/receipts", label: ro.nav.receipts, icon: ReceiptIcon, mobile: false },
   { href: "/accounts", label: ro.nav.accounts, icon: WalletIcon, mobile: false },
   { href: "/categories", label: ro.nav.categories, icon: FolderIcon, mobile: false },
   { href: "/tags", label: ro.nav.tags, icon: TagIcon, mobile: false },
-  { href: "/budgets", label: ro.nav.budgets, icon: PieIcon, mobile: true },
+  { href: "/budgets", label: ro.nav.budgets, icon: PieIcon, mobile: false },
   { href: "/goals", label: ro.nav.goals, icon: TargetIcon, mobile: false },
   { href: "/recurring", label: ro.nav.recurring, icon: RepeatIcon, mobile: false },
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
@@ -49,8 +62,8 @@ const panelItemClass =
 
 /**
  * Navigarea (master prompt 3.4, demo). Pe desktop: meniul lateral cu toate paginile. Pe telefon:
- * bara de jos cu Acasă, Tranzacții, Bugete, Rapoarte și „Mai mult” (în locul lui „Scanează”, care
- * vine în Faza 6), iar „Mai mult” deschide panoul cu celelalte pagini și deconectarea
+ * bara de jos cu Acasă, Tranzacții, Scanează, Rapoarte și „Mai mult” (Faza 6: „Scanează” a luat
+ * locul lui „Bugete”, mutat în „Mai mult”), iar „Mai mult” deschide panoul cu celelalte pagini și deconectarea
  * (`aria-expanded`; la deschidere focusul trece pe primul link, Escape îl închide și întoarce
  * focusul pe buton). Cele două liste nu sunt vizibile simultan (`md:hidden` /
  * `hidden md:grid`), deci fiecare link apare o singură dată în arborele de accesibilitate.
@@ -201,21 +214,25 @@ export function AppNav() {
 
       {/* Telefon: bara de jos. */}
       <ul className="grid grid-cols-5 md:hidden">
-        {ITEMS.filter((i) => i.mobile).map(({ href, label, icon: ItemIcon }) => (
-          <li key={href}>
-            <Link
-              href={href}
-              aria-current={isCurrent(href) ? "page" : undefined}
-              className={cn(
-                itemClass,
-                isCurrent(href) && "font-semibold text-primary hover:text-primary",
-              )}
-            >
-              <ItemIcon />
-              <span>{label}</span>
-            </Link>
-          </li>
-        ))}
+        {ITEMS.filter((i) => i.mobile).map((item) => {
+          const { href, icon: ItemIcon } = item;
+          const label = "mobileLabel" in item ? item.mobileLabel : item.label;
+          return (
+            <li key={href}>
+              <Link
+                href={href}
+                aria-current={isCurrent(href) ? "page" : undefined}
+                className={cn(
+                  itemClass,
+                  isCurrent(href) && "font-semibold text-primary hover:text-primary",
+                )}
+              >
+                <ItemIcon />
+                <span>{label}</span>
+              </Link>
+            </li>
+          );
+        })}
         <li>
           <button
             type="button"

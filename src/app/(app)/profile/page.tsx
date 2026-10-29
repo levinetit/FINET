@@ -13,6 +13,7 @@ import { PageHeader } from "../page-header";
 import { PasswordForm } from "./password-form";
 import { ProfileForm } from "./profile-form";
 import { type SessionRow, SessionsList } from "./sessions-list";
+import { ExternalAiConsent } from "./external-ai-consent";
 import { UsageConsent } from "./usage-consent";
 
 export const metadata: Metadata = { title: ro.profile.title };
@@ -57,6 +58,7 @@ export default async function ProfilePage() {
     getConsents(db, session.userId),
   ]);
   const usageStats = consents.some((c) => c.kind === "usageStats" && c.granted);
+  const externalAi = consents.some((c) => c.kind === "externalAi" && c.granted);
   const fmt = formatter(me.preferences.timezone);
   const rows: SessionRow[] = sessions.map((s) => ({
     id: s.id,
@@ -90,8 +92,9 @@ export default async function ProfilePage() {
         <div className="lg:col-span-2">
           <SessionsList sessions={rows} />
         </div>
-        <div className="lg:col-span-2">
+        <div className="flex flex-col gap-4 lg:col-span-2">
           <UsageConsent granted={usageStats} />
+          <ExternalAiConsent granted={externalAi} />
         </div>
       </div>
     </>
