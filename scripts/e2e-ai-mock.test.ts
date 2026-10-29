@@ -6,7 +6,7 @@ import { parseModelReceipt, toExtractedReceipt } from "@/modules/receipts/extrac
 import { mergeReceiptParts } from "@/modules/receipts/merge";
 import { RO_VAT_RATES_FALLBACK } from "@/modules/receipts/vat";
 
-import { jpegWidth, receiptFor } from "../e2e/ai-mock-server.mjs";
+import { jpegWidth, receiptFor } from "./e2e-ai-mock-data.mjs";
 
 /**
  * Serverul AI fals al E2E (F6-C): lățimea pozei se citește corect din JPEG, iar bonurile întoarse
