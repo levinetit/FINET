@@ -58,11 +58,17 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
               ai: aiRuntimeFromConfig(config),
             }
           : undefined,
+      // Extrasele PDF (Faza 7, F7-B): același storage doar-citire; FĂRĂ AI.
+      statements:
+        config.storage.driver === "local"
+          ? { storage: new LocalStorage(config.storage.dir, { readOnly: true }) }
+          : undefined,
     });
     log({
       event: "receipts",
       enabled: config.storage.driver === "local",
       ai: config.ai.baseUrl !== null && config.ai.apiKey !== null,
+      statements: config.storage.driver === "local",
     });
     io.onSignal(worker.stop);
     return { code: 0, worker };

@@ -68,6 +68,13 @@ export type AuditAction =
   | "statement.imported"
   | "statement.cancelled"
   | "statement.discarded"
+  // F7-B: încărcarea PDF (doar mărimea), renunțarea la ea, potrivirea bon ↔ tranzacție (fără
+  // sume) și respingerea unei propuneri de plată recurentă.
+  | "statement.uploaded"
+  | "statement.upload_cancelled"
+  | "receipt.matched"
+  | "receipt.match_rejected"
+  | "recurring.suggestion_dismissed"
   | "consent.granted"
   | "consent.revoked";
 
@@ -90,7 +97,8 @@ export type AuditEvent = Readonly<{
     | "recurring_rule"
     | "document"
     | "receipt"
-    | "statement_import";
+    | "statement_import"
+    | "statement_upload";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;

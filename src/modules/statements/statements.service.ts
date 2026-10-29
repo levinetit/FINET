@@ -40,6 +40,11 @@ export type StatementDeps = LedgerDeps &
     now?: () => Date;
     /** Previzualizări pe zi și gospodărie (contor doar crescător). */
     dailyLimit?: number;
+    /**
+     * Cota a fost deja consumată pentru această parte, ÎNAINTE de citirea fișierului (încărcarea
+     * prin API și workerul PDF; revizuirea F7-A): previzualizarea nu o mai incrementează.
+     */
+    quotaCharged?: boolean;
   }>;
 
 /** Plafonul zilnic implicit al previzualizărilor (decizia mea, ADR 0018). */
@@ -211,6 +216,35 @@ async function existingKeys(
   return found;
 }
 
+/**
+ * Cota zilnică (contor doar crescător, verificat și incrementat atomic; triggerul din 0014 refuză
+ * scăderea). Se consumă ÎNAINTE de orice citire a fișierului: un fișier refuzat sau care nu se
+ * poate citi consumă și el din cotă.
+ */
+export async function chargeStatementQuota(
+  tx: Tx,
+  householdId: string,
+  parts: number,
+  now: Date,
+  limit: number = STATEMENT_DAILY_LIMIT,
+): Promise<void> {
+  if (!(Number.isSafeInteger(parts) && parts >= 1 && parts <= 100)) {
+    throw new ValidationError({ _: "Număr de fișiere invalid." });
+  }
+  const day = localDateOf(now, DEFAULT_TIME_ZONE);
+  const [usage] = await tx
+    .insert(statementUsageDaily)
+    .values({ householdId, day, count: parts })
+    .onConflictDoUpdate({
+      target: [statementUsageDaily.householdId, statementUsageDaily.day],
+      set: { count: sql`${statementUsageDaily.count} + ${parts}`, updatedAt: now },
+    })
+    .returning({ count: statementUsageDaily.count });
+  if ((usage?.count ?? 0) > limit) {
+    throw new ConflictError("statement_daily_limit", "S-a atins limita zilnică de extrase.");
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Previzualizare
 // ---------------------------------------------------------------------------------------------
@@ -263,19 +297,7 @@ export async function createStatementPreview(
       };
     }
 
-    // Cota zilnică: contor doar crescător, verificat și incrementat atomic.
-    const day = localDateOf(now, DEFAULT_TIME_ZONE);
-    const [usage] = await tx
-      .insert(statementUsageDaily)
-      .values({ householdId: m.householdId, day, count: 1 })
-      .onConflictDoUpdate({
-        target: [statementUsageDaily.householdId, statementUsageDaily.day],
-        set: { count: sql`${statementUsageDaily.count} + 1`, updatedAt: now },
-      })
-      .returning({ count: statementUsageDaily.count });
-    if ((usage?.count ?? 0) > limit) {
-      throw new ConflictError("statement_daily_limit", "S-a atins limita zilnică de extrase.");
-    }
+    if (!deps.quotaCharged) await chargeStatementQuota(tx, m.householdId, 1, now, limit);
 
     const keys = computeKeys(account.id, parsed.bank, parsed.lines);
     const existing = await existingKeys(

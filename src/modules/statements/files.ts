@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
+
 import { type MappingSuggestion, suggestMapping } from "./mapping";
 import { type Table, parseCsv } from "./csv";
-import { StatementError } from "./types";
+import { StatementError, type StatementErrorCode } from "./types";
 import { parseXlsx } from "./xlsx";
 import { isZip, readZip } from "./zip";
 
@@ -13,14 +15,18 @@ import { isZip, readZip } from "./zip";
  */
 
 export type UploadPart =
-  | Readonly<{ index: number; kind: "pdf"; bytes: Buffer }>
+  | Readonly<{ index: number; kind: "pdf"; bytes: Buffer; sha256: string }>
   | Readonly<{
       index: number;
       kind: "table";
+      /** Amprenta octeților acestei părți (deduplicarea la nivel de fișier, pe cont). */
+      sha256: string;
       format: "csv" | "xlsx";
       table: Table;
       suggestion: MappingSuggestion;
-    }>;
+    }>
+  /** Un fișier dintr-un ZIP care nu se poate citi (celelalte merg mai departe). */
+  | Readonly<{ index: number; kind: "invalid"; code: StatementErrorCode; sha256: string }>;
 
 const isPdf = (b: Uint8Array) =>
   b.length >= 5 &&
@@ -33,15 +39,25 @@ const isPdf = (b: Uint8Array) =>
 /** Plafonul fișierului încărcat (înainte de orice citire). */
 export const STATEMENT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 
+const sha256Of = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
+
 function single(bytes: Buffer, index: number, inZip: boolean): UploadPart {
-  if (isPdf(bytes)) return { index, kind: "pdf", bytes };
+  const sha256 = sha256Of(bytes);
+  if (isPdf(bytes)) return { index, kind: "pdf", bytes, sha256 };
   if (isZip(bytes)) {
     if (inZip) throw new StatementError("zip_unsafe");
     const table = parseXlsx(bytes);
-    return { index, kind: "table", format: "xlsx", table, suggestion: suggestMapping(table) };
+    return {
+      index,
+      kind: "table",
+      format: "xlsx",
+      sha256,
+      table,
+      suggestion: suggestMapping(table),
+    };
   }
   const table = parseCsv(bytes);
-  return { index, kind: "table", format: "csv", table, suggestion: suggestMapping(table) };
+  return { index, kind: "table", format: "csv", sha256, table, suggestion: suggestMapping(table) };
 }
 
 export function readStatementUpload(input: Uint8Array): UploadPart[] {
@@ -66,7 +82,18 @@ export function readStatementUpload(input: Uint8Array): UploadPart[] {
     if (entries.some((x) => x.name === "[Content_Types].xml")) return [single(bytes, 0, false)];
     const files = entries.filter((x) => !x.name.startsWith("__MACOSX/"));
     if (files.length === 0) throw new StatementError("empty_statement");
-    return files.map((x, i) => single(x.data, i, true));
+    // O arhivă imbricată (inclusiv XLSX) refuză TOATĂ arhiva (fail-closed); un fișier care nu se
+    // poate citi e refuzat singur, cu codul lui.
+    return files.map((x, i) => {
+      try {
+        return single(x.data, i, true);
+      } catch (error) {
+        if (error instanceof StatementError && error.code !== "zip_unsafe") {
+          return { index: i, kind: "invalid" as const, code: error.code, sha256: sha256Of(x.data) };
+        }
+        throw error;
+      }
+    });
   }
   return [single(bytes, 0, false)];
 }
