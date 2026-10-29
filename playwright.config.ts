@@ -161,6 +161,8 @@ export default defineConfig({
     {
       // PWA și offline (Faza 9, ADR 0020): același server și aceeași bază, utilizatorii `pwa` și
       // `pwa2`; service worker-ul permis explicit (implicit oricum).
+      // În `saas`, testele cozii offline (cer `/import` și încărcarea, deci entitlements) se sar
+      // până în Faza 11, ca proiectul `receipts`.
       name: "pwa",
       testMatch: /pwa\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], baseURL: devURL, serviceWorkers: "allow" },

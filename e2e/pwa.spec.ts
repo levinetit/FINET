@@ -71,6 +71,17 @@ async function pick(page: Page, buffer: Buffer, mimeType = "image/jpeg"): Promis
   await expect(page.getByTestId("picked-list").locator("li")).toHaveCount(1);
 }
 
+/**
+ * Scanarea (offline) are nevoie de `/import` și de `POST /api/v1/documents`, care cer drepturile
+ * gospodăriei (`entitlements`: limita zilnică AI, cota). În `saas` acestea sunt neimplementate
+ * până în Faza 11 (`NotImplementedError`, master prompt 3.3), deci pagina `/import` nu se încarcă
+ * și încărcarea nu e disponibilă: aceleași motive pentru care proiectul `receipts` rulează doar în
+ * `personal`. Testele cozii offline se sar în `saas` (rulează integral în `personal`); manifestul,
+ * service worker-ul și `/offline` rămân testate în ambele moduri.
+ */
+const SCAN_SKIP = MODE === "saas";
+const SCAN_SKIP_REASON = "bonurile (entitlements) vin în saas în Faza 11";
+
 test.describe(`PWA și offline (${MODE})`, () => {
   test.describe.configure({ mode: "serial" });
   test.setTimeout(180_000);
@@ -154,6 +165,7 @@ test.describe(`PWA și offline (${MODE})`, () => {
     browser,
     baseURL,
   }) => {
+    test.skip(SCAN_SKIP, SCAN_SKIP_REASON);
     const { context, page } = await contextAs(browser, baseURL!, "pwa");
     await page.goto("/import");
     await controlled(page);
@@ -189,6 +201,7 @@ test.describe(`PWA și offline (${MODE})`, () => {
     browser,
     baseURL,
   }) => {
+    test.skip(SCAN_SKIP, SCAN_SKIP_REASON);
     const { context, page } = await contextAs(browser, baseURL!, "pwa2");
     await page.goto("/import");
     await context.setOffline(true);
@@ -205,6 +218,7 @@ test.describe(`PWA și offline (${MODE})`, () => {
   });
 
   test("deconectarea golește coada locală (IndexedDB)", async ({ browser, baseURL }) => {
+    test.skip(SCAN_SKIP, SCAN_SKIP_REASON);
     const { context, page } = await contextAs(browser, baseURL!, "pwa2");
     await page.goto("/import");
     // Încărcările eșuează ca la o rețea căzută: intrarea rămâne în așteptare.

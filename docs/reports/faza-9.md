@@ -50,6 +50,7 @@ Mediu: `node:24` în container (`--memory` 500–950 MB), PostgreSQL 17 efemer `
 ### 4. Puncte deschise
 
 - Rularea E2E `pwa`/`access` și `check:bundle` în CI (componentele PWA sunt în layout → câțiva KiB pe toate rutele autentificate).
+- În `saas`, testele E2E ale cozii offline (scanare, eroare permanentă, deconectare) se sar: `/import` și încărcarea depind de `entitlements`, neimplementate în `saas` până în Faza 11 (aceeași situație ca proiectul `receipts`); restul proiectului `pwa` rulează în ambele moduri.
 - Background Sync doar trezește paginile deschise; fără pagină deschisă, încărcarea are loc la următoarea deschidere.
 - Linkul APK servit de FINET după autentificare (repository privat, promptul Android 12.1): nefăcut; `url` trebuie să fie https (GitHub Releases).
 - Audit axe/Lighthouse și revizuirea `security`: F9-B / agenții de revizuire.
