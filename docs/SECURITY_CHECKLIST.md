@@ -527,3 +527,22 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | E2E (extrase sintetice: import, duplicat, anulare, acoperire, fișier invalid/ZIP, izolare gospodărie/membru, propunere, potrivire) | NOT RUN local (CI) | `e2e/statements.spec.ts` | — |
 | Revizuirea `security` a F7-B | TODO | agentul `security` | — |
 
+
+## 25. Liste de cumpărături și comparația cu bonul (F10-A, 2026-10-30; ADR 0022)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| RLS ENABLE + FORCE pe `shopping_lists`, `shopping_list_items`, `shopping_list_ai_requests`; drepturi minime pe coloane pentru `finet_app`; nimic pentru PUBLIC/anon/authenticated | DONE (PG17) | `shopping-rls.test.ts` („RLS ENABLE + FORCE; drepturi minime…”) | 2026-10-30 · programmer (F10-A) |
+| Lista comună: toți membrii; PERSONALĂ: doar proprietarul (citire, scriere, ștergere); altă gospodărie: nimic; nici id-ul nu scapă (404 uniform) | DONE (PG17) | `shopping-rls.test.ts` („lista comună…”), `shopping.test.ts` („lista personală e invizibilă…”), `shopping-api.test.ts` | 2026-10-30 · programmer (F10-A) |
+| Chei străine compuse cu gospodăria (articol → listă, articol → linie de bon); o linie de bon propusă/confirmată pentru cel mult UN articol al listei | DONE (PG17) | `shopping-rls.test.ts` („cheia compusă…”, „o linie de bon e propusă…”) | 2026-10-30 · programmer (F10-A) |
+| CHECK-uri și plafoane (nume, cantitate `numeric(9,3)`, unitate, notă, poziție, scor; 100 de liste, 300 de articole) pe baza de date și în Zod strict | DONE (PG17) | `shopping-rls.test.ts` („CHECK-uri…”), `shopping.test.ts` („plafoanele…”) | 2026-10-30 · programmer (F10-A) |
+| Coada AI: doar pentru liste vizibile, în numele celui care cere; funcțiile SECURITY DEFINER (`queued_list_matches`, `queued_list_match`, `erase_user_shopping_lists`) cu `search_path = pg_catalog`, doar identificatori | DONE (PG17) | `shopping-rls.test.ts` („coada AI: doar pentru liste vizibile…”) | 2026-10-30 · programmer (F10-A) |
+| Reîncercarea unui al doilea membru nu dă eroare de politică: cererea activă a altuia rămâne neatinsă, cea terminată e preluată (testul pică fără garda `setWhere` din `upsertAiRequest`) | DONE (PG17) | `shopping-rls.test.ts` („coada AI: al doilea membru…”) | 2026-10-30 · programmer (F10-A) |
+| Pasul LLM: oprit implicit (`AI_LIST_MATCH=0`); cere consimțământul `external_ai` (la coadă, la revendicare, la fiecare încercare); buget AI rezervat înainte de încercare; pleacă doar nume normalizate; ieșire constrânsă la id-urile candidate (Zod); nimic din conținut în `pgboss.job`, loguri, erori | DONE (PG17, server AI fals) | `list-match-job.test.ts`, `ai-match.test.ts`, `shopping.test.ts` („pasul AI…”) | 2026-10-30 · programmer (F10-A) |
+| Comparația nu modifică tranzacții sau bonuri; deciziile utilizatorului (confirmat/respins) nu se rescriu la reluare sau de AI; bon neconfirmat → 409; bon/listă străine → 404 | DONE (PG17) | `shopping.test.ts` („comparația listă ↔ bon…”) | 2026-10-30 · programmer (F10-A) |
+| Ștergerea contului șterge listele PERSONALE din toate gospodăriile | DONE (PG17) | `shopping-rls.test.ts` („ștergerea contului…”), `account-deletion.test.ts` | 2026-10-30 · programmer (F10-A) |
+| Exportul GDPR (`/me/export`) include listele și articolele vizibile utilizatorului (sub RLS) | IMPLEMENTAT, fără test dedicat | `src/modules/gdpr/data-export.ts` | — |
+| API: 401 fără sesiune pe toate rutele, `Idempotency-Key` la creare (replay, reutilizare cu alt corp), validare strictă, limită de rată pe comparație și sugestii, evenimente live doar tip + id (lista personală doar la proprietar), contract OpenAPI la zi (`openapi --check`) | DONE (PG17) | `shopping-api.test.ts`, `node scripts/openapi.mjs --check` | 2026-10-30 · programmer (F10-A) |
+| CSRF pe mutațiile cu cookie ale listelor | NEVERIFICAT în teste dedicate (mecanismul comun al `/api/v1`) | — | — |
+| E2E (creare listă, bifare, apariție live la al doilea utilizator, comparație cu un bon sintetic) și axe pe paginile noi | NOT RUN local (CI) | `e2e/shopping.spec.ts` (de scris) | — |
+| Revizuirea `security` a F10-A | TODO | agentul `security` | — |

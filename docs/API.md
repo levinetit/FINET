@@ -194,6 +194,15 @@ Gospodăria e cea **curentă** (activă, dacă apartenența există încă; altf
 curl -sN https://finet.example/api/v1/events -H 'authorization: Bearer tokenFictiv.semnatura'
 ```
 
+## Liste de cumpărături (F10-A, ADR 0022)
+O listă e COMUNĂ (implicit) sau PERSONALĂ (`personal: true`, doar a creatorului); lista personală a altui membru nu apare niciodată (404 uniform). Plafoane: 100 de liste vizibile, 300 de articole pe listă. Cantitățile sunt zecimale cu 3 zecimale (șir sau număr), nu float.
+- `GET /shopping-lists?status=active|archived` · `POST /shopping-lists` (`Idempotency-Key` recomandat; `{ name, personal?, items? }`) → `201`. `GET|PATCH|DELETE /shopping-lists/{id}` (PATCH: redenumire, arhivare/reactivare, listă personală → comună; DELETE → 204, auditat doar pentru liste comune).
+- `POST /shopping-lists/{id}/items` · `PATCH|DELETE /shopping-lists/{id}/items/{itemId}` (`checked: true|false` e starea bifării: idempotent, primul autor se păstrează) · `PUT /shopping-lists/{id}/order` (`itemIds` = permutare exactă a articolelor) · `POST /shopping-lists/{id}/copy` (articole nebifate, fără potriviri).
+- `GET /shopping-lists/suggestions?q=` → produsele cumpărate des de gospodărie (nume normalizate, calculate în cod). `GET /shopping-lists/receipts` → bonurile confirmate recente.
+- `POST /shopping-lists/{id}/comparisons` `{ receiptId }` → propune potrivirile și întoarce comparația: *potrivite*, *neplanificate*, *uitate*; `409` dacă bonul nu e confirmat. `GET /shopping-lists/{id}/comparisons/{receiptId}` → comparația salvată, fără scrieri.
+- `POST /shopping-lists/{id}/items/{itemId}/match` → confirmă, respinge, șterge sau corectează potrivirea unui articol. Nicio potrivire nu modifică tranzacții sau bonuri.
+- Actualizări live: entitatea `shopping_list` în fluxul SSE existent (tip + id, fără conținut).
+
 ## Aplicația Android (F9-A, ADR 0020)
 
 `GET /api/v1/app/android/latest` (sesiune cookie sau bearer) → `200 { data: { versionName, versionCode, minSupportedVersionCode, url, sha256, sizeBytes, notes, publishedAt } }` sau `404 android_release_unavailable` (nicio versiune publicată). Datele vin din `<STORAGE_DIR>/app/android-latest.json` (operatorul; `docs/INFRA.md` 4l). Aplicația îl cheamă cel mult o dată pe zi (promptul Android 12.1).

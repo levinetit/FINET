@@ -546,6 +546,17 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 7. **Redeploy** `finet-web` și `finet-worker`. Jurnalul workerului la pornire: `{"event":"receipts",…,"statements":true}`.
 8. **Verificare după deploy:** pe un cont de test, un CSV mic → alegerea coloanelor → previzualizare → confirmare → reîncărcare („deja importat”, 0 tranzacții noi) → anulare; un PDF de extras propriu → „în coadă” → previzualizare în ≤ 2 minute; `select count(*) from finet.statement_uploads where storage_key is not null` revine la 0 după confirmare/renunțare; jurnalele (`docker logs finet-worker`) conțin doar coduri și contoare.
 
+## 4o. Faza 10 (F10-A): liste de cumpărături — pe producție (după revizuiri, după 4n)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0022. Se aplică împreună cu F10-B (4p) sau separat; ordinea migrațiilor la merge: `0017`, apoi `0018`.
+
+1. **Ordinea:** după 4n (Faza 7, `0013`/`0014`) și 4m (`0016`). Jurnalul are `0017_shopping_lists` cu `when` 1794900000000, mai mare decât ultima intrare aplicată (1794800000000, `0014`); runner-ul refuză o migrație nouă mai veche decât una aplicată. Imaginile `finet` și `finet:tools` pentru commit-ul aprobat (construite în CI, nu local).
+2. **Backup** al schemei `finet`, apoi **migrația `0017_shopping_lists`** (rolul `migrate`; „aplicate acum 1”). Adaugă trei tabele (`shopping_lists`, `shopping_list_items`, `shopping_list_ai_requests`) cu RLS ENABLE + FORCE, 7 funcții/triggere SECURITY DEFINER sau de plafon și, pe `receipt_lines`, doar cheia unică `receipt_lines_id_household_key (id, household_id)` (nu rescrie date). Rollback: antetul fișierului, doar manual, cu backup (distruge listele și coada AI).
+3. **Variabile:** `AI_LIST_MATCH` (doar `finet-worker`, `0` implicit; vezi `finet.worker.env.example`). Cu `0` sau lipsă, pasul LLM e oprit și comparația rulează numai din cod. Pentru `1` sunt necesare AI configurat (Faza 6) și consimțământul `external_ai` al utilizatorului; consumă din bugetul AI lunar existent (`task = list_match` în `ai_calls`). Nicio variabilă pe `finet-web`, niciun secret nou.
+4. **Redeploy** `finet-web` și `finet-worker`. Jurnalul workerului la pornire conține job-urile `list-match.sweep`/`list-match.process` (doar nume de joburi, fără conținut).
+5. **Verificare după deploy:** pe un cont de test: creează o listă comună cu 3 articole, bifează unul (apare live la un al doilea membru), creează o listă PERSONALĂ (al doilea membru NU o vede, nici ca id), arhivează, copiază; confirmă un bon sintetic și rulează „Comparație cu bonul” (potrivite/neplanificate/uitate); `select count(*) from finet.shopping_list_ai_requests` rămâne 0 cu `AI_LIST_MATCH=0`; jurnalele (`docker logs finet-worker`) nu conțin nume de produse.
+6. **Backup/GDPR:** listele intră în backup-ul restic existent (schema `finet`); nu e nevoie de modificări. Ștergerea contului elimină listele personale ale utilizatorului (ADR 0022 §6).
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|
