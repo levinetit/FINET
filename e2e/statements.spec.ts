@@ -252,8 +252,13 @@ test.describe(`extrasele bancare (${MODE})`, () => {
     await expect(suggestion).toHaveCount(1, ACT);
     await expect(suggestion).toContainText("49,99 lei");
     await suggestion.getByTestId("suggestion-accept").click();
-    await expect(page.getByText("Regula recurentă a fost creată.")).toBeVisible(ACT);
+    // Acceptarea deschide regula creată; propunerea nu mai apare, regula e în listă.
+    await expect(page).toHaveURL(/\/recurring\/[0-9a-f-]{36}$/, ACT);
+    await page.goto("/recurring");
     await expect(page.getByTestId("recurring-list")).toContainText(`STREAMING${RUN.toUpperCase()}`);
+    await expect(
+      page.getByTestId("suggestion-row").filter({ hasText: `STREAMING${RUN.toUpperCase()}` }),
+    ).toHaveCount(0);
   });
 
   test("(e) cu workerul: PDF sintetic → previzualizare; potrivirea bonului cu tranzacția din extras", async ({
@@ -292,6 +297,8 @@ test.describe(`extrasele bancare (${MODE})`, () => {
     const doc = page.getByTestId("document-row").first();
     await expect(doc).toHaveAttribute("data-status", "needs_review", { timeout: WAIT });
     await doc.getByTestId("view-receipt").click();
+    // Adresa se citește DUPĂ navigare (altfel ar rămâne `/import`).
+    await expect(page).toHaveURL(/\/receipts\/[0-9a-f-]{36}$/, ACT);
     const receiptUrl = page.url();
     const card = await account(page, baseURL!, "Card potrivire");
     await importCsv(page, card, csv([["20.10.2026", `EPOS KAUFLAND RO ${RUN}`, "-20,48"]]));

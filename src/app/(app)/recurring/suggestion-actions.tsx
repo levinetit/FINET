@@ -26,16 +26,23 @@ export function SuggestionActions({ signature }: Readonly<{ signature: string }>
 
   async function run(action: "accept" | "dismiss") {
     setError(null);
-    const result = await submit(
+    const result = await submit<{ id: string }>(
       `/api/v1/recurring/suggestions/${signature}/${action}`,
       "POST",
       {},
-      { idempotent: action === "accept" },
+      { idempotent: action === "accept", lockOnSuccess: action === "accept" },
     );
     if (!result) return;
     if (result.status === 401) return goToLogin();
     if (!result.ok) {
       setError(apiErrors(result).form);
+      return;
+    }
+    // Acceptarea deschide regula creată (rândul propunerii dispare la reîncărcare, cu tot cu un
+    // mesaj afișat aici); respingerea doar reîncarcă lista.
+    const ruleId = (result.data as { id?: string } | null)?.id;
+    if (action === "accept" && ruleId) {
+      router.push(`/recurring/${ruleId}`);
       return;
     }
     setInfo(action === "accept" ? t.accepted : t.dismissed);

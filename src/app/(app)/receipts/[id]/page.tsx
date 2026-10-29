@@ -10,6 +10,7 @@ import { matchesToJson } from "@/app/api/v1/_lib/matching-handlers";
 import { Card } from "@/components/ui/card";
 import { getReceiptMatches } from "@/modules/matching/matching.service";
 import { receiptDetailToJson } from "@/modules/receipts/receipts.schema";
+import { getTransaction } from "@/modules/transactions/transactions.service";
 import { getReceipt } from "@/modules/receipts/receipts.service";
 
 import { formOptions } from "../../../_lib/ledger-options";
@@ -76,7 +77,15 @@ export default async function ReceiptPage({ params }: Readonly<{ params: Params 
       mime: d.mime,
       fileDeleted: d.fileDeleted,
     }));
+    // Bonul legat de o tranzacție din extras (potrivirea confirmată): nota stă în pagină, nu în
+    // starea panoului (care dispare la reîncărcare, bonul nemaifiind de potrivit).
+    const linked = receipt.transactionId
+      ? await getTransaction({ db }, page.actor, householdId, receipt.transactionId).catch(
+          () => null,
+        )
+      : null;
     return {
+      matchedStatement: linked?.source === "statement",
       matches: matches ? matchesToJson(matches) : null,
       receipt: receiptDetailToJson(receipt),
       documents,
@@ -94,10 +103,15 @@ export default async function ReceiptPage({ params }: Readonly<{ params: Params 
       </>
     );
   }
-  const { matches, ...review } = result.value;
+  const { matches, matchedStatement, ...review } = result.value;
   return (
     <>
       {header}
+      {matchedStatement ? (
+        <Alert tone="ok" className="mb-4" data-testid="match-done">
+          {ro.matching.confirmed}
+        </Alert>
+      ) : null}
       {matches ? (
         <Card className="mb-4">
           <MatchPanel

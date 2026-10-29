@@ -125,7 +125,7 @@ export function MatchPanel({
         </>
       )}
       <Alert>{error}</Alert>
-      <Alert tone="ok" data-testid="match-done">
+      <Alert tone="ok" data-testid="match-result">
         {info}
       </Alert>
     </section>

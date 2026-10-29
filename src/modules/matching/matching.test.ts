@@ -11,6 +11,13 @@ import {
   listRecurringSuggestions,
 } from "@/modules/recurring/suggestions.service";
 
+import { parseCsv } from "@/modules/statements/csv";
+import { mapTable } from "@/modules/statements/mapping";
+import {
+  confirmStatementImport,
+  createStatementPreview,
+} from "@/modules/statements/statements.service";
+
 import { decideReceiptMatch, getReceiptMatches, listMatchQueue } from "./matching.service";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
@@ -285,5 +292,38 @@ describe.skipIf(!TEST_ADMIN_URL)("potrivirea bonurilor și propunerile (Postgres
     const [still] = await f.admin<{ n: number }[]>`
       select count(*)::int as n from finet.transactions where id = ${own}`;
     expect(still!.n).toBe(1);
+  });
+
+  it("scenariul E2E (e): extras CSV importat prin serviciu + bonul serverului AI fals → candidatul apare", async () => {
+    const card = (
+      await createAccount({ db: f.db }, f.A, f.HA, {
+        name: "Card E2E",
+        type: "bank",
+        currency: "RON",
+      })
+    ).id;
+    const csvText = "Data;Descriere;Suma\r\n20.10.2026;EPOS KAUFLAND RO e2erun;-20,48";
+    const parsed = mapTable(
+      parseCsv(Buffer.from(csvText)),
+      {
+        headerRow: 0,
+        date: 0,
+        dateFormat: "dmy_dot",
+        amount: 2,
+        decimal: ",",
+        thousands: "",
+        description: [1],
+      },
+      { currency: "RON", format: "csv" },
+    );
+    const p = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: card,
+      sourceSha256: createHash("sha256").update(csvText).digest("hex"),
+      parsed,
+    });
+    await confirmStatementImport(deps(), f.A, f.HA, p.import.id);
+    const r = await receipt({ total: 2048, on: "2026-10-20", merchant: "KAUFLAND ROMANIA SCS" });
+    const m = await getReceiptMatches(deps(), f.A, f.HA, r);
+    expect(m!.candidates.map((c) => c.description)).toContain("EPOS KAUFLAND RO e2erun");
   });
 });
