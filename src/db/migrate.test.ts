@@ -560,14 +560,20 @@ describe("readMigrations (fără bază)", () => {
     }
     const code = text.replace(/--.*$/gm, "");
     expect(code).not.toMatch(/\bbetween\b/i);
-    expect(code).not.toMatch(/\bdrop\b|\btruncate\b|alter policy|\bdelete\s+from\s+finet\.(?!shopping_lists)/i);
+    expect(code).not.toMatch(
+      /\bdrop\b|\btruncate\b|alter policy|\bdelete\s+from\s+finet\.(?!shopping_lists)/i,
+    );
     // Funcțiile SECURITY DEFINER: exact acestea, toate cu `search_path = pg_catalog`.
     const definers = [
       ...code.matchAll(
         /create function finet\.(\w+)\([^)]*\)[^$]*?security definer\s+set search_path = pg_catalog/g,
       ),
     ].map((x) => x[1]);
-    expect(definers).toEqual(["queued_list_matches", "queued_list_match", "erase_user_shopping_lists"]);
+    expect(definers).toEqual([
+      "queued_list_matches",
+      "queued_list_match",
+      "erase_user_shopping_lists",
+    ]);
     expect([...code.matchAll(/security\s+definer/gi)]).toHaveLength(3);
     for (const fn of [
       "queued_list_matches(integer, integer)",
@@ -592,7 +598,9 @@ describe("readMigrations (fără bază)", () => {
     ]);
     // Dintre tabelele existente: doar cheia unică pe `receipt_lines` (ținta cheii compuse).
     const altered = [...code.matchAll(/alter table "?finet"?\."?(\w+)"?/gi)].map((x) => x[1]!);
-    expect(new Set(altered.filter((t) => !created.includes(t)))).toEqual(new Set(["receipt_lines"]));
+    expect(new Set(altered.filter((t) => !created.includes(t)))).toEqual(
+      new Set(["receipt_lines"]),
+    );
     expect(code).toContain(
       'ALTER TABLE "finet"."receipt_lines" ADD CONSTRAINT "receipt_lines_id_household_key" UNIQUE("id","household_id")',
     );

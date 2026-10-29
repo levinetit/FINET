@@ -927,7 +927,9 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Listele vizibile (comune + personale ale tale), cu numărătorile.",
     description:
       "Lista personală a altui membru nu apare niciodată (nici ca id): vizibilitatea o impune RLS în bază.",
-    query: [{ name: "status", schema: z.enum(SHOPPING_LIST_STATUSES), description: "Doar o stare." }],
+    query: [
+      { name: "status", schema: z.enum(SHOPPING_LIST_STATUSES), description: "Doar o stare." },
+    ],
     success: { status: 200, schema: dataOf(z.array(shoppingListSchema)), description: "Listele." },
     errors: [VALIDATION, REUSED],
   },
@@ -1025,7 +1027,8 @@ export const OPERATIONS: readonly Operation[] = [
     operationId: "reorderShoppingItems",
     tag: "shopping",
     summary: "Ordinea articolelor: o permutare exactă a celor din listă.",
-    description: "Dacă mulțimea diferă (altcineva a adăugat/șters între timp) → 409 `order_mismatch`.",
+    description:
+      "Dacă mulțimea diferă (altcineva a adăugat/șters între timp) → 409 `order_mismatch`.",
     body: { schema: reorderSchema },
     success: { status: 200, schema: dataOf(shoppingListDetailSchema), description: "Lista." },
     errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],

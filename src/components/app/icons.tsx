@@ -50,6 +50,16 @@ export function LogoutIcon() {
   );
 }
 
+export function CartIcon() {
+  return (
+    <Icon>
+      <circle cx="9" cy="20" r="1.5" />
+      <circle cx="18" cy="20" r="1.5" />
+      <path d="M2 3h3l2.7 12.4a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 7H6" />
+    </Icon>
+  );
+}
+
 export function ListIcon() {
   return (
     <Icon>

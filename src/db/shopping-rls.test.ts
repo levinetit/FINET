@@ -26,7 +26,12 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
   const rows = async <T>(userId: string, householdId: string | null, statement: SQL) =>
     (await as(userId, householdId, statement)) as unknown as T[];
 
-  async function newList(owner: string, hh: string, personal: boolean, name = "L"): Promise<string> {
+  async function newList(
+    owner: string,
+    hh: string,
+    personal: boolean,
+    name = "L",
+  ): Promise<string> {
     const id = randomUUID();
     await as(
       owner,
@@ -96,7 +101,11 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     // Fără context RLS, finet_app nu vede nimic.
     const l = await newList(f.A.userId, f.HA, false);
     expect(await rows(f.A.userId, null, sql`select id from finet.shopping_lists`)).toEqual([]);
-    expect((await rows<{ id: string }>(f.A.userId, f.HA, sql`select id from finet.shopping_lists`)).map((x) => x.id)).toContain(l);
+    expect(
+      (await rows<{ id: string }>(f.A.userId, f.HA, sql`select id from finet.shopping_lists`)).map(
+        (x) => x.id,
+      ),
+    ).toContain(l);
   });
 
   it("lista comună: toți membrii; personală: doar proprietarul (citire, scriere, ștergere); altă gospodărie: nimic", async () => {
@@ -104,49 +113,111 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     const personalC = await newList(f.C.userId, f.HA, true, "Doar C");
     const itemC = await newItem(f.C.userId, f.HA, personalC, "secret");
     const ids = (r: { id: string }[]) => r.map((x) => x.id);
-    expect(ids(await rows(f.A.userId, f.HA, sql`select id from finet.shopping_lists`))).toContain(common);
+    expect(ids(await rows(f.A.userId, f.HA, sql`select id from finet.shopping_lists`))).toContain(
+      common,
+    );
     expect(ids(await rows(f.C.userId, f.HA, sql`select id from finet.shopping_lists`))).toEqual(
       expect.arrayContaining([common, personalC]),
     );
-    expect(ids(await rows(f.A.userId, f.HA, sql`select id from finet.shopping_lists`))).not.toContain(personalC);
+    expect(
+      ids(await rows(f.A.userId, f.HA, sql`select id from finet.shopping_lists`)),
+    ).not.toContain(personalC);
     // Articolele moștenesc vizibilitatea listei.
-    expect(await rows(f.A.userId, f.HA, sql`select id from finet.shopping_list_items where id = ${itemC}`)).toEqual([]);
-    expect(await rows(f.C.userId, f.HA, sql`select id from finet.shopping_list_items where id = ${itemC}`)).toHaveLength(1);
+    expect(
+      await rows(
+        f.A.userId,
+        f.HA,
+        sql`select id from finet.shopping_list_items where id = ${itemC}`,
+      ),
+    ).toEqual([]);
+    expect(
+      await rows(
+        f.C.userId,
+        f.HA,
+        sql`select id from finet.shopping_list_items where id = ${itemC}`,
+      ),
+    ).toHaveLength(1);
     // A nu poate scrie în lista lui C: INSERT (WITH CHECK) → 42501; UPDATE/DELETE → 0 rânduri.
     expect(
       await sqlState(() =>
-        as(f.A.userId, f.HA, sql`insert into finet.shopping_list_items (list_id, household_id, name, normalized_name)
-          values (${personalC}, ${f.HA}, 'x', 'x')`),
+        as(
+          f.A.userId,
+          f.HA,
+          sql`insert into finet.shopping_list_items (list_id, household_id, name, normalized_name)
+          values (${personalC}, ${f.HA}, 'x', 'x')`,
+        ),
       ),
     ).toBe("42501");
-    expect(await rows(f.A.userId, f.HA, sql`update finet.shopping_list_items set name = 'furat' where id = ${itemC} returning id`)).toEqual([]);
-    expect(await rows(f.A.userId, f.HA, sql`delete from finet.shopping_lists where id = ${personalC} returning id`)).toEqual([]);
+    expect(
+      await rows(
+        f.A.userId,
+        f.HA,
+        sql`update finet.shopping_list_items set name = 'furat' where id = ${itemC} returning id`,
+      ),
+    ).toEqual([]);
+    expect(
+      await rows(
+        f.A.userId,
+        f.HA,
+        sql`delete from finet.shopping_lists where id = ${personalC} returning id`,
+      ),
+    ).toEqual([]);
     // O listă personală a altuia nu se poate crea (owner ≠ utilizator) și nici "în numele altuia".
     expect(
       await sqlState(() =>
-        as(f.A.userId, f.HA, sql`insert into finet.shopping_lists (household_id, name, owner_user_id, created_by_user_id)
-          values (${f.HA}, 'x', ${f.C.userId}, ${f.A.userId})`),
+        as(
+          f.A.userId,
+          f.HA,
+          sql`insert into finet.shopping_lists (household_id, name, owner_user_id, created_by_user_id)
+          values (${f.HA}, 'x', ${f.C.userId}, ${f.A.userId})`,
+        ),
       ),
     ).toBe("42501");
     expect(
       await sqlState(() =>
-        as(f.A.userId, f.HA, sql`insert into finet.shopping_lists (household_id, name, created_by_user_id)
-          values (${f.HA}, 'x', ${f.C.userId})`),
+        as(
+          f.A.userId,
+          f.HA,
+          sql`insert into finet.shopping_lists (household_id, name, created_by_user_id)
+          values (${f.HA}, 'x', ${f.C.userId})`,
+        ),
       ),
     ).toBe("42501");
     // Altă gospodărie (B) nu vede nimic din HA, nici cu contextul HA setat greșit.
-    expect(await rows(f.B.userId, f.HB, sql`select id from finet.shopping_lists where household_id = ${f.HA}`)).toEqual([]);
+    expect(
+      await rows(
+        f.B.userId,
+        f.HB,
+        sql`select id from finet.shopping_lists where household_id = ${f.HA}`,
+      ),
+    ).toEqual([]);
     expect(await rows(f.B.userId, f.HA, sql`select id from finet.shopping_lists`)).toEqual([]);
     expect(
       await sqlState(() =>
-        as(f.B.userId, f.HB, sql`insert into finet.shopping_lists (household_id, name, created_by_user_id)
-          values (${f.HA}, 'x', ${f.B.userId})`),
+        as(
+          f.B.userId,
+          f.HB,
+          sql`insert into finet.shopping_lists (household_id, name, created_by_user_id)
+          values (${f.HA}, 'x', ${f.B.userId})`,
+        ),
       ),
     ).toBe("42501");
     // Proprietarul poate trece lista la comună, dar nu alt membru să o preia / nu comună → personală.
-    expect(await rows(f.C.userId, f.HA, sql`update finet.shopping_lists set owner_user_id = null where id = ${personalC} returning id`)).toHaveLength(1);
     expect(
-      await sqlState(() => as(f.A.userId, f.HA, sql`update finet.shopping_lists set owner_user_id = ${f.A.userId} where id = ${personalC}`)),
+      await rows(
+        f.C.userId,
+        f.HA,
+        sql`update finet.shopping_lists set owner_user_id = null where id = ${personalC} returning id`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      await sqlState(() =>
+        as(
+          f.A.userId,
+          f.HA,
+          sql`update finet.shopping_lists set owner_user_id = ${f.A.userId} where id = ${personalC}`,
+        ),
+      ),
     ).toBe("23514");
   });
 
@@ -155,8 +226,9 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     const listB = await newList(f.B.userId, f.HB, false);
     // Lista din HB cu household_id = HA: cheia compusă (list_id, household_id) refuză.
     expect(
-      await sqlState(() =>
-        f.admin`insert into finet.shopping_list_items (list_id, household_id, name, normalized_name)
+      await sqlState(
+        () =>
+          f.admin`insert into finet.shopping_list_items (list_id, household_id, name, normalized_name)
           values (${listB}, ${f.HA}, 'x', 'x')`,
       ),
     ).toBe("23503");
@@ -166,29 +238,55 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     // Linia din HB pe un articol din HA: refuzată (cheia compusă spre receipt_lines).
     expect(
       await sqlState(() =>
-        as(f.A.userId, f.HA, sql`update finet.shopping_list_items set matched_receipt_line_id = ${savedB.lineIds[0]!},
-          match_status = 'suggested' where id = ${item}`),
+        as(
+          f.A.userId,
+          f.HA,
+          sql`update finet.shopping_list_items set matched_receipt_line_id = ${savedB.lineIds[0]!},
+          match_status = 'suggested' where id = ${item}`,
+        ),
       ),
     ).toBe("23503");
     // Bon neconfirmat: refuzat de trigger (aceeași eroare 23503).
-    const draft = await seedReceipt(f.admin, f.HA, f.A.userId, [["LAPTE"]], { status: "needs_review" });
+    const draft = await seedReceipt(f.admin, f.HA, f.A.userId, [["LAPTE"]], {
+      status: "needs_review",
+    });
     expect(
       await sqlState(() =>
-        as(f.A.userId, f.HA, sql`update finet.shopping_list_items set matched_receipt_line_id = ${draft.lineIds[0]!},
-          match_status = 'suggested' where id = ${item}`),
+        as(
+          f.A.userId,
+          f.HA,
+          sql`update finet.shopping_list_items set matched_receipt_line_id = ${draft.lineIds[0]!},
+          match_status = 'suggested' where id = ${item}`,
+        ),
       ),
     ).toBe("23503");
     // Bon confirmat din HA: merge. Fără stare (`none`) cu linie → CHECK (23514).
-    await as(f.A.userId, f.HA, sql`update finet.shopping_list_items set matched_receipt_line_id = ${savedA.lineIds[0]!},
-      match_status = 'suggested', match_score = 90, match_source = 'code' where id = ${item}`);
+    await as(
+      f.A.userId,
+      f.HA,
+      sql`update finet.shopping_list_items set matched_receipt_line_id = ${savedA.lineIds[0]!},
+      match_status = 'suggested', match_score = 90, match_source = 'code' where id = ${item}`,
+    );
     expect(
-      await sqlState(() => as(f.A.userId, f.HA, sql`update finet.shopping_list_items set match_status = 'none' where id = ${item}`)),
+      await sqlState(() =>
+        as(
+          f.A.userId,
+          f.HA,
+          sql`update finet.shopping_list_items set match_status = 'none' where id = ${item}`,
+        ),
+      ),
     ).toBe("23514");
     // Ștergerea bonului: NULL DOAR pe linie; household_id și starea rămân.
     await f.admin`delete from finet.receipts where id = ${savedA.id}`;
-    const [raw] = await f.admin<{ household_id: string; matched_receipt_line_id: string | null; match_status: string }[]>`
+    const [raw] = await f.admin<
+      { household_id: string; matched_receipt_line_id: string | null; match_status: string }[]
+    >`
       select household_id, matched_receipt_line_id, match_status from finet.shopping_list_items where id = ${item}`;
-    expect(raw).toEqual({ household_id: f.HA, matched_receipt_line_id: null, match_status: "suggested" });
+    expect(raw).toEqual({
+      household_id: f.HA,
+      matched_receipt_line_id: null,
+      match_status: "suggested",
+    });
   });
 
   it("o linie de bon e propusă/confirmată pentru cel mult UN articol al listei", async () => {
@@ -197,8 +295,12 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     const i1 = await newItem(f.A.userId, f.HA, list, "lapte");
     const i2 = await newItem(f.A.userId, f.HA, list, "lapte 2");
     const link = (item: string, line: string, status: string) =>
-      as(f.A.userId, f.HA, sql`update finet.shopping_list_items set matched_receipt_line_id = ${line},
-        match_status = ${status} where id = ${item}`);
+      as(
+        f.A.userId,
+        f.HA,
+        sql`update finet.shopping_list_items set matched_receipt_line_id = ${line},
+        match_status = ${status} where id = ${item}`,
+      );
     await link(i1, rc.lineIds[0]!, "suggested");
     expect(await sqlState(() => link(i2, rc.lineIds[0]!, "confirmed"))).toBe("23505");
     // Respins (nu ține linia în indexul unic) sau altă linie: merge.
@@ -212,11 +314,15 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
       const cols = { name: sql`'x'`, normalized_name: sql`'x'`, ...over };
       const names = Object.keys(cols).join(", ");
       const values = sql.join(Object.values(cols), sql`, `);
-      return as(f.A.userId, f.HA, sql`insert into finet.shopping_list_items (list_id, household_id, ${sql.raw(names)})
-        values (${list}, ${f.HA}, ${values})`);
+      return as(
+        f.A.userId,
+        f.HA,
+        sql`insert into finet.shopping_list_items (list_id, household_id, ${sql.raw(names)})
+        values (${list}, ${f.HA}, ${values})`,
+      );
     };
     await base({});
-    for (const bad of [
+    const bads: Record<string, SQL>[] = [
       { name: sql`''` },
       { name: sql`' x'` },
       { name: sql`repeat('a', 121)` },
@@ -232,7 +338,8 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
       { match_score: sql`101` },
       { match_status: sql`'altceva'` },
       { match_source: sql`'altceva'` },
-    ]) {
+    ];
+    for (const bad of bads) {
       expect(await sqlState(() => base(bad))).toBe("23514");
     }
     // numeric(9,3): 1.000.000 depășește precizia coloanei (22003), nu ajunge la CHECK.
@@ -243,15 +350,23 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     for (const name of ["''", "' x '", "repeat('a', 101)"]) {
       expect(
         await sqlState(() =>
-          as(f.A.userId, f.HA, sql`insert into finet.shopping_lists (household_id, name, created_by_user_id)
-            values (${f.HA}, ${sql.raw(name)}, ${f.A.userId})`),
+          as(
+            f.A.userId,
+            f.HA,
+            sql`insert into finet.shopping_lists (household_id, name, created_by_user_id)
+            values (${f.HA}, ${sql.raw(name)}, ${f.A.userId})`,
+          ),
         ),
       ).toBe("23514");
     }
     expect(
       await sqlState(() =>
-        as(f.A.userId, f.HA, sql`insert into finet.shopping_lists (household_id, name, status, created_by_user_id)
-          values (${f.HA}, 'ok', 'altceva', ${f.A.userId})`),
+        as(
+          f.A.userId,
+          f.HA,
+          sql`insert into finet.shopping_lists (household_id, name, status, created_by_user_id)
+          values (${f.HA}, 'ok', 'altceva', ${f.A.userId})`,
+        ),
       ),
     ).toBe("23514");
   });
@@ -261,8 +376,12 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     const personalC = await newList(f.C.userId, f.HA, true);
     const rc = await seedReceipt(f.admin, f.HA, f.A.userId, [["LAPTE"]]);
     const request = (user: string, list: string, requester = user) =>
-      as(user, f.HA, sql`insert into finet.shopping_list_ai_requests (household_id, list_id, receipt_id, requested_by_user_id)
-        values (${f.HA}, ${list}, ${rc.id}, ${requester})`);
+      as(
+        user,
+        f.HA,
+        sql`insert into finet.shopping_list_ai_requests (household_id, list_id, receipt_id, requested_by_user_id)
+        values (${f.HA}, ${list}, ${rc.id}, ${requester})`,
+      );
     await request(f.A.userId, common);
     // Nu în numele altcuiva; nu pe lista personală a altuia; nu pentru alt bon din altă gospodărie.
     expect(await sqlState(() => request(f.C.userId, common, f.A.userId))).toBe("42501");
@@ -270,36 +389,64 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     const foreign = await seedReceipt(f.admin, f.HB, f.B.userId, [["LAPTE"]]);
     expect(
       await sqlState(() =>
-        as(f.A.userId, f.HA, sql`insert into finet.shopping_list_ai_requests (household_id, list_id, receipt_id, requested_by_user_id)
-          values (${f.HA}, ${common}, ${foreign.id}, ${f.A.userId})`),
+        as(
+          f.A.userId,
+          f.HA,
+          sql`insert into finet.shopping_list_ai_requests (household_id, list_id, receipt_id, requested_by_user_id)
+          values (${f.HA}, ${common}, ${foreign.id}, ${f.A.userId})`,
+        ),
       ),
     ).toBe("23503");
     // Cererea e vizibilă membrilor listei comune, nu și pentru lista personală a altuia.
     await request(f.C.userId, personalC);
-    expect(await rows(f.A.userId, f.HA, sql`select id from finet.shopping_list_ai_requests where list_id = ${personalC}`)).toEqual([]);
-    expect(await rows(f.C.userId, f.HA, sql`select id from finet.shopping_list_ai_requests where list_id = ${personalC}`)).toHaveLength(1);
+    expect(
+      await rows(
+        f.A.userId,
+        f.HA,
+        sql`select id from finet.shopping_list_ai_requests where list_id = ${personalC}`,
+      ),
+    ).toEqual([]);
+    expect(
+      await rows(
+        f.C.userId,
+        f.HA,
+        sql`select id from finet.shopping_list_ai_requests where list_id = ${personalC}`,
+      ),
+    ).toHaveLength(1);
     // Funcțiile cozii: doar identificatori, doar cereri `queued`/`processing` cu cel care a cerut
     // încă membru activ; finet_app nu vede tabelul fără context.
-    const queued = (await f.db.execute(sql`select * from finet.queued_list_matches(100, 900)`)) as unknown as Record<string, unknown>[];
+    const queued = (await f.db.execute(
+      sql`select * from finet.queued_list_matches(100, 900)`,
+    )) as unknown as Record<string, unknown>[];
     const mine = queued.filter((q) => q.household_id === f.HA);
     expect(mine.length).toBeGreaterThanOrEqual(2);
     expect(Object.keys(mine[0]!).sort()).toEqual(["actor_user_id", "household_id", "request_id"]);
-    expect(mine.map((q) => q.actor_user_id)).toEqual(expect.arrayContaining([f.A.userId, f.C.userId]));
+    expect(mine.map((q) => q.actor_user_id)).toEqual(
+      expect.arrayContaining([f.A.userId, f.C.userId]),
+    );
     const one = (await f.db.execute(
       sql`select * from finet.queued_list_match(${mine[0]!.request_id as string}::uuid)`,
     )) as unknown as Record<string, unknown>[];
     expect(one).toHaveLength(1);
-    expect(await f.db.execute(sql`select * from finet.queued_list_matches(-5, 10)`)).toHaveLength(0);
+    expect(await f.db.execute(sql`select * from finet.queued_list_matches(-5, 10)`)).toHaveLength(
+      0,
+    );
     // O cerere terminată sau cu încercări epuizate nu mai e întoarsă.
     await f.admin`update finet.shopping_list_ai_requests set status = 'done' where list_id = ${common}`;
     await f.admin`update finet.shopping_list_ai_requests set attempts = 3 where list_id = ${personalC}`;
-    const after = (await f.db.execute(sql`select * from finet.queued_list_matches(100, 900)`)) as unknown as Record<string, unknown>[];
+    const after = (await f.db.execute(
+      sql`select * from finet.queued_list_matches(100, 900)`,
+    )) as unknown as Record<string, unknown>[];
     expect(after.filter((q) => q.household_id === f.HA)).toEqual([]);
     // Un membru plecat nu mai are cereri în coadă (nimeni nu lucrează în numele lui).
     await f.admin`update finet.shopping_list_ai_requests set status = 'queued', attempts = 0 where list_id = ${personalC}`;
     await f.admin`delete from finet.household_members where household_id = ${f.HA} and user_id = ${f.C.userId}`;
-    const gone = (await f.db.execute(sql`select * from finet.queued_list_matches(100, 900)`)) as unknown as Record<string, unknown>[];
-    expect(gone.filter((q) => q.household_id === f.HA && q.actor_user_id === f.C.userId)).toEqual([]);
+    const gone = (await f.db.execute(
+      sql`select * from finet.queued_list_matches(100, 900)`,
+    )) as unknown as Record<string, unknown>[];
+    expect(gone.filter((q) => q.household_id === f.HA && q.actor_user_id === f.C.userId)).toEqual(
+      [],
+    );
     await f.admin`insert into finet.household_members (household_id, user_id, role) values (${f.HA}, ${f.C.userId}, 'member')`;
   });
 
@@ -311,17 +458,25 @@ describe.skipIf(!TEST_ADMIN_URL)("0017: liste de cumpărături (finet_app)", () 
     const shared = await newList(U.userId, f.HA, false, "Comună a lui U");
     // Utilizatorul pleacă din gospodărie (nu mai poate vedea nimic), iar lista personală rămâne.
     await f.admin`delete from finet.household_members where household_id = ${f.HA} and user_id = ${U.userId}`;
-    expect(await f.admin`select id from finet.shopping_lists where id = ${personal}`).toHaveLength(1);
+    expect(await f.admin`select id from finet.shopping_lists where id = ${personal}`).toHaveLength(
+      1,
+    );
     const [r] = (await withRlsOn(f.db, { userId: U.userId }, (tx) =>
       tx.execute(sql`select finet.erase_user_shopping_lists() as n`),
     )) as unknown as { n: number }[];
     expect(r!.n).toBe(1);
-    expect(await f.admin`select id from finet.shopping_lists where id = ${personal}`).toHaveLength(0);
-    expect(await f.admin`select id from finet.shopping_list_items where list_id = ${personal}`).toHaveLength(0);
+    expect(await f.admin`select id from finet.shopping_lists where id = ${personal}`).toHaveLength(
+      0,
+    );
+    expect(
+      await f.admin`select id from finet.shopping_list_items where list_id = ${personal}`,
+    ).toHaveLength(0);
     // Lista comună rămâne celorlalți (autorul devine NULL doar la ștergerea utilizatorului).
     expect(await f.admin`select id from finet.shopping_lists where id = ${shared}`).toHaveLength(1);
     // Fără utilizator în context: refuzat; funcția nu e executabilă de PUBLIC.
-    expect(await sqlState(() => f.db.execute(sql`select finet.erase_user_shopping_lists()`))).toBe("42501");
+    expect(await sqlState(() => f.db.execute(sql`select finet.erase_user_shopping_lists()`))).toBe(
+      "42501",
+    );
     // Cascada: ștergerea efectivă a utilizatorului șterge listele lui personale rămase.
     const V = await f.newUser("Șters");
     await f.addMember(f.A, f.HA, V);

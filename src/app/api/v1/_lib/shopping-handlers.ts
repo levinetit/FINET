@@ -7,11 +7,7 @@ import {
   runComparison,
   setItemMatch,
 } from "@/modules/shopping/compare.service";
-import {
-  itemToJson,
-  listToJson,
-  listWithItemsToJson,
-} from "@/modules/shopping/shopping.schema";
+import { itemToJson, listToJson, listWithItemsToJson } from "@/modules/shopping/shopping.schema";
 import {
   addItem,
   copyList,
@@ -90,7 +86,11 @@ export function createShoppingListHandler(request: Request, d: ApiDeps): Promise
   });
 }
 
-export function getShoppingListHandler(request: Request, d: ApiDeps, id: string): Promise<Response> {
+export function getShoppingListHandler(
+  request: Request,
+  d: ApiDeps,
+  id: string,
+): Promise<Response> {
   return handle(request, d, async (ctx) => {
     const hh = await currentHousehold(ctx);
     const view = await getList({ db: d.db }, ctx.actor, hh, routeId(id));
@@ -166,7 +166,11 @@ export function reorderShoppingItemsHandler(
 
 // --- Articolele --------------------------------------------------------------------------------
 
-export function addShoppingItemHandler(request: Request, d: ApiDeps, id: string): Promise<Response> {
+export function addShoppingItemHandler(
+  request: Request,
+  d: ApiDeps,
+  id: string,
+): Promise<Response> {
   return handle(request, d, async (ctx) => {
     const listId = routeId(id);
     const body = await readJsonBody(request);

@@ -159,7 +159,10 @@ export const shoppingListItems = finet.table(
       "shopping_list_items_note_length",
       sql`${t.note} is null or (char_length(${t.note}) >= 1 and char_length(${t.note}) <= 200)`,
     ),
-    check("shopping_list_items_position_range", sql`${t.position} >= 0 and ${t.position} <= 100000`),
+    check(
+      "shopping_list_items_position_range",
+      sql`${t.position} >= 0 and ${t.position} <= 100000`,
+    ),
     // `checked_at` există exact cât timp articolul e bifat (`checked_by` poate fi NULL după
     // ștergerea utilizatorului).
     check("shopping_list_items_checked_shape", sql`(${t.checkedAt} is not null) = ${t.checked}`),

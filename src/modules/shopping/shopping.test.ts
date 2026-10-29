@@ -39,7 +39,18 @@ describe("cantitatea (fără float)", () => {
     expect(quantitySchema.parse("1,5")).toBe("1.5");
     expect(quantitySchema.parse(3)).toBe("3");
     expect(quantitySchema.parse("0.001")).toBe("0.001");
-    for (const bad of ["0", "0.000", "-1", "1.2345", "1e3", "abc", "", "1000000", 1e21, 0.1 + 0.2]) {
+    for (const bad of [
+      "0",
+      "0.000",
+      "-1",
+      "1.2345",
+      "1e3",
+      "abc",
+      "",
+      "1000000",
+      1e21,
+      0.1 + 0.2,
+    ]) {
       expect(quantitySchema.safeParse(bad).success).toBe(false);
     }
   });
@@ -108,9 +119,15 @@ describe.skipIf(!TEST_ADMIN_URL)("liste de cumpărături (Postgres real, finet_a
     // Proprietarul o vede; owner-ul gospodăriei (A) NU, nici altă gospodărie (B).
     expect((await listLists(f.deps, f.C, f.HA)).map((l) => l.id)).toContain(personal.list.id);
     expect((await listLists(f.deps, f.A, f.HA)).map((l) => l.id)).not.toContain(personal.list.id);
-    await expect(getList(f.deps, f.A, f.HA, personal.list.id)).rejects.toBeInstanceOf(NotFoundError);
-    await expect(getList(f.deps, f.B, f.HB, personal.list.id)).rejects.toBeInstanceOf(NotFoundError);
-    await expect(getList(f.deps, f.B, f.HA, personal.list.id)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(getList(f.deps, f.A, f.HA, personal.list.id)).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    await expect(getList(f.deps, f.B, f.HB, personal.list.id)).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    await expect(getList(f.deps, f.B, f.HA, personal.list.id)).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
     // Nici nu o poate modifica, șterge sau completa.
     await expect(
       updateList(f.deps, f.A, f.HA, personal.list.id, { name: "Furat" }),
@@ -165,12 +182,12 @@ describe.skipIf(!TEST_ADMIN_URL)("liste de cumpărături (Postgres real, finet_a
     expect(read.list.checkedCount).toBe(1);
     const off = await updateItem(f.deps, f.C, f.HA, l.list.id, id, { checked: false });
     expect(off.item).toMatchObject({ checked: false, checkedAt: null, checkedByMe: null });
-    expect((await updateItem(f.deps, f.C, f.HA, l.list.id, id, { checked: false })).item.checked).toBe(
-      false,
+    expect(
+      (await updateItem(f.deps, f.C, f.HA, l.list.id, id, { checked: false })).item.checked,
+    ).toBe(false);
+    await expect(updateItem(f.deps, f.A, f.HA, l.list.id, id, {})).rejects.toBeInstanceOf(
+      ValidationError,
     );
-    await expect(
-      updateItem(f.deps, f.A, f.HA, l.list.id, id, {}),
-    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it("editare, ștergere, reordonare (permutare exactă) și copiere", async () => {
@@ -185,12 +202,21 @@ describe.skipIf(!TEST_ADMIN_URL)("liste de cumpărături (Postgres real, finet_a
       unit: "kg",
       note: "telemea",
     });
-    expect(renamed.item).toMatchObject({ name: "Brânză", quantity: "0.5", unit: "kg", note: "telemea" });
+    expect(renamed.item).toMatchObject({
+      name: "Brânză",
+      quantity: "0.5",
+      unit: "kg",
+      note: "telemea",
+    });
     const order = await reorderItems(f.deps, f.A, f.HA, l.list.id, { itemIds: [c, a, b] });
     expect(names(order.items)).toEqual(["c3", "a1", "Brânză"]);
     expect(order.items.map((i) => i.position)).toEqual([1, 2, 3]);
     // Mulțime diferită (articol lipsă, în plus, dublat) → 409 `order_mismatch`.
-    for (const ids of [[a, b], [a, b, c, c], [a, b, "00000000-0000-4000-8000-000000000001"]]) {
+    for (const ids of [
+      [a, b],
+      [a, b, c, c],
+      [a, b, "00000000-0000-4000-8000-000000000001"],
+    ]) {
       await expect(
         reorderItems(f.deps, f.A, f.HA, l.list.id, { itemIds: ids }),
       ).rejects.toMatchObject({ reason: "order_mismatch" });
@@ -200,7 +226,12 @@ describe.skipIf(!TEST_ADMIN_URL)("liste de cumpărături (Postgres real, finet_a
     expect(added.item.position).toBe(4);
     await updateItem(f.deps, f.A, f.HA, l.list.id, a, { checked: true });
     const copy = await copyList(f.deps, f.C, f.HA, l.list.id);
-    expect(copy.list).toMatchObject({ name: "Ordine (copie)", shared: true, itemCount: 4, checkedCount: 0 });
+    expect(copy.list).toMatchObject({
+      name: "Ordine (copie)",
+      shared: true,
+      itemCount: 4,
+      checkedCount: 0,
+    });
     expect(names(copy.items)).toEqual(["c3", "a1", "Brânză", "d4"]);
     expect(copy.items.every((i) => !i.checked && i.match.status === "none")).toBe(true);
     await deleteItem(f.deps, f.A, f.HA, l.list.id, d4Id(added));
@@ -213,9 +244,9 @@ describe.skipIf(!TEST_ADMIN_URL)("liste de cumpărături (Postgres real, finet_a
     expect((await listLists(f.deps, f.A, f.HA, { status: "archived" })).map((x) => x.id)).toContain(
       l.list.id,
     );
-    expect((await listLists(f.deps, f.A, f.HA, { status: "active" })).map((x) => x.id)).not.toContain(
-      l.list.id,
-    );
+    expect(
+      (await listLists(f.deps, f.A, f.HA, { status: "active" })).map((x) => x.id),
+    ).not.toContain(l.list.id);
     // Ștergerea listei: auditată (comună), fără nume în audit.
     await deleteList(f.deps, f.A, f.HA, l.list.id);
     await expect(getList(f.deps, f.A, f.HA, l.list.id)).rejects.toBeInstanceOf(NotFoundError);
@@ -321,7 +352,12 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
       name: "Săptămâna",
       items: [{ name: "lapte" }, { name: "pâine" }, { name: "ouă" }, { name: "cafea" }],
     });
-    const [lapte, paine, oua, cafea] = list.items.map((i) => i.id) as [string, string, string, string];
+    const [lapte, paine, oua, cafea] = list.items.map((i) => i.id) as [
+      string,
+      string,
+      string,
+      string,
+    ];
     await updateItem(f.deps, f.A, f.HA, list.list.id, oua, { checked: true });
     const rc = await seedReceipt(f.admin, f.HA, f.A.userId, lines);
 
@@ -331,7 +367,9 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
       ["lapte", "LAPTE ZUZU 1,5% 1L", "suggested", false],
       ["pâine", "PAINE FELIATA 500G", "suggested", false],
     ]);
-    expect(run.view.matched.every((m) => (m.score ?? 0) >= MATCH_HIGH && m.source === "code")).toBe(true);
+    expect(run.view.matched.every((m) => (m.score ?? 0) >= MATCH_HIGH && m.source === "code")).toBe(
+      true,
+    );
     // Neplanificat: șamponul (pe bon, nu pe listă); SGR și punga nu sunt „produse”.
     expect(run.view.unplanned.map((l) => l.name)).toEqual(["SAMPON HAIR 400ML"]);
     expect(run.view.forgotten.map((i) => i.name)).toEqual(["cafea"]);
@@ -350,7 +388,9 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
     expect((await getComparison(f.deps, f.C, f.HA, list.list.id, rc.id)).view).toEqual(second.view);
 
     // Confirmă laptele; respinge pâinea; leagă manual cafeaua de șampon (corecție).
-    const confirmed = await setItemMatch(f.deps, f.A, f.HA, list.list.id, lapte, { action: "confirm" });
+    const confirmed = await setItemMatch(f.deps, f.A, f.HA, list.list.id, lapte, {
+      action: "confirm",
+    });
     expect(confirmed.item.match.status).toBe("confirmed");
     await setItemMatch(f.deps, f.A, f.HA, list.list.id, paine, { action: "reject" });
     const manual = await setItemMatch(f.deps, f.A, f.HA, list.list.id, cafea, {
@@ -367,12 +407,17 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
     ]);
     expect(again.view.unplanned.map((l) => l.name)).toEqual(["PAINE FELIATA 500G"]);
     expect(again.view.forgotten.map((i) => i.name)).toEqual(["pâine"]);
-    const rejected = (await getList(f.deps, f.A, f.HA, list.list.id)).items.find((i) => i.id === paine)!;
+    const rejected = (await getList(f.deps, f.A, f.HA, list.list.id)).items.find(
+      (i) => i.id === paine,
+    )!;
     expect(rejected.match.status).toBe("rejected");
 
     // O linie confirmată pentru alt articol nu se poate lua.
     await expect(
-      setItemMatch(f.deps, f.A, f.HA, list.list.id, oua, { action: "set", receiptLineId: rc.lineIds[2]! }),
+      setItemMatch(f.deps, f.A, f.HA, list.list.id, oua, {
+        action: "set",
+        receiptLineId: rc.lineIds[2]!,
+      }),
     ).rejects.toMatchObject({ reason: "line_already_matched" });
     // Fără propunere nu e nimic de confirmat/respins.
     await expect(
@@ -384,25 +429,41 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
     // Linie a altui tip (SGR), inexistentă sau din altă gospodărie → 404.
     for (const lineId of [rc.lineIds[3]!, "00000000-0000-4000-8000-000000000999"]) {
       await expect(
-        setItemMatch(f.deps, f.A, f.HA, list.list.id, oua, { action: "set", receiptLineId: lineId }),
+        setItemMatch(f.deps, f.A, f.HA, list.list.id, oua, {
+          action: "set",
+          receiptLineId: lineId,
+        }),
       ).rejects.toBeInstanceOf(NotFoundError);
     }
 
     // Un al doilea bon: laptele confirmat pe primul apare „cumpărat în altă parte”.
-    const rc2 = await seedReceipt(f.admin, f.HA, f.A.userId, [["OUA M 10 BUC"], ["MERE GOLDEN 1KG"]]);
+    const rc2 = await seedReceipt(f.admin, f.HA, f.A.userId, [
+      ["OUA M 10 BUC"],
+      ["MERE GOLDEN 1KG"],
+    ]);
     const cmp2 = await runComparison(f.deps, f.A, f.HA, list.list.id, { receiptId: rc2.id });
-    expect(cmp2.view.matched.map((m) => [m.item.name, m.line.name])).toEqual([["ouă", "OUA M 10 BUC"]]);
+    expect(cmp2.view.matched.map((m) => [m.item.name, m.line.name])).toEqual([
+      ["ouă", "OUA M 10 BUC"],
+    ]);
     expect(cmp2.view.boughtElsewhere.map((i) => i.name)).toEqual(["lapte", "cafea"]);
     expect(cmp2.view.unplanned.map((l) => l.name)).toEqual(["MERE GOLDEN 1KG"]);
 
     // „Șterge potrivirea”.
     const cleared = await setItemMatch(f.deps, f.A, f.HA, list.list.id, oua, { action: "clear" });
-    expect(cleared.item.match).toEqual({ status: "none", score: null, source: null, receiptLineId: null });
+    expect(cleared.item.match).toEqual({
+      status: "none",
+      score: null,
+      source: null,
+      receiptLineId: null,
+    });
   });
 
   it("istoricul: o confirmare învață perechea; o respingere o oprește (alte liste, alte bonuri)", async () => {
     const rcA = await seedReceipt(f.admin, f.HA, f.A.userId, [["LACTATE PREMIUM 1L"]]);
-    const l1 = await createList(f.deps, f.A, f.HA, { name: "Învățare 1", items: [{ name: "lapte praf" }] });
+    const l1 = await createList(f.deps, f.A, f.HA, {
+      name: "Învățare 1",
+      items: [{ name: "lapte praf" }],
+    });
     // Fără istoric, „lapte praf” nu seamănă destul cu „lactate premium”.
     const before = await runComparison(f.deps, f.A, f.HA, l1.list.id, { receiptId: rcA.id });
     expect(before.view.matched).toEqual([]);
@@ -411,16 +472,25 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
       receiptLineId: rcA.lineIds[0]!,
     });
     const rcB = await seedReceipt(f.admin, f.HA, f.A.userId, [["LACTATE PREMIUM 1L"]]);
-    const l2 = await createList(f.deps, f.C, f.HA, { name: "Învățare 2", items: [{ name: "lapte praf" }] });
+    const l2 = await createList(f.deps, f.C, f.HA, {
+      name: "Învățare 2",
+      items: [{ name: "lapte praf" }],
+    });
     const learned = await runComparison(f.deps, f.C, f.HA, l2.list.id, { receiptId: rcB.id });
     expect(learned.view.matched.map((m) => [m.source, m.score])).toEqual([["learned", 100]]);
     // Respingerea: perechea (lapte, lapte zuzu) nu se mai propune pe liste noi.
     const rcC = await seedReceipt(f.admin, f.HA, f.A.userId, [["LAPTE ZUZU 1,5% 1L"]]);
-    const l3 = await createList(f.deps, f.A, f.HA, { name: "Respingere 1", items: [{ name: "lapte" }] });
+    const l3 = await createList(f.deps, f.A, f.HA, {
+      name: "Respingere 1",
+      items: [{ name: "lapte" }],
+    });
     const first = await runComparison(f.deps, f.A, f.HA, l3.list.id, { receiptId: rcC.id });
     expect(first.view.matched).toHaveLength(1);
     await setItemMatch(f.deps, f.A, f.HA, l3.list.id, l3.items[0]!.id, { action: "reject" });
-    const l4 = await createList(f.deps, f.A, f.HA, { name: "Respingere 2", items: [{ name: "lapte" }] });
+    const l4 = await createList(f.deps, f.A, f.HA, {
+      name: "Respingere 2",
+      items: [{ name: "lapte" }],
+    });
     const second = await runComparison(f.deps, f.A, f.HA, l4.list.id, { receiptId: rcC.id });
     expect(second.view.matched).toEqual([]);
     expect(second.view.forgotten.map((i) => i.name)).toEqual(["lapte"]);
@@ -428,7 +498,9 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
 
   it("acces: bon neconfirmat → 409; bon/listă străine → 404; lista personală a altuia → 404", async () => {
     const list = await createList(f.deps, f.A, f.HA, { name: "Acces", items: [{ name: "lapte" }] });
-    const draft = await seedReceipt(f.admin, f.HA, f.A.userId, [["LAPTE"]], { status: "needs_review" });
+    const draft = await seedReceipt(f.admin, f.HA, f.A.userId, [["LAPTE"]], {
+      status: "needs_review",
+    });
     await expect(
       runComparison(f.deps, f.A, f.HA, list.list.id, { receiptId: draft.id }),
     ).rejects.toMatchObject({ reason: "receipt_not_confirmed" });
@@ -466,22 +538,35 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
 
   it("bonul șters: potrivirea rămâne fără linie și se arată ca „fără potrivire”", async () => {
     const rc = await seedReceipt(f.admin, f.HA, f.A.userId, [["BANANE"]]);
-    const list = await createList(f.deps, f.A, f.HA, { name: "Bon șters", items: [{ name: "banane" }] });
+    const list = await createList(f.deps, f.A, f.HA, {
+      name: "Bon șters",
+      items: [{ name: "banane" }],
+    });
     const cmp = await runComparison(f.deps, f.A, f.HA, list.list.id, { receiptId: rc.id });
     expect(cmp.view.matched).toHaveLength(1);
     await setItemMatch(f.deps, f.A, f.HA, list.list.id, list.items[0]!.id, { action: "confirm" });
     await f.admin`delete from finet.receipts where id = ${rc.id}`;
     const after = await getList(f.deps, f.A, f.HA, list.list.id);
-    expect(after.items[0]!.match).toEqual({ status: "none", score: null, source: null, receiptLineId: null });
+    expect(after.items[0]!.match).toEqual({
+      status: "none",
+      score: null,
+      source: null,
+      receiptLineId: null,
+    });
     const [raw] = await f.admin<{ match_status: string; matched_receipt_line_id: string | null }[]>`
       select match_status, matched_receipt_line_id from finet.shopping_list_items
        where id = ${list.items[0]!.id}`;
     expect(raw).toEqual({ match_status: "confirmed", matched_receipt_line_id: null });
     // Redenumirea unui articol cu propunere o șterge; una confirmată rămâne.
     const rc2 = await seedReceipt(f.admin, f.HA, f.A.userId, [["BANANE"]]);
-    const l2 = await createList(f.deps, f.A, f.HA, { name: "Redenumire", items: [{ name: "banane" }, { name: "mere" }] });
+    const l2 = await createList(f.deps, f.A, f.HA, {
+      name: "Redenumire",
+      items: [{ name: "banane" }, { name: "mere" }],
+    });
     await runComparison(f.deps, f.A, f.HA, l2.list.id, { receiptId: rc2.id });
-    const renamed = await updateItem(f.deps, f.A, f.HA, l2.list.id, l2.items[0]!.id, { name: "portocale" });
+    const renamed = await updateItem(f.deps, f.A, f.HA, l2.list.id, l2.items[0]!.id, {
+      name: "portocale",
+    });
     expect(renamed.item.match.status).toBe("none");
   });
 
@@ -495,7 +580,9 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
     await grantExternalAi(f.admin, f.A.userId);
     const withConsent = await runComparison(f.deps, f.A, f.HA, list.list.id, { receiptId: rc.id });
     expect(withConsent.view.ai.status).toBe("queued");
-    const [req] = await f.admin<{ status: string; requested_by_user_id: string; attempts: number }[]>`
+    const [req] = await f.admin<
+      { status: string; requested_by_user_id: string; attempts: number }[]
+    >`
       select status, requested_by_user_id, attempts from finet.shopping_list_ai_requests
        where list_id = ${list.list.id}`;
     expect(req).toEqual({ status: "queued", requested_by_user_id: f.A.userId, attempts: 0 });
@@ -515,17 +602,36 @@ describe.skipIf(!TEST_ADMIN_URL)("comparația listă ↔ bon (Postgres real, fin
     expect(still).toEqual({ status: "queued", requested_by_user_id: f.A.userId });
     // În lucru (`processing`): la fel.
     await f.admin`update finet.shopping_list_ai_requests set status = 'processing' where list_id = ${list.list.id}`;
-    expect((await runComparison(f.deps, f.C, f.HA, list.list.id, { receiptId: rc.id })).view.ai.status).toBe("processing");
+    expect(
+      (await runComparison(f.deps, f.C, f.HA, list.list.id, { receiptId: rc.id })).view.ai.status,
+    ).toBe("processing");
     // Terminată: C o poate pune din nou în coadă, în numele lui, cu încercările la 0.
     await f.admin`update finet.shopping_list_ai_requests set status = 'failed', attempts = 3, error_code = 'timeout' where list_id = ${list.list.id}`;
-    expect((await runComparison(f.deps, f.C, f.HA, list.list.id, { receiptId: rc.id })).view.ai.status).toBe("queued");
-    const [requeued] = await f.admin<{ status: string; requested_by_user_id: string; attempts: number; error_code: string | null }[]>`
+    expect(
+      (await runComparison(f.deps, f.C, f.HA, list.list.id, { receiptId: rc.id })).view.ai.status,
+    ).toBe("queued");
+    const [requeued] = await f.admin<
+      {
+        status: string;
+        requested_by_user_id: string;
+        attempts: number;
+        error_code: string | null;
+      }[]
+    >`
       select status, requested_by_user_id, attempts, error_code from finet.shopping_list_ai_requests
        where list_id = ${list.list.id}`;
-    expect(requeued).toEqual({ status: "queued", requested_by_user_id: f.C.userId, attempts: 0, error_code: null });
+    expect(requeued).toEqual({
+      status: "queued",
+      requested_by_user_id: f.C.userId,
+      attempts: 0,
+      error_code: null,
+    });
     // Fără perechi ambigue (potrivire sigură) nu se pune nimic în coadă.
     const rc2 = await seedReceipt(f.admin, f.HA, f.A.userId, [["PAINE FELIATA 500G"]]);
-    const l2 = await createList(f.deps, f.A, f.HA, { name: "AI sigur", items: [{ name: "pâine" }] });
+    const l2 = await createList(f.deps, f.A, f.HA, {
+      name: "AI sigur",
+      items: [{ name: "pâine" }],
+    });
     const sure = await runComparison(f.deps, f.A, f.HA, l2.list.id, { receiptId: rc2.id });
     expect(sure.view.ai.status).toBe("none");
   });

@@ -56,7 +56,9 @@ import {
  * - Nimic din liste nu atinge tranzacțiile sau bonurile.
  */
 
-export function listView(row: ListRowWithCounts | (ListRow & { itemCount?: number; checkedCount?: number })): ListView {
+export function listView(
+  row: ListRowWithCounts | (ListRow & { itemCount?: number; checkedCount?: number }),
+): ListView {
   return {
     id: row.id,
     name: row.name,
@@ -101,7 +103,8 @@ export function itemView(row: ItemRow, userId: string): ItemView {
 /** Numele normalizat al articolului (garantat de schema Zod; aici doar o plasă de siguranță). */
 function normalizedOf(name: string): string {
   const n = normalizeProductName(name);
-  if (n === null) throw new ValidationError({ name: "Numele trebuie să conțină litere sau cifre." });
+  if (n === null)
+    throw new ValidationError({ name: "Numele trebuie să conțină litere sau cifre." });
   return n;
 }
 
@@ -187,7 +190,8 @@ export async function updateList(
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     const current = await requireList(tx, m.householdId, id, true);
     // `shared: true` pe o listă deja comună = nimic de făcut (idempotent).
-    const ownerPatch = patch.shared === true && current.ownerUserId !== null ? { ownerUserId: null } : {};
+    const ownerPatch =
+      patch.shared === true && current.ownerUserId !== null ? { ownerUserId: null } : {};
     const row = await updateListRow(tx, m.householdId, id, {
       ...(patch.name === undefined ? {} : { name: patch.name }),
       ...(patch.status === undefined ? {} : { status: patch.status }),
@@ -268,7 +272,10 @@ function copyName(name: string): string {
   const chars = Array.from(name);
   return chars.length + COPY_SUFFIX.length <= 100
     ? `${name}${COPY_SUFFIX}`
-    : `${chars.slice(0, 100 - COPY_SUFFIX.length).join("").trimEnd()}${COPY_SUFFIX}`;
+    : `${chars
+        .slice(0, 100 - COPY_SUFFIX.length)
+        .join("")
+        .trimEnd()}${COPY_SUFFIX}`;
 }
 
 // --- Articolele --------------------------------------------------------------------------------
@@ -347,7 +354,10 @@ export async function updateItem(
       set.checkedAt = null;
     }
     // Nicio schimbare efectivă (de exemplu bifarea repetată): citirea curentă, fără scriere.
-    const row = Object.keys(set).length === 0 ? current : await updateItemRow(tx, m.householdId, lid, iid, set);
+    const row =
+      Object.keys(set).length === 0
+        ? current
+        : await updateItemRow(tx, m.householdId, lid, iid, set);
     if (!row) throw new NotFoundError();
     if (row !== current) await touchList(tx, m.householdId, lid);
     return { item: itemView(row, actor.userId), shared: list.ownerUserId === null };
@@ -396,12 +406,18 @@ export async function reorderItems(
       new Set(wanted).size === wanted.length &&
       current.every((i) => wanted.includes(i.id));
     if (!same) {
-      throw new ConflictError("order_mismatch", "Lista s-a schimbat; reîncarc-o și încearcă din nou.");
+      throw new ConflictError(
+        "order_mismatch",
+        "Lista s-a schimbat; reîncarc-o și încearcă din nou.",
+      );
     }
     await setItemPositions(tx, m.householdId, lid, wanted);
     await touchList(tx, m.householdId, lid);
     const items = await selectItems(tx, m.householdId, lid);
-    return { list: listView({ ...list, updatedAt: new Date() }), items: items.map((i) => itemView(i, actor.userId)) };
+    return {
+      list: listView({ ...list, updatedAt: new Date() }),
+      items: items.map((i) => itemView(i, actor.userId)),
+    };
   });
 }
 

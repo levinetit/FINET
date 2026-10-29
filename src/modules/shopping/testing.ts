@@ -8,7 +8,10 @@ import { normalizeProductName } from "@/modules/receipts/normalize";
  * Doar pentru testele listelor de cumpărături: un bon (cu documentul lui) și liniile lui, scrise
  * direct ca superuser (ca în `matching.test.ts`). Nu se importă din codul aplicației.
  */
-export type SeedLine = readonly [rawName: string, kind?: "product" | "discount" | "deposit_sgr" | "bag" | "other"];
+export type SeedLine = readonly [
+  rawName: string,
+  kind?: "product" | "discount" | "deposit_sgr" | "bag" | "other",
+];
 
 export async function seedReceipt(
   admin: postgres.Sql,

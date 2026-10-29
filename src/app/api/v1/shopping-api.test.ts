@@ -57,7 +57,11 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
     return { status: res.status, body: (text ? JSON.parse(text) : {}) as Body, res };
   }
   const createList = (s: Sessions, body: unknown, headers: Record<string, string> = {}) =>
-    call(SH.createShoppingListHandler, "/api/v1/shopping-lists", { bearer: s.bearer, body, headers });
+    call(SH.createShoppingListHandler, "/api/v1/shopping-lists", {
+      bearer: s.bearer,
+      body,
+      headers,
+    });
   const getList = (s: Sessions, id: string) =>
     call(SH.getShoppingListHandler, `/api/v1/shopping-lists/${id}`, { bearer: s.bearer }, id);
   const patchItem = (s: Sessions, list: string, item: string, body: unknown) =>
@@ -109,7 +113,12 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
           const f = await frame(Math.max(1, deadline - Date.now()));
           if (f === null) return null;
           if (f.includes("event: change")) {
-            return JSON.parse(f.split("\n").find((l) => l.startsWith("data: "))!.slice(6));
+            return JSON.parse(
+              f
+                .split("\n")
+                .find((l) => l.startsWith("data: "))!
+                .slice(6),
+            );
           }
         }
       },
@@ -159,7 +168,12 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
       [SH.getShoppingListHandler, `/api/v1/shopping-lists/${id}`, {}, id],
       [SH.shoppingSuggestionsHandler, "/api/v1/shopping-lists/suggestions", {}],
       [SH.shoppingReceiptsHandler, "/api/v1/shopping-lists/receipts", {}],
-      [SH.runShoppingComparisonHandler, `/api/v1/shopping-lists/${id}/comparisons`, { body: {} }, id],
+      [
+        SH.runShoppingComparisonHandler,
+        `/api/v1/shopping-lists/${id}/comparisons`,
+        { body: {} },
+        id,
+      ],
     ];
     for (const [h, path, init, ...rest] of cases) {
       expect((await call(h, path, init, ...rest)).status, path).toBe(401);
@@ -182,7 +196,9 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
     // B (membru) o vede; C (altă gospodărie) primește 404.
     expect((await getList(B, detail.list.id)).status).toBe(200);
     expect((await getList(C, detail.list.id)).status).toBe(404);
-    const all = await call(SH.listShoppingListsHandler, "/api/v1/shopping-lists", { bearer: B.bearer });
+    const all = await call(SH.listShoppingListsHandler, "/api/v1/shopping-lists", {
+      bearer: B.bearer,
+    });
     expect((all.body.data as { id: string }[]).map((l) => l.id)).toContain(detail.list.id);
     // Cheile necunoscute / corp invalid / stare necunoscută.
     expect((await createList(A, { name: "x", householdId: hhA })).status).toBe(400);
@@ -215,7 +231,11 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
     const add = await call(
       SH.addShoppingItemHandler,
       `/api/v1/shopping-lists/${d.list.id}/items`,
-      { bearer: A.bearer, body: { name: "Ceai", quantity: "0,5", unit: "kg" }, headers: { "idempotency-key": newKey() } },
+      {
+        bearer: A.bearer,
+        body: { name: "Ceai", quantity: "0,5", unit: "kg" },
+        headers: { "idempotency-key": newKey() },
+      },
       d.list.id,
     );
     expect(add.status).toBe(201);
@@ -232,11 +252,17 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
   });
 
   it("lista personală: invizibilă pentru ceilalți (404 pe orice rută), comună la cerere", async () => {
-    const created = await createList(B, { name: "Cadouri", personal: true, items: [{ name: "Eșarfă" }] });
+    const created = await createList(B, {
+      name: "Cadouri",
+      personal: true,
+      items: [{ name: "Eșarfă" }],
+    });
     const d = created.body.data as ListDetail;
     expect(d.list.shared).toBe(false);
     expect((await getList(A, d.list.id)).status).toBe(404);
-    const listA = await call(SH.listShoppingListsHandler, "/api/v1/shopping-lists", { bearer: A.bearer });
+    const listA = await call(SH.listShoppingListsHandler, "/api/v1/shopping-lists", {
+      bearer: A.bearer,
+    });
     expect(JSON.stringify(listA.body)).not.toContain(d.list.id);
     expect((await patchItem(A, d.list.id, d.items[0]!.id, { checked: true })).status).toBe(404);
     const del = await call(
@@ -297,7 +323,12 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
     const copy = await call(
       SH.copyShoppingListHandler,
       `/api/v1/shopping-lists/${d.list.id}/copy`,
-      { bearer: A.bearer, method: "POST", body: { name: "Copia" }, headers: { "idempotency-key": newKey() } },
+      {
+        bearer: A.bearer,
+        method: "POST",
+        body: { name: "Copia" },
+        headers: { "idempotency-key": newKey() },
+      },
       d.list.id,
     );
     expect(copy.status).toBe(201);
@@ -305,7 +336,8 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
   });
 
   it("evenimente live: lista comună ajunge la B (doar tip + id), cea personală doar la proprietar", async () => {
-    const shared = (await createList(A, { name: "Live", items: [{ name: "Ouă" }] })).body.data as ListDetail;
+    const shared = (await createList(A, { name: "Live", items: [{ name: "Ouă" }] })).body
+      .data as ListDetail;
     const streamB = await openEvents(B);
     const streamA = await openEvents(A);
     try {
@@ -315,8 +347,12 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
       // Doar tip + id: niciun nume sau conținut în cadru.
       expect(JSON.stringify(seen)).not.toContain("Ouă");
       // Lista personală a lui A: B nu primește nimic, A primește.
-      const personal = (await createList(A, { name: "Secret", personal: true })).body.data as ListDetail;
-      expect(await streamA.nextChange()).toMatchObject({ type: "shopping_list", id: expect.any(String) });
+      const personal = (await createList(A, { name: "Secret", personal: true })).body
+        .data as ListDetail;
+      expect(await streamA.nextChange()).toMatchObject({
+        type: "shopping_list",
+        id: expect.any(String),
+      });
       const leak = await streamB.nextChange(600);
       expect(leak?.id).not.toBe(personal.list.id);
     } finally {
@@ -326,12 +362,20 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
   });
 
   it("comparația: bon neconfirmat → 409, propuneri, acțiuni, GET persistat, limita de rată", async () => {
-    const list = (await createList(A, {
-      name: "Cumpărături",
-      items: [{ name: "lapte" }, { name: "pâine" }, { name: "cafea" }],
-    })).body.data as ListDetail;
-    const saved = await seedReceipt(fx.scratch.admin, hhA, idA, [["LAPTE ZUZU 1,5% 1L"], ["PAINE FELIATA 500G"], ["SAMPON HAIR 400ML"]]);
-    const draft = await seedReceipt(fx.scratch.admin, hhA, idA, [["LAPTE"]], { status: "needs_review" });
+    const list = (
+      await createList(A, {
+        name: "Cumpărături",
+        items: [{ name: "lapte" }, { name: "pâine" }, { name: "cafea" }],
+      })
+    ).body.data as ListDetail;
+    const saved = await seedReceipt(fx.scratch.admin, hhA, idA, [
+      ["LAPTE ZUZU 1,5% 1L"],
+      ["PAINE FELIATA 500G"],
+      ["SAMPON HAIR 400ML"],
+    ]);
+    const draft = await seedReceipt(fx.scratch.admin, hhA, idA, [["LAPTE"]], {
+      status: "needs_review",
+    });
     const run = (s: Sessions, receiptId: string, deps?: ApiDeps) =>
       call(
         SH.runShoppingComparisonHandler,
@@ -358,7 +402,8 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
     expect(view.ai.status).toBe("none");
 
     // B confirmă laptele și respinge pâinea; A vede starea persistată.
-    const matchPath = (item: string) => `/api/v1/shopping-lists/${list.list.id}/items/${item}/match`;
+    const matchPath = (item: string) =>
+      `/api/v1/shopping-lists/${list.list.id}/items/${item}/match`;
     const lapte = view.matched[0]!.item.id;
     const paine = view.matched[1]!.item.id;
     const confirm = await call(
@@ -406,7 +451,9 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
     expect(gv.unplanned.map((l) => l.name)).toEqual(["PAINE FELIATA 500G", "SAMPON HAIR 400ML"]);
 
     // Bonurile oferite: doar cele confirmate din gospodărie.
-    const rec = await call(SH.shoppingReceiptsHandler, "/api/v1/shopping-lists/receipts", { bearer: A.bearer });
+    const rec = await call(SH.shoppingReceiptsHandler, "/api/v1/shopping-lists/receipts", {
+      bearer: A.bearer,
+    });
     const recIds = (rec.body.data as { id: string }[]).map((r) => r.id);
     expect(recIds).toContain(saved.id);
     expect(recIds).not.toContain(draft.id);
@@ -438,15 +485,26 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 liste de cumpărături pe PostgreS
 
   it("sugestiile: produse frecvente, parametri strict, limită de rată", async () => {
     await seedReceipt(fx.scratch.admin, hhA, idA, [["BANANE"], ["BANANE"]]);
-    const sug = await call(SH.shoppingSuggestionsHandler, "/api/v1/shopping-lists/suggestions?q=ban", {
-      bearer: A.bearer,
-    });
+    const sug = await call(
+      SH.shoppingSuggestionsHandler,
+      "/api/v1/shopping-lists/suggestions?q=ban",
+      {
+        bearer: A.bearer,
+      },
+    );
     expect(sug.status).toBe(200);
     expect((sug.body.data as { name: string }[]).map((s) => s.name)).toEqual(["banane"]);
     expect(
-      (await call(SH.shoppingSuggestionsHandler, "/api/v1/shopping-lists/suggestions?z=1", { bearer: A.bearer })).status,
+      (
+        await call(SH.shoppingSuggestionsHandler, "/api/v1/shopping-lists/suggestions?z=1", {
+          bearer: A.bearer,
+        })
+      ).status,
     ).toBe(400);
-    const strict: ApiDeps = { ...env, limits: { ...env.limits, shoppingSuggest: { max: 1, windowSeconds: 600 } } };
+    const strict: ApiDeps = {
+      ...env,
+      limits: { ...env.limits, shoppingSuggest: { max: 1, windowSeconds: 600 } },
+    };
     const hit = () =>
       SH.shoppingSuggestionsHandler(
         apiRequest("/api/v1/shopping-lists/suggestions", { bearer: C.bearer }),

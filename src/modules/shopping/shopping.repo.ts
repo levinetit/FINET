@@ -111,7 +111,9 @@ export async function selectItems(tx: Tx, householdId: string, listId: string): 
   return tx
     .select()
     .from(shoppingListItems)
-    .where(and(eq(shoppingListItems.householdId, householdId), eq(shoppingListItems.listId, listId)))
+    .where(
+      and(eq(shoppingListItems.householdId, householdId), eq(shoppingListItems.listId, listId)),
+    )
     .orderBy(
       asc(shoppingListItems.position),
       asc(shoppingListItems.createdAt),
@@ -206,11 +208,17 @@ export async function deleteItemRow(
   return rows.length > 0;
 }
 
-export async function maxItemPosition(tx: Tx, householdId: string, listId: string): Promise<number> {
+export async function maxItemPosition(
+  tx: Tx,
+  householdId: string,
+  listId: string,
+): Promise<number> {
   const [row] = await tx
     .select({ max: sql<number>`coalesce(max(${shoppingListItems.position}), 0)::int` })
     .from(shoppingListItems)
-    .where(and(eq(shoppingListItems.householdId, householdId), eq(shoppingListItems.listId, listId)));
+    .where(
+      and(eq(shoppingListItems.householdId, householdId), eq(shoppingListItems.listId, listId)),
+    );
   return row?.max ?? 0;
 }
 
@@ -331,7 +339,11 @@ export async function selectRecentSavedReceipts(
     })
     .from(receipts)
     .where(and(eq(receipts.householdId, householdId), eq(receipts.status, "saved")))
-    .orderBy(sql`${receipts.occurredOn} desc nulls last`, desc(receipts.createdAt), asc(receipts.id))
+    .orderBy(
+      sql`${receipts.occurredOn} desc nulls last`,
+      desc(receipts.createdAt),
+      asc(receipts.id),
+    )
     .limit(limit);
 }
 

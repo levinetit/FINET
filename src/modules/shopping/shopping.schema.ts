@@ -193,9 +193,8 @@ export function itemToJson(i: ItemView): ItemJson {
   return { ...i, checkedAt: i.checkedAt ? i.checkedAt.toISOString() : null };
 }
 
-export function listWithItemsToJson(v: ListWithItems): {
-  list: ListJson;
-  items: ItemJson[];
-} {
+export type ListWithItemsJson = { list: ListJson; items: ItemJson[] };
+
+export function listWithItemsToJson(v: ListWithItems): ListWithItemsJson {
   return { list: listToJson(v.list), items: v.items.map(itemToJson) };
 }

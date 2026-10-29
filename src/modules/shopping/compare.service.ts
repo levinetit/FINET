@@ -115,7 +115,10 @@ async function requireSavedReceipt(
   const header = await selectReceiptHeader(tx, householdId, receiptId);
   if (!header) throw new NotFoundError();
   if (header.status !== "saved") {
-    throw new ConflictError("receipt_not_confirmed", "Bonul trebuie confirmat înainte de comparație.");
+    throw new ConflictError(
+      "receipt_not_confirmed",
+      "Bonul trebuie confirmat înainte de comparație.",
+    );
   }
   return header;
 }
@@ -167,7 +170,8 @@ async function buildView(
   const boughtElsewhere: ItemView[] = [];
   for (const row of items) {
     const status = effective(row);
-    const line = row.matchedReceiptLineId === null ? undefined : lineById.get(row.matchedReceiptLineId);
+    const line =
+      row.matchedReceiptLineId === null ? undefined : lineById.get(row.matchedReceiptLineId);
     if ((status === "suggested" || status === "confirmed") && line) {
       claimed.add(line.id);
       const source = row.matchSource ?? "manual";
@@ -401,7 +405,10 @@ export async function setItemMatch(
     switch (input.action) {
       case "confirm":
         if (status !== "suggested") {
-          throw new ConflictError("no_suggestion", "Articolul nu are nicio propunere de confirmat.");
+          throw new ConflictError(
+            "no_suggestion",
+            "Articolul nu are nicio propunere de confirmat.",
+          );
         }
         patch = { matchStatus: "confirmed" };
         break;
@@ -413,7 +420,12 @@ export async function setItemMatch(
         patch = { matchStatus: "rejected" };
         break;
       case "clear":
-        patch = { matchStatus: "none", matchedReceiptLineId: null, matchScore: null, matchSource: null };
+        patch = {
+          matchStatus: "none",
+          matchedReceiptLineId: null,
+          matchScore: null,
+          matchSource: null,
+        };
         break;
       case "set": {
         const [line] = await selectLinesByIds(tx, m.householdId, [input.receiptLineId]);
