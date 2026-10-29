@@ -22,7 +22,7 @@ import { type Draft, amountOf, currencyFrom, finalizeLines, ibanLast4 } from "./
 export const BRD_PARSER_VERSION = 1;
 const STYLE = "dot_comma" as const;
 
-// Codurile operațiunii (`OPH…`, `OPTTZ…`, `NC …`, `OP …/…`) = referința băncii (nu e unică).
+// Codurile operațiunii (`OP…`, `NC …`, `OP …/…`) = referința băncii (nu e unică).
 const REFERENCE_RE = /^(?:OP[A-Z0-9/]{6,}|NC \d[\d ]{6,}|OP \d+\/\d+)$/;
 
 export function parseBrd(raw: readonly TextItem[]): ParsedStatement {

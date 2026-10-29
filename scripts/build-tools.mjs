@@ -44,3 +44,7 @@ for (const [name, entry] of Object.entries(TOOLS)) {
 mkdirSync("dist/tools", { recursive: true });
 copyFileSync("src/worker/receipts/pdf-child.mjs", "dist/tools/pdf-child.mjs");
 console.log("build-tools: dist/tools/pdf-child.mjs");
+// Faza 7 (ADR 0018): procesul copil care extrage elementele de text poziționale din extrase PDF,
+// căutat de `src/worker/statements/pdf-items-sandbox.ts` lângă `worker.mjs`.
+copyFileSync("src/worker/statements/pdf-items-child.mjs", "dist/tools/pdf-items-child.mjs");
+console.log("build-tools: dist/tools/pdf-items-child.mjs");
