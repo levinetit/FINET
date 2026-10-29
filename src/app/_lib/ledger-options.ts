@@ -38,6 +38,12 @@ export async function formOptions(
     tags: tags
       .filter((t) => !t.hidden || keptTags.has(t.id))
       .map((t) => ({ id: t.id, name: t.name, color: t.color })),
-    allAccounts: accounts.accounts.map((a) => ({ id: a.id, name: a.name, currency: a.currency })),
+    // Faza 8: `ownerUserId` (null = cont comun) decide dacă o cheltuială se poate împărți.
+    allAccounts: accounts.accounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      currency: a.currency,
+      ownerUserId: a.ownerUserId,
+    })),
   };
 }

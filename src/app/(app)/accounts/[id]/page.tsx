@@ -60,6 +60,7 @@ export default async function AccountPage({
           types={ACCOUNT_TYPES}
           currencies={DB_CURRENCIES}
           currencyLocked={!empty}
+          meUserId={page.actor.userId}
         />
         <AccountActions id={account.id} archived={account.archived} empty={empty} />
       </div>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Fragment } from "react";
 
 import { CategoryChart, DailyChart, MonthlyChart } from "@/components/planning/charts";
 import { MonthSelector } from "@/components/planning/month-selector";
@@ -23,6 +24,9 @@ import { getBudgetStatuses } from "@/modules/budgets/budgets.service";
 import { listCategories } from "@/modules/categories/categories.service";
 import { dashboardToJson } from "@/modules/dashboard/dashboard.schema";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
+import { balancesToJson } from "@/modules/family/family.schema";
+import { listMembers } from "@/modules/family/members.service";
+import { getBalances } from "@/modules/family/settlements.service";
 import { goalToJson } from "@/modules/goals/goals.schema";
 import { listGoals } from "@/modules/goals/goals.service";
 import { getMe } from "@/modules/profile/profile.service";
@@ -62,14 +66,18 @@ export default async function DashboardPage({
       ? await load(async () => {
           const deps = { db, now };
           const query = { month: selection.month };
-          const [dashboard, budgets, goals, accounts, recent, categories] = await Promise.all([
-            getDashboard(deps, page.actor, householdId, query),
-            getBudgetStatuses(deps, page.actor, householdId, query),
-            listGoals(deps, page.actor, householdId, { status: "active" }),
-            listAccounts(deps, page.actor, householdId),
-            listTransactions(deps, page.actor, householdId, { limit: 5 }),
-            listCategories(deps, page.actor, householdId, { includeHidden: true }),
-          ]);
+          const [dashboard, budgets, goals, accounts, recent, categories, balances, members] =
+            await Promise.all([
+              getDashboard(deps, page.actor, householdId, query),
+              getBudgetStatuses(deps, page.actor, householdId, query),
+              listGoals(deps, page.actor, householdId, { status: "active" }),
+              listAccounts(deps, page.actor, householdId),
+              listTransactions(deps, page.actor, householdId, { limit: 5 }),
+              listCategories(deps, page.actor, householdId, { includeHidden: true }),
+              // Faza 8: widgetul „Ai de dat / Ai de primit”.
+              getBalances(deps, page.actor, householdId),
+              listMembers(deps, page.actor, householdId),
+            ]);
           return {
             dashboard: dashboardToJson(dashboard),
             budgets: budgets.map(budgetStatusToJson),
@@ -78,6 +86,7 @@ export default async function DashboardPage({
             totals: accounts.totals.map(currencyTotalToJson),
             recent: recent.data.map(transactionToJson),
             categoryName: new Map(categories.map((c) => [c.id, c.name] as const)),
+            family: { me: balancesToJson(balances).me, members: members.length },
           };
         })
       : null;
@@ -107,6 +116,10 @@ export default async function DashboardPage({
         {selection?.invalid ? <Alert tone="info">{ro.planning.invalidMonth}</Alert> : null}
         {data && !data.ok ? <Alert>{t.loadError}</Alert> : null}
         {v ? <BudgetAlert statuses={v.budgets} month={month} /> : null}
+        {v &&
+        (v.family.members > 1 || v.family.me.some((m) => m.owesMinor > 0 || m.owedMinor > 0)) ? (
+          <FamilyWidget me={v.family.me} />
+        ) : null}
         {v && !v.dashboard.onboarding.completed ? (
           <Onboarding
             hasAccount={v.dashboard.onboarding.hasAccount}
@@ -410,6 +423,61 @@ function Onboarding({
           );
         })}
       </ol>
+    </Card>
+  );
+}
+
+/**
+ * Widgetul de împărțire (master prompt, „Dashboard”): „Ai de dat / Ai de primit”, pe monedă, din
+ * soldurile reciproce (Faza 8). Fără nume și fără detalii: acestea sunt pe pagina „Familie”.
+ */
+function FamilyWidget({
+  me,
+}: Readonly<{
+  me: ReadonlyArray<Readonly<{ currency: Currency; owesMinor: number; owedMinor: number }>>;
+}>) {
+  const f = ro.family;
+  const open = me.filter((m) => m.owesMinor > 0 || m.owedMinor > 0);
+  return (
+    <Card aria-labelledby="family-widget" data-testid="family-widget">
+      <CardHeader>
+        <CardTitle id="family-widget">{f.widgetTitle}</CardTitle>
+      </CardHeader>
+      {open.length === 0 ? (
+        <p className="text-muted-foreground" data-testid="family-widget-empty">
+          {f.widgetEmpty}
+        </p>
+      ) : (
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {open.map((m) => (
+            <Fragment key={m.currency}>
+              <div className="rounded-md bg-surface-2 px-4 py-3">
+                <dt className="text-sm text-muted-foreground">{`${f.youOwe} (${m.currency})`}</dt>
+                <dd
+                  className="font-mono text-xl font-semibold tabular-nums"
+                  data-testid={`widget-owes-${m.currency}`}
+                >
+                  {formatMinor(m.owesMinor, m.currency)}
+                </dd>
+              </div>
+              <div className="rounded-md bg-surface-2 px-4 py-3">
+                <dt className="text-sm text-muted-foreground">{`${f.youAreOwed} (${m.currency})`}</dt>
+                <dd
+                  className="font-mono text-xl font-semibold tabular-nums"
+                  data-testid={`widget-owed-${m.currency}`}
+                >
+                  {formatMinor(m.owedMinor, m.currency)}
+                </dd>
+              </div>
+            </Fragment>
+          ))}
+        </dl>
+      )}
+      <div>
+        <Link href="/family" className={buttonClasses("outline", "sm")}>
+          {f.seeFamily}
+        </Link>
+      </div>
     </Card>
   );
 }

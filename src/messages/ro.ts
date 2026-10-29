@@ -21,6 +21,7 @@ export const ro = {
     import: "Import",
     scan: "Scanează",
     receipts: "Bonuri",
+    family: "Familie",
     reports: "Rapoarte",
     profile: "Profil",
     more: "Mai mult",
@@ -314,6 +315,9 @@ export const ro = {
           "Se împart doar cheltuielile plătite din contul tău personal.",
         split_not_payer: "Doar cine a plătit modifică împărțirea.",
         settlement_already_cancelled: "Decontarea e deja anulată.",
+        settlement_exceeds_debt:
+          "Decontarea depășește datoria curentă dintre cei doi membri. Verifică suma și sensul.",
+        balance_limit: "Soldul dintre cei doi membri ar depăși plafonul permis.",
       } as Record<string, string>,
     },
   },
@@ -339,6 +343,14 @@ export const ro = {
     archive: "Arhivează",
     unarchive: "Dezarhivează",
     archivedBadge: "Arhivat",
+    // Faza 8 (ADR 0016): conturi personale și comune.
+    personal: "Cont personal (îl vezi doar tu)",
+    personalHint:
+      "Ceilalți membri nu văd contul, tranzacțiile din el și nici sumele lui în totaluri. Lasă nebifat pentru un cont comun al familiei.",
+    personalEditHint:
+      "Debifat, contul devine comun și îl văd toți membrii, cu tot istoricul. Un cont comun nu mai poate redeveni personal.",
+    commonHint: "Cont comun: îl văd toți membrii. Un cont comun nu poate deveni personal.",
+    personalBadge: "Personal",
     archivedOk: "Contul a fost arhivat.",
     unarchivedOk: "Contul a fost dezarhivat.",
     deleteHint: "Doar un cont fără tranzacții se poate șterge; altfel arhivează-l.",
@@ -976,6 +988,165 @@ export const ro = {
       too_many_lines: "Bonul are prea multe linii; s-au păstrat primele 500.",
     } as Record<string, string>,
     issueLine: (n: number) => `linia ${n}`,
+  },
+  family: {
+    title: "Familie",
+    eyebrow: "Gospodăria",
+    noHousehold: "Nu faci parte încă din nicio gospodărie.",
+    loadError: "Datele familiei nu au putut fi încărcate. Reîncarcă pagina.",
+    you: "tu",
+    formerMember: "fost membru",
+    roles: { owner: "Proprietar", member: "Membru" } as Record<string, string>,
+    // Membrii
+    membersTitle: "Membri",
+    membersHint: "Cel mult 6 membri. Proprietarii invită, schimbă roluri și pot scoate membri.",
+    joinedOn: (date: string) => `din ${date}`,
+    makeOwner: "Fă-l proprietar",
+    makeMember: "Fă-l membru",
+    transferOwnership: "Predă rolul de proprietar",
+    transferConfirm: "Persoana aleasă devine proprietar, iar tu devii membru. Continui?",
+    transferYes: "Da, predă",
+    remove: "Scoate din gospodărie",
+    removeConfirm:
+      "Membrul nu va mai vedea datele gospodăriei. Conturile lui personale devin invizibile pentru toți; împărțirile și decontările rămân în istoric.",
+    removeYes: "Da, scoate",
+    removedUnsettled:
+      "Membrul a fost scos. Atenție: avea solduri nedecontate, care rămân în istoric (apare ca „fost membru”).",
+    removed: "Membrul a fost scos.",
+    leave: "Părăsește gospodăria",
+    leaveConfirm:
+      "Nu vei mai vedea datele gospodăriei. Conturile tale personale de aici devin invizibile pentru toți până revii.",
+    leaveYes: "Da, pleacă",
+    leaveUnsettled:
+      "Ai părăsit gospodăria. Atenție: aveai solduri nedecontate; ele rămân în istoric, decontează-le cu ceilalți.",
+    roleSaved: "Rolul a fost schimbat.",
+    // Invitațiile
+    invitesTitle: "Invitații",
+    invitesHint:
+      "Un link de invitație e valabil cel mult 7 zile și se poate folosi o singură dată. Persoana invitată trebuie să aibă cont FINET și acces prin Cloudflare Access.",
+    inviteRole: "Rolul celui invitat",
+    inviteHours: "Valabilitate",
+    inviteHoursOptions: [
+      { value: 24, label: "24 de ore" },
+      { value: 72, label: "3 zile" },
+      { value: 168, label: "7 zile" },
+    ],
+    createInvite: "Creează link de invitație",
+    creatingInvite: "Se creează…",
+    inviteCreated:
+      "Link creat. Copiază-l acum: nu va mai fi afișat (în FINET se păstrează doar o amprentă a lui).",
+    inviteLink: "Linkul de invitație",
+    copy: "Copiază",
+    copied: "Copiat.",
+    copyFailed: "Copierea nu a reușit: selectează linkul și copiază-l manual.",
+    noInvites: "Nicio invitație încă.",
+    inviteStatus: {
+      active: "Activă",
+      used: "Folosită",
+      revoked: "Revocată",
+      expired: "Expirată",
+    } as Record<string, string>,
+    expiresAt: (when: string) => `expiră la ${when}`,
+    revoke: "Revocă",
+    revokeConfirm: "Linkul nu va mai putea fi folosit.",
+    revokeYes: "Da, revocă",
+    // Soldurile
+    balancesTitle: "Solduri între membri",
+    balancesHint: "Din cheltuielile împărțite și decontări, separat pe monedă (fără conversie).",
+    balancesEmpty: "Nu există solduri: nicio cheltuială împărțită nedecontată.",
+    owes: (debtor: string, creditor: string) => `${debtor} îi datorează lui ${creditor}`,
+    youOwe: "Ai de dat",
+    youAreOwed: "Ai de primit",
+    // Decontările
+    settlementsTitle: "Decontări",
+    settlementsHint:
+      "Înregistrează banii dați înapoi. O decontare parțială e o sumă mai mică decât soldul.",
+    settlementFrom: "Cine a dat banii",
+    settlementTo: "Cui",
+    settlementAmount: "Suma",
+    settlementCurrency: "Moneda",
+    settlementDate: "Data",
+    settlementNote: "Notă",
+    addSettlement: "Înregistrează decontarea",
+    addingSettlement: "Se salvează…",
+    settlementSaved: "Decontarea a fost înregistrată.",
+    settlementsEmpty: "Nicio decontare încă.",
+    settlementLine: (from: string, to: string) => `${from} → ${to}`,
+    cancelled: "anulată",
+    cancelSettlement: "Anulează",
+    cancelSettlementConfirm: "Decontarea rămâne în istoric, marcată „anulată”, iar soldul revine.",
+    cancelSettlementYes: "Da, anulează",
+    // Împărțirile
+    splitsTitle: "Cheltuieli împărțite recent",
+    splitsEmpty:
+      "Nicio cheltuială împărțită. Împarte o cheltuială din contul tău personal, din pagina tranzacției.",
+    paidBy: (name: string) => `plătit de ${name}`,
+    // Conturi și bugete
+    scopeTitle: "Ce văd ceilalți membri",
+    scopeHint:
+      "Conturile și bugetele COMUNE le văd toți membrii. Cele PERSONALE le vezi doar tu, inclusiv tranzacțiile din ele (și în totaluri și rapoarte).",
+    commonAccounts: "Conturi comune",
+    personalAccounts: "Conturile tale personale",
+    commonBudgets: "Bugete comune",
+    personalBudgets: "Bugetele tale personale",
+    none: "niciunul",
+    receiptsNote:
+      "Bonurile încărcate sunt văzute de toți membrii, chiar dacă sunt salvate pe un cont personal.",
+    // Comutatorul
+    switcherLabel: "Gospodăria activă",
+    switch: "Schimbă",
+    switching: "Se schimbă…",
+    // Widgetul de pe Acasă
+    widgetTitle: "Împărțeli în familie",
+    widgetEmpty: "Ești la zi: nu ai nimic de dat sau de primit.",
+    seeFamily: "Vezi familia",
+    // Actualizările live
+    liveUpdated: "Datele au fost actualizate.",
+  },
+  join: {
+    title: "Invitație în gospodărie",
+    intro:
+      "Ai primit un link de invitație într-o gospodărie FINET. După acceptare vei vedea conturile și bugetele comune ale familiei; conturile tale personale rămân doar ale tale.",
+    accept: "Acceptă invitația",
+    accepting: "Se verifică…",
+    unavailable:
+      "Invitația nu mai este valabilă: a expirat, a fost folosită sau revocată, ori linkul e greșit. Cere un link nou.",
+    rateLimited: (minutes: number) =>
+      `Prea multe încercări. Încearcă din nou peste ${minutes} ${minutes === 1 ? "minut" : "minute"}.`,
+    alreadyMember: "Faci deja parte din această gospodărie. Am făcut-o gospodăria activă.",
+    joined: "Ai intrat în gospodărie.",
+    goFamily: "Mergi la Familie",
+    full: "Gospodăria are deja numărul maxim de membri (6).",
+  },
+  split: {
+    title: "Împarte cheltuiala",
+    hint: "Doar cheltuielile din contul tău personal. Plătitorul ești tu; ceilalți îți datorează partea lor.",
+    notEligibleCommon:
+      "Cheltuiala e dintr-un cont comun: banii sunt deja ai tuturor, deci nu se împarte.",
+    notEligibleOther: "Împărțirea o setează doar cine a plătit.",
+    current: "Împărțirea actuală",
+    locked:
+      "Cheltuiala e împărțită: suma, contul și tipul nu se mai pot schimba, iar tranzacția nu se poate șterge până elimini împărțirea.",
+    mode: "Cum împarți",
+    modes: { equal: "În părți egale", percent: "Pe procente", fixed: "Sume fixe" } as Record<
+      string,
+      string
+    >,
+    participants: "Cine participă",
+    percentOf: (name: string) => `Procentul lui ${name}`,
+    amountOf: (name: string) => `Partea lui ${name}`,
+    percentHint: "Procentele trebuie să însumeze exact 100 (de exemplu 33,34 + 33,33 + 33,33).",
+    fixedHint: (total: string) => `Sumele trebuie să însumeze exact ${total}.`,
+    save: "Salvează împărțirea",
+    saving: "Se salvează…",
+    saved: "Împărțirea a fost salvată.",
+    clear: "Elimină împărțirea",
+    clearConfirm: "Soldurile dintre membri se recalculează fără această cheltuială.",
+    clearYes: "Da, elimină",
+    cleared: "Împărțirea a fost eliminată.",
+    needTwo: "Alege cel puțin doi membri.",
+    soloHousehold:
+      "Ești singur în gospodărie: invită un membru din pagina Familie ca să poți împărți.",
   },
   common: {
     loading: "Se încarcă…",

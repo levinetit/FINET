@@ -33,12 +33,15 @@ export function AccountForm({
   types,
   currencies,
   currencyLocked = false,
+  meUserId,
 }: Readonly<{
   account?: AccountJson;
   types: readonly string[];
   currencies: readonly string[];
   /** Contul are tranzacții: moneda nu se mai schimbă. */
   currencyLocked?: boolean;
+  /** Utilizatorul curent (Faza 8): un cont personal se creează doar pentru tine. */
+  meUserId?: string;
 }>) {
   const router = useRouter();
   const hydrated = useHydrated();
@@ -70,6 +73,10 @@ export function AccountForm({
       openingBalanceMinor,
     };
     if (!account || !currencyLocked) body.currency = currency;
+    // Faza 8 (ADR 0016): personal = doar al tău; un cont comun nu devine personal.
+    const personal = form.get("personal") === "on";
+    if (!account && personal && meUserId) body.ownerUserId = meUserId;
+    if (account && account.ownerUserId !== null && !personal) body.ownerUserId = null;
     const result = account
       ? await submit<AccountJson>(`/api/v1/accounts/${account.id}`, "PATCH", body, {
           lockOnSuccess: true,
@@ -173,6 +180,26 @@ export function AccountForm({
               />
             )}
           </Field>
+          {meUserId && (!account || account.ownerUserId === meUserId) ? (
+            <div className="flex flex-col gap-1">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  name="personal"
+                  defaultChecked={Boolean(account && account.ownerUserId === meUserId)}
+                  className="size-4"
+                  aria-describedby="account-personal-hint"
+                  data-testid="account-personal"
+                />
+                {ro.accounts.personal}
+              </label>
+              <p id="account-personal-hint" className="text-xs text-muted-foreground">
+                {account ? ro.accounts.personalEditHint : ro.accounts.personalHint}
+              </p>
+            </div>
+          ) : account ? (
+            <p className="text-xs text-muted-foreground">{ro.accounts.commonHint}</p>
+          ) : null}
           <Alert>{errors.form}</Alert>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={busy}>

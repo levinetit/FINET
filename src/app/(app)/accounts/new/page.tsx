@@ -20,7 +20,11 @@ export default async function NewAccountPage() {
         usageStats={page.usageStats}
       />
       {page.householdId ? (
-        <AccountForm types={ACCOUNT_TYPES} currencies={DB_CURRENCIES} />
+        <AccountForm
+          types={ACCOUNT_TYPES}
+          currencies={DB_CURRENCIES}
+          meUserId={page.actor.userId}
+        />
       ) : (
         <Card>
           <p className="text-muted-foreground">{ro.ledger.noHousehold}</p>
