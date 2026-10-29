@@ -159,6 +159,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
+      // Extrasele (Faza 7, F7-B): utilizatorii `statements`, `statements2`, `statements3`; doar
+      // date SINTETICE. Partea cu PDF și potrivirea cer workerul + serverul AI fals (ca `receipts`).
+      name: "statements",
+      testMatch: /statements\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // Doar fixture-ul `request`: nu pornește niciun browser.
       name: "access",
       testMatch: /access\.spec\.ts$/,
