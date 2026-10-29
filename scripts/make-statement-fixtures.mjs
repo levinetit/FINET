@@ -449,7 +449,7 @@ function brd() {
 
 function raiffeisen() {
   const doc = new Doc();
-  const IBAN = "RO31 RZBR 0000 0600 7777 1234";
+  const IBAN = "RO30 RZBR 0000 0600 7777 1234";
   const txs = [
     {
       d: "02.11.2026",

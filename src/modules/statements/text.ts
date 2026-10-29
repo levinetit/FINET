@@ -199,10 +199,17 @@ export function repairRaiffeisen(s: string): string {
   return s.replace(/[`\][~{}]/g, (c) => RAIFFEISEN_MAP[c] ?? c);
 }
 
-// IBAN-uri (cu sau fără spații) și numere de card mascate: eliminate din descrierile stocate.
-const IBAN_RE = /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,4})?\b/g;
-const CARD_RE = /\b\d{4,6}[*X.]{4,}\d{4}\b|\b(?:X{4} ){3}\d{4}\b|\.{3,}\d{4}\b/g;
+// IBAN-uri (cu sau fără spații, litere mari sau mici, TĂIATE peste rândurile de continuare: între
+// grupuri poate apărea separatorul „ · ” al rândurilor unite) și numere de card mascate: eliminate
+// din descrierile stocate (revizuirea F7-A). Se aplică DUPĂ unirea rândurilor.
+const GAP = "(?:\\s?·\\s?|\\s)?";
+const IBAN_RE = new RegExp(
+  `(?<![A-Za-z0-9])[A-Za-z]{2}\\d{2}(?:${GAP}[A-Za-z0-9]{4}){3,7}(?:\\s?\\d[A-Za-z0-9]{0,3})?(?![A-Za-z0-9])`,
+  "g",
+);
+const CARD_RE = /\b\d{4,6}[*X.]{4,}\d{4}\b|\b(?:X{4} ){3}\d{4}\b|\.{3,}\d{4}\b/gi;
 const CNP_RE = /\bCNP\/CF:\s*\S+/gi;
+const SEP = " · ";
 
 /**
  * Descrierea stocată: rândurile unite cu „ · ”, fără IBAN-uri, numere de card și CNP-uri
@@ -210,16 +217,22 @@ const CNP_RE = /\bCNP\/CF:\s*\S+/gi;
  */
 export function buildDescription(parts: readonly string[]): string {
   const joined = parts
-    .map((p) => p.replace(CNP_RE, "").replace(IBAN_RE, "").replace(CARD_RE, "").trim())
+    .map((p) => p.replace(CNP_RE, "").replace(CARD_RE, "").trim())
+    .filter((p) => p !== "")
+    .join(SEP)
+    .replace(IBAN_RE, " ");
+  const cleaned = joined
+    .split("·")
     .map((p) =>
       p
-        .replace(/[,;]\s*$/, "")
         .replace(/\s{2,}/g, " ")
+        .trim()
+        .replace(/[,;]\s*$/, "")
         .trim(),
     )
     .filter((p) => p !== "")
-    .join(" · ");
-  const chars = Array.from(cleanText(joined, STATEMENT_DESCRIPTION_MAX) ?? "");
+    .join(SEP);
+  const chars = Array.from(cleanText(cleaned, STATEMENT_DESCRIPTION_MAX) ?? "");
   return chars.slice(0, STATEMENT_DESCRIPTION_MAX).join("") || "—";
 }
 
