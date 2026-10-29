@@ -14,6 +14,7 @@ export * from "./households";
 export * from "./ledger";
 export * from "./planning";
 export * from "./recurring";
+export * from "./statements";
 export * from "./user-data";
 
 /**
