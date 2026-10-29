@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: ro.help.title };
 
 /**
  * Ghidul `/help` (Faza 9, ADR 0020), în zona autentificată (și în modul `personal`): pașii
- * principali (conturi, tranzacții, bonuri, extrase „în curând” până la Faza 7, familie, instalarea
+ * principali (conturi, tranzacții, bonuri, extrase (Faza 7), familie, instalarea
  * PWA) și întrebările frecvente. Text static din `ro.help`; fără date ale utilizatorului.
  * Întrebările frecvente folosesc `<details>`/`<summary>` (accesibile din tastatură, fără JS).
  */

@@ -2,11 +2,11 @@ import { type Page, expect } from "@playwright/test";
 
 /**
  * Datele testelor E2E de autentificare. Utilizatorii se creează ÎNAINTE de rulare, cu CLI-ul
- * admin (parola din stdin), câte douăzeci și unu pentru fiecare mod, ca scenariile să nu se încurce (fără IP
+ * admin (parola din stdin), câte douăzeci și patru pentru fiecare mod, ca scenariile să nu se încurce (fără IP
  * de încredere în dezvoltare, rate limiting-ul e pe email; mutațiile API au 120/min per
  * utilizator, de aceea seed-ul de paginare are utilizatorul lui):
  *
- *   for u in main parola sesiuni ledger ledger2 seed planning planning2 regresii recurring recurring2 receipts receipts2 family family2 family3 pwa pwa2 gdpr gdpr2 a11y; do
+ *   for u in main parola sesiuni ledger ledger2 seed planning planning2 regresii recurring recurring2 receipts receipts2 family family2 family3 pwa pwa2 gdpr gdpr2 a11y statements statements2 statements3; do
  *     printf '%s\n' "$E2E_PASSWORD" | FINET_ROLE=admin DATABASE_URL=<finet_app> \
  *       node dist/tools/admin.mjs create-user --email "e2e-$u-<mod>@finet.test" \
  *       --name "E2E $u" --password-stdin
@@ -32,7 +32,8 @@ export function password(): string {
  * receipts2; Faza 6: al doilea fără consimțământ AI, și pentru izolare) și `family` (family,
  * family2, family3; Faza 8: owner, membru prin invitație, utilizator din afară) și `pwa` (pwa,
  * pwa2; Faza 9: scanarea offline, coada locală, deconectarea), `gdpr` (gdpr, gdpr2; F9-B: exportul
- * și ștergerea contului — `gdpr2` nu mai există după test) și `a11y` (F9-B: auditul axe).
+ * și ștergerea contului — `gdpr2` nu mai există după test), `a11y` (F9-B: auditul axe) și `statements`
+ * (statements, statements2, statements3; Faza 7: proprietarul, o altă gospodărie, un membru).
  */
 export const USER_KINDS = [
   "main",
@@ -56,6 +57,9 @@ export const USER_KINDS = [
   "gdpr",
   "gdpr2",
   "a11y",
+  "statements",
+  "statements2",
+  "statements3",
 ] as const;
 export type UserKind = (typeof USER_KINDS)[number];
 

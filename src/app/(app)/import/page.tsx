@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { Alert } from "@/components/ui/alert";
+import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getStorage } from "@/lib/storage";
 import { ro } from "@/messages/ro";
+import { listAccounts } from "@/modules/accounts/accounts.service";
 import { dailyUsage, listDocuments } from "@/modules/documents/documents.service";
 import { getConsents } from "@/modules/usage/consents";
 
@@ -11,6 +14,37 @@ import { load, requireLedgerPage } from "../../_lib/ledger-page";
 import { PageHeader } from "../page-header";
 
 import { type RecentDocument, ImportClient } from "./import-client";
+import { StatementImport } from "./statement-import";
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/** Filele „Bon fiscal” / „Extras bancar” (linkuri: funcționează și fără JavaScript). */
+function Tabs({ statement }: Readonly<{ statement: boolean }>) {
+  const t = ro.imports.tabs;
+  return (
+    <nav aria-label={t.label} className="mb-4">
+      <ul className="flex flex-wrap gap-2">
+        {(
+          [
+            ["/import", t.receipt, !statement],
+            ["/import?tip=extras", t.statement, statement],
+          ] as const
+        ).map(([href, label, current]) => (
+          <li key={href}>
+            <Link
+              href={href}
+              aria-current={current ? "page" : undefined}
+              className={buttonClasses(current ? "secondary" : "ghost")}
+              data-testid={current ? "import-tab-current" : undefined}
+            >
+              {label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
 
 export const metadata: Metadata = { title: ro.imports.title };
 
@@ -26,10 +60,22 @@ function dayAgo(): string {
  * document (`queued` → `processing` → `needs_review`), cu polling blând. Datele inițiale vin de pe
  * server (documentele din ultimele 24 de ore), restul prin `/api/v1/documents`.
  */
-export default async function ImportPage() {
+export default async function ImportPage({
+  searchParams,
+}: Readonly<{ searchParams: SearchParams }>) {
   const page = await requireLedgerPage("/import");
   const t = ro.imports;
-  const header = <PageHeader eyebrow={t.eyebrow} title={t.title} usageStats={page.usageStats} />;
+  const statement = (await searchParams).tip === "extras";
+  const header = (
+    <>
+      <PageHeader
+        eyebrow={statement ? ro.statements.eyebrow : t.eyebrow}
+        title={t.title}
+        usageStats={page.usageStats}
+      />
+      <Tabs statement={statement} />
+    </>
+  );
   if (!page.householdId) {
     return (
       <>
@@ -42,6 +88,32 @@ export default async function ImportPage() {
   }
   const householdId = page.householdId;
   const { db, config } = page.session.runtime;
+  if (statement) {
+    // Extrasele (F7-B): conturile vizibile și deschise (un cont personal al altui membru nu apare).
+    const accounts = await load(async () =>
+      (await listAccounts({ db }, page.actor, householdId)).accounts
+        .filter((a) => a.type !== "cash")
+        .map((a) => ({ id: a.id, name: a.name, currency: a.currency })),
+    );
+    return (
+      <>
+        {header}
+        {accounts.ok ? (
+          <StatementImport accounts={accounts.value} />
+        ) : (
+          <Alert>{ro.ledger.loadError}</Alert>
+        )}
+        <p className="mt-4 flex flex-wrap gap-3 text-sm">
+          <Link href="/statements" className="font-semibold text-primary underline">
+            {ro.statements.list}
+          </Link>
+          <Link href="/statements/coverage" className="font-semibold text-primary underline">
+            {ro.statements.coverage}
+          </Link>
+        </p>
+      </>
+    );
+  }
   const result = await load(async () => {
     const since = dayAgo();
     const deps = { db, config, storage: getStorage() };

@@ -1,0 +1,40 @@
+{
+  "bank": "revolut",
+  "currency": "RON",
+  "periodStart": "2026-11-01",
+  "periodEnd": "2026-11-07",
+  "openingBalanceMinor": "12034",
+  "closingBalanceMinor": "58061",
+  "pendingCount": 0,
+  "ibanLast4": "5432",
+  "balanceStatus": "ok",
+  "lines": [
+    {
+      "occurredOn": "2026-11-03",
+      "direction": "credit",
+      "amountMinor": "60000",
+      "reference": "0a1b2c3d-1111-4aaa-8bbb-000000000001"
+    },
+    {
+      "occurredOn": "2026-11-04",
+      "direction": "debit",
+      "amountMinor": "4975",
+      "reference": "0a1b2c3d-1111-4aaa-8bbb-000000000002",
+      "kind": "fx",
+      "fxCurrency": "EUR",
+      "fxAmountMinor": "1000"
+    },
+    {
+      "occurredOn": "2026-11-06",
+      "direction": "debit",
+      "amountMinor": "3999",
+      "reference": "0a1b2c3d-1111-4aaa-8bbb-000000000003"
+    },
+    {
+      "occurredOn": "2026-11-06",
+      "direction": "debit",
+      "amountMinor": "4999",
+      "reference": "0a1b2c3d-1111-4aaa-8bbb-000000000004"
+    }
+  ]
+}

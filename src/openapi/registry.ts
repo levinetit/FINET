@@ -36,6 +36,9 @@ import {
 } from "@/modules/gdpr/gdpr.schema";
 import { DOCUMENT_STATUSES, RECEIPT_STATUSES } from "@/db/schema";
 import { receiptConfirmSchema, receiptPatchSchema } from "@/modules/receipts/receipts.schema";
+import { matchDecisionSchema } from "@/modules/matching/matching.schema";
+import { acceptSuggestionSchema } from "@/modules/recurring/suggestions.schema";
+import { cancelImportSchema, confirmImportSchema } from "@/modules/statements/statements.schema";
 import {
   activeHouseholdSchema,
   inviteAcceptSchema,
@@ -46,6 +49,14 @@ import {
 } from "@/modules/family/family.schema";
 
 import {
+  coverageRowSchema,
+  matchDecisionResultSchema,
+  receiptMatchesSchema,
+  recurringSuggestionSchema,
+  statementCancelResultSchema,
+  statementImportSchema,
+  statementUploadResultSchema,
+  statementUploadSchema,
   acceptInviteResultSchema,
   balancesSchema,
   createdInviteSchema,
@@ -1490,6 +1501,234 @@ export const OPERATIONS: readonly Operation[] = [
     query: [...TRANSACTION_FILTERS, DIALECT_PARAM],
     success: csvSuccess("Fișierul `finet-tranzactii.csv`."),
     errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
+  },
+  // --- Faza 7 (F7-B): extrase, potrivire, propuneri de recurențe --------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/statements/uploads",
+    operationId: "listStatementUploads",
+    tag: "statements",
+    summary: "Încărcările PDF recente și starea citirii lor de către worker.",
+    success: {
+      status: 200,
+      schema: dataOf(z.array(statementUploadSchema)),
+      description: "Încărcările.",
+    },
+    errors: [VALIDATION],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/statements/uploads",
+    operationId: "uploadStatement",
+    tag: "statements",
+    summary: "Încarcă un extras (PDF, CSV, XLSX sau ZIP) pe un cont.",
+    description:
+      "`multipart/form-data`, un singur fișier ≤ 20 MB. Tipul se detectează după conținut. Contul trebuie să fie vizibil și deschis (cont personal al altui membru → 404). Cota zilnică (50 de fișiere/gospodărie; 409 `statement_daily_limit`) se consumă ÎNAINTE de citire, câte una pe fișier (un ZIP cu N fișiere = N). CSV/XLSX: fără `mapping` → `mapping_required` (sugestie + cel mult 15 rânduri de probă, nimic păstrat); cu `mapping` (JSON, schema `ColumnMapping`) → previzualizare. PDF: păstrat temporar (cel mult 24 h) și citit de worker în procesul copil limitat → `queued`; starea se urmărește cu `GET /api/v1/statements/uploads/{id}`. ZIP: fiecare fișier are rezultatul lui (`rejected` cu cod fix pentru cele necitibile); arhivele imbricate refuză tot ZIP-ul. Erori de citire: 422 cu codul (`unknown_bank`, `ambiguous_bank`, `multi_currency_statement`, `csv_invalid`, `xlsx_unsafe`, `zip_unsafe`, …). Ruta e exclusă din proxy-ul Next, cu aceeași verificare Cloudflare Access. Limită proprie de cereri (429). Cel mult 2 încărcări simultane pe proces (memoria serverului): altfel 503 `statement_upload_busy` cu `Retry-After`, corpul necitit.",
+    multipart: {
+      description: "Câmpurile text înaintea fișierului.",
+      fields: {
+        accountId: "Contul extrasului (uuid).",
+        mapping: "Opțional, pentru CSV/XLSX: maparea coloanelor (JSON, ≤ 4 KB).",
+        file: "Fișierul (un singur fișier; mai multe → ZIP).",
+      },
+    },
+    success: {
+      status: 201,
+      alsoStatus: 200,
+      schema: dataOf(statementUploadResultSchema),
+      description:
+        "Rezultatul pe fiecare fișier (200: nimic nou, de exemplu cerere de mapare sau duplicat).",
+    },
+    errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, TOO_LARGE, MEDIA, REUSED, 503],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/statements/uploads"),
+    operationId: "getStatementUpload",
+    tag: "statements",
+    summary:
+      "Starea unei încărcări PDF (`queued` → `processing` → `parsed` cu `importId` | `failed` cu cod).",
+    success: { status: 200, schema: dataOf(statementUploadSchema), description: "Încărcarea." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/statements/uploads"),
+    operationId: "cancelStatementUpload",
+    tag: "statements",
+    summary:
+      "Renunță la o încărcare PDF: fișierul se șterge imediat (409 dacă e citit chiar acum).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 200, schema: dataOf(statementUploadSchema), description: "Încărcarea." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/statements/imports",
+    operationId: "listStatementImports",
+    tag: "statements",
+    summary: "Importurile de extrase (cele mai noi întâi), fără rânduri.",
+    query: [
+      { name: "accountId", schema: z.uuid(), description: "Doar importurile contului." },
+      { name: "limit", schema: intParam, description: "Câte (implicit 50, plafon 100)." },
+    ],
+    success: {
+      status: 200,
+      schema: dataOf(z.array(statementImportSchema)),
+      description: "Importurile.",
+    },
+    errors: [VALIDATION],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/statements/imports"),
+    operationId: "getStatementImport",
+    tag: "statements",
+    summary: "Previzualizarea sau importul, cu rândurile (stări, duplicate, schimburi valutare).",
+    success: { status: 200, schema: dataOf(statementImportSchema), description: "Importul." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/statements/imports"),
+    operationId: "discardStatementPreview",
+    tag: "statements",
+    summary: "Renunță la o previzualizare neconfirmată (cu rândurile și fișierul sursă).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 204, schema: null, description: "Ștearsă." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/statements/imports", "/confirm"),
+    operationId: "confirmStatementImport",
+    tag: "statements",
+    summary: "Confirmă importul: tranzacțiile noi, într-o singură tranzacție SQL.",
+    description:
+      "Idempotentă (o a doua confirmare întoarce rezultatul primei; `Idempotency-Key` opțional). Duplicatele se recontrolează. 409: `statement_balance_mismatch` (fără `acknowledgeBalanceMismatch: true`), `statement_import_not_previewed`, `statement_fx_counterpart_exists`, `account_archived`. Fiecare schimb valutar cere o decizie în `fx` (transfer cu contul-pereche, venit/cheltuială sau sari). După confirmare, fișierul PDF sursă se șterge.",
+    body: { schema: confirmImportSchema },
+    success: {
+      status: 200,
+      schema: dataOf(statementImportSchema),
+      description: "Importul confirmat.",
+    },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/statements/imports", "/cancel"),
+    operationId: "cancelStatementImport",
+    tag: "statements",
+    summary: "Anulează un import confirmat: șterge DOAR tranzacțiile create de el.",
+    description:
+      "Tranzacțiile modificate după import (editate, etichete, împărțite, bon legat; la transferuri valutare: oricare picior) cer `editedPolicy` (`keep` | `delete`), altfel 409 `statement_import_has_edited`. Un transfer valutar cu piciorul într-un cont personal al altui membru → 409 `statement_import_counterpart_hidden` (îl anulează proprietarul).",
+    body: { schema: cancelImportSchema, optional: true },
+    success: {
+      status: 200,
+      schema: dataOf(statementCancelResultSchema),
+      description: "Importul anulat.",
+    },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/statements/coverage",
+    operationId: "getStatementCoverage",
+    tag: "statements",
+    summary:
+      "„Acoperire extrase”: conturile vizibile × luni (complet / parțial până la o dată / lipsă).",
+    query: [
+      {
+        name: "from",
+        schema: z.string().regex(/^[0-9]{4}-[0-9]{2}$/),
+        description: "Prima lună (AAAA-LL).",
+      },
+      {
+        name: "to",
+        schema: z.string().regex(/^[0-9]{4}-[0-9]{2}$/),
+        description: "Ultima lună (AAAA-LL).",
+      },
+    ],
+    success: {
+      status: 200,
+      schema: dataOf(z.array(coverageRowSchema)),
+      description: "Acoperirea.",
+    },
+    errors: [VALIDATION],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/receipts", "/matches"),
+    operationId: "getReceiptMatches",
+    tag: "matching",
+    summary: "Tranzacțiile din extras propuse pentru bon: sumă exactă, ±3 zile, scor și motive.",
+    description:
+      "`data: null` dacă bonul nu e eligibil (fără total/dată, deja potrivit sau salvat cu o tranzacție invizibilă). Doar tranzacțiile vizibile (nu cele din conturile personale ale altor membri).",
+    success: {
+      status: 200,
+      schema: dataOf(receiptMatchesSchema.nullable()),
+      description: "Propunerile.",
+    },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/receipts", "/matches"),
+    operationId: "decideReceiptMatch",
+    tag: "matching",
+    summary: "Confirmă (leagă bonul, fără tranzacție nouă) sau respinge (memorat) o propunere.",
+    description:
+      "Tranzacția trebuie să fie un candidat valid ACUM (altfel 404). Bon deja salvat: legătura trece pe tranzacția din extras, iar tranzacția bonului se șterge (409 `receipt_transaction_edited` dacă are etichete sau e împărțită). Idempotentă.",
+    body: { schema: matchDecisionSchema },
+    success: { status: 200, schema: dataOf(matchDecisionResultSchema), description: "Decizia." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/matches",
+    operationId: "listMatchQueue",
+    tag: "matching",
+    summary: "Coada potrivirilor: bonurile cu cel puțin o tranzacție din extras propusă.",
+    query: [
+      { name: "limit", schema: intParam, description: "Câte bonuri (implicit 20, plafon 50)." },
+    ],
+    success: { status: 200, schema: dataOf(z.array(receiptMatchesSchema)), description: "Coada." },
+    errors: [VALIDATION],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/recurring/suggestions",
+    operationId: "listRecurringSuggestions",
+    tag: "matching",
+    summary: "Plățile recurente detectate în istoricul vizibil (propuneri; nimic creat automat).",
+    success: {
+      status: 200,
+      schema: dataOf(z.array(recurringSuggestionSchema)),
+      description: "Propunerile.",
+    },
+    errors: [VALIDATION],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/recurring/suggestions/{signature}/accept",
+    operationId: "acceptRecurringSuggestion",
+    tag: "matching",
+    summary: "Acceptă propunerea: o regulă de recurență (Faza 5), recalculată pe server.",
+    body: { schema: acceptSuggestionSchema, optional: true },
+    success: { status: 201, schema: dataOf(recurringRuleSchema), description: "Regula creată." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "POST",
+    path: "/api/v1/recurring/suggestions/{signature}/dismiss",
+    operationId: "dismissRecurringSuggestion",
+    tag: "matching",
+    summary: "Respinge propunerea (se memorează doar amprenta; idempotent).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 204, schema: null, description: "Respinsă." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
   },
   {
     method: "GET",

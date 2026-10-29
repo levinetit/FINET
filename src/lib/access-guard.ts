@@ -28,22 +28,27 @@ export function verifierFor(access: AccessConfig): AccessVerifier | null {
 }
 
 /**
- * Singura cale exclusă din proxy. `guardAccess` o transmite FIX politicii (nu calea din URL), ca
- * excepțiile de sănătate/liveness din `isRequestAllowed` să nu se poată aplica niciodată unei rute
- * păzite aici, oricum ar fi scrisă adresa cererii (revizuirea F6-C).
+ * Căile excluse din proxy (încărcări citite în flux, peste plafonul de 10 MB al proxy-ului):
+ * documentele (Faza 6) și extrasele (Faza 7, F7-B). `guardAccess` transmite politicii o cale FIXĂ
+ * din această listă (nu calea din URL), ca excepțiile de sănătate/liveness din `isRequestAllowed`
+ * să nu se poată aplica niciodată unei rute păzite aici, oricum ar fi scrisă adresa cererii
+ * (revizuirea F6-C).
  */
-export const PROXY_EXCLUDED_PATH = "/api/v1/documents";
+export const PROXY_EXCLUDED_PATHS = ["/api/v1/documents", "/api/v1/statements/uploads"] as const;
+export type ProxyExcludedPath = (typeof PROXY_EXCLUDED_PATHS)[number];
+export const PROXY_EXCLUDED_PATH: ProxyExcludedPath = PROXY_EXCLUDED_PATHS[0];
 
 /** `true` dacă cererea trece de Access (aceeași funcție ca în proxy), pe calea fixă. */
 export async function accessAllowed(
   request: Readonly<{ method: string; headers: Headers }>,
+  path: ProxyExcludedPath = PROXY_EXCLUDED_PATH,
 ): Promise<boolean> {
   try {
     const config = getConfig();
     return await isRequestAllowed(
       {
         method: request.method,
-        pathname: PROXY_EXCLUDED_PATH,
+        pathname: PROXY_EXCLUDED_PATHS.includes(path) ? path : PROXY_EXCLUDED_PATH,
         headers: request.headers,
       },
       {
@@ -84,7 +89,8 @@ function withHeaders(response: Response): Response {
 export async function guardAccess(
   request: Request,
   run: () => Promise<Response>,
+  path: ProxyExcludedPath = PROXY_EXCLUDED_PATH,
 ): Promise<Response> {
-  if (!(await accessAllowed(request))) return withHeaders(forbiddenResponse());
+  if (!(await accessAllowed(request, path))) return withHeaders(forbiddenResponse());
   return withHeaders(await run());
 }

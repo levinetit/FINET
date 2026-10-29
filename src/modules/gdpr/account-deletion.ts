@@ -4,6 +4,7 @@ import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { type Db, type Tx, withRlsOn } from "@/db";
 import {
+  accounts,
   appEvents,
   authAccounts,
   authSessions,
@@ -12,6 +13,7 @@ import {
   documents,
   householdMembers,
   households,
+  statementUploads,
   userPreferences,
   users,
 } from "@/db/schema";
@@ -184,6 +186,11 @@ async function deleteSoleHousehold(tx: Tx, id: string): Promise<string[]> {
     .select({ key: documents.storageKey })
     .from(documents)
     .where(and(eq(documents.householdId, id), isNotNull(documents.storageKey)));
+  // Faza 7: PDF-urile temporare ale încărcărilor de extras (rândurile dispar în cascadă).
+  const uploads = await tx
+    .select({ key: statementUploads.storageKey })
+    .from(statementUploads)
+    .where(and(eq(statementUploads.householdId, id), isNotNull(statementUploads.storageKey)));
   const deleted = await tx
     .delete(households)
     .where(eq(households.id, id))
@@ -194,7 +201,31 @@ async function deleteSoleHousehold(tx: Tx, id: string): Promise<string[]> {
       "O gospodărie nu poate fi ștearsă. Contactează administratorul.",
     );
   }
-  return keys.map((k) => k.key).filter((k): k is string => k !== null && isKeyOfHousehold(k, id));
+  return [...keys, ...uploads]
+    .map((k) => k.key)
+    .filter((k): k is string => k !== null && isKeyOfHousehold(k, id));
+}
+
+/**
+ * Faza 7: PDF-urile temporare ale încărcărilor de extras de pe conturile PERSONALE ale
+ * utilizatorului într-o gospodărie pe care o părăsește (`erase_current_user` șterge conturile, iar
+ * rândurile încărcărilor dispar în cascadă): cheile se adună înainte, fișierele se șterg după commit.
+ */
+async function personalStatementUploadKeys(tx: Tx, userId: string, householdId: string) {
+  const rows = await tx
+    .select({ key: statementUploads.storageKey })
+    .from(statementUploads)
+    .innerJoin(accounts, eq(accounts.id, statementUploads.accountId))
+    .where(
+      and(
+        eq(statementUploads.householdId, householdId),
+        eq(accounts.ownerUserId, userId),
+        isNotNull(statementUploads.storageKey),
+      ),
+    );
+  return rows
+    .map((r) => r.key)
+    .filter((k): k is string => k !== null && isKeyOfHousehold(k, householdId));
 }
 
 async function leaveHousehold(tx: Tx, userId: string, s: HouseholdState): Promise<void> {
@@ -263,6 +294,7 @@ export async function deleteAccount(
           fileKeys.push(...(await deleteSoleHousehold(tx, m.id)));
           deletedHouseholds += 1;
         } else {
+          fileKeys.push(...(await personalStatementUploadKeys(tx, userId, m.id)));
           await leaveHousehold(tx, userId, s);
           leftHouseholds += 1;
         }

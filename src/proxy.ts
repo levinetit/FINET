@@ -72,7 +72,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 //   Ruta refăce aceeași verificare Access și aceleași antete (`guardAccess`, `src/lib/access-guard.ts`)
 //   înainte de sesiune și de corp, pe toate metodele ei. Sub-căile (`/api/v1/documents/<id>`,
 //   `/file`) trec în continuare prin proxy (testat în `src/proxy.test.ts`).
+// - EXACT `/api/v1/statements/uploads` (Faza 7, F7-B; ADR 0018 §11): același motiv (extrase până
+//   la 20 MB), aceeași verificare `guardAccess` în rută, pe toate metodele. Sub-căile
+//   (`/api/v1/statements/uploads/<id>`) trec prin proxy.
 // Valoarea trebuie să fie literală (Next o analizează static la build).
 export const config = {
-  matcher: ["/((?!_next/static/|api/v1/documents$).*)"],
+  matcher: ["/((?!_next/static/|api/v1/documents$|api/v1/statements/uploads$).*)"],
 };

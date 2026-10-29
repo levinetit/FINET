@@ -63,6 +63,18 @@ export type AuditAction =
   | "receipt.reprocessed"
   | "receipt.deleted"
   | "documents.expired"
+  // Extrasele (Faza 7): doar contoare și id-ul importului, fără sume, descrieri sau IBAN.
+  | "statement.previewed"
+  | "statement.imported"
+  | "statement.cancelled"
+  | "statement.discarded"
+  // F7-B: încărcarea PDF (doar mărimea), renunțarea la ea, potrivirea bon ↔ tranzacție (fără
+  // sume) și respingerea unei propuneri de plată recurentă.
+  | "statement.uploaded"
+  | "statement.upload_cancelled"
+  | "receipt.matched"
+  | "receipt.match_rejected"
+  | "recurring.suggestion_dismissed"
   | "consent.granted"
   | "consent.revoked"
   // GDPR (F9-B): doar numărul de gospodării exportate, fără conținut.
@@ -86,7 +98,9 @@ export type AuditEvent = Readonly<{
     | "goal"
     | "recurring_rule"
     | "document"
-    | "receipt";
+    | "receipt"
+    | "statement_import"
+    | "statement_upload";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;

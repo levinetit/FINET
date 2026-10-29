@@ -159,6 +159,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
+      // Extrasele (Faza 7, F7-B): utilizatorii `statements`, `statements2`, `statements3`; doar
+      // date SINTETICE. Partea cu PDF și potrivirea cer workerul + serverul AI fals (ca `receipts`).
+      name: "statements",
+      testMatch: /statements\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // PWA și offline (Faza 9, ADR 0020): același server și aceeași bază, utilizatorii `pwa` și
       // `pwa2`; service worker-ul permis explicit (implicit oricum).
       // În `saas`, testele cozii offline (cer `/import` și încărcarea, deci entitlements) se sar

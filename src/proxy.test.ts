@@ -475,6 +475,33 @@ describe("FAIL-CLOSED", () => {
       expect(run).not.toHaveBeenCalled();
     });
 
+    it("ruta exclusă /api/v1/statements/uploads (Faza 7): aceeași verificare Access, pe calea ei fixă", async () => {
+      prodEnv({ HEALTH_TOKEN });
+      const run = vi.fn(async () => Response.json({ ok: true }));
+      for (const method of ["GET", "POST", "OPTIONS"]) {
+        const res = await guardAccess(
+          new Request("https://finet.exemplu.invalid/api/v1/statements/uploads", {
+            method,
+            headers: { "content-type": "multipart/form-data; boundary=x" },
+          }),
+          run,
+          "/api/v1/statements/uploads",
+        );
+        await expectForbidden(res);
+        expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      }
+      await expectForbidden(
+        await guardAccess(
+          new Request("http://127.0.0.1:3000/api/health/live", {
+            headers: { host: "127.0.0.1:3000", [HEALTH_TOKEN_HEADER]: HEALTH_TOKEN },
+          }),
+          run,
+          "/api/v1/statements/uploads",
+        ),
+      );
+      expect(run).not.toHaveBeenCalled();
+    });
+
     describe("antetele de securitate (6.3)", () => {
       const nonceOf = (csp: string | null) => /'nonce-([A-Za-z0-9+/=]+)'/.exec(csp ?? "")?.[1];
 
@@ -689,6 +716,13 @@ describe("matcher-ul din src/proxy.ts", () => {
       "/api/v1/documents%2Fx",
       "/api/v1/Documents",
       "/api/v1/receipts",
+      // Faza 7: doar `/api/v1/statements/uploads` exact e exclus.
+      "/api/v1/statements/uploads/",
+      "/api/v1/statements/uploads/7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f",
+      "/api/v1/statements/uploadsX",
+      "/api/v1/statements/imports",
+      "/api/v1/statements/coverage",
+      "/api/v1/Statements/uploads",
       "/import",
       "/receipts",
       // Faza 9: fișierele PWA trec prin proxy (Access + antete), ca orice altă cale.
@@ -706,5 +740,10 @@ describe("matcher-ul din src/proxy.ts", () => {
   it("exclude exact /api/v1/documents (încărcarea în flux; verificarea Access e în rută)", () => {
     expect(matches("/api/v1/documents")).toBe(false);
     expect(matches("/api/v1/documents?cursor=abc")).toBe(false);
+  });
+
+  it("exclude exact /api/v1/statements/uploads (Faza 7; verificarea Access e în rută)", () => {
+    expect(matches("/api/v1/statements/uploads")).toBe(false);
+    expect(matches("/api/v1/statements/uploads?x=1")).toBe(false);
   });
 });

@@ -16,6 +16,13 @@ import {
   handleGenerateNow,
 } from "./jobs";
 import type { DocumentJobDeps } from "./receipts/documents-job";
+import {
+  JOB_STATEMENT_PARSE,
+  JOB_STATEMENT_SWEEP,
+  STATEMENT_SWEEP_CRON,
+  handleStatementParse,
+  handleStatementSweep,
+} from "./statements/statement-jobs";
 import type { AiRuntime } from "./receipts/receipt-job";
 import {
   JOB_RECEIPT_PROCESS,
@@ -40,6 +47,9 @@ import {
  * - bonurile (Faza 6, F6-B; ADR 0014), doar cu `receipts` în opțiuni: `receipt.sweep` (cron la
  *   fiecare minut, coadă `singleton`) trimite `receipt.process` pe document (coadă `exclusive`,
  *   `singletonKey` = documentul, concurență 1: un singur document în memorie odată);
+ * - extrasele PDF (Faza 7, F7-B; ADR 0018 §11), doar cu `statements` în opțiuni: `statement.sweep`
+ *   (cron la fiecare minut, `singleton`) trimite `statement.parse` pe încărcare (`exclusive`,
+ *   `singletonKey` = încărcarea, concurență 1: un singur proces copil PDF odată); fără AI;
  * - oprire grațioasă la SIGTERM/SIGINT: pg-boss termină jobul curent (cel mult 25 s), apoi
  *   semnalul `stopped_at`, apoi închiderea conexiunilor.
  */
@@ -49,6 +59,19 @@ export const QUEUE_OPTIONS = {
   retryDelay: 60,
   retryBackoff: true,
   expireInSeconds: 600,
+  retentionSeconds: 7 * 24 * 3600,
+  deleteAfterSeconds: 7 * 24 * 3600,
+} as const;
+
+/**
+ * Opțiunile cozii extraselor: o citire PDF durează ≤ 45 s (copilul are 30 s CPU); o singură
+ * reîncercare (încercările sunt plafonate și în bază, la 3).
+ */
+export const STATEMENT_QUEUE_OPTIONS = {
+  retryLimit: 1,
+  retryDelay: 60,
+  retryBackoff: true,
+  expireInSeconds: 300,
   retentionSeconds: 7 * 24 * 3600,
   deleteAfterSeconds: 7 * 24 * 3600,
 } as const;
@@ -77,6 +100,8 @@ export type WorkerOptions = Readonly<{
   log: LogFn;
   /** Procesarea bonurilor (Faza 6); fără ea, workerul face doar recurențele. */
   receipts?: ReceiptWorkerOptions;
+  /** Citirea extraselor PDF (Faza 7); storage-ul doar pentru citire. */
+  statements?: Readonly<{ storage: DocumentJobDeps["storage"] }>;
 }>;
 
 export type RunningWorker = Readonly<{ boss: PgBoss; db: Db; stop: () => Promise<void> }>;
@@ -190,6 +215,45 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       safeHandler(JOB_RECEIPT_PROCESS, log, async ([job]: { data?: unknown }[]) => {
         const r = await handleReceiptProcess(receiptDeps, job?.data);
         return "rejected" in r ? r : { outcome: r.outcome };
+      }),
+    );
+  }
+
+  const statements = options.statements;
+  if (statements) {
+    await boss.createQueue(JOB_STATEMENT_SWEEP, { policy: "singleton", ...QUEUE_OPTIONS });
+    await boss.createQueue(JOB_STATEMENT_PARSE, {
+      policy: "exclusive",
+      ...STATEMENT_QUEUE_OPTIONS,
+    });
+    await boss.schedule(JOB_STATEMENT_SWEEP, STATEMENT_SWEEP_CRON, null, {
+      tz: GENERATE_TZ,
+      singletonKey: JOB_STATEMENT_SWEEP,
+    });
+    const statementDeps = { db, log, storage: statements.storage };
+    await boss.work(
+      JOB_STATEMENT_SWEEP,
+      { localConcurrency: 1 },
+      safeHandler(JOB_STATEMENT_SWEEP, log, async () => {
+        const enqueued = await handleStatementSweep(statementDeps, (uploadId, householdId) =>
+          boss.send(
+            JOB_STATEMENT_PARSE,
+            { uploadId, householdId },
+            { singletonKey: uploadId.toLowerCase() },
+          ),
+        );
+        return { enqueued };
+      }),
+    );
+    await boss.work(
+      JOB_STATEMENT_PARSE,
+      { localConcurrency: 1 },
+      safeHandler(JOB_STATEMENT_PARSE, log, async ([job]: { data?: unknown }[]) => {
+        const r = await handleStatementParse(statementDeps, job?.data);
+        if ("rejected" in r) return r;
+        return r.outcome === "failed"
+          ? { outcome: r.outcome, code: r.code }
+          : { outcome: r.outcome };
       }),
     );
   }

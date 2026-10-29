@@ -92,7 +92,10 @@ describe.skipIf(!TEST_ADMIN_URL)("retenția documentelor (cleanup-documents)", (
     await utimes(tmp, old2h, old2h);
 
     const r = await cli(["cleanup-documents", "--temp-hours", "1"], { ...ENV, STORAGE_DIR: root });
-    expect(r, r.err).toMatchObject({ code: 0, out: "expired=1 failed=0 temp=1" });
+    expect(r, r.err).toMatchObject({
+      code: 0,
+      out: "expired=1 failed=0 temp=1 statements=0 statements_failed=0 previews=0",
+    });
     const files = await readdir(dir);
     expect(files.sort()).toEqual([fresh, processing].sort());
     const rows = await fx.scratch.admin<
@@ -107,7 +110,10 @@ describe.skipIf(!TEST_ADMIN_URL)("retenția documentelor (cleanup-documents)", (
     expect(audit).toEqual([{ metadata: { files: 1 } }]);
 
     const again = await cli(["cleanup-documents"], { ...ENV, STORAGE_DIR: root });
-    expect(again).toMatchObject({ code: 0, out: "expired=0 failed=0 temp=0" });
+    expect(again).toMatchObject({
+      code: 0,
+      out: "expired=0 failed=0 temp=0 statements=0 statements_failed=0 previews=0",
+    });
   });
 
   it("storage nemontat (fără households/) → nimic marcat; STORAGE_DIR lipsă → eroare", async () => {
@@ -116,7 +122,10 @@ describe.skipIf(!TEST_ADMIN_URL)("retenția documentelor (cleanup-documents)", (
     const empty = await realpath(await mkdtemp(join(tmpdir(), "finet-retention-gol-")));
     try {
       const r = await cli(["cleanup-documents"], { ...ENV, STORAGE_DIR: empty });
-      expect(r).toMatchObject({ code: 0, out: "expired=0 failed=0 temp=0 storage=empty" });
+      expect(r).toMatchObject({
+        code: 0,
+        out: "expired=0 failed=0 temp=0 statements=0 statements_failed=0 previews=0 storage=empty",
+      });
       const [n] = await fx.scratch.admin<{ n: number }[]>`
         select count(*)::int as n from finet.documents where storage_key is not null`;
       expect(n!.n).toBe(2);

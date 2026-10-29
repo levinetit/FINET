@@ -13,7 +13,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 4 — Stabilizare | **parțial** (implementat în repo) | recuperarea după deploy, `global-error`, date `zz.ll.aaaa`, `tagMatch=all`, accesibilitate de bază, bugetul JS, `0005_perf_indexes`, testele de regresie; rămân prima rulare CI (build, buget, E2E `regressions`), `0005` pe Supabase, cron-ul de curățare și revizuirea `security` — vezi mai jos și `docs/reports/faza-4.md` |
 | 5 — Recurențe | **parțial** (F5-A, F5-B în repo) | date, servicii, worker pg-boss (F5-A); API `/api/v1/recurring`, UI `/recurring`, E2E `recurring` (F5-B); rămân migrațiile `0006`/`0007` și workerul pe producție (operatorul), prima rulare CI completă și revizuirea `security` — vezi mai jos și `docs/reports/faza-5.md` |
 | 6 — Ingestia bonurilor | **în repo** (F6-A, F6-B, F6-C; de revizuit și de aplicat pe producție) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat) — ADR 0013. F6-B: migrația `0009_receipt_pipeline`, clientul LiteLLM, jobul `receipt.process`, verificările 5.5 și scorul, categorisirea, bonul lung, bugetul global, fixtures sintetice și `pnpm eval:receipts` — ADR 0014. F6-C: API-ul public (`/api/v1/documents`, `/receipts`, `/ai/usage`), paginile `/import`, `/receipts`, `/receipts/[id]`, retenția originalelor (`0011`, `cleanup-documents`), E2E cu serverul AI fals și workerul — ADR 0015. Rămân `0008`–`0011` pe Supabase, evaluarea pe bonuri reale și revizuirea `security` |
-| 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
+| 7 — Extrase bancare, potrivire, abonamente | **în repo** (F7-A + F7-B) | F7-A: migrația `0013_statements`, extracția PDF în procesul copil al workerului, parserele BT, BRD, Raiffeisen, Revolut (fixture-uri sintetice), CSV/XLSX/ZIP cu mapare de coloane, deduplicare, schimb valutar ca transfer, anulare, acoperire — ADR 0018. F7-B: migrația `0014_statement_uploads` (PDF-urile spre worker, 24 h), API-ul `/api/v1/statements/*`, potrivirea bon ↔ tranzacție, plățile recurente detectate, interfața, E2E — ADR 0018 §11, ADR 0019. Rămân `0013`/`0014` pe Supabase, E2E în CI și revizuirea `security` — vezi mai jos |
 | 8 — Familie | **parțial** (F8-A și F8-B în repo) | F8-A: migrația `0012_family` (invitații, împărțiri cu verificare amânată a sumei, decontări, gospodăria activă, vizibilitatea personal/comun în RLS pe conturi, tranzacții, etichete, recurențe), serviciile `src/modules/family/` (invitații, membri, roluri, ultimul owner, comutator, împărțiri, solduri, decontări) — ADR 0016. F8-B: API-ul `/api/v1` al familiei, `/family`, `/join/[token]`, comutatorul, împărțirea pe tranzacție, widgetul de pe Acasă, actualizările live (SSE, ADR 0017), E2E `family`. Rămân `0012` pe Supabase, deploy-ul (INFRA 4k) și revizuirea `security` — vezi mai jos |
 | 9 — Hardening, PWA, offline | **în repo** (F9-A, F9-B; branch `phase/09-hardening`, de revizuit și de aplicat pe producție) | F9-A: manifest, iconițe, service worker, `/offline`, scanarea offline (IndexedDB), invitația de instalare, `/help`, `/settings`, `/settings/android`, `GET /api/v1/app/android/latest` (ADR 0020). F9-B: migrația `0016_gdpr_stats`, exportul GDPR (ZIP în flux), ștergerea contului, retenția `app_events` (`aggregate-events`), „Statistici” pentru administrator, încercarea upgrade-ului PostgreSQL 17 → 18 (PASS) și workflow-ul `pg-next`, auditul axe (E2E `a11y`), dovezile din SECURITY_CHECKLIST (ADR 0021). **Reper „v1.0 personal”** după deploy — vezi „Faza 9: stare” |
 | 10 — Liste de cumpărături și prețuri | neimplementat | |
@@ -189,6 +189,28 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 
 **Rămâne:** `0008`–`0011` pe Supabase, programarea `finet-cleanup` (INFRA 4i), evaluarea pe bonuri reale, revizuirea `security`.
 
+### Faza 7: stare
+**F7-A (date, extracție, parsere, servicii), gata în repo, verificat local pe PostgreSQL 17 efemer (subseturi; suita completă și build-ul în CI):**
+- migrația `0013_statements`: `statement_imports`, `statement_lines`, `statement_usage_daily`; fără modificarea tabelelor existente (tranzacțiile folosesc `source = 'statement'` și `external_ref`); triggere SECURITY INVOKER pentru legătura rând → tranzacție și tranzițiile de stare;
+- `src/worker/statements/`: extracția elementelor poziționale din PDF într-un proces copil limitat (`prlimit`, SIGKILL, plafoane);
+- `src/modules/statements/`: detectarea băncii, parserele BT/BRD/Raiffeisen/Revolut, verificarea soldurilor, CSV/XLSX/ZIP sigure, maparea de coloane (șablon Wise NEVERIFICAT), deduplicarea, serviciile (previzualizare, confirmare, anulare, renunțare, listă, detaliu, acoperire), cota zilnică.
+
+**Băncile „suportate” (master prompt Faza 7):** niciuna încă în sensul strict (cere un extras REAL anonimizat în `fixtures/statements`; azi fixture-urile sunt sintetice). Parserele BT, BRD, Raiffeisen și Revolut trec local pe extrasele reale ale operatorului (rezultate agregate în raportul F7-A). ING, BCR: mapare manuală; Wise: șablon CSV neverificat.
+
+**Amânate din F7-A (motiv):** PDF-urile băncilor fără parser prin `finet-text-local` / `external_ai_statements` (refuz clar + recomandarea CSV; ADR 0018 §10); extrasele PDF scanate (fără text); stocarea fișierului sursă pentru procesarea în worker (`documents` nu se refolosește: coada bonurilor nu filtrează pe `kind`; ADR 0018 §1); curățarea previzualizărilor neconfirmate vechi; categorisirea automată a tranzacțiilor importate; Revolut/Wise cu mai multe monede în același PDF (un import pe monedă).
+
+**F7-B (API, worker, interfață, potrivire, recurențe), gata în repo, verificat local pe PostgreSQL 17 efemer (subseturi; suita completă, build-ul și E2E în CI):**
+- revizuirea F7-A aplicată (cheia `fx`, marcajele de secțiune în descrieri, chei duplicate, anularea transferurilor valutare, contorul zilnic, IBAN-uri);
+- migrația `0014_statement_uploads`: `statement_uploads` (PDF-urile până la worker, cel mult 24 h; nu `documents` — ADR 0018 §11), `receipt_match_rejections`, `recurring_suggestion_dismissals`, indexul unic „un bon per tranzacție”, funcțiile SECURITY DEFINER ale cozii și curățării;
+- workerul: `statement.sweep` / `statement.parse` (un proces copil odată); curățarea în `cleanup-documents` (PDF-uri expirate, previzualizări > 7 zile);
+- API-ul `/api/v1/statements/*`, `/api/v1/receipts/{id}/matches`, `/api/v1/matches`, `/api/v1/recurring/suggestions/*` (OpenAPI regenerat);
+- interfața: `/import?tip=extras` (mapare de coloane, coadă PDF), `/statements`, `/statements/[id]` (previzualizare, confirmare), `/statements/coverage`, `/receipts/matches`, potrivirile în `/receipts/[id]`, propunerile în `/recurring`;
+- E2E `statements` (scris; NOT RUN local).
+
+**Amânate (motiv):** PDF-urile băncilor fără parser prin AI (`external_ai_statements`; ADR 0018 §10); extrasele scanate; Revolut/Wise cu mai multe monede într-un PDF (refuzat explicit: un extras pe monedă); categorisirea automată a tranzacțiilor importate; evenimente live pentru importuri (un import atinge multe tranzacții).
+
+**Rămâne:** `0013` + `0014` pe Supabase (INFRA 4n, cu verificarea dinainte), E2E și build în CI, revizuirea `security`.
+
 ### Faza 8: stare
 **F8-A (date și servicii), gata în repo, verificat local pe PostgreSQL 17 efemer (subseturi; suita completă, typecheck-ul complet și build-ul în CI):**
 - migrația `0012_family`: `household_invites` (doar hash SHA-256, fără SELECT pe hash și fără DELETE), `transaction_splits` (plătitorul stocat, suma = totalul verificată la COMMIT), `settlements` (anulare o singură dată, fără DELETE), `user_preferences.active_household_id`; `finet.accept_invite` (SECURITY DEFINER, consum atomic, răspuns uniform); triggerele „ultimul owner” și plafonul de 6 membri (sub lock); politicile restrânse prin `ALTER POLICY` pentru vizibilitatea personal/comun; `check_transfer_group` și `due_recurring_rules` redefinite (aceleași semnături);
@@ -333,8 +355,10 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | exporturi CSV (în `/reports` și `/transactions`) | `/export` (CSV) | 3 | branch; pagină `/export` proprie cu Excel și PDF: Faza 10 |
 | `/recurring`, `/recurring/new`, `/recurring/[id]` | `/recurring` | 5 | branch |
 | `/receipts`, `/receipts/[id]` | `/receipts` | 6 | branch (F6-C) |
-| `/import` | `/import` | 6 (bonuri), 7 (extrase) | branch (F6-C, bonuri); extrasele în Faza 7 |
-| `/statements/coverage` (nume provizoriu) | „Evidență extrase & acoperire” | 7 | planificat |
+| `/import` | `/import` | 6 (bonuri), 7 (extrase) | branch (F6-C bonuri; F7-B extrase: fila „Extras bancar”, `?tip=extras`) |
+| `/statements`, `/statements/[id]` | „Evidență extrase” | 7 | branch (F7-B): lista importurilor cu anulare, previzualizarea cu confirmare |
+| `/statements/coverage` | „Evidență extrase & acoperire” | 7 | branch (F7-B) |
+| `/receipts/matches` | — | 7 | branch (F7-B): coada potrivirilor bon ↔ extras |
 | `/join/[token]` | — | 8 | branch (F8-B): acceptare prin buton (`POST`), mesaj uniform |
 | `/family` | membri, bugete comune, decontări | 8 | branch (F8-B): solduri, decontări, membri, invitații, împărțiri, comun vs personal; comutatorul în antet; împărțirea pe `/transactions/[id]`; widgetul pe `/dashboard` |
 | `/offline` | — (la finpulse dă 404) | 9 | branch (F9-A): HTML static, servit din cache de service worker |

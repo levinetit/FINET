@@ -34,6 +34,8 @@ import {
   receipts,
   recurringRules,
   settlements,
+  statementImports,
+  statementLines,
   tags,
   transactionSplits,
   transactionTags,
@@ -110,9 +112,9 @@ async function* jsonPages<T extends { id: string }>(
 
 // --- Verificarea dinaintea exportului (revizuirea F9) ---------------------------------------
 
-/** Intrările fixe: `README.txt`, `profil.json` și cele 14 fișiere de pe fiecare gospodărie. */
+/** Intrările fixe: `README.txt`, `profil.json` și cele 15 fișiere de pe fiecare gospodărie. */
 export const FIXED_ENTRIES = 2;
-export const ENTRIES_PER_HOUSEHOLD = 14;
+export const ENTRIES_PER_HOUSEHOLD = 15;
 /** Estimarea pe tranzacție (JSON + CSV, necomprimat) și rezerva pentru restul textului. */
 export const BYTES_PER_TRANSACTION = 4096;
 export const TEXT_RESERVE_BYTES = 64 * 1024 * 1024;
@@ -188,7 +190,8 @@ originale ale bonurilor încărcate de tine.
   autentificare (fără parolă), instalările și evenimentele de utilizare.
 - gospodarii/<n>/: câte un dosar pentru fiecare dintre cele ${n} gospodării din care faci parte:
   gospodăria, conturile, categoriile, etichetele, tranzacțiile (JSON și CSV), bugetele, obiectivele,
-  regulile recurente, bonurile încărcate de tine (cu liniile lor), împărțirile și decontările în
+  regulile recurente, bonurile încărcate de tine (cu liniile lor), importurile de extrase făcute de
+  tine (cu rândurile lor; fișierele extraselor nu se păstrează), împărțirile și decontările în
   care ești parte, acțiunile tale din jurnalul de audit și fișierele bonurilor (fisiere/).
 
 Exportul conține doar ce poți vedea în aplicație: conturile personale ale altor membri nu apar.
@@ -449,6 +452,39 @@ export async function* dataExportEntries(
         })),
         receipts: receiptRows,
         lines,
+      }),
+    ];
+    // Faza 7: importurile de extras create de el (fără fișiere: PDF-urile sunt temporare) și
+    // rândurile lor (sub RLS: conturile personale ale altora nu apar).
+    const imports = await inHh(db, userId, hh, (tx) =>
+      tx
+        .select()
+        .from(statementImports)
+        .where(
+          and(eq(statementImports.householdId, hh), eq(statementImports.createdByUserId, userId)),
+        )
+        .orderBy(asc(statementImports.id)),
+    );
+    const importIds = imports.map((i) => i.id);
+    yield [
+      `${dir}/extrase.json`,
+      exportJson({
+        imports,
+        lines:
+          importIds.length === 0
+            ? []
+            : await inHh(db, userId, hh, (tx) =>
+                tx
+                  .select()
+                  .from(statementLines)
+                  .where(
+                    and(
+                      eq(statementLines.householdId, hh),
+                      inArray(statementLines.importId, importIds),
+                    ),
+                  )
+                  .orderBy(asc(statementLines.importId), asc(statementLines.rowNo)),
+              ),
       }),
     ];
     yield [

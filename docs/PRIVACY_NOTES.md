@@ -67,6 +67,16 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Invitațiile:** linkul se arată o singură dată celui care invită, doar în pagină (nu se salvează în browser); înainte de acceptare, pagina de invitație nu arată numele gospodăriei. Tokenul apare în calea URL-ului, deci poate rămâne în istoricul browserului și în jurnalele de acces ale Cloudflare/Traefik (unică folosință, expiră în ≤ 7 zile).
 - **Actualizările live (SSE):** evenimentele conțin doar tipul și id-ul obiectului, nu sume, nume sau descrieri; o tranzacție dintr-un cont personal nu generează eveniment pentru ceilalți membri. Evenimentele nu se stochează (memoria procesului web).
 
+## Extrase bancare (Faza 7; ADR 0018, 0019)
+- **Ce se păstrează:** pentru fiecare import doar contul, banca, formatul, perioada, soldurile, contoarele, codurile de avertisment și amprenta SHA-256 a fișierului; rândurile parsate (dată, sumă, descriere, referința băncii). **Fișierul extrasului NU se păstrează** (nici numele lui): un PDF stă doar temporar, până îl citește workerul (vezi mai jos). Din descrieri se elimină IBAN-urile, numerele de card și `CNP/CF`; rămân numele contrapărții și detaliile operațiunii. IBAN-ul și titularul din antet nu se stochează (doar ultimele 4 caractere ale IBAN-ului sunt întoarse în previzualizare, ca indiciu pentru alegerea contului).
+- **Vizibilitatea:** un import pe un cont personal (și rândurile lui) îl vede doar proprietarul contului (RLS, ca tranzacțiile din 0012); pe un cont comun îl văd toți membrii.
+- **Fișierele PDF (F7-B; ADR 0018 §11):** se păstrează TEMPORAR, doar cât să le citească workerul: în storage-ul aplicației (`households/<id>/documents/…`, fără numele original), cel mult 24 h, și se șterg imediat după confirmarea sau renunțarea la previzualizare (altfel de `cleanup-documents`). Sunt vizibile doar membrilor care văd contul (un cont personal: doar proprietarului). CSV/XLSX nu se păstrează deloc. Previzualizările neconfirmate se șterg după 7 zile.
+- **Exportul și ștergerea contului (Faza 9):** exportul GDPR conține `extrase.json` (importurile create de utilizator, cu rândurile lor; fără fișiere); ștergerea contului șterge și PDF-urile temporare de extras din gospodăriile șterse și de pe conturile personale ale utilizatorului (rândurile dispar în cascadă).
+- **Potrivirea bon ↔ extras și plățile recurente (ADR 0019):** se calculează în aplicație, fără AI; respingerile memorează doar identificatori, respectiv amprenta propunerii (nu textul comerciantului).
+- **Fără AI:** extrasele nu se trimit la niciun furnizor (nici local, nici extern) în Faza 7; consimțământul `external_ai_statements` nu e încă folosit. Parsarea PDF-urilor se face în procesul copil al workerului, pe server.
+- **Extrasele reale de test ale operatorului** nu intră în repo, în teste, în documentație sau în CI: fixture-urile sunt sintetice (generate de `scripts/make-statement-fixtures.mjs`), iar verificarea pe extrasele reale s-a făcut doar local, cu raportare agregată.
+- **Ștergere:** o previzualizare neconfirmată se șterge cu rândurile ei; un import anulat rămâne în istoric (fără tranzacții); ștergerea gospodăriei șterge tot (cascadă).
+
 ## PWA și scanarea offline (Faza 9, F9-A; ADR 0020)
 - **Ce rămâne pe dispozitiv:** doar fișierele aplicației în cache-ul service worker-ului (cod JavaScript/CSS compilat, iconițe, manifestul, pagina „fără conexiune”). Nicio pagină cu date, niciun răspuns API.
 - **Pozele scanate fără rețea:** stau în IndexedDB-ul browserului (baza `finet-offline`), cu id-ul utilizatorului și al gospodăriei, până când serverul confirmă încărcarea; apoi se șterg. Plafoane: 10 încărcări, 50 MB, 7 zile (după 7 zile se șterg neîncărcate).
@@ -83,7 +93,7 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Statisticile** (Setări → Statistici, doar administratorul platformei): numere agregate (utilizatori activi, instalări și versiuni, login-uri, evenimente, ecrane, erori, apeluri AI și costul lor de operare); în `personal` și lista membrilor cu ultima activitate, platforma și versiunea aplicației. **Nicio** sumă, descriere, comerciant sau alt conținut financiar.
 
 ## TODO (operator / faze viitoare)
-- **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
+- **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); extrasele PDF cel mult 24 h (F7-B); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 — implementate (Fazele 2–9; ștergerea contului în F9-B). Rămâne de decis expirarea datelor șterse din backup-uri (mai sus).
 - Loguri fără date sensibile: de verificat la fiecare fază (încă nu există loguri de aplicație).
 - Dacă aplicația trece în `saas`: politică publică, DPA-uri, lista împuterniciților, cookie-uri.

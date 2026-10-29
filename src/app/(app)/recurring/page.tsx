@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { suggestionToJson } from "@/app/api/v1/_lib/matching-handlers";
+
 import { Alert } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { ro } from "@/messages/ro";
 import { listAccounts } from "@/modules/accounts/accounts.service";
 import { recurringRuleToJson } from "@/modules/recurring/recurring.schema";
 import { listRecurringRules } from "@/modules/recurring/recurring.service";
+import type { Currency } from "@/lib/money";
+import { listRecurringSuggestions } from "@/modules/recurring/suggestions.service";
 
+import { formatMinor } from "../../_lib/ledger-ui";
 import { load, requireLedgerPage } from "../../_lib/ledger-page";
+import { formatDate } from "../../_lib/planning-ui";
 import {
   type RecurringStatusFilter,
   UI_RECURRING_STATUSES,
@@ -22,6 +28,7 @@ import {
 import { PageHeader } from "../page-header";
 
 import { GenerateButton } from "./generate-button";
+import { SuggestionActions } from "./suggestion-actions";
 
 export const metadata: Metadata = { title: ro.recurring.title };
 
@@ -67,11 +74,14 @@ export default async function RecurringPage({
   const householdId = page.householdId;
   const deps = { db: page.session.runtime.db };
   const result = await load(async () => {
-    const [list, accounts] = await Promise.all([
+    const [list, accounts, suggestions] = await Promise.all([
       listRecurringRules(deps, page.actor, householdId, filter === "all" ? {} : { status: filter }),
       listAccounts(deps, page.actor, householdId, { includeArchived: true }),
+      // F7-B: propunerile din istoric (sub RLS; o eroare nu strică pagina).
+      listRecurringSuggestions(deps, page.actor, householdId).catch(() => []),
     ]);
     return {
+      suggestions: suggestions.map(suggestionToJson),
       rules: list.data.map(recurringRuleToJson),
       counts: list.counts,
       accountName: new Map(accounts.accounts.map((a) => [a.id, a.name])),
@@ -85,7 +95,8 @@ export default async function RecurringPage({
       </>
     );
   }
-  const { rules, counts, accountName } = result.value;
+  const { rules, counts, accountName, suggestions } = result.value;
+  const st = ro.suggestions;
   return (
     <>
       {header}
@@ -100,6 +111,39 @@ export default async function RecurringPage({
             </div>
             <GenerateButton />
           </div>
+        </Card>
+        <Card aria-labelledby="suggestions-title" data-testid="recurring-suggestions">
+          <CardHeader>
+            <CardTitle id="suggestions-title">{st.title}</CardTitle>
+            <CardDescription>{st.hint}</CardDescription>
+          </CardHeader>
+          {suggestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{st.empty}</p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-border">
+              {suggestions.map((s) => (
+                <li
+                  key={s.signature}
+                  className="flex flex-wrap items-start justify-between gap-3 py-3"
+                  data-testid="suggestion-row"
+                >
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold">{s.description}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {s.accountName} ·{" "}
+                      {st.summary(
+                        formatMinor(s.amountMinor, s.currency as Currency),
+                        st.frequency[s.frequency] ?? s.frequency,
+                        s.occurrences,
+                        formatDate(s.nextOn),
+                      )}
+                    </span>
+                  </div>
+                  <SuggestionActions signature={s.signature} />
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
         <nav aria-label={t.filterLabel}>
           <ul className="flex flex-wrap gap-2">

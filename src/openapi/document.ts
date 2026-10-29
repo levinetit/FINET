@@ -112,18 +112,29 @@ const ERROR_DESCRIPTIONS: Readonly<Record<number, string>> = {
   422: "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`) sau un sold calculat care nu poate fi transmis exact (`amount_out_of_range`, peste 2^53 − 1). La încărcarea documentelor: `invalid_image` (imagine care nu poate fi citită).",
   429: "Prea multe cereri (`rate_limited`, antet `Retry-After`).",
   500: "Eroare internă (`internal_error`, fără detalii).",
+  503: "Serverul e ocupat (`statement_upload_busy`: prea multe încărcări de extrase simultane), antet `Retry-After`.",
 };
 
 const COMMON_ERRORS = [401, 429, 500];
 
 function pathParams(path: string): Json[] {
-  return [...path.matchAll(/\{(\w+)\}/g)].map((m) => ({
-    name: m[1],
-    in: "path",
-    required: true,
-    schema: { type: "string", format: "uuid" },
-    description: "Id (uuid). Un id invalid sau al altei gospodării dă 404.",
-  }));
+  return [...path.matchAll(/\{(\w+)\}/g)].map((m) =>
+    m[1] === "signature"
+      ? {
+          name: m[1],
+          in: "path",
+          required: true,
+          schema: { type: "string", pattern: "^[0-9a-f]{64}$" },
+          description: "Amprenta propunerii (SHA-256 hex). Una necunoscută sau invizibilă dă 404.",
+        }
+      : {
+          name: m[1],
+          in: "path",
+          required: true,
+          schema: { type: "string", format: "uuid" },
+          description: "Id (uuid). Un id invalid sau al altei gospodării dă 404.",
+        },
+  );
 }
 
 function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json {
@@ -285,6 +296,15 @@ export function buildOpenApiDocument(): Json {
       { name: "recurring", description: "Plățile recurente (Faza 5)." },
       { name: "documents", description: "Documentele încărcate (bonuri; Faza 6)." },
       { name: "receipts", description: "Bonurile extrase, verificarea și confirmarea (Faza 6)." },
+      {
+        name: "statements",
+        description:
+          "Extrasele bancare (Faza 7): încărcare, previzualizare, confirmare, anulare, acoperire.",
+      },
+      {
+        name: "matching",
+        description: "Potrivirea bon ↔ tranzacție din extras și propunerile de recurențe (Faza 7).",
+      },
       { name: "reports", description: "Dashboard-ul și raportul lunar (Faza 3)." },
       { name: "exports", description: "Exporturile CSV (Faza 3)." },
     ],

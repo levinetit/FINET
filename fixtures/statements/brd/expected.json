@@ -1,0 +1,43 @@
+{
+  "bank": "brd",
+  "currency": "RON",
+  "periodStart": "2026-10-01",
+  "periodEnd": "2026-10-31",
+  "openingBalanceMinor": "4521",
+  "closingBalanceMinor": "172764",
+  "pendingCount": 0,
+  "ibanLast4": "4550",
+  "balanceStatus": "ok",
+  "lines": [
+    {
+      "occurredOn": "2026-10-02",
+      "direction": "credit",
+      "amountMinor": "315000",
+      "reference": "OPTEST000000A1"
+    },
+    {
+      "occurredOn": "2026-10-05",
+      "direction": "debit",
+      "amountMinor": "4567",
+      "reference": "OP 7000001/10001"
+    },
+    {
+      "occurredOn": "2026-10-07",
+      "direction": "debit",
+      "amountMinor": "120000",
+      "reference": "OPTEST000000A3"
+    },
+    {
+      "occurredOn": "2026-10-07",
+      "direction": "debit",
+      "amountMinor": "300",
+      "reference": "OPTEST000000A3"
+    },
+    {
+      "occurredOn": "2026-10-15",
+      "direction": "debit",
+      "amountMinor": "21890",
+      "reference": "NC 2610150000000001"
+    }
+  ]
+}

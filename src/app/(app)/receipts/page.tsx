@@ -35,9 +35,18 @@ export default async function ReceiptsPage({
   const page = await requireLedgerPage("/receipts");
   const t = ro.receipts;
   const actions = (
-    <Link href="/import" className={buttonClasses()} data-testid="scan-button">
-      {t.scan}
-    </Link>
+    <div className="flex flex-wrap gap-2">
+      <Link href="/import" className={buttonClasses()} data-testid="scan-button">
+        {t.scan}
+      </Link>
+      <Link
+        href="/receipts/matches"
+        className={buttonClasses("outline")}
+        data-testid="matches-link"
+      >
+        {ro.matching.title}
+      </Link>
+    </div>
   );
   const header = (
     <PageHeader

@@ -18,6 +18,7 @@ import { LocalStorage, type Storage } from "@/lib/storage";
 import { OrphanSafetyError, cleanupOrphanStorage } from "@/modules/documents/orphans";
 import { expireDocumentFiles } from "@/modules/documents/retention";
 import { purgeIdempotencyKeys } from "@/modules/idempotency/idempotency";
+import { cleanupStatementFiles } from "@/modules/statements/cleanup";
 import { aggregateOldAppEvents } from "@/modules/usage/stats";
 
 /**
@@ -267,11 +268,14 @@ export async function main(io: AdminIo): Promise<number> {
         tempOlderThanMs: hours * 3600 * 1000,
         skipFiles: !mounted,
       });
+      // Faza 7 (F7-B): PDF-urile de extras expirate/eșuate și previzualizările vechi de 7 zile.
+      const s = await cleanupStatementFiles({ db, storage, skipFiles: !mounted });
       io.out(
         `expired=${r.expired} failed=${r.failed} temp=${r.tempRemoved}` +
+          ` statements=${s.files} statements_failed=${s.failed} previews=${s.previews}` +
           (mounted ? "" : " storage=empty"),
       );
-      return r.failed > 0 ? 1 : 0;
+      return r.failed > 0 || s.failed > 0 ? 1 : 0;
     }
 
     if (command === "cleanup-orphan-storage") {

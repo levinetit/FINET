@@ -1,0 +1,39 @@
+{
+  "bank": "raiffeisen",
+  "currency": "RON",
+  "periodStart": "2026-11-01",
+  "periodEnd": "2026-11-30",
+  "openingBalanceMinor": "98765",
+  "closingBalanceMinor": "130291",
+  "pendingCount": 0,
+  "ibanLast4": "1234",
+  "balanceStatus": "ok",
+  "lines": [
+    {
+      "occurredOn": "2026-11-02",
+      "direction": "debit",
+      "amountMinor": "2475",
+      "reference": null,
+      "kind": "fx",
+      "fxCurrency": "EUR"
+    },
+    {
+      "occurredOn": "2026-11-02",
+      "direction": "credit",
+      "amountMinor": "50000",
+      "reference": null
+    },
+    {
+      "occurredOn": "2026-11-06",
+      "direction": "debit",
+      "amountMinor": "3999",
+      "reference": null
+    },
+    {
+      "occurredOn": "2026-11-10",
+      "direction": "debit",
+      "amountMinor": "12000",
+      "reference": null
+    }
+  ]
+}

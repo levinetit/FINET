@@ -1,0 +1,67 @@
+{
+  "bank": "bt",
+  "currency": "RON",
+  "periodStart": "2026-11-03",
+  "periodEnd": "2026-11-05",
+  "openingBalanceMinor": "312045",
+  "closingBalanceMinor": "653790",
+  "pendingCount": 3,
+  "ibanLast4": "3W01",
+  "balanceStatus": "ok",
+  "lines": [
+    {
+      "occurredOn": "2026-11-03",
+      "direction": "credit",
+      "amountMinor": "450000",
+      "reference": "TQX7A1"
+    },
+    {
+      "occurredOn": "2026-11-03",
+      "direction": "debit",
+      "amountMinor": "8714",
+      "reference": "TQX7A2"
+    },
+    {
+      "occurredOn": "2026-11-03",
+      "direction": "debit",
+      "amountMinor": "86",
+      "reference": "TQX7A2"
+    },
+    {
+      "occurredOn": "2026-11-04",
+      "direction": "debit",
+      "amountMinor": "1500",
+      "reference": "TQX7B1"
+    },
+    {
+      "occurredOn": "2026-11-04",
+      "direction": "debit",
+      "amountMinor": "1500",
+      "reference": "TQX7B1"
+    },
+    {
+      "occurredOn": "2026-11-04",
+      "direction": "debit",
+      "amountMinor": "70000",
+      "reference": "TQX7B3"
+    },
+    {
+      "occurredOn": "2026-11-04",
+      "direction": "debit",
+      "amountMinor": "5499",
+      "reference": "TQX7B4"
+    },
+    {
+      "occurredOn": "2026-11-04",
+      "direction": "credit",
+      "amountMinor": "2500",
+      "reference": "TQX7B5"
+    },
+    {
+      "occurredOn": "2026-11-05",
+      "direction": "debit",
+      "amountMinor": "23456",
+      "reference": "TQX7C1"
+    }
+  ]
+}

@@ -189,6 +189,52 @@ describe.skipIf(!TEST_ADMIN_URL)("ștergerea contului (Postgres real, finet_app)
     expect(await userRow(a.userId)).toBeNull();
   });
 
+  it("Faza 7: PDF-urile temporare de extras se șterg cu gospodăria proprie și cu conturile personale din gospodăriile părăsite; ale altora rămân", async () => {
+    const owner = await user("StmtOwner");
+    const a = await user("StmtA");
+    const shared = await household(owner, "Extrase comune");
+    await f.addMember(owner, shared, a);
+    const solo = await household(a, "Extrase solo");
+    const soloAcc = await createAccount(deps(), a, solo, {
+      name: "B",
+      type: "bank",
+      currency: "RON",
+    });
+    const personal = await createAccount(deps(), a, shared, {
+      name: "P",
+      type: "bank",
+      currency: "RON",
+      ownerUserId: a.userId,
+    });
+    const common = await createAccount(deps(), owner, shared, {
+      name: "C",
+      type: "bank",
+      currency: "RON",
+    });
+    const storage = new MemoryStorage();
+    const upload = async (actor: Actor, hh: string, accountId: string) => {
+      const id = randomUUID();
+      const key = `households/${hh}/documents/${id}`;
+      storage.seed(key, Buffer.from("%PDF-1.4"));
+      await f.admin`insert into finet.statement_uploads (id, household_id, account_id, currency,
+          created_by_user_id, storage_key, sha256, size_bytes, expires_at)
+        values (${id}, ${hh}, ${accountId}, 'RON', ${actor.userId}, ${key},
+          ${createHash("sha256").update(id).digest("hex")}, 8, now() + interval '1 day')`;
+      return key;
+    };
+    const kSolo = await upload(a, solo, soloAcc.id);
+    const kPersonal = await upload(a, shared, personal.id);
+    const kCommon = await upload(owner, shared, common.id);
+    const r = await del(storage, a);
+    expect(r).toMatchObject({ deletedHouseholds: 1, leftHouseholds: 1 });
+    expect(storage.files.has(kSolo)).toBe(false);
+    expect(storage.files.has(kPersonal)).toBe(false);
+    expect(storage.files.has(kCommon)).toBe(true);
+    const [n] = await f.admin<{ n: number }[]>`
+      select count(*)::int as n from finet.statement_uploads where account_id = ${personal.id}`;
+    expect(n!.n).toBe(0);
+  });
+
   it("gospodăria comună: conturile personale (și cele din gospodării părăsite) se șterg, NU devin comune; transferul personal→comun lasă soldul comun neschimbat; istoricul împărțirilor/decontărilor rămâne sub „Cont șters”", async () => {
     const owner = await user("FamOwner");
     const a = await user("FamA");
