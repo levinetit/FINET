@@ -35,7 +35,9 @@ describe("hash-ul cererii", () => {
 describe.skipIf(!TEST_ADMIN_URL)("Idempotency-Key pe PostgreSQL real", () => {
   let fx: AuthFixture;
   let env: AuthEnv & ApiDeps;
-  let clock = Date.parse("2026-10-28T10:00:00Z");
+  // Ceasul pornește de la momentul rulării: o dată fixă ar îmbătrâni față de ceasul bazei
+  // (`now()`) și ar strica numărul de rânduri șterse de curățare după 24 h.
+  let clock = Date.now();
   let A: Sessions;
   let B: Sessions;
   let C: Sessions;

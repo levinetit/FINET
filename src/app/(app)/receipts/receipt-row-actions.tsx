@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { ConfirmButton } from "@/components/ledger/confirm-button";
 import { Alert } from "@/components/ui/alert";
-import { Button, buttonClasses } from "@/components/ui/button";
+import { buttonClasses } from "@/components/ui/button";
 import { ro } from "@/messages/ro";
 
 import { goToLogin } from "../../_lib/api-client";
@@ -48,15 +48,16 @@ export function ReceiptRowActions({ id, saved }: Readonly<{ id: string; saved: b
           {t.view}
         </Link>
         {!saved ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!hydrated || pending}
+          <ConfirmButton
+            label={t.reprocess}
+            question={t.reprocessConfirm}
+            confirmLabel={t.reprocess}
+            busyLabel={t.reprocessing}
             title={t.reprocessHint}
-            onClick={() => void run(`/api/v1/receipts/${id}/reprocess`, "POST", t.reprocessed)}
-          >
-            {pending ? t.reprocessing : t.reprocess}
-          </Button>
+            busy={pending}
+            disabled={!hydrated}
+            onConfirm={() => void run(`/api/v1/receipts/${id}/reprocess`, "POST", t.reprocessed)}
+          />
         ) : null}
         <ConfirmButton
           label={ro.ledger.delete}

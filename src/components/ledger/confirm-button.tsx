@@ -14,6 +14,8 @@ export function ConfirmButton({
   label,
   question,
   confirmLabel = ro.ledger.confirmDelete,
+  busyLabel = ro.ledger.deleting,
+  title,
   busy,
   disabled,
   onConfirm,
@@ -22,6 +24,10 @@ export function ConfirmButton({
   label: string;
   question: string;
   confirmLabel?: string;
+  /** Textul butonului de confirmare cât timp acțiunea rulează (implicit „Se șterge…”). */
+  busyLabel?: string;
+  /** Indiciu (atributul `title`) pe butonul care deschide confirmarea. */
+  title?: string;
   busy: boolean;
   disabled?: boolean;
   onConfirm: () => void;
@@ -30,7 +36,13 @@ export function ConfirmButton({
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
-      <Button variant="outline" size="sm" disabled={disabled || busy} onClick={() => setOpen(true)}>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={disabled || busy}
+        title={title}
+        onClick={() => setOpen(true)}
+      >
         {label}
       </Button>
     );
@@ -45,7 +57,7 @@ export function ConfirmButton({
       {children}
       <div className="flex flex-wrap gap-2">
         <Button variant="destructive" size="sm" disabled={busy} onClick={onConfirm}>
-          {busy ? ro.ledger.deleting : confirmLabel}
+          {busy ? busyLabel : confirmLabel}
         </Button>
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => setOpen(false)}>
           {ro.ledger.cancel}

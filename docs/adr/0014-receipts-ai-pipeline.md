@@ -185,3 +185,11 @@ Un document (sau un bon lung) are **12 minute** (`DOCUMENT_DEADLINE_MS`, decizia
 
    Testat: 6 loturi `[valid, corupt, valid, valid]` nu împiedică procesarea documentului altei gospodării.
 4. **Bugetul:** dacă tokenii raportați costă mai mult decât s-a rezervat, diferența intră și ea în contor (care doar crește), cu plafonul contorului, nu cu bugetul: costul real se înregistrează chiar dacă depășește bugetul, iar rezervările următoare sunt refuzate.
+
+## Model ales (provizoriu, 2026-10-29)
+
+- **Model:** `gemini/gemini-3.8-flash` prin LiteLLM, pentru ambele trasee (vision pe imagini și text pe PDF), plus categorisirea.
+- **Format de răspuns:** `AI_RESPONSE_FORMAT=json_object`, cu schema exactă în prompt (promptul `receipt-v2`) și validarea strictă în cod. `json_schema` e refuzat de Gemini prin LiteLLM (HTTP 400), deci nu se folosește.
+- **Buget:** 10 USD/lună în aplicație și 10 USD/30 de zile pe cheia LiteLLM.
+- **Rezultat până acum:** primul bon real a trecut cu încredere 100.
+- **Ce rămâne:** evaluarea pe 15–25 de bonuri reale, cu adevărul (ground-truth) scris de mână de operator, înainte ca modelul să fie considerat validat. Până atunci alegerea e provizorie, iar acuratețea reală rămâne necunoscută.

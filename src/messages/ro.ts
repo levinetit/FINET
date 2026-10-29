@@ -871,6 +871,8 @@ export const ro = {
     reprocessing: "Se trimite…",
     reprocessed: "Bonul a fost trimis din nou la citire. Revino în aproximativ un minut.",
     reprocessHint: "Citirea din nou consumă un document din limita zilei.",
+    reprocessConfirm:
+      "Reprocesarea șterge rezultatul curent al bonului (inclusiv corecturile tale) și îl citește din nou. Continui?",
     deleteConfirm: "Ștergi bonul și pozele lui? Tranzacția salvată din el (dacă există) rămâne.",
     deleted: "Bonul a fost șters.",
     noMerchant: "Magazin necunoscut",
@@ -963,7 +965,11 @@ export const ro = {
     confirmed: "Bonul a fost salvat ca tranzacție.",
     openTransaction: "Vezi tranzacția",
     savedNote: "Bonul e salvat ca tranzacție; nu se mai modifică.",
-    noAccounts: "Adaugă întâi un cont, ca bonul să poată fi salvat.",
+    noAccount: (currency: string) =>
+      `Pentru a salva bonul ai nevoie de un cont în ${currency}. Creează mai întâi un cont.`,
+    noAccountInCurrency: (currency: string) =>
+      `Niciunul dintre conturile tale deschise nu e în ${currency}. Pentru a salva bonul ai nevoie de un cont în ${currency}: creează mai întâi unul.`,
+    goToAccounts: "Mergi la conturi",
     issueText: {
       extraction_failed: "Bonul nu a putut fi citit automat; completează câmpurile.",
       ai_unavailable: "Serviciul AI nu e configurat; completează câmpurile manual.",
