@@ -309,8 +309,10 @@ create policy shopping_list_ai_requests_update on finet.shopping_list_ai_request
                           where l.household_id = (select finet.current_household_id())
                             and (l.owner_user_id is null
                                  or l.owner_user_id = (select finet.current_user_id()))))
+  -- Cel care (re)pune cererea în coadă (sau workerul, în numele lui) rămâne „cel care a cerut”.
   with check (household_id = (select finet.current_household_id())
          and (select finet.member_role(finet.current_household_id())) is not null
+         and requested_by_user_id = (select finet.current_user_id())
          and list_id in (select l.id from finet.shopping_lists l
                           where l.household_id = (select finet.current_household_id())
                             and (l.owner_user_id is null
@@ -434,5 +436,5 @@ grant update (name, normalized_name, quantity, unit, note, checked, checked_by_u
 --> statement-breakpoint
 grant select, insert on finet.shopping_list_ai_requests to finet_app;
 --> statement-breakpoint
-grant update (status, attempts, error_code, processing_started_at, updated_at)
-  on finet.shopping_list_ai_requests to finet_app;
+grant update (requested_by_user_id, status, attempts, error_code, processing_started_at,
+  updated_at) on finet.shopping_list_ai_requests to finet_app;

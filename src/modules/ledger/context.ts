@@ -26,6 +26,8 @@ const UNIQUE_REASONS: Readonly<Record<string, string>> = {
   budgets_active_key: "budget_exists",
   // Faza 6: aceeași cheie de bon (CUI + număr + dată + total) există deja în gospodărie.
   receipts_household_dedup_key: "duplicate_receipt",
+  // Faza 10 (0017): o linie de bon propusă/confirmată pentru cel mult UN articol al listei.
+  shopping_list_items_line_key: "line_already_matched",
 };
 
 /**
@@ -38,6 +40,8 @@ const CHECK_REASONS: Readonly<Record<string, string>> = {
   accounts_owner_change: "account_owner_change",
   household_invites_final: "invite_not_active",
   settlements_cancel_once: "settlement_already_cancelled",
+  // Faza 10 (0017): o listă comună nu devine personală.
+  shopping_lists_owner_change: "list_owner_change",
 };
 
 export function translateDbError(error: unknown): never {
@@ -61,6 +65,11 @@ export function translateDbError(error: unknown): never {
     case "54000":
       // Plafonul de membri ai gospodăriei (0012, triggerul household_members_check_cap).
       if (info.constraint === "household_members_cap") throw new ConflictError("household_full");
+      // Plafoanele listelor de cumpărături (0017): cod fix, fără mesajul Postgres.
+      if (info.constraint === "shopping_lists_cap") throw new ConflictError("shopping_list_limit");
+      if (info.constraint === "shopping_list_items_cap") {
+        throw new ConflictError("shopping_item_limit");
+      }
       throw error;
     case "22021":
       // Caracter invalid în text (de exemplu NUL, `\u0000`, sau UTF-8 invalid): 400 cu mesaj fix,

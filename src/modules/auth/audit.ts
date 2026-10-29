@@ -47,6 +47,8 @@ export type AuditAction =
   | "tag.deleted"
   | "budget.deleted"
   | "goal.deleted"
+  // Listele de cumpărături (Faza 10): doar id-ul și numărul de articole, fără nume sau conținut.
+  | "shopping_list.deleted"
   // Recurențele (Faza 5): fără sume sau descrieri.
   | "recurring_rule.deleted"
   // Generarea la cerere (F5-B): doar contoare în `metadata`, fără sume sau reguli.
@@ -96,6 +98,7 @@ export type AuditEvent = Readonly<{
     | "tag"
     | "budget"
     | "goal"
+    | "shopping_list"
     | "recurring_rule"
     | "document"
     | "receipt"
