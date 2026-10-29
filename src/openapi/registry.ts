@@ -479,7 +479,8 @@ export const OPERATIONS: readonly Operation[] = [
     path: `/api/v1/categories/${PATH_ID}`,
     operationId: "deleteCategory",
     tag: "categories",
-    summary: "Șterge o categorie personalizată; dacă e folosită, cere `reassignToId`.",
+    summary:
+      "Șterge o categorie personalizată (în gospodăriile cu mai mulți membri o ascunde); dacă e folosită, cere `reassignToId`.",
     query: [
       {
         name: "reassignToId",
@@ -489,8 +490,9 @@ export const OPERATIONS: readonly Operation[] = [
     ],
     success: {
       status: 200,
-      schema: dataOf(z.strictObject({ reassigned: z.number().int() })),
-      description: "Câte tranzacții au fost mutate.",
+      schema: dataOf(z.strictObject({ reassigned: z.number().int(), hidden: z.boolean() })),
+      description:
+        "Câte tranzacții au fost mutate; `hidden: true` = categoria a fost ascunsă, nu ștearsă (gospodărie cu mai mulți membri, ADR 0016).",
     },
     errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA],
   },

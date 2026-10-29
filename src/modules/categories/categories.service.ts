@@ -13,6 +13,7 @@ import {
   countUsage,
   deleteCategoryRow,
   hasChildren,
+  householdMemberCount,
   insertCategory,
   reassignTransactions,
   selectCategories,
@@ -164,11 +165,13 @@ export async function updateCategory(
  * același tip); tranzacțiile se mută în aceeași tranzacție SQL, apoi categoria se șterge.
  * Întoarce câte tranzacții au fost reasignate.
  *
- * Faza 8 (revizuirea m1, ADR 0016): dacă după reasignare categoria mai e folosită în rânduri pe
- * care actorul NU le vede (conturile personale ale altor membri, bugetele lor personale), ea NU
- * se șterge (cheia străină ar fi dezvăluit folosirea, iar bugetele personale ale altora ar fi
- * dispărut în cascadă): se ASCUNDE (`hidden: true` în răspuns, mesaj neutru „încă folosită în
- * gospodărie”). Se află doar un boolean, nu unde sau de către cine.
+ * Faza 8 (revizuirile m1 și F8-B, ADR 0016 §10): în gospodăriile cu MAI MULȚI membri o categorie
+ * personalizată se ASCUNDE mereu în loc să se șteargă (`hidden: true`), ca rezultatul să nu
+ * depindă de rândurile pe care actorul nu le vede (conturile personale ale altora, bugetele lor
+ * personale: cheia străină ar fi dezvăluit folosirea, iar bugetele ar fi dispărut în cascadă).
+ * Cu UN singur membru se șterge efectiv, cu excepția cazului în care mai e folosită în rândurile
+ * rămase de la foști membri (`category_used_elsewhere`): atunci tot se ascunde. Numele categoriei
+ * ascunse rămâne ocupat; ca să refolosești numele, redenumește sau reafișează categoria ascunsă.
  */
 export async function deleteCategory(
   deps: LedgerDeps,
@@ -176,7 +179,7 @@ export async function deleteCategory(
   householdId: string,
   categoryId: string,
   rawOptions: unknown = {},
-): Promise<{ reassigned: number; hidden?: true }> {
+): Promise<{ reassigned: number; hidden: boolean }> {
   if (!isValidId(categoryId)) throw new NotFoundError();
   const options = parseInput(categoryDeleteSchema, rawOptions) ?? {};
   const id = categoryId.toLowerCase();
@@ -211,7 +214,10 @@ export async function deleteCategory(
       }
       reassigned = await reassignTransactions(tx, m.householdId, id, target.id);
     }
-    if (await categoryUsedElsewhere(tx, id)) {
+    if (
+      (await householdMemberCount(tx, m.householdId)) > 1 ||
+      (await categoryUsedElsewhere(tx, id))
+    ) {
       await updateCategoryRow(tx, m.householdId, id, { hidden: true });
       await insertAudit(tx, actor.userId, m.householdId, {
         action: "category.deleted",
@@ -228,6 +234,6 @@ export async function deleteCategory(
       targetId: id,
       metadata: { reassigned },
     });
-    return { reassigned };
+    return { reassigned, hidden: false };
   });
 }

@@ -114,7 +114,7 @@ export function CategoriesManager({
     const query = target ? `?reassignToId=${encodeURIComponent(target)}` : "";
     setRowError(null);
     setInfo(null);
-    const result = await submit<{ reassigned: number }>(
+    const result = await submit<{ reassigned: number; hidden?: boolean }>(
       `/api/v1/categories/${c.id}${query}`,
       "DELETE",
     );
@@ -124,7 +124,11 @@ export function CategoriesManager({
       setRowError({ id: c.id, message: Object.values(mapped.fields)[0] ?? mapped.form ?? "" });
       return;
     }
-    setInfo(ro.categories.deleted(result.data?.reassigned ?? 0));
+    setInfo(
+      result.data?.hidden
+        ? ro.categories.hiddenInstead(result.data.reassigned)
+        : ro.categories.deleted(result.data?.reassigned ?? 0),
+    );
     router.refresh();
   }
 

@@ -1794,7 +1794,7 @@
         "tags": [
           "categories"
         ],
-        "summary": "Șterge o categorie personalizată; dacă e folosită, cere `reassignToId`.",
+        "summary": "Șterge o categorie personalizată (în gospodăriile cu mai mulți membri o ascunde); dacă e folosită, cere `reassignToId`.",
         "parameters": [
           {
             "name": "id",
@@ -1823,7 +1823,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Câte tranzacții au fost mutate.",
+            "description": "Câte tranzacții au fost mutate; `hidden: true` = categoria a fost ascunsă, nu ștearsă (gospodărie cu mai mulți membri, ADR 0016).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1836,10 +1836,14 @@
                           "type": "integer",
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
+                        },
+                        "hidden": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
-                        "reassigned"
+                        "reassigned",
+                        "hidden"
                       ],
                       "additionalProperties": false
                     }

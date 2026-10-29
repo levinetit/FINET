@@ -151,6 +151,14 @@ export async function categoryUsedElsewhere(tx: Tx, id: string): Promise<boolean
   return rows[0]?.used === true;
 }
 
+/** Câți membri are gospodăria (din contextul RLS: membrii gospodăriei curente). */
+export async function householdMemberCount(tx: Tx, householdId: string): Promise<number> {
+  const rows = await tx.execute<{ n: number }>(
+    sql`select count(*)::int as n from finet.household_members where household_id = ${householdId}`,
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 export async function deleteCategoryRow(tx: Tx, householdId: string, id: string): Promise<boolean> {
   const rows = await tx
     .delete(categories)

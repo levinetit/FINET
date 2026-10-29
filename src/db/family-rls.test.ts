@@ -382,9 +382,13 @@ describe.skipIf(!TEST_ADMIN_URL)(
       const [b] = await f.admin<{ n: number }[]>`
         select count(*)::int as n from finet.budgets where id = ${budget.id}`;
       expect(b?.n).toBe(1);
-      // Nefolosită nicăieri: se șterge ca înainte.
+      // Nefolosită nicăieri: răspunsul e IDENTIC (gospodăria are mai mulți membri), deci nu
+      // dezvăluie nimic despre rândurile invizibile.
       const free = await createCategory(f.deps, f.A, f.HA, { name: "Liberă", kind: "expense" });
-      expect(await deleteCategory(f.deps, f.A, f.HA, free.id)).toEqual({ reassigned: 0 });
+      expect(await deleteCategory(f.deps, f.A, f.HA, free.id)).toEqual({
+        reassigned: 0,
+        hidden: true,
+      });
       // Funcția: doar boolean, doar pentru membri, fără context → false.
       const [noCtx] = await f.fx.client<{ used: boolean }[]>`
         select finet.category_used_elsewhere(${shared.id}::uuid) as used`;
