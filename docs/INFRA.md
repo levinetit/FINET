@@ -337,6 +337,18 @@ Agentul nu a rulat nimic din această secțiune. Ordinea contează: schema `pgbo
 
 **Rollback:** `sudo docker compose … stop finet-worker` (regulile nu se mai generează; nimic nu se pierde: la repornire se recuperează cel mult 12 scadențe pe regulă pe rulare). Imaginea anterioară a `finet-web` funcționează și cu tabelele noi. Migrațiile: comenzile din antete (`0007`: `drop schema pgboss cascade`, cu workerul oprit).
 
+## 4h. Faza 6 (F6-A) pe producție (operatorul, după revizuiri și după F6-B/F6-C)
+
+Agentul nu a rulat nimic din această secțiune. F6-A singur nu schimbă comportamentul vizibil (fără rută publică de încărcare și fără job în worker); pașii se fac odată cu deploy-ul Fazei 6.
+
+1. **Imaginile** `finet` și `finet:tools` din workflow-ul `images` (`sudo sh ops/deploy/pull-images.sh <sha>`). `finet:tools` conține acum `sharp`, `unpdf`, `busboy` (dependențe de producție) și `dist/tools/pdf-child.mjs`; verifică `prlimit`: `sudo docker run --rm --network none --entrypoint sh finet:tools -c 'which prlimit'` → `/usr/bin/prlimit` (fără el, PDF-urile sunt refuzate, `pdf_sandbox_unavailable`).
+2. **Backup** al schemei `finet` (ca la 4g).
+3. **Migrația `0008_documents`** (rolul `migrate`, ca la 4g pasul 4): „aplicate acum 1”, apoi „aplicate acum 0”. Adaugă pe `transactions` cheia `transactions_document_fk` (`NOT VALID` + `VALIDATE`) și un index parțial (lock scurt). Rollback: comenzile din antetul fișierului (cu backup; fișierele din `/srv/finet/storage/households/*/documents/` se șterg separat).
+4. **Variabile noi (opționale, nesecrete)** în `/srv/finet/env/finet.env` și `finet.worker.env`: `MAX_UPLOAD_MB` (10), `MAX_PDF_PAGES` (6), `MAX_IMAGE_PIXELS` (50000000), `RECEIPT_IMAGE_RETENTION_DAYS` (180), `DOCUMENT_DUPLICATE_MAX_DISTANCE` (6). Variabilele AI (`AI_BASE_URL`, `AI_API_KEY_FILE` …) vin în F6-B.
+5. **Workerul**: compose-ul îi montează acum `${FINET_DATA_DIR}/storage` **doar citire** în `/data/storage` și fixează `STORAGE_DIR=/data/storage` (obligatoriu în producție pentru rolul `worker`), `mem_limit`/`memswap_limit` 384m, `NODE_OPTIONS=--max-old-space-size=160`. Directorul există din Faza 0 (`1000:1000`, mod 700): workerul rulează tot ca uid 1000, deci îl poate citi. `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile worker up -d finet-worker`, apoi `sudo docker inspect finet-worker --format '{{range .Mounts}}{{.Destination}} rw={{.RW}} {{end}}'` → `/data/storage rw=false`.
+6. **Încărcările mari prin proxy (F6-C):** cu `src/proxy.ts` pe ruta de încărcare, Next 16 trunchiază corpul la 10 MB (`proxyClientMaxBodySize`); F6-C exclude ruta din proxy sau ridică limita (ADR 0013). Limita de corp a Cloudflare (100 MB pe planul gratuit) și a Traefik sunt peste plafonul FINET (~41 MB).
+7. **Spațiul pe disc:** cota implicită e 5000 MB pe gospodărie (`STORAGE_QUOTA_MB`); discul VPS-ului are ~60 GB liberi. `/api/health` raportează `diskFreePercent`.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

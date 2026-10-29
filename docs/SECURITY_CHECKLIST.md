@@ -80,13 +80,15 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | N3 — scanerul: id bot Telegram 8–12 cifre; JWT `anon`: FĂRĂ excepție (FINET nu trimite cheia `anon` Supabase în browser, deci orice JWT în bundle e o scurgere) | DONE | `scan-client-secrets.mjs`, `scan-client-secrets.test.ts` (11 și 12 cifre găsite, 13 nu) | 2026-10-28 · programmer (F4) |
 | F6 — scanare de secrete în istoric/PR (gitleaks) | TODO | `docs/ROADMAP.md` | — |
 
-## 5. Încărcări de fișiere (viitor, Faza 6)
+## 5. Încărcări de fișiere (Faza 6; detalii în secțiunea 16)
 
 | Cerință | Stare | Dovadă | Data · revizor |
 |---|---|---|---|
-| Tip după conținut, dimensiune maximă, cotă, EXIF eliminat, nume generate, servire autorizată, limite ZIP | TODO | Faza 6 | — |
+| Tip după conținut, dimensiune maximă, cotă, EXIF eliminat, nume generate | DONE (F6-A, teste) | secțiunea 16, ADR 0013 | 2026-10-29 · programmer (F6-A) |
+| Servire autorizată (`Content-Disposition: attachment`, `nosniff`, tipul detectat) | TODO | F6-C | — |
+| Limite ZIP | N/A până în Faza 7 (extrase) | — | — |
 | Storage local confinat (realpath, `O_NOFOLLOW`, scriere atomică) | DONE | `src/lib/storage/local.ts`, `storage.test.ts` | 2026-10-27 · security (T5) |
-| F9 — curățarea fișierelor temporare orfane și limita la `put` | TODO | Faza 6 | — |
+| F9 — curățarea fișierelor temporare orfane (`cleanupTemp`) și limita la `put` (`maxBytes`) | DONE (funcții + teste) / TODO programarea curățării | `src/lib/storage/local.ts`, `storage.test.ts` | 2026-10-29 · programmer (F6-A) |
 
 ## 6. Date personale în loguri
 
@@ -274,3 +276,27 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | F5-B: contractul OpenAPI verificat pe fiecare răspuns (`assertContract`), `recurringRuleId` pe `Transaction` | DONE | `openapi.test.ts`, `ledger-api.test.ts`, `planning-api.test.ts`, `recurring-api.test.ts` | 2026-10-28 · programmer (F5-B) |
 | F5-B: paginile noi fără `style=`, un singur `h1`, câmpuri etichetate, zero încălcări CSP | DONE (static) / NOT RUN local (E2E în CI) | `ui-rules.test.ts`, `a11y-rules.test.ts`, `e2e/recurring.spec.ts` (d) | 2026-10-28 · programmer (F5-B) |
 | Revizuirea `security` a F5-B | TODO | agentul `security` | — |
+
+## 16. Ingestia documentelor (F6-A, 2026-10-29)
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Tipul după conținut (semnătura la offset 0): JPEG, PNG, WebP, PDF; SVG, HTML, EXE, ZIP, poligloți (marcaje HTML/SVG la început), HEIC/AVIF refuzați cu cod stabil | DONE (teste) | `content.ts`, `content.test.ts`, `multipart.test.ts` | 2026-10-29 · programmer (F6-A) |
+| Bombe de decompresie: dimensiunile din antet ≤ `MAX_IMAGE_PIXELS` înainte de stocare; `limitInputPixels` în sharp | DONE (teste) | `content.ts`, `preprocess.ts` | 2026-10-29 · programmer (F6-A) |
+| Corp în flux (busboy), `Content-Length` și plafon dur pe corp, ≤ 4 fișiere, câmpuri permise, corp trunchiat respins, fișierele cererii șterse la orice eroare | DONE (teste) | `multipart.ts`, `multipart.test.ts` | 2026-10-29 · programmer (F6-A) |
+| `src/proxy.ts` trunchiază corpurile > 10 MB fără eroare (Next 16 `proxyClientMaxBodySize`): ruta publică trebuie exclusă din proxy sau limita ridicată | TODO | F6-C, ADR 0013 | — |
+| Rate limit dedicat încărcării (`api_document_upload`, 30/10 min) înaintea citirii corpului; apartenența verificată înainte de citire | DONE (teste) | `documents-handlers.ts`, `documents-api.test.ts`, `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
+| Cotă pe gospodărie și limită zilnică sub lock; limita zilnică dintr-un contor care doar crește (ștergerea nu o eliberează; revizuire M3) | DONE (PG17 efemer) | `documents.service.ts`, `document_usage_daily`, `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
+| Deduplicarea (SHA-256) înaintea limitelor; unic `(household_id, sha256)` în bază | DONE (PG17 efemer) | `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
+| Chei de storage generate de server, legate de rând prin CHECK (`households/<gospodărie>/documents/<id>`); fără traversare | DONE (teste) | `0008_documents.sql`, `storage.test.ts`, `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
+| RLS ENABLE + FORCE pe cele 7 tabele noi, 0 rânduri fără context, străinii → 42501/404; GRANT-uri pe coloane; `ai_calls` și contorul zilnic fără UPDATE/DELETE relevante | DONE (PG17 efemer) | `grants.test.ts`, `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
+| `queued_documents`: SECURITY DEFINER, `search_path = pg_catalog`, doar id-uri, EXECUTE doar pentru `finet_app` | DONE (PG17 efemer) | `grants.test.ts`, `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
+| EXIF/GPS eliminat din imaginea preprocesată (verificat pe octeți), rotirea aplicată; tipul confirmat de decodor | DONE (teste) | `preprocess.test.ts`, `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
+| PDF citit într-un proces copil sub `prlimit` (adrese 1,8 GB, CPU, fără fișiere), SIGKILL la termen; copilul trimite doar JPEG ≤ 2048 px, părintele validează antetul și un buget fix de 32 MB înainte de a citi corpul (un singur buffer); bombă 12000×12000 ucide doar copilul (revizuiri M1/M2 și „parser differential”) | DONE (teste; `prlimit` verificat în `finet:tools`) | `pdf-sandbox.ts`, `pdf-child.mjs`, `pdf-sandbox.test.ts` | 2026-10-29 · programmer (F6-A) |
+| Inventarul pe octeți al imaginilor PDF: doar fail-fast, fail-closed (`#xx`, `/W` `/H`, duplicate, indirecte, ObjStm, imagini inline vizibile) | DONE (teste de adversar) | `pdf-scan.ts`, `pdf-sandbox.test.ts` | 2026-10-29 · programmer (F6-A) |
+| Timeout fără muncă în fundal (sharp `timeout`, copil ucis, termen verificat între pași) | DONE (teste) | `preprocess.ts`, `preprocess.test.ts` | 2026-10-29 · programmer (F6-A) |
+| Workerul: storage DOAR citire (montaj + driver), `mem_limit` 384m, încercările numărate înainte de lucru (≤ 10) | DONE (`test-env-examples.sh`, teste) | `docker-compose.yml`, `documents-job.ts` | 2026-10-29 · programmer (F6-A) |
+| Fără antivirus (ClamAV) — risc acceptat de operator, mitigări în ADR 0013 | ACCEPTED | ADR 0013, decizia 5 | 2026-10-29 · operator (F6-COMUN) |
+| Originalele cu EXIF stau pe disc până la retenție; ștergerea automată la `expires_at` | TODO | F6-C / ROADMAP | — |
+| Audit fără nume de fișiere sau conținut (`document.uploaded` doar contoare, `document.deleted` doar id) | DONE (test) | `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
+| Revizuirea `security` a F6-A | TODO (revizuirile automate tratate: M1, M2, M3, „parser differential”) | agentul `security` | — |

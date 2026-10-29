@@ -12,7 +12,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C, F3-D în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI), F3-C (UI, E2E `planning`) și F3-D (backup restic, restaurare testată pe Postgres efemer) gata; rămân instalarea backup-ului și restaurarea de probă pe producție (operatorul), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
 | 4 — Stabilizare | **parțial** (implementat în repo) | recuperarea după deploy, `global-error`, date `zz.ll.aaaa`, `tagMatch=all`, accesibilitate de bază, bugetul JS, `0005_perf_indexes`, testele de regresie; rămân prima rulare CI (build, buget, E2E `regressions`), `0005` pe Supabase, cron-ul de curățare și revizuirea `security` — vezi mai jos și `docs/reports/faza-4.md` |
 | 5 — Recurențe | **parțial** (F5-A, F5-B în repo) | date, servicii, worker pg-boss (F5-A); API `/api/v1/recurring`, UI `/recurring`, E2E `recurring` (F5-B); rămân migrațiile `0006`/`0007` și workerul pe producție (operatorul), prima rulare CI completă și revizuirea `security` — vezi mai jos și `docs/reports/faza-5.md` |
-| 6 — Ingestia bonurilor | neimplementat | |
+| 6 — Ingestia bonurilor | **parțial** (F6-A în repo) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat); rămân F6-B (AI prin LiteLLM, validări, categorisire, evaluare), F6-C (API, UI, E2E), `0008` pe Supabase și revizuirea `security` — ADR 0013 |
 | 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
 | 8 — Familie | neimplementat | |
 | 9 — Hardening, PWA, offline | neimplementat | |
@@ -162,6 +162,15 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - prima rulare CI completă (build, E2E) — local NOT RUN (memoria hostului);
 - amânat (cu motiv): fusul orar al gospodăriei pentru „azi” (azi București), reasignarea creatorului unei reguli (fallback pe proprietar), recurențele de tip transfer, detectarea din extrase (Faza 7), notificările; curățarea cheilor de idempotență mutată din cron în worker (posibilă acum, nefăcută: cron-ul din 4f rămâne).
 
+### Faza 6: stare
+**F6-A (date, stocare, încărcare, preprocesare, deduplicare), gata în repo, verificat local pe PostgreSQL 17 efemer (subseturi; suita completă și build-ul în CI):**
+- migrația `0008_documents` (7 tabele cu RLS ENABLE + FORCE, GRANT-uri pe coloane, triggere, `queued_documents` SECURITY DEFINER, cheia `transactions.document_id`), `document_usage_daily` pentru limita zilnică;
+- storage: chei de gospodărie, `putStream` cu plafon, mod doar-citire, curățarea temporarelor;
+- încărcarea (`src/modules/documents/`, handlerul `documents-handlers.ts` fără rută publică): busboy în flux, tipul după conținut, HEIC refuzat, limite, deduplicare SHA-256, cotă, limită zilnică, consimțământ `external_ai`, bon lung 2–4 poze;
+- preprocesarea în worker (`src/worker/receipts/`): sharp (EXIF eliminat, rotire, 2048 px, JPEG), dHash și „posibil duplicat”, PDF prin pdf.js într-un proces copil sub `prlimit`.
+
+**Rămâne:** F6-B (jobul pg-boss + AI, validările 5.5, categorisirea, fixtures sintetice, `pnpm eval:receipts`), F6-C (`POST /api/v1/documents` și restul API-ului, excluderea rutei din `src/proxy.ts` sau `proxyClientMaxBodySize`, servirea fișierelor, UI, E2E, ștergerea la retenție și programarea `cleanupTemp`), `0008` pe Supabase, revizuirea `security`.
+
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
 - **L2** — `audit_events` dispar în CASCADE la ștergerea unei gospodării: aplicația nu șterge încă gospodării; se decide odată cu ștergerea (păstrare anonimizată sau `SET NULL`).
@@ -193,7 +202,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
   - `pnpm audit --prod` blocant de la severitatea HIGH (acum non-blocant);
   - scanare de secrete în istoric și în PR-uri (gitleaks) în CI.
 - **F8 (rest) — antetele de securitate: închis în F1-C** (CSP cu nonce, HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`; `docs/SECURITY_CHECKLIST.md`). Rămâne pentru Faza 9: `preload` la HSTS (decizia operatorului). Pagina `global-error` proprie: făcută în Faza 4.
-- **F9 — storage local (Faza 6, odată cu ingestia):** curățarea fișierelor temporare orfane `*.tmp-*` rămase după o scriere întreruptă; limită de dimensiune la `put` (pe lângă cota totală).
+- **F9 — storage local:** închis tehnic în F6-A (`cleanupTemp`, `maxBytes` la `put`); rămâne programarea curățării (job de administrare, F6-C).
 - **F2 (rest) / N1 — secretele în data-root-ul Docker: închis tehnic în T7.**
   - Ce s-a făcut: URL-urile bazei și `HEALTH_TOKEN` intră în containere ca fișiere (`secrets:` → `/run/secrets/`, citite prin `*_FILE`, `src/lib/secret-files.ts`), deci nu mai ajung în `config.v2.json`.
   - Fișierele exemplu de mediu nu mai conțin secrete, iar `pnpm test:ops` verifică asta.
