@@ -27,6 +27,7 @@
     "scan:client-secrets": "node scripts/scan-client-secrets.mjs .next/static",
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "fixtures:receipts": "node scripts/make-receipt-fixtures.mjs",
+    "fixtures:statements": "node scripts/make-statement-fixtures.mjs",
     "eval:receipts": "vitest run --config vitest.eval.config.mts",
     "openapi:generate": "node scripts/openapi.mjs",
     "openapi:check": "node scripts/openapi.mjs --check",

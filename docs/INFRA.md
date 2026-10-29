@@ -463,6 +463,16 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 
 **Rollback:** imaginea anterioară a `finet-web` (paginile și rutele familiei dispar; datele rămân). Migrația `0012`: comenzile din antet, doar cu backup și decizia operatorului (atenție: rollback-ul ei face din nou conturile personale vizibile tuturor).
 
+## 4l. Faza 7 (F7-A) pe producție (operatorul, după revizuiri și după F7-B)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0018.
+
+1. **Ordinea:** după ce `0012_family` e aplicată (4k). Imaginile `finet` și `finet:tools` pentru commit-ul aprobat.
+2. **Backup** al schemei `finet`, apoi **migrația `0013_statements`** (rolul `migrate`; prima rulare „aplicate acum 1”, a doua „aplicate acum 0”). Nu modifică tabelele existente și nu rescrie date. Rollback: antetul fișierului, doar cu backup.
+3. **Nicio variabilă și niciun secret nou.** Workerul (imaginea `tools`) conține acum și `dist/tools/pdf-items-child.mjs` (extracția extraselor PDF; folosește `prlimit`, deja prezent în imagine). Limita de memorie a workerului (≤ 384 MB, Faza 6) rămâne suficientă: procesul copil are propriul plafon de adrese.
+4. **Redeploy** `finet-web` și `finet-worker` odată cu F7-B (rutele și interfața extraselor); F7-A singur nu expune nimic nou.
+5. **Verificare după deploy (cu F7-B):** un extras CSV mic importat pe un cont de test → previzualizare, confirmare, reimport (0 tranzacții noi), anulare; jurnalele nu conțin conținut din extrase.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

@@ -67,6 +67,13 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Invitațiile:** linkul se arată o singură dată celui care invită, doar în pagină (nu se salvează în browser); înainte de acceptare, pagina de invitație nu arată numele gospodăriei. Tokenul apare în calea URL-ului, deci poate rămâne în istoricul browserului și în jurnalele de acces ale Cloudflare/Traefik (unică folosință, expiră în ≤ 7 zile).
 - **Actualizările live (SSE):** evenimentele conțin doar tipul și id-ul obiectului, nu sume, nume sau descrieri; o tranzacție dintr-un cont personal nu generează eveniment pentru ceilalți membri. Evenimentele nu se stochează (memoria procesului web).
 
+## Extrase bancare (Faza 7, F7-A; ADR 0018)
+- **Ce se păstrează:** pentru fiecare import doar contul, banca, formatul, perioada, soldurile, contoarele, codurile de avertisment și amprenta SHA-256 a fișierului; rândurile parsate (dată, sumă, descriere, referința băncii). **Fișierul extrasului NU se stochează** (nici numele lui). Din descrieri se elimină IBAN-urile, numerele de card și `CNP/CF`; rămân numele contrapărții și detaliile operațiunii. IBAN-ul și titularul din antet nu se stochează (doar ultimele 4 caractere ale IBAN-ului sunt întoarse în previzualizare, ca indiciu pentru alegerea contului).
+- **Vizibilitatea:** un import pe un cont personal (și rândurile lui) îl vede doar proprietarul contului (RLS, ca tranzacțiile din 0012); pe un cont comun îl văd toți membrii.
+- **Fără AI:** extrasele nu se trimit la niciun furnizor (nici local, nici extern) în F7-A; consimțământul `external_ai_statements` nu e încă folosit. Parsarea PDF-urilor se face în procesul copil al workerului, pe server.
+- **Extrasele reale de test ale operatorului** nu intră în repo, în teste, în documentație sau în CI: fixture-urile sunt sintetice (generate de `scripts/make-statement-fixtures.mjs`), iar verificarea pe extrasele reale s-a făcut doar local, cu raportare agregată.
+- **Ștergere:** o previzualizare neconfirmată se șterge cu rândurile ei; un import anulat rămâne în istoric (fără tranzacții); ștergerea gospodăriei șterge tot (cascadă).
+
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 (Faza 2+) — **TODO**.
