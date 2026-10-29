@@ -168,3 +168,18 @@ Un document (sau un bon lung) are **12 minute** (`DOCUMENT_DEADLINE_MS`, decizia
   - Rezervarea pesimistă consumă bugetul mai repede decât costul real (fail-closed).
   - Acuratețea reală e necunoscută.
   - Cota de 5% diferă de brief (punctul 5).
+
+## Corecturi după revizuirea de securitate F6-A+B (2026-10-29)
+
+1. **NUL în textul PDF.** Un ToUnicode poate mapa un cod la U+0000; verificat că pdf.js îl întoarce în text, iar Postgres îl refuză în `text` (22021). Eroarea bazei purta parametrii (datele bonului) până în `pgboss.job.output` (fără RLS, 7 zile, în backup) și declanșa reluări plătite. Corecturi:
+   - caracterele de control (C0/C1, NUL inclus; `\t` și `\n` rămân) se elimină în procesul copil (`pdf-child.mjs`), din nou în părinte (`cleanPdfText`), în prompt (`pdfTextForPrompt`) și în `ocr_text` (`cleanMultilineText`);
+   - după apelurile plătite, **orice** eroare de salvare duce la un bon gol „De verificat”, fără text; dacă nici acesta nu se poate salva, documentele trec în `failed` (`persist_failed`) și se aruncă doar un cod fix;
+   - toate handlerele pg-boss (`recurring.*`, `receipt.*`) sunt învelite în `safeHandler`, care aruncă doar `Error("job_failed:<SQLSTATE|unknown>")`, niciodată eroarea originală. Testat cu pg-boss real: `pgboss.job.output` nu conține datele.
+2. **Consimțământul se verifică înaintea fiecărei încercări** a fiecărui apel (extragere și categorisire), lângă rezervarea bugetului, nu doar la începutul jobului. O retragere în timpul jobului oprește apelurile următoare: bonul ajunge „De verificat” cu `consent_missing` (problema și `fallback_reason`).
+3. **Bonul lung cu o poză respinsă** (sau cu o poză într-o stare finală) trece în `failed` cu **toate** pozele nefinale; înainte, pozele nerevendicate rămâneau `queued` pe vecie. Migrația **0010_worker_queue_fairness** (`CREATE OR REPLACE`, aceleași semnături și drepturi):
+   - `queued_documents` întoarce cel mult 5 documente pe gospodărie la un apel, pe rând între gospodării, și exclude loturile `failed`;
+   - `queued_document` exclude și el loturile `failed`;
+   - proprietarul vede din `processing_batches` doar loturile `failed` (politica `processing_batches_migrator_failed`).
+
+   Testat: 6 loturi `[valid, corupt, valid, valid]` nu împiedică procesarea documentului altei gospodării.
+4. **Bugetul:** dacă tokenii raportați costă mai mult decât s-a rezervat, diferența intră și ea în contor (care doar crește), cu plafonul contorului, nu cu bugetul: costul real se înregistrează chiar dacă depășește bugetul, iar rezervările următoare sunt refuzate.

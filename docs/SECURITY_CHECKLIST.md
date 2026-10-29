@@ -320,5 +320,10 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | O constrângere a bazei nu declanșează o nouă extragere plătită (bon gol „De verificat” în loc de reîncercare) | DONE (teste: cantitate 0, > 500 de linii) | `receipt-job.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (F6-B) |
 | `json_schema` acceptat de LiteLLM → Gemini (tipuri reuniune, `pattern`) | TODO (operator, primul deploy; plasă: `AI_RESPONSE_FORMAT=json_object`) | INFRA 4h, ADR 0014 | — |
 | Jurnalele LiteLLM fără corpurile cererilor pentru cheia FINET | TODO (operator) | PRIVACY_NOTES | — |
+| Textul PDF fără NUL/caractere de control (copil, părinte, prompt, `ocr_text`); test cu ToUnicode → U+0000 | DONE (PG17) | `pdf-child.mjs`, `pdf-sandbox.ts`, `normalize.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (revizuirea F6-A+B) |
+| Erorile joburilor pg-boss: doar `job_failed:<cod>`, niciodată eroarea originală (parametrii SQL) în `pgboss.job.output`; după apelurile plătite, orice eroare de salvare → bon gol, fără reluare plătită | DONE (pg-boss real) | `main.ts` (`safeHandler`), `receipt-job.ts`, `pgboss.test.ts` | 2026-10-29 · programmer (revizuirea F6-A+B) |
+| Consimțământul verificat înaintea fiecărei încercări (extragere, categorisire); retragerea în timpul jobului → 0 cereri următoare | DONE (test) | `receipt-job.ts`, `receipt-job.test.ts` | 2026-10-29 · programmer (revizuirea F6-A+B) |
+| Selecția workerului echitabilă (≤ 5 pe gospodărie), fără loturi `failed`; lot cu poză respinsă → toate pozele `failed` | DONE (PG17) | `0010_worker_queue_fairness.sql`, `receipt-job.test.ts`, `migrate.test.ts` | 2026-10-29 · programmer (revizuirea F6-A+B) |
+| Costul real peste rezervare intră în contorul bugetului | DONE (test) | `receipt-job.ts` | 2026-10-29 · programmer (revizuirea F6-A+B) |
 | Revizuirea `security` a F6-B | TODO | agentul `security` | — |
 
