@@ -264,6 +264,44 @@ describe("XLSX", () => {
   });
 });
 
+describe("XLSX adversarial (ReDoS, plafoane în timpul parcurgerii)", () => {
+  const zipOf = (sheet: string, sst = "<sst/>") =>
+    buildZip([
+      { name: "[Content_Types].xml", data: "<Types/>" },
+      { name: "xl/workbook.xml", data: "<workbook/>" },
+      { name: "xl/sharedStrings.xml", data: sst },
+      { name: "xl/worksheets/sheet1.xml", data: sheet },
+    ]);
+  const timed = (bytes: Buffer) => {
+    const t = Date.now();
+    const c = code(() => parseXlsx(bytes));
+    return { c, ms: Date.now() - t };
+  };
+
+  it.each([
+    ["100k `<si>` neînchise", zipOf("<worksheet/>", `<sst>${"<si><t>x".repeat(100_000)}</sst>`)],
+    [
+      "`<row` fără `</row>`",
+      zipOf(`<worksheet><sheetData>${'<row r="1"><c r="A1"><v>1</v></c>'.repeat(50_000)}`),
+    ],
+    [
+      "`<c` imbricate adânc",
+      zipOf(`<worksheet><sheetData><row>${"<c>".repeat(200_000)}</row></sheetData></worksheet>`),
+    ],
+    ["tag fără `>`", zipOf(`<worksheet><sheetData><row ${"a".repeat(1_000_000)}`)],
+    ["prea multe `<si>` închise", zipOf("<worksheet/>", `<sst>${"<si/>".repeat(200_001)}</sst>`)],
+  ] as const)("%s → refuz rapid", (_l, bytes) => {
+    const { c, ms } = timed(bytes);
+    expect(["xlsx_invalid", "xlsx_unsafe"]).toContain(c);
+    expect(ms).toBeLessThan(2_000);
+  });
+
+  it("foaia sau șirurile partajate peste 8 MB decomprimat → refuz", () => {
+    const big = `<worksheet><sheetData>${" ".repeat(9 * 1024 * 1024)}</sheetData></worksheet>`;
+    expect(timed(zipOf(big)).c).toBe("xlsx_unsafe");
+  });
+});
+
 describe("ZIP malițios", () => {
   const ok = (name = "a.csv", data = "Data;Suma\n03.11.2026;1,00\n") => ({ name, data });
 

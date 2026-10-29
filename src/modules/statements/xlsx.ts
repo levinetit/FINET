@@ -23,6 +23,9 @@ export const XLSX_LIMITS = Object.freeze({
   maxColumns: 50,
   maxSharedStrings: 200_000,
   maxCellChars: 1000,
+  /** Mărimea decomprimată maximă a foii și a `sharedStrings.xml` (decizia mea). */
+  maxPartBytes: 8 * 1024 * 1024,
+  maxCells: 500_000,
 });
 
 const unsafe = (): never => {
@@ -58,11 +61,61 @@ function decodeEntities(s: string): string {
   });
 }
 
+/**
+ * Elementele `<name …>…</name>` (sau `<name/>`) dintr-un text, într-o SINGURĂ trecere liniară
+ * cu `indexOf` (fără expresii regulate cu `[\s\S]*?` pe date neîncrezătoare: ReDoS). Un tag
+ * neînchis = fișier invalid (eșec imediat). `max` plafonează numărul de elemente în timpul
+ * parcurgerii.
+ */
+export function* elements(
+  s: string,
+  name: string,
+  max: number,
+): Generator<Readonly<{ attrs: string; body: string }>> {
+  const open = `<${name}`;
+  const close = `</${name}>`;
+  let pos = 0;
+  let n = 0;
+  for (;;) {
+    const i = s.indexOf(open, pos);
+    if (i < 0) return;
+    const after = s.charCodeAt(i + open.length);
+    // `<c` nu trebuie să potrivească `<col`: după nume urmează spațiu, `>` sau `/`.
+    if (
+      after !== 0x20 &&
+      after !== 0x3e &&
+      after !== 0x2f &&
+      after !== 0x09 &&
+      after !== 0x0a &&
+      after !== 0x0d
+    ) {
+      pos = i + open.length;
+      continue;
+    }
+    const tagEnd = s.indexOf(">", i);
+    if (tagEnd < 0 || tagEnd - i > MAX_TAG_CHARS) invalid();
+    if (++n > max) unsafe();
+    const attrs = s.slice(i + open.length, tagEnd);
+    if (s.charCodeAt(tagEnd - 1) === 0x2f) {
+      yield { attrs: attrs.slice(0, -1), body: "" };
+      pos = tagEnd + 1;
+      continue;
+    }
+    const end = s.indexOf(close, tagEnd + 1);
+    if (end < 0) invalid();
+    yield { attrs, body: s.slice(tagEnd + 1, end) };
+    pos = end + close.length;
+  }
+}
+
+const MAX_TAG_CHARS = 2000;
+
 /** Textul tuturor nodurilor `<t>` dintr-un fragment (șiruri cu formatare „rich”). */
 function texts(fragment: string): string {
   let out = "";
-  for (const m of fragment.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>|<t(?:\s[^>]*)?\/>/g)) {
-    out += decodeEntities(m[1] ?? "");
+  for (const t of elements(fragment, "t", 10_000)) {
+    out += decodeEntities(t.body);
+    if (out.length > XLSX_LIMITS.maxCellChars) invalid();
   }
   return out;
 }
@@ -120,30 +173,31 @@ export function parseXlsx(bytes: Uint8Array): Table {
   const shared: string[] = [];
   const sst = byName.get("xl/sharedStrings.xml");
   if (sst) {
-    for (const m of xmlText(sst).matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)) {
-      shared.push(texts(m[1] ?? ""));
-      if (shared.length > L.maxSharedStrings) unsafe();
-    }
+    if (sst.length > L.maxPartBytes) unsafe();
+    for (const si of elements(xmlText(sst), "si", L.maxSharedStrings)) shared.push(texts(si.body));
   }
 
-  const sheet = xmlText(byName.get(sheets[0]!)!);
+  const sheetData = byName.get(sheets[0]!)!;
+  if (sheetData.length > L.maxPartBytes) unsafe();
+  const sheet = xmlText(sheetData);
   const rows: string[][] = [];
-  for (const r of sheet.matchAll(/<row\b[^>]*?(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+  let cells = 0;
+  for (const r of elements(sheet, "row", L.maxRows + 1)) {
     const out: string[] = [];
-    for (const c of (r[1] ?? "").matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
-      const attrs = c[1] ?? "";
-      const body = c[2] ?? "";
-      const ref = /\br="([A-Z]{1,3}\d+)"/.exec(attrs)?.[1];
-      const type = /\bt="(\w+)"/.exec(attrs)?.[1] ?? "n";
+    for (const c of elements(r.body, "c", L.maxColumns * 4)) {
+      if (++cells > L.maxCells) unsafe();
+      const ref = /\br="([A-Z]{1,3}\d+)"/.exec(c.attrs)?.[1];
+      const type = /\bt="(\w{1,12})"/.exec(c.attrs)?.[1] ?? "n";
       const idx = ref ? columnIndex(ref) : out.length;
       if (idx >= L.maxColumns) unsafe();
-      const v = /<v>([\s\S]*?)<\/v>/.exec(body)?.[1];
+      let v: string | undefined;
+      for (const e of elements(c.body, "v", 1)) v = e.body;
       let value = "";
       if (type === "s") {
         const k = Number(v);
         if (!Number.isSafeInteger(k) || k < 0 || k >= shared.length) invalid();
         value = shared[k]!;
-      } else if (type === "inlineStr") value = texts(body);
+      } else if (type === "inlineStr") value = texts(c.body);
       else if (v !== undefined) value = decodeEntities(v); // n, b, str, e: valoarea salvată
       while (out.length < idx) out.push("");
       out[idx] = cell(value);
