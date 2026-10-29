@@ -430,6 +430,9 @@ export async function confirmStatementImport(
       pending.map((l) => fxKeys.get(l.rowNo)!),
     );
 
+    // Indicele de apariție al picioarelor din conturile-pereche (două schimburi identice în
+    // aceeași zi primesc chei diferite, ca rândurile din extrasul celuilalt cont).
+    const counterpartOcc = new Map<string, number>();
     const touchedAccounts = new Set<string>([account.id]);
     let imported = 0;
     let duplicates = lines.filter((l) => l.state === "duplicate").length;
@@ -459,7 +462,7 @@ export async function confirmStatementImport(
           continue;
         }
         if (d.mode === "transfer") {
-          transactionId = await insertFxTransfer(tx, account, l, d, common);
+          transactionId = await insertFxTransfer(tx, account, l, d, common, counterpartOcc);
           touchedAccounts.add(d.counterpartAccountId!.toLowerCase());
           await setLineState(tx, l.id, "imported", transactionId);
           imported++;
@@ -531,6 +534,7 @@ async function insertFxTransfer(
   l: LineRow,
   d: { counterpartAccountId?: string; counterAmountMinor?: number },
   common: { householdId: string; createdByUserId: string; source: "statement" },
+  counterpartOcc: Map<string, number>,
 ): Promise<string> {
   if (!d.counterpartAccountId) {
     throw new ValidationError({ fx: "Alege contul în cealaltă monedă." });
@@ -553,6 +557,25 @@ async function insertFxTransfer(
   const thisDir = l.direction === "debit" ? "out" : "in";
   const otherDir = thisDir === "out" ? "in" : "out";
   const otherLineDir = l.direction === "debit" ? "credit" : "debit";
+  const tuple = `${other.id}|${l.occurredOn}|${otherLineDir}|${counter}`;
+  const occ = counterpartOcc.get(tuple) ?? 0;
+  counterpartOcc.set(tuple, occ + 1);
+  const otherRef = externalRefOf(fxKey(other.id, l.occurredOn, otherLineDir, counter, occ));
+  // Schimbul a fost deja importat din extrasul celuilalt cont (ca venit/cheltuială): fără
+  // dublură; utilizatorul alege `plain` sau `skip` pentru acest rând.
+  const [clash] = await tx
+    .select({ id: transactions.id })
+    .from(transactions)
+    .where(
+      and(eq(transactions.householdId, common.householdId), eq(transactions.externalRef, otherRef)),
+    )
+    .limit(1);
+  if (clash) {
+    throw new ConflictError(
+      "statement_fx_counterpart_exists",
+      "Schimbul valutar e deja importat în celălalt cont; alege „venit/cheltuială” sau „sari”.",
+    );
+  }
   const base = {
     ...common,
     type: "transfer" as const,
@@ -577,7 +600,7 @@ async function insertFxTransfer(
     currency: other.currency,
     amountMinor: counter,
     transferDirection: otherDir,
-    externalRef: externalRefOf(fxKey(other.id, l.occurredOn, otherLineDir, counter, 0)),
+    externalRef: otherRef,
   });
   return mine!.id;
 }

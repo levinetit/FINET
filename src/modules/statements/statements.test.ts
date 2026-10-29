@@ -328,6 +328,103 @@ describe.skipIf(!TEST_ADMIN_URL)("importul extraselor (Postgres real, finet_app)
     expect(e.import.lines![0]!.state).toBe("duplicate");
   });
 
+  it("două schimburi identice în aceeași zi: două transferuri, ambele văzute ca duplicate din extrasul EUR; piciorul deja importat → conflict clar", async () => {
+    const r = (
+      await createAccount({ db: f.db }, f.A, f.HA, {
+        name: "FX RON",
+        type: "bank",
+        currency: "RON",
+      })
+    ).id;
+    const e = (
+      await createAccount({ db: f.db }, f.A, f.HA, {
+        name: "FX EUR",
+        type: "bank",
+        currency: "EUR",
+      })
+    ).id;
+    const fxLine = (
+      rowNo: number,
+      direction: "debit" | "credit",
+      amountMinor: bigint,
+      fxAmountMinor: bigint,
+      fxCurrency: "EUR" | "RON",
+    ) => ({
+      rowNo,
+      occurredOn: "2026-11-10",
+      direction,
+      amountMinor,
+      description: "Schimbat",
+      bankReference: `fx-${rowNo}-${direction}`,
+      kind: "fx" as const,
+      fxAmountMinor,
+      fxCurrency,
+      balanceAfterMinor: null,
+    });
+    const base = { ...revolut(), openingBalanceMinor: null, closingBalanceMinor: null };
+    const ronSide: ParsedStatement = {
+      ...base,
+      lines: [fxLine(1, "debit", 500n, 100n, "EUR"), fxLine(2, "debit", 500n, 100n, "EUR")],
+    };
+    const p = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: r,
+      sourceSha256: sha("fx2"),
+      parsed: ronSide,
+    });
+    await confirmStatementImport(deps(), f.A, f.HA, p.import.id, {
+      fx: [1, 2].map((rowNo) => ({ rowNo, mode: "transfer" as const, counterpartAccountId: e })),
+    });
+    expect(await count(e)).toBe(2);
+    const eurSide: ParsedStatement = {
+      ...base,
+      currency: "EUR",
+      lines: [fxLine(1, "credit", 100n, 500n, "RON"), fxLine(2, "credit", 100n, 500n, "RON")],
+    };
+    const q = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: e,
+      sourceSha256: sha("fx2-eur"),
+      parsed: eurSide,
+    });
+    expect(q.import.lines!.map((l) => l.state)).toEqual(["duplicate", "duplicate"]);
+    // Ordinea inversă: extrasul EUR importat întâi ca venit (`plain`), apoi cel RON ca transfer.
+    const r2 = (
+      await createAccount({ db: f.db }, f.A, f.HA, {
+        name: "FX RON 2",
+        type: "bank",
+        currency: "RON",
+      })
+    ).id;
+    const e2 = (
+      await createAccount({ db: f.db }, f.A, f.HA, {
+        name: "FX EUR 2",
+        type: "bank",
+        currency: "EUR",
+      })
+    ).id;
+    const pe = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: e2,
+      sourceSha256: sha("fx3-eur"),
+      parsed: { ...eurSide, lines: [eurSide.lines[0]!] },
+    });
+    await confirmStatementImport(deps(), f.A, f.HA, pe.import.id, {
+      fx: [{ rowNo: 1, mode: "plain" }],
+    });
+    const pr = await createStatementPreview(deps(), f.A, f.HA, {
+      accountId: r2,
+      sourceSha256: sha("fx3-ron"),
+      parsed: { ...ronSide, lines: [ronSide.lines[0]!] },
+    });
+    await expect(
+      confirmStatementImport(deps(), f.A, f.HA, pr.import.id, {
+        fx: [{ rowNo: 1, mode: "transfer", counterpartAccountId: e2 }],
+      }),
+    ).rejects.toMatchObject({ reason: "statement_fx_counterpart_exists" });
+    const ok = await confirmStatementImport(deps(), f.A, f.HA, pr.import.id, {
+      fx: [{ rowNo: 1, mode: "plain" }],
+    });
+    expect(ok.importedCount).toBe(1);
+  });
+
   it("izolare: altă gospodărie și contul PERSONAL al altui membru sunt invizibile (404)", async () => {
     const p = await createStatementPreview(deps(), f.C, f.HA, {
       accountId: personalC,
