@@ -339,6 +339,18 @@ describe("readMigrations (fără bază)", () => {
     expect(code).not.toMatch(/\bdrop\b|\btruncate\b|\bdelete\s+from\b|\bupdate\s+finet\./i);
     expect(code).not.toMatch(/\bbetween\b/i);
     expect(code).not.toMatch(/security\s+definer/i);
+    // Triggerele de integritate (SECURITY INVOKER: RLS-ul apelantului se aplică și în ele).
+    expect(
+      [
+        ...code.matchAll(
+          /create function finet\.(\w+)\(\)[^$]*?security invoker\s+set search_path = pg_catalog/g,
+        ),
+      ].map((x) => x[1]),
+    ).toEqual([
+      "statement_lines_check_transaction",
+      "statement_imports_check_update",
+      "statement_lines_check_update",
+    ]);
     expect(code).not.toMatch(/alter policy/i);
     // Doar tabelele noi sunt modificate (cheile străine noi indică spre tabelele existente).
     const altered = [...code.matchAll(/alter table "?finet"?\."?(\w+)"?/gi)].map((x) => x[1]!);
@@ -352,14 +364,17 @@ describe("readMigrations (fără bază)", () => {
       "statement_imports_insert:insert:finet_app",
       "statement_imports_update:update:finet_app",
       "statement_imports_delete:delete:finet_app",
-      "statement_lines_household:all:finet_app",
+      "statement_lines_select:select:finet_app",
+      "statement_lines_insert:insert:finet_app",
+      "statement_lines_update:update:finet_app",
+      "statement_lines_delete:delete:finet_app",
       "statement_usage_daily_household:all:finet_app",
     ]);
     expect([
       ...code.matchAll(
         /a\.owner_user_id is null\s+or a\.owner_user_id = \(select finet\.current_user_id\(\)\)/g,
       ),
-    ]).toHaveLength(7);
+    ]).toHaveLength(10);
     expect(code).not.toMatch(/grant[^;]*\bupdate\b(?!\s*\()[^;]*on finet\.statement/i);
     expect(code).not.toMatch(/grant[^;]*delete[^;]*on finet\.statement_usage_daily/i);
     expect(code).toContain("on delete set null (transaction_id)");

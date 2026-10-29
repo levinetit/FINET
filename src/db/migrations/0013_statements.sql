@@ -16,6 +16,8 @@
 -- Rollback (doar manual, de operator, cu backup înainte; DISTRUGE istoricul importurilor, NU și
 -- tranzacțiile create din extrase, care rămân cu `external_ref` = 'stmt:…'):
 --   drop table finet.statement_lines, finet.statement_imports, finet.statement_usage_daily;
+--   drop function finet.statement_lines_check_transaction(), finet.statement_imports_check_update(),
+--     finet.statement_lines_check_update();
 --   delete from finet.__drizzle_migrations where hash = '<hash-ul 0013_statements>';
 -- (Politicile și drepturile dispar odată cu tabelele.)
 CREATE TABLE "finet"."statement_imports" (
@@ -158,6 +160,99 @@ alter table finet.statement_lines add constraint statement_lines_transaction_fk
   references finet.transactions (id, household_id)
   on delete set null (transaction_id) on update no action;
 --> statement-breakpoint
+-- Integritatea legăturii rând → tranzacție (revizuirea F7-A): cheia compusă cu gospodăria nu
+-- împiedică legarea de o tranzacție din ALT cont (inclusiv un cont personal invizibil, dacă id-ul
+-- e cunoscut). Triggerul rulează cu drepturile apelantului (SECURITY INVOKER), deci cere ca
+-- tranzacția să fie în ACELAȘI cont și vizibilă sub RLS-ul lui. Ștergerea tranzacției pune NULL
+-- (fără verificare).
+create function finet.statement_lines_check_transaction() returns trigger
+  language plpgsql security invoker
+  set search_path = pg_catalog
+  as $$
+  begin
+    if new.transaction_id is null then
+      return new;
+    end if;
+    if not exists (select 1 from finet.transactions t
+                    where t.id = new.transaction_id
+                      and t.household_id = new.household_id
+                      and t.account_id = new.account_id) then
+      raise exception 'statement_lines: tranzacția nu e în contul rândului'
+        using errcode = '23503', constraint = 'statement_lines_transaction_account';
+    end if;
+    return new;
+  end
+  $$;
+--> statement-breakpoint
+create trigger statement_lines_check_transaction
+  before insert or update of transaction_id on finet.statement_lines
+  for each row execute function finet.statement_lines_check_transaction();
+--> statement-breakpoint
+-- Tranzițiile de stare (revizuirea F7-A): `previewed` → `imported` | `failed` | `cancelled`;
+-- `imported` → `cancelled`; `failed` și `cancelled` sunt finale. Un import confirmat nu-și mai
+-- schimbă contoarele sau data importului; doar anularea (status, cancelled_at/by, updated_at).
+create function finet.statement_imports_check_update() returns trigger
+  language plpgsql security invoker
+  set search_path = pg_catalog
+  as $$
+  begin
+    if old.status = 'failed' or old.status = 'cancelled' then
+      raise exception 'statement_imports: importul e final'
+        using errcode = '23514', constraint = 'statement_imports_final';
+    end if;
+    if old.status = 'imported' then
+      if new.status <> 'imported' and new.status <> 'cancelled' then
+        raise exception 'statement_imports: tranziție de stare nepermisă'
+          using errcode = '23514', constraint = 'statement_imports_transition';
+      end if;
+      if new.imported_at is distinct from old.imported_at
+         or new.new_count <> old.new_count
+         or new.duplicate_count <> old.duplicate_count
+         or new.imported_count <> old.imported_count
+         or new.error_code is distinct from old.error_code then
+        raise exception 'statement_imports: un import confirmat nu se modifică'
+          using errcode = '23514', constraint = 'statement_imports_transition';
+      end if;
+    end if;
+    return new;
+  end
+  $$;
+--> statement-breakpoint
+create trigger statement_imports_check_update
+  before update on finet.statement_imports
+  for each row execute function finet.statement_imports_check_update();
+--> statement-breakpoint
+-- Stările rândurilor: `imported` → doar `cancelled`; `cancelled` e finală; legătura spre
+-- tranzacție se pune o singură dată (NULL → id), apoi doar ștergerea tranzacției o golește.
+create function finet.statement_lines_check_update() returns trigger
+  language plpgsql security invoker
+  set search_path = pg_catalog
+  as $$
+  begin
+    if old.state = 'cancelled' and new.state <> 'cancelled' then
+      raise exception 'statement_lines: rândul e final'
+        using errcode = '23514', constraint = 'statement_lines_transition';
+    end if;
+    if old.state = 'imported' and new.state <> 'imported' and new.state <> 'cancelled' then
+      raise exception 'statement_lines: tranziție de stare nepermisă'
+        using errcode = '23514', constraint = 'statement_lines_transition';
+    end if;
+    if old.transaction_id is not null and new.transaction_id is not null
+       and new.transaction_id <> old.transaction_id then
+      raise exception 'statement_lines: legătura spre tranzacție nu se mută'
+        using errcode = '23514', constraint = 'statement_lines_transition';
+    end if;
+    return new;
+  end
+  $$;
+--> statement-breakpoint
+create trigger statement_lines_check_update
+  before update on finet.statement_lines
+  for each row execute function finet.statement_lines_check_update();
+--> statement-breakpoint
+revoke all on function finet.statement_lines_check_transaction(),
+  finet.statement_imports_check_update(), finet.statement_lines_check_update() from public;
+--> statement-breakpoint
 alter table finet.statement_imports enable row level security;
 --> statement-breakpoint
 alter table finet.statement_imports force row level security;
@@ -219,8 +314,26 @@ create policy statement_imports_delete on finet.statement_imports
                                and (a.owner_user_id is null
                                     or a.owner_user_id = (select finet.current_user_id()))));
 --> statement-breakpoint
-create policy statement_lines_household on finet.statement_lines
-  for all to finet_app
+create policy statement_lines_select on finet.statement_lines
+  for select to finet_app
+  using (household_id = (select finet.current_household_id())
+         and (select finet.member_role(finet.current_household_id())) is not null
+         and account_id in (select a.id from finet.accounts a
+                             where a.household_id = (select finet.current_household_id())
+                               and (a.owner_user_id is null
+                                    or a.owner_user_id = (select finet.current_user_id()))));
+--> statement-breakpoint
+create policy statement_lines_insert on finet.statement_lines
+  for insert to finet_app
+  with check (household_id = (select finet.current_household_id())
+         and (select finet.member_role(finet.current_household_id())) is not null
+         and account_id in (select a.id from finet.accounts a
+                             where a.household_id = (select finet.current_household_id())
+                               and (a.owner_user_id is null
+                                    or a.owner_user_id = (select finet.current_user_id()))));
+--> statement-breakpoint
+create policy statement_lines_update on finet.statement_lines
+  for update to finet_app
   using (household_id = (select finet.current_household_id())
          and (select finet.member_role(finet.current_household_id())) is not null
          and account_id in (select a.id from finet.accounts a
@@ -234,6 +347,20 @@ create policy statement_lines_household on finet.statement_lines
                                and (a.owner_user_id is null
                                     or a.owner_user_id = (select finet.current_user_id()))));
 --> statement-breakpoint
+-- Rândurile se șterg doar odată cu o previzualizare neconfirmată (sau eșuată); rândurile unui
+-- import confirmat sau anulat rămân (istoricul și deduplicarea depind de ele).
+create policy statement_lines_delete on finet.statement_lines
+  for delete to finet_app
+  using (household_id = (select finet.current_household_id())
+         and (select finet.member_role(finet.current_household_id())) is not null
+         and account_id in (select a.id from finet.accounts a
+                             where a.household_id = (select finet.current_household_id())
+                               and (a.owner_user_id is null
+                                    or a.owner_user_id = (select finet.current_user_id())))
+         and exists (select 1 from finet.statement_imports i
+                      where i.id = statement_lines.import_id
+                        and (i.status = 'previewed' or i.status = 'failed')));
+--> statement-breakpoint
 create policy statement_usage_daily_household on finet.statement_usage_daily
   for all to finet_app
   using (household_id = (select finet.current_household_id())
@@ -244,8 +371,8 @@ create policy statement_usage_daily_household on finet.statement_usage_daily
 -- Drepturile minime ale aplicației:
 -- - statement_imports: citire, inserare; UPDATE doar pe starea, contoarele confirmării și
 --   anulare; DELETE (doar previzualizări, prin politică);
--- - statement_lines: citire, inserare, ștergere (cu previzualizarea); UPDATE doar pe stare și pe
---   legătura spre tranzacție;
+-- - statement_lines: citire, inserare, ștergere (doar rândurile unei previzualizări, prin
+--   politică); UPDATE doar pe stare și pe legătura spre tranzacție (triggerele de mai sus);
 -- - statement_usage_daily: contor care doar crește (fără DELETE; UPDATE doar pe count/updated_at).
 revoke all on finet.statement_imports, finet.statement_lines, finet.statement_usage_daily
   from public;
