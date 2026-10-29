@@ -12,7 +12,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 3 — Dashboard, bugete, obiective, rapoarte, export, backup | **parțial** (F3-A, F3-B, F3-C, F3-D în repo) | F3-A (date, servicii, corecțiile Fazei 2), F3-B (API `/api/v1`, OpenAPI), F3-C (UI, E2E `planning`) și F3-D (backup restic, restaurare testată pe Postgres efemer) gata; rămân instalarea backup-ului și restaurarea de probă pe producție (operatorul), migrația `0004` pe Supabase, prima rulare E2E `planning` în CI și revizuirea de securitate — vezi mai jos și `docs/reports/faza-3.md` |
 | 4 — Stabilizare | **parțial** (implementat în repo) | recuperarea după deploy, `global-error`, date `zz.ll.aaaa`, `tagMatch=all`, accesibilitate de bază, bugetul JS, `0005_perf_indexes`, testele de regresie; rămân prima rulare CI (build, buget, E2E `regressions`), `0005` pe Supabase, cron-ul de curățare și revizuirea `security` — vezi mai jos și `docs/reports/faza-4.md` |
 | 5 — Recurențe | **parțial** (F5-A, F5-B în repo) | date, servicii, worker pg-boss (F5-A); API `/api/v1/recurring`, UI `/recurring`, E2E `recurring` (F5-B); rămân migrațiile `0006`/`0007` și workerul pe producție (operatorul), prima rulare CI completă și revizuirea `security` — vezi mai jos și `docs/reports/faza-5.md` |
-| 6 — Ingestia bonurilor | **parțial** (F6-A, F6-B în repo) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat) — ADR 0013. F6-B: migrația `0009_receipt_pipeline`, clientul LiteLLM, jobul `receipt.process`, verificările 5.5 și scorul, categorisirea, bonul lung, bugetul global, fixtures sintetice și `pnpm eval:receipts` — ADR 0014. Rămân F6-C (API, UI, E2E), `0008`/`0009` pe Supabase, evaluarea pe bonuri reale și revizuirea `security` |
+| 6 — Ingestia bonurilor | **în repo** (F6-A, F6-B, F6-C; de revizuit și de aplicat pe producție) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat) — ADR 0013. F6-B: migrația `0009_receipt_pipeline`, clientul LiteLLM, jobul `receipt.process`, verificările 5.5 și scorul, categorisirea, bonul lung, bugetul global, fixtures sintetice și `pnpm eval:receipts` — ADR 0014. F6-C: API-ul public (`/api/v1/documents`, `/receipts`, `/ai/usage`), paginile `/import`, `/receipts`, `/receipts/[id]`, retenția originalelor (`0011`, `cleanup-documents`), E2E cu serverul AI fals și workerul — ADR 0015. Rămân `0008`–`0011` pe Supabase, evaluarea pe bonuri reale și revizuirea `security` |
 | 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
 | 8 — Familie | neimplementat | |
 | 9 — Hardening, PWA, offline | neimplementat | |
@@ -178,7 +178,16 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - evaluarea pe bonuri reale și alegerea modelelor (3.6): de făcut de operator cu `AI_EVAL=1`;
 - verificarea `json_schema` pe LiteLLM-ul real (`AI_RESPONSE_FORMAT`): la primul deploy (INFRA 4h).
 
-**Rămâne:** F6-C (`POST /api/v1/documents` și restul API-ului, excluderea rutei din `src/proxy.ts` sau `proxyClientMaxBodySize`, servirea fișierelor, UI, E2E, ștergerea la retenție și programarea `cleanupTemp`), `0008`/`0009` pe Supabase, revizuirea `security`.
+**F6-C (API, UI, E2E, retenție), gata în repo, verificat local pe PostgreSQL 17 efemer (subseturi; build-ul, suita completă, bugetul JS și E2E în CI):**
+- API-ul: documentele (listă, stare, fișierul în flux cu antete fixe, ștergere), contorul zilei, bonurile (listă cu căutare după magazin/produs/sumă, detaliu, corectare cu verificările recalculate și `product_aliases`, confirmare → o tranzacție `source=receipt`, reprocesare care consumă limita, ștergere), consimțământul `externalAi` care pune în coadă documentele care îl așteptau;
+- `/api/v1/documents` exclusă din `src/proxy.ts` (fluxul nu mai e trunchiat la 10 MB), cu aceeași verificare Access în rută (`src/lib/access-guard.ts`);
+- paginile `/import`, `/receipts`, `/receipts/[id]`, comutatorul din `/profile`, insigna „din bon”, „Scanează” în bara de jos (în locul lui „Bugete”, mutat în „Mai mult”);
+- migrația `0011_document_retention` + `admin cleanup-documents` în serviciul one-shot `finet-cleanup` (închide F9: programarea `cleanupTemp`);
+- E2E `receipts` cu serverul AI fals și workerul real în CI — ADR 0015.
+
+**Amânate din F6-C (motiv):** numele liniilor eliminate în raportul unirii (o linie în `receipt-job.ts`, fișier în lucru în paralel la F6-B; API/UI gata), unirea automată a încărcărilor separate cu același bon (se folosește „Mod bon lung”), E2E-ul bonurilor în modul `saas` (timpul jobului; pipeline-ul nu depinde de mod).
+
+**Rămâne:** `0008`–`0011` pe Supabase, programarea `finet-cleanup` (INFRA 4i), evaluarea pe bonuri reale, revizuirea `security`.
 
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
@@ -211,7 +220,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
   - `pnpm audit --prod` blocant de la severitatea HIGH (acum non-blocant);
   - scanare de secrete în istoric și în PR-uri (gitleaks) în CI.
 - **F8 (rest) — antetele de securitate: închis în F1-C** (CSP cu nonce, HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`; `docs/SECURITY_CHECKLIST.md`). Rămâne pentru Faza 9: `preload` la HSTS (decizia operatorului). Pagina `global-error` proprie: făcută în Faza 4.
-- **F9 — storage local:** închis tehnic în F6-A (`cleanupTemp`, `maxBytes` la `put`); rămâne programarea curățării (job de administrare, F6-C).
+- **F9 — storage local:** închis tehnic în F6-A (`cleanupTemp`, `maxBytes` la `put`); programarea în F6-C (`admin cleanup-documents`, serviciul `finet-cleanup`, cron în INFRA 4i).
 - **F2 (rest) / N1 — secretele în data-root-ul Docker: închis tehnic în T7.**
   - Ce s-a făcut: URL-urile bazei și `HEALTH_TOKEN` intră în containere ca fișiere (`secrets:` → `/run/secrets/`, citite prin `*_FILE`, `src/lib/secret-files.ts`), deci nu mai ajung în `config.v2.json`.
   - Fișierele exemplu de mediu nu mai conțin secrete, iar `pnpm test:ops` verifică asta.
@@ -280,8 +289,8 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/reports` | `/reports` (de bază) | 3; micro-cheltuieli în 10 | branch |
 | exporturi CSV (în `/reports` și `/transactions`) | `/export` (CSV) | 3 | branch; pagină `/export` proprie cu Excel și PDF: Faza 10 |
 | `/recurring`, `/recurring/new`, `/recurring/[id]` | `/recurring` | 5 | branch |
-| `/receipts` | `/receipts` | 6 | planificat |
-| `/import` | `/import` | 6 (bonuri), 7 (extrase) | planificat |
+| `/receipts`, `/receipts/[id]` | `/receipts` | 6 | branch (F6-C) |
+| `/import` | `/import` | 6 (bonuri), 7 (extrase) | branch (F6-C, bonuri); extrasele în Faza 7 |
 | `/statements/coverage` (nume provizoriu) | „Evidență extrase & acoperire” | 7 | planificat |
 | `/join/[token]` | — | 8 | planificat; invitații în familie |
 | `/family` (nume provizoriu) | membri, bugete comune, decontări | 8 | planificat |

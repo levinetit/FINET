@@ -36,10 +36,12 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 
 ## Documente încărcate (Faza 6, F6-A)
 - **Ce se stochează:** fișierul original (poză sau PDF) în `/srv/finet/storage/households/<gospodărie>/documents/<id>`, pe VPS (driverul local; bucket-ul Supabase rămâne gol). Originalul **păstrează EXIF-ul, inclusiv locația GPS**, până la ștergere sau retenție (decizia mea: originalul se păstrează pentru exportul GDPR „fișierele originale”); doar copia trimisă la AI e fără metadate. În bază: tipul detectat, dimensiunea, SHA-256, hash-ul perceptual (dHash, nu permite reconstruirea imaginii), stările; nu se stochează numele fișierului.
-- **Retenția:** `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180; 0 = niciodată) setează `expires_at` la încărcare; după expirare se șterge **doar fișierul** (datele extrase rămân). Jobul care o aplică: TODO (F6-C).
+- **Retenția:** `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180; 0 = niciodată) setează `expires_at` la încărcare; după expirare se șterge **doar fișierul** (datele extrase rămân). Jobul care o aplică: `admin cleanup-documents` (F6-C, ADR 0015), rulat zilnic de operator prin serviciul `finet-cleanup` (INFRA 4i); până la programarea lui, originalele rămân pe disc.
 - **Fără consimțământ `external_ai`:** documentul se stochează, nu pleacă nicăieri (nu există model local în Faza 6), rămâne „așteaptă consimțământul”; bonul se poate introduce manual. Retragerea consimțământului oprește trimiterile viitoare.
 - **Ștergerea** (5.6): rândul și bonul extras, apoi fișierul; tranzacțiile create din bon rămân, fără legătură. Auditul nu conține nume de fișiere sau conținut.
 - **Jurnalul AI** (`ai_calls`): doar metadate (sarcina, modelul, durata, costul estimat, rezultatul), fără imagini sau text.
+- **Afișarea (F6-C):** originalul se servește DOAR membrilor gospodăriei, prin `GET /api/v1/documents/{id}/file` (sesiune + RLS, `no-store`, `attachment`, nume generat de server); niciun link public sau semnat. Browserul nu trimite numele fișierului (formularul îl înlocuiește cu `bon-<n>`). Corecturile de categorie ale utilizatorului se păstrează ca alias pe numele normalizat al produsului (`product_aliases`, în gospodărie), ca bonurile următoare să le folosească.
+- **Consimțământul în interfață (F6-C):** comutatorul „Citirea bonurilor cu AI” din `/profile` explică ce pleacă și către cine; pagina `/import` arată când lipsește.
 - **Backup:** fișierele din `/srv/finet/storage` intră în backup-ul restic criptat al FINET (ADR 0009), nu în backup-ul `/home` al hostului.
 
 ## Pipeline-ul AI (Faza 6, F6-B; ADR 0014)
@@ -52,7 +54,7 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Retenția la furnizor:** după termenii Google/LiteLLM. De confirmat de operator: dacă LiteLLM înregistrează corpurile cererilor (jurnalele/spend logs cu conținut), opțiunea trebuie oprită pentru cheia FINET.
 
 ## TODO (operator / faze viitoare)
-- **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere în F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
+- **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 (Faza 2+) — **TODO**.
 - Loguri fără date sensibile: de verificat la fiecare fază (încă nu există loguri de aplicație).
 - Dacă aplicația trece în `saas`: politică publică, DPA-uri, lista împuterniciților, cookie-uri.

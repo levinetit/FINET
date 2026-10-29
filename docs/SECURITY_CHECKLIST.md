@@ -85,10 +85,10 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Cerință | Stare | Dovadă | Data · revizor |
 |---|---|---|---|
 | Tip după conținut, dimensiune maximă, cotă, EXIF eliminat, nume generate | DONE (F6-A, teste) | secțiunea 16, ADR 0013 | 2026-10-29 · programmer (F6-A) |
-| Servire autorizată (`Content-Disposition: attachment`, `nosniff`, tipul detectat) | TODO | F6-C | — |
+| Servire autorizată (`Content-Disposition: attachment`, `nosniff`, tipul detectat) | DONE (F6-C, secțiunea 18) | `documents-handlers.ts`, `receipts-api.test.ts` | 2026-10-29 · programmer (F6-C) |
 | Limite ZIP | N/A până în Faza 7 (extrase) | — | — |
 | Storage local confinat (realpath, `O_NOFOLLOW`, scriere atomică) | DONE | `src/lib/storage/local.ts`, `storage.test.ts` | 2026-10-27 · security (T5) |
-| F9 — curățarea fișierelor temporare orfane (`cleanupTemp`) și limita la `put` (`maxBytes`) | DONE (funcții + teste) / TODO programarea curățării | `src/lib/storage/local.ts`, `storage.test.ts` | 2026-10-29 · programmer (F6-A) |
+| F9 — curățarea fișierelor temporare orfane (`cleanupTemp`) și limita la `put` (`maxBytes`) | DONE (funcții + teste; F6-C: rulate de `cleanup-documents`) / TODO operator: cron-ul (INFRA 4i) | `src/lib/storage/local.ts`, `storage.test.ts` | 2026-10-29 · programmer (F6-A) |
 
 ## 6. Date personale în loguri
 
@@ -284,7 +284,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Tipul după conținut (semnătura la offset 0): JPEG, PNG, WebP, PDF; SVG, HTML, EXE, ZIP, poligloți (marcaje HTML/SVG la început), HEIC/AVIF refuzați cu cod stabil | DONE (teste) | `content.ts`, `content.test.ts`, `multipart.test.ts` | 2026-10-29 · programmer (F6-A) |
 | Bombe de decompresie: dimensiunile din antet ≤ `MAX_IMAGE_PIXELS` înainte de stocare; `limitInputPixels` în sharp | DONE (teste) | `content.ts`, `preprocess.ts` | 2026-10-29 · programmer (F6-A) |
 | Corp în flux (busboy), `Content-Length` și plafon dur pe corp, ≤ 4 fișiere, câmpuri permise, corp trunchiat respins, fișierele cererii șterse la orice eroare | DONE (teste) | `multipart.ts`, `multipart.test.ts` | 2026-10-29 · programmer (F6-A) |
-| `src/proxy.ts` trunchiază corpurile > 10 MB fără eroare (Next 16 `proxyClientMaxBodySize`): ruta publică trebuie exclusă din proxy sau limita ridicată | TODO | F6-C, ADR 0013 | — |
+| `src/proxy.ts` trunchiază corpurile > 10 MB fără eroare (Next 16 `proxyClientMaxBodySize`): ruta publică trebuie exclusă din proxy sau limita ridicată | DONE (F6-C: exclusă exact `/api/v1/documents`, Access refăcut în rută; secțiunea 18) | `proxy.ts`, `access-guard.ts`, `proxy.test.ts`, `access.spec.ts` | 2026-10-29 · programmer (F6-C) |
 | Rate limit dedicat încărcării (`api_document_upload`, 30/10 min) înaintea citirii corpului; apartenența verificată înainte de citire | DONE (teste) | `documents-handlers.ts`, `documents-api.test.ts`, `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
 | Cotă pe gospodărie și limită zilnică sub lock; limita zilnică dintr-un contor care doar crește (ștergerea nu o eliberează; revizuire M3) | DONE (PG17 efemer) | `documents.service.ts`, `document_usage_daily`, `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
 | Deduplicarea (SHA-256) înaintea limitelor; unic `(household_id, sha256)` în bază | DONE (PG17 efemer) | `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
@@ -297,7 +297,7 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Timeout fără muncă în fundal (sharp `timeout`, copil ucis, termen verificat între pași) | DONE (teste) | `preprocess.ts`, `preprocess.test.ts` | 2026-10-29 · programmer (F6-A) |
 | Workerul: storage DOAR citire (montaj + driver), `mem_limit` 384m, încercările numărate înainte de lucru (≤ 10) | DONE (`test-env-examples.sh`, teste) | `docker-compose.yml`, `documents-job.ts` | 2026-10-29 · programmer (F6-A) |
 | Fără antivirus (ClamAV) — risc acceptat de operator, mitigări în ADR 0013 | ACCEPTED | ADR 0013, decizia 5 | 2026-10-29 · operator (F6-COMUN) |
-| Originalele cu EXIF stau pe disc până la retenție; ștergerea automată la `expires_at` | TODO | F6-C / ROADMAP | — |
+| Originalele cu EXIF stau pe disc până la retenție; ștergerea automată la `expires_at` | DONE în repo (F6-C: `cleanup-documents`); TODO operator: cron-ul `finet-cleanup` (INFRA 4i) | `retention.ts`, `retention.test.ts` | 2026-10-29 · programmer (F6-C) |
 | Audit fără nume de fișiere sau conținut (`document.uploaded` doar contoare, `document.deleted` doar id) | DONE (test) | `documents.test.ts` | 2026-10-29 · programmer (F6-A) |
 | Revizuirea `security` a F6-A | TODO (revizuirile automate tratate: M1, M2, M3, „parser differential”) | agentul `security` | — |
 
@@ -326,4 +326,23 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Selecția workerului echitabilă (≤ 5 pe gospodărie), fără loturi `failed`; lot cu poză respinsă → toate pozele `failed` | DONE (PG17) | `0010_worker_queue_fairness.sql`, `receipt-job.test.ts`, `migrate.test.ts` | 2026-10-29 · programmer (revizuirea F6-A+B) |
 | Costul real peste rezervare intră în contorul bugetului | DONE (test) | `receipt-job.ts` | 2026-10-29 · programmer (revizuirea F6-A+B) |
 | Revizuirea `security` a F6-B | TODO | agentul `security` | — |
+
+## 18. API-ul și interfața bonurilor (F6-C, 2026-10-29)
+
+| Cerință | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Ruta de încărcare exclusă din proxy (flux, fără trunchiere la 10 MB) FĂRĂ a slăbi Access: matcher exact `api/v1/documents$`, sub-căile prin proxy; în rută aceeași `isRequestAllowed`, același verificator JWKS, aceleași antete, înainte de sesiune și de corp, pe toate metodele; fail closed; `HEALTH_TOKEN` nu o deschide | DONE (teste unitare; E2E `access` pe serverul de producție în CI) | `proxy.ts`, `access-guard.ts`, `proxy.test.ts`, `e2e/access.spec.ts` | 2026-10-29 · programmer (F6-C) |
+| Un fișier de 11 MB ajunge întreg la handler și e refuzat de limita aplicației (`413 file_too_large`, nu `invalid_multipart`) | DONE (handler, PG17); E2E prin serverul Next: CI | `receipts-api.test.ts`, `e2e/receipts.spec.ts` | 2026-10-29 · programmer (F6-C) |
+| Fișierele servite doar membrilor (RLS, 404 uniform), tipul DETECTAT (niciodată HTML/SVG), `attachment` cu nume generat de server, `nosniff`, `no-store`, `CSP: default-src 'none'; sandbox`, `CORP: same-origin`; citirea plafonată la dimensiunea înregistrată | DONE (PG17) | `documents-handlers.ts`, `documents.service.ts`, `receipts-api.test.ts`, `testing.ts` (`assertContract`) | 2026-10-29 · programmer (F6-C) |
+| Zod strict pe toate intrările noi (query, `PATCH`, `confirm`, `reprocess`); sumele doar întregi `…Minor`, cantitatea/TVA text, fără float; id-urile de linii doar ale bonului curent | DONE (PG17) | `receipts.schema.ts`, `receipts-api.test.ts` | 2026-10-29 · programmer (F6-C) |
+| Scoping pe gospodărie + RLS în fiecare interogare (inclusiv subinterogările corelate, cu coloanele exterioare calificate explicit); izolare A/B pe listă, detaliu, fișier, corectare, confirmare, reprocesare, ștergere | DONE (PG17) | `receipts.service.ts`, `documents.repo.ts`, `receipts-api.test.ts` | 2026-10-29 · programmer (F6-C) |
+| Căutarea: `LIKE` cu escape, suma prin `parseAmount` (fără regex pe conținut, fără float) | DONE (PG17) | `receipts.service.ts` (`amountOfQuery`), `receipts-api.test.ts` | 2026-10-29 · programmer (F6-C) |
+| Nicio tranzacție fără confirmare explicită; confirmarea blochează bonul (`FOR UPDATE`), `Idempotency-Key`, moneda contului = a bonului, garda 2^53, duplicatul cere `allowDuplicate` | DONE (PG17) | `receipts.service.ts`, `receipts-api.test.ts` | 2026-10-29 · programmer (F6-C) |
+| Reprocesarea (apel AI plătit): limită proprie de cereri, consumă limita zilnică (contorul doar crește), refuzată pentru bon salvat / fișier șters / document refuzat | DONE (PG17) | `receipts-handlers.ts`, `receipts.service.ts`, `receipts-api.test.ts` | 2026-10-29 · programmer (F6-C) |
+| Erori cu cod fix fără conținut utilizator; SQLSTATE 22021 (NUL/caracter invalid) → 400 fix, fără parametrii interogării | DONE (teste) | `ledger/context.ts`, `context.test.ts`, `ro.ts` | 2026-10-29 · programmer (F6-C) |
+| Auditul bonurilor fără sume, produse sau comercianți | DONE (PG17) | `receipts-api.test.ts` | 2026-10-29 · programmer (F6-C) |
+| Retenția: `expired_documents` SECURITY DEFINER (doar identificatori, `search_path = pg_catalog`, EXECUTE doar `finet_app`, politică de citire doar pe expirate, fără BETWEEN); ștergerea ca membru sub RLS, fișierul întâi; storage nemontat → nimic marcat; storage în scriere doar în `finet-cleanup` | DONE (PG17, `test-env-examples.sh`) | `0011_document_retention.sql`, `retention.ts`, `retention.test.ts`, `migrate.test.ts`, `docker-compose.yml` | 2026-10-29 · programmer (F6-C) |
+| UI: CSP cu nonce neschimbat (previzualizarea prin `data:`, fără `blob:`), fără `style=`/`dangerouslySetInnerHTML`, poze doar prin ruta autentificată, numele fișierelor nefolosite; zero încălcări CSP pe paginile noi | DONE (reguli statice); E2E în CI | `ui-rules.test.ts`, `e2e/receipts.spec.ts` | 2026-10-29 · programmer (F6-C) |
+| E2E: fără consimțământ → `awaiting_consent` și zero cereri la serverul AI fals; CI fără furnizor real (`AI_ALLOWED_HOSTS` = loopback) | NOT RUN local (CI) | `e2e/receipts.spec.ts`, `ci.yml` | — |
+| Revizuirea `security` a F6-C | TODO | agentul `security` | — |
 
