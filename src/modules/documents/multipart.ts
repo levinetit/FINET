@@ -133,13 +133,21 @@ export async function receiveMultipart(
   try {
     bb = busboy({
       headers: { "content-type": contentType },
+      // busboy 1.6 (lib/types/multipart.js) emite `partsLimit` când numărul de părți ATINGE
+      // limita (`++parts === partsLimit`, la sfârșitul ultimei părți permise), deci cu limita
+      // exactă o cerere legitimă cu toate câmpurile și `maxFiles` fișiere (bonul lung de 4 poze)
+      // era respinsă. `filesLimit`/`fieldsLimit` se emit abia la depășire, dar primesc aceeași
+      // margine +1, pentru uniformitate. Limitele busboy sunt doar plasa de siguranță contra
+      // corpurilor patologice; limitele REALE se aplică în cod:
+      // cel mult `maxFiles` fișiere (`too_many_files`), doar câmpurile din `TEXT_FIELDS`, fiecare
+      // o singură dată (`invalid_field`); o parte în plus e fie un fișier, fie un câmp în plus.
       limits: {
-        files: limits.maxFiles,
+        files: limits.maxFiles + 1,
         fileSize: limits.maxFileBytes,
-        fields: TEXT_FIELDS.length,
+        fields: TEXT_FIELDS.length + 1,
         fieldSize: 64,
         fieldNameSize: 32,
-        parts: limits.maxFiles + TEXT_FIELDS.length,
+        parts: limits.maxFiles + TEXT_FIELDS.length + 1,
         headerPairs: 16,
       },
       defParamCharset: "utf8",
@@ -164,6 +172,12 @@ export async function receiveMultipart(
     stream.on("error", () => {});
     if (failure || name !== FILE_FIELD) {
       if (!failure) fail(new UploadError(400, "invalid_field"));
+      stream.resume();
+      return;
+    }
+    // Limita reală de fișiere (busboy are marginea +1, vezi mai sus).
+    if (index >= limits.maxFiles) {
+      fail(new UploadError(413, "too_many_files"));
       stream.resume();
       return;
     }
