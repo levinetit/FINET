@@ -151,8 +151,11 @@ export function AppNav() {
       )}
     >
       <div className="hidden md:block">
-        <Link href="/dashboard" aria-label={`${ro.app.name}, ${ro.nav.dashboard}`}>
+        {/* Numele accesibil din conținut („FINET, Acasă”), fără `aria-label`: un aria-label care nu
+            conține textul vizibil al logoului încalcă WCAG 2.5.3 (axe: label-content-name-mismatch). */}
+        <Link href="/dashboard">
           <Logo className="text-3xl" />
+          <span className="sr-only">, {ro.nav.dashboard}</span>
         </Link>
         <p className="mt-1 text-sm text-muted-foreground">{ro.app.tagline}</p>
       </div>

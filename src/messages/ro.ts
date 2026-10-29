@@ -1224,7 +1224,6 @@ export const ro = {
     notNow: "Nu, mulțumesc",
     iosBody: "Pe iPhone: apasă butonul Partajează din Safari, apoi „Adaugă pe ecranul principal”.",
     guideLink: "Ghidul de instalare",
-    close: "Închide invitația",
   },
   settings: {
     title: "Setări",

@@ -199,6 +199,26 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
     expect(audit?.metadata).toEqual({ households: 2 });
   });
 
+  it("exportul întrerupt de client (abort după primul fragment): fără eroare și fără log", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const r = await G.dataExportHandler(
+        apiRequest("/api/v1/me/export", { bearer: bogdan.S.bearer }),
+        { ...env, limits: { gdprExport: { max: 100, windowSeconds: 3600 } } },
+      );
+      expect(r.status).toBe(200);
+      const reader = r.body!.getReader();
+      const first = await reader.read();
+      expect(first.done).toBe(false);
+      await reader.cancel();
+      // Lasă generatorul să se închidă (pull-ul în curs, dacă există).
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it("exportul peste limitele ZIP (estimarea dinainte): 413 `export_too_large` JSON, fără niciun octet de arhivă", async () => {
     for (const exportLimits of [
       { maxBytes: 1, maxEntries: 65_535 },
@@ -206,7 +226,8 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
     ]) {
       const r = await G.dataExportHandler(
         apiRequest("/api/v1/me/export", { bearer: bogdan.S.bearer }),
-        { ...env, exportLimits },
+        // Limita de rată ridicată: testele anterioare au consumat deja exporturile pe oră.
+        { ...env, exportLimits, limits: { gdprExport: { max: 100, windowSeconds: 3600 } } },
       );
       await assertContract(G.dataExportHandler, r);
       expect(r.status).toBe(413);

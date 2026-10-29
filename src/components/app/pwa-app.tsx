@@ -128,7 +128,6 @@ export function InstallPrompt() {
         <button
           type="button"
           onClick={dismiss}
-          aria-label={ro.pwa.close}
           data-testid="install-dismiss"
           className="rounded-md px-3 py-2 text-sm text-muted-foreground underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
