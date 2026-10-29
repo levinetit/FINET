@@ -723,10 +723,15 @@ async function extractAll(
     if (merged.mismatch) issues.push({ code: "long_receipt_mismatch" });
     mergeReport = {
       // Plafonat (CHECK: ≤ 32 KB): primele 100 de linii eliminate + numărul total.
+      // F6-C: și numele de pe bon (deja curățat de `cleanText`, plafonat la 80 de caractere), ca
+      // ecranul de verificare să arate liniile eliminate tăiate (100 × ~120 B ≪ 32 KB, CHECK-ul).
       removed: merged.removed.slice(0, MAX_REPORTED_REMOVED).map((r) => ({
         part: r.part + 1,
         position: r.position,
         reason: r.reason,
+        name: Array.from(extracted[r.part]?.lines[r.position - 1]?.rawName ?? "")
+          .slice(0, 80)
+          .join(""),
       })),
       removedCount: merged.removed.length,
       difference: merged.difference === null ? null : merged.difference.toString(),

@@ -544,8 +544,8 @@ describe.skipIf(!TEST_ADMIN_URL)(
       expect(r).toMatchObject({ batch_id: up.batchId, document_id: null, total_minor: "3500" });
       expect(r!.merge_report).toEqual({
         removed: [
-          { part: 2, position: 1, reason: "overlap" },
-          { part: 3, position: 1, reason: "overlap" },
+          { part: 2, position: 1, reason: "overlap", name: "OUA" },
+          { part: 3, position: 1, reason: "overlap", name: "LAPTE" },
         ],
         removedCount: 2,
         difference: "0",
