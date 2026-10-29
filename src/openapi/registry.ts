@@ -50,6 +50,7 @@ import {
   splitSchema,
   accountSchema,
   aiUsageSchema,
+  androidReleaseSchema,
   budgetSchema,
   documentSchema,
   receiptConfirmResultSchema,
@@ -329,6 +330,22 @@ export const OPERATIONS: readonly Operation[] = [
     body: { schema: appEventsBatchSchema },
     success: { status: 204, schema: null, description: "Primit." },
     errors: [...MUTATION_ERRORS],
+  },
+  // --- Aplicația Android (Faza 9; promptul Android 12.1) --------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/app/android/latest",
+    operationId: "getAndroidLatest",
+    tag: "app",
+    summary: "Ultima versiune publicată a aplicației Android (metadate, fără APK).",
+    description:
+      "Datele vin din configurația serverului (fișierul `<STORAGE_DIR>/app/android-latest.json`, scris de operator), nu din cod. Fără versiune publicată sau cu un fișier invalid: 404 `android_release_unavailable`. Aplicația cheamă endpointul cel mult o dată pe zi; dacă `versionCode` e mai mare decât cel instalat, anunță versiunea nouă; sub `minSupportedVersionCode` cere actualizarea.",
+    success: {
+      status: 200,
+      schema: dataOf(androidReleaseSchema),
+      description: "Versiunea curentă.",
+    },
+    errors: [VALIDATION, NOT_FOUND],
   },
   // --- Gospodăriile --------------------------------------------------------------------------
   {

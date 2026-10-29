@@ -467,6 +467,30 @@ export const uploadResultSchema = z
   })
   .meta({ title: "UploadResult" });
 
+/** Faza 9 (promptul Android 12.1): ultima versiune Android publicată. */
+export const androidReleaseSchema = z
+  .strictObject({
+    versionName: z
+      .string()
+      .meta({ description: "Versiunea semantică (`1.0.0`, din tagul `FINET-v1.0.0`)." }),
+    versionCode: int.meta({ description: "Crește monoton cu fiecare build publicat." }),
+    minSupportedVersionCode: int.meta({
+      description:
+        "Sub această valoare aplicația cere actualizarea și nu mai trimite cereri financiare.",
+    }),
+    url: z.string().meta({ description: "Linkul de descărcare (https; GitHub Releases)." }),
+    sha256: z.string().meta({ description: "Suma SHA-256 a APK-ului (hex, 64 de caractere)." }),
+    sizeBytes: int.meta({ description: "Dimensiunea APK-ului, în octeți." }),
+    notes: z
+      .string()
+      .meta({ description: "Notele versiunii, în română (cel mult 2000 de caractere)." }),
+    publishedAt: z
+      .string()
+      .nullable()
+      .meta({ description: "Momentul publicării (ISO 8601) sau `null`." }),
+  })
+  .meta({ title: "AndroidRelease" });
+
 export const aiUsageSchema = z
   .strictObject({
     used: int.meta({ description: "Documente încărcate azi (ziua din București)." }),

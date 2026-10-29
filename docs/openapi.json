@@ -29,6 +29,10 @@
       "description": "Statisticile de utilizare (6.5)."
     },
     {
+      "name": "app",
+      "description": "Aplicația Android: ultima versiune publicată (Faza 9)."
+    },
+    {
       "name": "households",
       "description": "Gospodăriile utilizatorului."
     },
@@ -770,6 +774,112 @@
           },
           "401": {
             "$ref": "#/components/responses/E401"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/app/android/latest": {
+      "get": {
+        "operationId": "getAndroidLatest",
+        "tags": [
+          "app"
+        ],
+        "summary": "Ultima versiune publicată a aplicației Android (metadate, fără APK).",
+        "description": "Datele vin din configurația serverului (fișierul `<STORAGE_DIR>/app/android-latest.json`, scris de operator), nu din cod. Fără versiune publicată sau cu un fișier invalid: 404 `android_release_unavailable`. Aplicația cheamă endpointul cel mult o dată pe zi; dacă `versionCode` e mai mare decât cel instalat, anunță versiunea nouă; sub `minSupportedVersionCode` cere actualizarea.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versiunea curentă.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "versionName": {
+                          "type": "string",
+                          "description": "Versiunea semantică (`1.0.0`, din tagul `FINET-v1.0.0`)."
+                        },
+                        "versionCode": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Crește monoton cu fiecare build publicat."
+                        },
+                        "minSupportedVersionCode": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Sub această valoare aplicația cere actualizarea și nu mai trimite cereri financiare."
+                        },
+                        "url": {
+                          "type": "string",
+                          "description": "Linkul de descărcare (https; GitHub Releases)."
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "description": "Suma SHA-256 a APK-ului (hex, 64 de caractere)."
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Dimensiunea APK-ului, în octeți."
+                        },
+                        "notes": {
+                          "type": "string",
+                          "description": "Notele versiunii, în română (cel mult 2000 de caractere)."
+                        },
+                        "publishedAt": {
+                          "description": "Momentul publicării (ISO 8601) sau `null`.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "versionName",
+                        "versionCode",
+                        "minSupportedVersionCode",
+                        "url",
+                        "sha256",
+                        "sizeBytes",
+                        "notes",
+                        "publishedAt"
+                      ],
+                      "additionalProperties": false,
+                      "title": "AndroidRelease"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
           },
           "429": {
             "$ref": "#/components/responses/E429"

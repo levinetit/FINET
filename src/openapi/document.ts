@@ -261,6 +261,7 @@ export function buildOpenApiDocument(): Json {
     tags: [
       { name: "me", description: "Contul curent (Faza 1) și consimțămintele." },
       { name: "usage", description: "Statisticile de utilizare (6.5)." },
+      { name: "app", description: "Aplicația Android: ultima versiune publicată (Faza 9)." },
       { name: "households", description: "Gospodăriile utilizatorului." },
       {
         name: "family",
