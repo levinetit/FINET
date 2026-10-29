@@ -6,6 +6,7 @@ import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 
 import type { Tx } from "@/db";
 import {
+  DOCUMENT_MAX_ATTEMPTS,
   documents,
   processingBatches,
   productAliases,
@@ -54,6 +55,7 @@ import {
   toExtractedReceipt,
 } from "@/modules/receipts/extraction.schema";
 import { type MergeResult, mergeReceiptParts } from "@/modules/receipts/merge";
+import { cleanMultilineText } from "@/modules/receipts/normalize";
 import {
   CATEGORIZE_MAX_TOKENS,
   RECEIPT_MAX_TOKENS,
@@ -138,7 +140,32 @@ export type ReceiptOutcome =
 
 const actorOf = (ref: QueuedDocument): Actor => ({ userId: ref.actorUserId });
 
-type ExtractFailure = "budget_exceeded" | "extraction_failed";
+type ExtractFailure = "budget_exceeded" | "extraction_failed" | "consent_missing";
+
+type CallFailure = AiError["code"] | "consent_missing";
+
+/** Consimțământul a fost retras în timpul jobului: nicio cerere nu mai pleacă. */
+class ConsentRevokedError extends Error {
+  constructor() {
+    super("consent_missing");
+    this.name = "ConsentRevokedError";
+  }
+}
+
+/**
+ * Consimțământul `external_ai` al celui care a încărcat (`ref.actorUserId`, egal cu el după
+ * `consentGate`), verificat din nou înaintea FIECĂREI încercări a fiecărui apel (extragere și
+ * categorisire): o retragere în timpul jobului oprește apelurile următoare (revizuirea F6-A+B).
+ */
+async function consentStillActive(deps: ReceiptJobDeps, ref: QueuedDocument): Promise<boolean> {
+  return inHousehold(deps, actorOf(ref), ref.householdId, async (tx) => {
+    await lockUserUsage(tx, ref.actorUserId);
+    return hasActiveConsent(tx, ref.actorUserId, "external_ai");
+  });
+}
+
+/** Plafonul contorului (= CHECK-ul `ai_budget_usage_reserved_range`). */
+const BUDGET_COUNTER_CAP = { amountMinor: 10_000_000_000_000n } as const;
 type PartResult =
   | Readonly<{ ok: true; receipt: ExtractedReceipt }>
   | Readonly<{ ok: false; reason: ExtractFailure }>;
@@ -237,7 +264,7 @@ async function callAi<T>(
     /** Termenul absolut al documentului (ms epoch). */
     deadline: number;
   }>,
-): Promise<Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; code: AiError["code"] }>> {
+): Promise<Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; code: CallFailure }>> {
   const maxCost = maxCostOf(ai.pricing, call.textChars, call.images, call.maxTokens);
   if (Date.now() >= call.deadline) return { ok: false, code: "timeout" };
   let attempts = 0;
@@ -254,6 +281,7 @@ async function callAi<T>(
       {
         deadline: call.deadline,
         beforeAttempt: async () => {
+          if (!(await consentStillActive(deps, ref))) throw new ConsentRevokedError();
           if (!(await reserveAiBudget(deps.db, maxCost, ai.monthlyBudget))) {
             throw new AiError("budget_exceeded");
           }
@@ -262,7 +290,16 @@ async function callAi<T>(
       },
     );
     // Costul real (din tokeni) al încercării reușite + plafonul celor eșuate (pesimist).
-    const cost = actualCostOf(ai.pricing, result.usage, maxCost) + maxCost * BigInt(attempts - 1);
+    const actual = actualCostOf(ai.pricing, result.usage, maxCost);
+    const cost = actual + maxCost * BigInt(attempts - 1);
+    // Dacă furnizorul a raportat mai mult decât s-a rezervat, diferența intră și ea în contor
+    // (care doar crește): bugetul lunii reflectă cel puțin costul real (revizuirea F6-A+B).
+    if (actual > maxCost) {
+      await reserveAiBudget(deps.db, actual - maxCost, {
+        ...BUDGET_COUNTER_CAP,
+        currency: ai.monthlyBudget.currency,
+      });
+    }
     let value: T;
     let valid = true;
     try {
@@ -284,7 +321,12 @@ async function callAi<T>(
     });
     return valid ? { ok: true, value } : { ok: false, code: "failed_validation" };
   } catch (error) {
-    const code: AiError["code"] = error instanceof AiError ? error.code : "provider_error";
+    const code: CallFailure =
+      error instanceof ConsentRevokedError
+        ? "consent_missing"
+        : error instanceof AiError
+          ? error.code
+          : "provider_error";
     // Fără nicio încercare pornită (bugetul a refuzat prima), nimic nu a plecat: fără rând.
     if (attempts > 0) {
       await recordAiCall(deps, ref, {
@@ -295,10 +337,10 @@ async function callAi<T>(
         costMinor: maxCost * BigInt(attempts),
         currency: ai.monthlyBudget.currency,
         durationMs: Date.now() - started,
-        result: aiCallResultOf(code),
+        result: code === "consent_missing" ? "error" : aiCallResultOf(code),
       });
     }
-    if (!(error instanceof AiError)) throw error;
+    if (!(error instanceof AiError || error instanceof ConsentRevokedError)) throw error;
     return { ok: false, code };
   }
 }
@@ -337,7 +379,8 @@ async function extractPart(
     deps.log?.({ job: "receipt.process", step: "extract", error: r.code });
     return {
       ok: false,
-      reason: r.code === "budget_exceeded" ? "budget_exceeded" : "extraction_failed",
+      reason:
+        r.code === "budget_exceeded" || r.code === "consent_missing" ? r.code : "extraction_failed",
     };
   }
   return { ok: true, receipt: r.value };
@@ -361,8 +404,8 @@ function ocrTextOf(
             .filter((x): x is string => x !== null)
             .join("\n")
         : "";
-  if (text.trim() === "") return null;
-  return text.length > 20_000 ? text.slice(0, 20_000) : text;
+  // Fără NUL/caractere de control (Postgres refuză U+0000; revizuirea F6-A+B), plafonat (CHECK).
+  return cleanMultilineText(text, 20_000);
 }
 
 type Prepared = Readonly<{ documentId: string; pre: Preprocessed; possibleDuplicate: boolean }>;
@@ -403,22 +446,36 @@ async function prepareBatch(
   for (const d of docs) {
     const r = await prepareDocument(withDeadline(deps, deadline), { ...ref, documentId: d.id });
     if (r.outcome === "skipped") {
-      await release("queued", null);
-      return { ok: false, outcome: { outcome: "skipped" } };
+      // Poza e luată acum de alt worker (în lucru, nu expirată): se reîncearcă mai târziu. Altfel
+      // poza e într-o stare finală sau peste plafonul de încercări: lotul nu mai poate fi unit, deci
+      // TOATE pozele lui care nu sunt finale trec în `failed` (altfel ar rămâne `queued` pe vecie
+      // și ar ocupa locurile din selecția workerului; revizuirea F6-A+B).
+      const [st] = await inHousehold(deps, actorOf(ref), ref.householdId, (tx) =>
+        tx
+          .select({
+            status: documents.status,
+            attempts: documents.attempts,
+            startedAt: documents.processingStartedAt,
+          })
+          .from(documents)
+          .where(and(eq(documents.householdId, ref.householdId), eq(documents.id, d.id)))
+          .limit(1),
+      );
+      const staleBefore = Date.now() - PROCESSING_STALE_SECONDS * 1000;
+      const busyElsewhere =
+        st?.status === "processing" &&
+        st.startedAt !== null &&
+        st.startedAt.getTime() >= staleBefore &&
+        st.attempts < DOCUMENT_MAX_ATTEMPTS;
+      if (busyElsewhere) {
+        await release("queued", null);
+        return { ok: false, outcome: { outcome: "skipped" } };
+      }
+      await failDocuments(deps, ref, claimed, batchId, "batch_part_unavailable");
+      return { ok: false, outcome: { outcome: "rejected", code: "batch_part_unavailable" } };
     }
     if (r.outcome === "rejected") {
-      await release("failed", "batch_part_rejected");
-      await inHousehold(deps, actorOf(ref), ref.householdId, (tx) =>
-        tx
-          .update(processingBatches)
-          .set({ status: "failed", updatedAt: new Date() })
-          .where(
-            and(
-              eq(processingBatches.householdId, ref.householdId),
-              eq(processingBatches.id, batchId),
-            ),
-          ),
-      );
+      await failDocuments(deps, ref, claimed, batchId, "batch_part_rejected");
       return { ok: false, outcome: { outcome: "rejected", code: r.code } };
     }
     claimed.push(d.id);
@@ -445,8 +502,15 @@ type Draft = Readonly<{
   issues: ReceiptIssue[];
   providerUsed: "none" | "local" | "external";
   fallbackReason:
-    "no_local_model" | "budget_exceeded" | "external_failed" | "ai_unconfigured" | null;
+    | "no_local_model"
+    | "budget_exceeded"
+    | "external_failed"
+    | "ai_unconfigured"
+    | "consent_missing"
+    | null;
   mergeReport: Record<string, unknown> | null;
+  /** Bonul gol de rezervă (după o eroare de salvare): fără `ocr_text`. */
+  minimal?: boolean;
 }>;
 
 /** Procesează documentul (sau lotul lui) până la `needs_review`. Vezi antetul modulului. */
@@ -499,20 +563,88 @@ export async function processReceiptDocument(
   try {
     return await persist(deps, ref, parts, batchId, draft, deadline);
   } catch (error) {
-    // Datele extrase încalcă o constrângere a bazei (CHECK/cheie): apelurile AI sunt deja
-    // plătite, deci NU se aruncă (ar urma reîncercarea jobului și încă o extragere), ci se
-    // salvează bonul gol „De verificat” (introducere manuală).
-    if (!(error instanceof ConflictError) || draft.receipt === null) throw error;
-    deps.log?.({ job: "receipt.process", step: "persist", fallback: error.reason });
-    return persist(
-      deps,
-      ref,
-      parts,
-      batchId,
-      { ...draft, receipt: null, issues: [{ code: "extraction_failed" }], mergeReport: null },
-      deadline,
-    );
+    // ORICE eroare de salvare după apelurile AI (deja plătite): NU se aruncă mai departe (ar urma
+    // reîncercarea jobului și încă o extragere, iar mesajul erorii bazei poate conține parametrii,
+    // adică datele bonului). Se salvează bonul gol „De verificat” (introducere manuală), fără
+    // text; dacă nici asta nu merge, documentele trec în `failed` și se aruncă doar un cod fix.
+    deps.log?.({ job: "receipt.process", step: "persist", fallback: errorCodeOf(error) });
+    try {
+      return await persist(
+        deps,
+        ref,
+        parts,
+        batchId,
+        {
+          ...draft,
+          receipt: null,
+          issues: [{ code: "extraction_failed" }],
+          mergeReport: null,
+          minimal: true,
+        },
+        deadline,
+      );
+    } catch (second) {
+      deps.log?.({ job: "receipt.process", step: "persist_minimal", error: errorCodeOf(second) });
+      await failDocuments(
+        deps,
+        ref,
+        parts.map((p) => p.documentId),
+        batchId,
+        "persist_failed",
+      ).catch(() => {});
+      throw new Error("persist_failed");
+    }
   }
+}
+
+/** Codul unei erori (SQLSTATE sau numele clasei), fără mesaj: mesajele pot conține date. */
+export function errorCodeOf(error: unknown): string {
+  let e: unknown = error;
+  for (let i = 0; i < 5 && e; i++) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === "string" && /^[A-Za-z0-9_]{1,32}$/.test(code)) return code;
+    e = (e as { cause?: unknown }).cause;
+  }
+  if (error instanceof ConflictError) return error.reason.slice(0, 32);
+  return "unknown";
+}
+
+/** Documentele (și lotul) trec în `failed` cu un cod fix; nu mai sunt reluate. */
+async function failDocuments(
+  deps: ReceiptJobDeps,
+  ref: QueuedDocument,
+  ids: readonly string[],
+  batchId: string | null,
+  code: string,
+): Promise<void> {
+  await inHousehold(deps, actorOf(ref), ref.householdId, async (tx) => {
+    const now = new Date();
+    const scope =
+      batchId === null
+        ? inArray(documents.id, [...ids])
+        : or(inArray(documents.id, [...ids]), eq(documents.batchId, batchId));
+    await tx
+      .update(documents)
+      .set({ status: "failed", errorCode: code, processingStartedAt: null, updatedAt: now })
+      .where(
+        and(
+          eq(documents.householdId, ref.householdId),
+          scope,
+          inArray(documents.status, ["uploaded", "awaiting_consent", "queued", "processing"]),
+        ),
+      );
+    if (batchId !== null) {
+      await tx
+        .update(processingBatches)
+        .set({ status: "failed", updatedAt: now })
+        .where(
+          and(
+            eq(processingBatches.householdId, ref.householdId),
+            eq(processingBatches.id, batchId),
+          ),
+        );
+    }
+  });
 }
 
 async function extractAll(
@@ -536,6 +668,16 @@ async function extractAll(
   for (const p of parts) {
     const r = await extractPart(deps, ai, ref, p.documentId, p.pre, deadline);
     if (!r.ok) {
+      if (r.reason === "consent_missing") {
+        // Retras în timpul jobului: ce s-a citit deja se aruncă, nimic nu mai pleacă.
+        return {
+          receipt: null,
+          issues: [{ code: "consent_missing" }],
+          providerUsed: extracted.length === 0 ? "none" : providerOf(ai.visionModel),
+          fallbackReason: "consent_missing",
+          mergeReport: null,
+        };
+      }
       return r.reason === "budget_exceeded" && extracted.length === 0
         ? {
             receipt: null,
@@ -647,6 +789,8 @@ async function persist(
   });
 
   const issues: ReceiptIssue[] = [...draft.issues];
+  let fallbackReason = draft.fallbackReason;
+  let consentRevoked = false;
   let confidence = 0;
   let categories: { categoryId: string | null }[] = [];
   if (draft.receipt !== null) {
@@ -678,10 +822,18 @@ async function persist(
                 },
                 deadline,
               });
-              if (!r.ok) throw new AiError(r.code);
+              if (!r.ok) {
+                if (r.code === "consent_missing") consentRevoked = true;
+                throw new Error(r.code);
+              }
               return r.value;
             },
     });
+  }
+  if (consentRevoked) {
+    // Retras înainte de categorisire: liniile rămân necategorizate; motivul se păstrează.
+    issues.push({ code: "consent_missing" });
+    fallbackReason = "consent_missing";
   }
   if (parts.some((p) => p.possibleDuplicate)) issues.push({ code: "possible_duplicate_image" });
 
@@ -722,13 +874,15 @@ async function persist(
         status: "needs_review",
         confidence: receipt === null ? 0 : confidence,
         providerUsed: draft.providerUsed,
-        fallbackReason: draft.fallbackReason,
+        fallbackReason,
         dedupKey: duplicateOf === null ? dedupKey : null,
         duplicateOfReceiptId: duplicateOf,
-        ocrText: ocrTextOf(
-          receipt,
-          parts.map((p) => p.pre),
-        ),
+        ocrText: draft.minimal
+          ? null
+          : ocrTextOf(
+              receipt,
+              parts.map((p) => p.pre),
+            ),
         issues: finalIssues.slice(0, 100),
         mergeReport: draft.mergeReport,
       })

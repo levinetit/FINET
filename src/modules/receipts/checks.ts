@@ -46,6 +46,7 @@ export const ISSUE_CODES = [
   "long_receipt_mismatch",
   "possible_duplicate_image",
   "too_many_lines",
+  "consent_missing",
 ] as const;
 export type IssueCode = (typeof ISSUE_CODES)[number];
 
@@ -78,6 +79,7 @@ const PENALTY: Readonly<Partial<Record<IssueCode, number>>> = {
   long_receipt_order: 30,
   long_receipt_mismatch: 30,
   too_many_lines: 30,
+  consent_missing: 100,
 };
 
 export const MAX_RECEIPT_AGE_YEARS = 5;
