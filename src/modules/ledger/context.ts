@@ -46,6 +46,13 @@ export function translateDbError(error: unknown): never {
       throw new ConflictError("reference_conflict");
     case "23514":
       throw new ConflictError("integrity_check_failed");
+    case "22021":
+      // Caracter invalid în text (de exemplu NUL, `\u0000`, sau UTF-8 invalid): 400 cu mesaj fix,
+      // fără parametrii interogării sau conținutul primit (mesajul Postgres le-ar cita).
+      throw new ValidationError(
+        { _: "Textul conține caractere nepermise." },
+        "Textul conține caractere nepermise.",
+      );
     case "42501":
       // RLS a refuzat scrierea (de exemplu `household_id` străin): același răspuns ca 404.
       throw new NotFoundError();
