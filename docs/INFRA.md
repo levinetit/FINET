@@ -400,6 +400,22 @@ Agentul nu a rulat nimic din această secțiune și nu a atins LiteLLM-ul real s
 
 **Rollback:** imaginea anterioară a `finet-web` (paginile și rutele noi dispar; datele rămân); `stop finet-worker` (bonurile rămân `queued`); linia de cron a curățării se scoate. Migrațiile: comenzile din antete, doar cu backup și decizia operatorului.
 
+## 4j. Faza 8 (F8-A): verificarea dinaintea migrației `0012_family`
+
+Agentul nu a rulat nimic de aici. Pașii completi de deploy ai Fazei 8 vin în F8-B; F8-A adaugă doar migrația și o verificare OBLIGATORIE înainte de ea, pentru că `0012` schimbă vizibilitatea: un cont cu `owner_user_id` setat devine PERSONAL și dispare pentru ceilalți membri (ADR 0016).
+
+1. Pe Supabase (SQL editor, rol cu drept de citire peste RLS, de exemplu `postgres`), înainte de `0012`:
+   ```sql
+   select a.household_id, count(*) as conturi_cu_proprietar,
+          (select count(*) from finet.household_members m where m.household_id = a.household_id) as membri
+     from finet.accounts a
+    where a.owner_user_id is not null
+    group by a.household_id;
+   ```
+   Dacă rezultatul e gol sau gospodăriile au un singur membru: nimic de făcut. Altfel, decide cu familia: conturile care trebuie să rămână comune se fac comune ÎNAINTE de migrare (`update finet.accounts set owner_user_id = null where id in (...)`, cu backup).
+2. Backup, apoi migrațiile (rolul `migrate`; „aplicate acum 1”, a doua rulare „aplicate acum 0”). Rollback: antetul `0012_family.sql`.
+3. Nicio variabilă și niciun secret nou pentru F8-A.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

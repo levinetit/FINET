@@ -14,7 +14,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 5 — Recurențe | **parțial** (F5-A, F5-B în repo) | date, servicii, worker pg-boss (F5-A); API `/api/v1/recurring`, UI `/recurring`, E2E `recurring` (F5-B); rămân migrațiile `0006`/`0007` și workerul pe producție (operatorul), prima rulare CI completă și revizuirea `security` — vezi mai jos și `docs/reports/faza-5.md` |
 | 6 — Ingestia bonurilor | **în repo** (F6-A, F6-B, F6-C; de revizuit și de aplicat pe producție) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat) — ADR 0013. F6-B: migrația `0009_receipt_pipeline`, clientul LiteLLM, jobul `receipt.process`, verificările 5.5 și scorul, categorisirea, bonul lung, bugetul global, fixtures sintetice și `pnpm eval:receipts` — ADR 0014. F6-C: API-ul public (`/api/v1/documents`, `/receipts`, `/ai/usage`), paginile `/import`, `/receipts`, `/receipts/[id]`, retenția originalelor (`0011`, `cleanup-documents`), E2E cu serverul AI fals și workerul — ADR 0015. Rămân `0008`–`0011` pe Supabase, evaluarea pe bonuri reale și revizuirea `security` |
 | 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
-| 8 — Familie | neimplementat | |
+| 8 — Familie | **parțial** (F8-A în repo) | F8-A: migrația `0012_family` (invitații, împărțiri cu verificare amânată a sumei, decontări, gospodăria activă, vizibilitatea personal/comun în RLS pe conturi, tranzacții, etichete, recurențe), serviciile `src/modules/family/` (invitații, membri, roluri, ultimul owner, comutator, împărțiri, solduri, decontări) — ADR 0016. Rămân F8-B (API, UI, actualizări live, E2E), `0012` pe Supabase și revizuirea `security` — vezi mai jos |
 | 9 — Hardening, PWA, offline | neimplementat | |
 | 10 — Liste de cumpărături și prețuri | neimplementat | |
 | 11 — Fundația SaaS | neimplementat | |
@@ -189,10 +189,28 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 
 **Rămâne:** `0008`–`0011` pe Supabase, programarea `finet-cleanup` (INFRA 4i), evaluarea pe bonuri reale, revizuirea `security`.
 
+### Faza 8: stare
+**F8-A (date și servicii), gata în repo, verificat local pe PostgreSQL 17 efemer (subseturi; suita completă, typecheck-ul complet și build-ul în CI):**
+- migrația `0012_family`: `household_invites` (doar hash SHA-256, fără SELECT pe hash și fără DELETE), `transaction_splits` (plătitorul stocat, suma = totalul verificată la COMMIT), `settlements` (anulare o singură dată, fără DELETE), `user_preferences.active_household_id`; `finet.accept_invite` (SECURITY DEFINER, consum atomic, răspuns uniform); triggerele „ultimul owner” și plafonul de 6 membri (sub lock); politicile restrânse prin `ALTER POLICY` pentru vizibilitatea personal/comun; `check_transfer_group` și `due_recurring_rules` redefinite (aceleași semnături);
+- serviciile `src/modules/family/`: invitații (create/list/revoke/accept, limită de rată la acceptare, 20/zi la creare), membri (listă, rol, eliminare, plecare, transfer de ownership), comutatorul de gospodărie activă, împărțiri (egal, procente în puncte de bază, sume fixe), solduri (2 și 3 membri, netting pe perechi), decontări (inclusiv parțiale, anulare), audit fără conținut;
+- regula conturilor (serviciu + bază): un cont personal doar pentru tine, comun → personal refuzat, personal → comun permis; `updateTransaction` refuză schimbarea sumei/contului/tipului unei cheltuieli împărțite.
+
+**L3 (ultimul owner):** închis în F8-A (ADR 0016, punctul 4).
+
+**Amânate din F8-A (motiv, ADR 0016 punctul 1):**
+- vizibilitatea per membru a **documentelor și bonurilor** (`documents`, `receipts`, `receipt_lines`): rămân ale tuturor membrilor, chiar dacă bonul e confirmat pe un cont personal; cere bonuri „personale” și impact pe pipeline-ul Fazei 6;
+- **obiective** personale (`goals` rămân comune);
+- indexul unic al numelor de conturi pe proprietar (azi un nume de cont personal e „ocupat” pentru toată gospodăria, deci vizibil ca existent);
+- semantica bugetelor comune „doar din conturile comune” (azi: din tranzacțiile vizibile cititorului);
+- ștergerea contului de utilizator: `accounts.owner_user_id ON DELETE SET NULL` ar face conturile personale comune — funcția de ștergere a contului trebuie să le trateze;
+- API-ul, UI-ul, SSE și E2E: F8-B.
+
+**Rămâne:** F8-B, `0012` pe Supabase (cu verificarea din INFRA 4j), revizuirea `security`.
+
 ### Constatări amânate din revizuirea de securitate a Fazei 1 (2026-10-28)
 Corectate: H1, M1–M5, L1, L4, L5 (`docs/SECURITY_CHECKLIST.md`, secțiunea 9; ADR 0003). Amânate, cu motivul:
 - **L2** — `audit_events` dispar în CASCADE la ștergerea unei gospodării: aplicația nu șterge încă gospodării; se decide odată cu ștergerea (păstrare anonimizată sau `SET NULL`).
-- **L3** — protecția „ultimului owner” (nu poate pleca / nu poate fi scos): odată cu gestiunea membrilor din Faza 8.
+- **L3** — protecția „ultimului owner” (nu poate pleca / nu poate fi scos): **închis în F8-A** (triggerul `household_members_guard_owner` + serviciile, ADR 0016).
 - **L6** — tokenul de resetare a parolei e stocat în clar (Better Auth nu are `storeToken: "hashed"` pentru resetare): de revăzut la actualizarea Better Auth; azi 30 de minute, unică folosință.
 - **L7** — parola generată de CLI apare pe stdout (o singură dată): de decis cu operatorul (fișier 0600 sau doar `--password-stdin`).
 - **L8** — `viaBearer` scutește de CSRF și când cererea are și cookie: de restrâns la prima revizuire a clientului Android.
@@ -292,8 +310,8 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/receipts`, `/receipts/[id]` | `/receipts` | 6 | branch (F6-C) |
 | `/import` | `/import` | 6 (bonuri), 7 (extrase) | branch (F6-C, bonuri); extrasele în Faza 7 |
 | `/statements/coverage` (nume provizoriu) | „Evidență extrase & acoperire” | 7 | planificat |
-| `/join/[token]` | — | 8 | planificat; invitații în familie |
-| `/family` (nume provizoriu) | membri, bugete comune, decontări | 8 | planificat |
+| `/join/[token]` | — | 8 | serviciile gata (F8-A: `acceptInvite`); pagina în F8-B |
+| `/family` (nume provizoriu) | membri, bugete comune, decontări | 8 | serviciile gata (F8-A); pagina în F8-B |
 | `/offline` | — (la finpulse dă 404) | 9 | planificat |
 | `/help` (ghid în aplicație) | `/help` | 9 | planificat |
 | `/admin/statistics` (nume provizoriu) | — | 9 | planificat; statistici de utilizare, doar administrator |
