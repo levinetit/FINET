@@ -87,7 +87,7 @@ describe("checkStorage", () => {
       delete: async () => {},
       exists: async () => false,
       putStream: async () => "health/x" as never,
-      openRead: async () => [],
+      openRead: async () => (async function* () {})(),
     };
     expect(await checkStorage(broken)).toBe("down");
   });
@@ -99,7 +99,7 @@ describe("checkStorage", () => {
       delete: async () => {},
       exists: async () => true,
       putStream: async () => "health/x" as never,
-      openRead: async () => [],
+      openRead: async () => (async function* () {})(),
     };
     expect(await checkStorage(wrong)).toBe("down");
   });
