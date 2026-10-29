@@ -104,6 +104,8 @@ export type PdfChildOptions = Readonly<{
   minTextChars: number;
   /** Pixeli maximi ai unei imagini extrase (verificați și în copil, înainte de sharp). */
   maxImagePixels: number;
+  /** Pixeli decodați maximi însumați pe document (în copil, independent de inventar). */
+  maxTotalPixels?: number;
   /** Termenul (ms Unix): la el copilul primește SIGKILL. */
   deadline: number;
   /** Doar teste: alt script copil (de exemplu unul ostil). */
@@ -183,6 +185,7 @@ export function readPdfInChild(
         String(L.maxSidePx),
         String(L.maxImageBytes),
         String(L.maxTotalBytes),
+        String(options.maxTotalPixels ?? 2 * options.maxImagePixels),
       ],
       // Mediu minim: un singur fir libuv (sharp/libvips), nimic din mediul workerului.
       { stdio: ["pipe", "pipe", "ignore"], env: { UV_THREADPOOL_SIZE: "1" }, windowsHide: true },

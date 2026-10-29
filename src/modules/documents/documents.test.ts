@@ -26,6 +26,7 @@ import {
   listQueuedDocuments,
   prepareDocument,
 } from "@/worker/receipts/documents-job";
+import { activePdfChildren } from "@/worker/receipts/pdf-sandbox";
 
 import {
   type DocumentsDeps,
@@ -402,6 +403,49 @@ describe.skipIf(!TEST_ADMIN_URL)("documente (Postgres real, finet_app)", () => {
       expect(row).toEqual({ status: "rejected", error_code: "unsupported_type" });
     });
 
+    it("PDF cu un copil ostil (anunță 200 MB): copilul ucis, documentul rejected, workerul viu", async () => {
+      await grantExternalAi(f.A.userId);
+      const doc = (await upload([["files", textPdf(), "bon.pdf", "application/pdf"]]))
+        .documents[0]!;
+      const { writeFile, mkdtemp: mk } = await import("node:fs/promises");
+      const dir = await mk(join(tmpdir(), "finet-hostile-child-"));
+      const script = join(dir, "hostile.mjs");
+      await writeFile(
+        script,
+        'process.stdout.write(JSON.stringify({pages:1,text:[""],images:[{width:100,height:100,length:200*1024*1024}]})+"\\n"); setInterval(()=>{},1000);',
+      );
+      try {
+        const [ref] = await listQueuedDocuments(f.db);
+        const deps = jobDeps();
+        const outcome = await prepareDocument(
+          { ...deps, limits: { ...deps.limits, pdfChildScript: script } },
+          ref!,
+        );
+        expect(outcome).toEqual({ outcome: "rejected", code: "pdf_too_complex" });
+        expect(activePdfChildren()).toBe(0);
+        const [row] = await f.admin<{ status: string; error_code: string }[]>`
+          select status, error_code from finet.documents where id = ${doc.id}`;
+        expect(row).toEqual({ status: "rejected", error_code: "pdf_too_complex" });
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("un fișier înlocuit pe disc cu unul mai mare decât cel înregistrat → rejected file_changed", async () => {
+      await grantExternalAi(f.A.userId);
+      const doc = (await upload([["files", await receiptLikeImage({ seed: 44 })]])).documents[0]!;
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(
+        join(root, `households/${f.HA}/documents/${doc.id}`),
+        await receiptLikeImage({ seed: 45, width: 1200, height: 1800 }),
+      );
+      const [ref] = await listQueuedDocuments(f.db);
+      expect(await prepareDocument(jobDeps(), ref!)).toEqual({
+        outcome: "rejected",
+        code: "file_changed",
+      });
+    });
+
     it("plafonul de încercări: la 10, documentul nu mai e selectat", async () => {
       await grantExternalAi(f.A.userId);
       const doc = (await upload([["files", await receiptLikeImage({ seed: 43 })]])).documents[0]!;
@@ -485,6 +529,23 @@ describe.skipIf(!TEST_ADMIN_URL)("documente (Postgres real, finet_app)", () => {
       expect(
         await inB(sql`insert into finet.product_aliases (household_id, normalized_name, category_id)
           values (${f.HA}, 'x', ${cat!.id})`),
+      ).toBe("42501");
+      // Bonul, linia și contorul zilei: tot 42501 cu gospodăria altcuiva.
+      const docA = (await upload([["files", await receiptLikeImage({ seed: 70 })]])).documents[0]!;
+      const [rcA] = await f.admin<{ id: string }[]>`
+        insert into finet.receipts (household_id, document_id) values (${f.HA}, ${docA.id}) returning id`;
+      expect(
+        await inB(
+          sql`insert into finet.receipts (household_id, document_id) values (${f.HA}, ${docA.id})`,
+        ),
+      ).toBe("42501");
+      expect(
+        await inB(sql`insert into finet.receipt_lines (receipt_id, household_id, position, raw_name, line_total_minor)
+          values (${rcA!.id}, ${f.HA}, 2, 'X', 1)`),
+      ).toBe("42501");
+      expect(
+        await inB(sql`insert into finet.document_usage_daily (household_id, day, count)
+          values (${f.HA}, date '2026-10-29', 0)`),
       ).toBe("42501");
     });
 

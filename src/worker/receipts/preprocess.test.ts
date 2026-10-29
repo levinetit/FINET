@@ -43,6 +43,13 @@ describe("preprocesarea imaginilor", () => {
     const input = await jpegWithGpsExif();
     const before = await sharp(input).metadata();
     expect(before.exif).toBeDefined();
+    // Intrarea are cu adevărat aparatul și IFD-ul GPS (pointerul 0x8825), altfel testul e gol.
+    expect(input.toString("latin1")).toContain("TelefonTest");
+    expect(input.toString("latin1")).toContain("ModelTest");
+    const exif = before.exif!;
+    expect(
+      exif.includes(Buffer.from([0x88, 0x25])) || exif.includes(Buffer.from([0x25, 0x88])),
+    ).toBe(true);
     expect(before.orientation).toBe(6);
     expect([before.width, before.height]).toEqual([300, 200]);
 

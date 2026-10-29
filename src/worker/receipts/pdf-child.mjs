@@ -5,7 +5,7 @@
 // imaginea `tools`. Nu primește mediul părintelui (fără URL-uri sau căi de secrete).
 //
 // Intrare: octeții PDF pe stdin; argumentele: maxPages, minTextChars, maxImagesPerPage,
-// maxImagePixels, maxSidePx, maxImageBytes, maxTotalBytes.
+// maxImagePixels, maxSidePx, maxImageBytes, maxTotalBytes, maxTotalPixels.
 // Ieșire pe stdout: o linie JSON (`{pages,text,images:[{width,height,length}]}` sau `{error}`),
 // urmată de imaginile ca JPEG, în ordine. Imaginea extrasă e REDIMENSIONATĂ și COMPRIMATĂ aici
 // (≤ maxSidePx pe latura lungă, JPEG), ca părintele să primească doar câțiva MB, niciodată
@@ -22,6 +22,7 @@ const [
   maxSidePx,
   maxImageBytes,
   maxTotalBytes,
+  maxTotalPixels,
 ] = process.argv.slice(2).map(Number);
 sharp.cache(false);
 sharp.concurrency(1);
@@ -71,6 +72,7 @@ try {
       const images = [];
       const data = [];
       let total = 0;
+      let decodedPixels = 0;
       let tooMany = false;
       for (let page = 1; page <= pages && !tooMany; page++) {
         const found = await extractImages(pdf, page);
@@ -81,7 +83,8 @@ try {
         found.sort((a, b) => b.width * b.height - a.width * a.height);
         const largest = found[0];
         if (!largest) continue;
-        if (largest.width * largest.height > maxImagePixels) {
+        decodedPixels += found.reduce((sum, i) => sum + i.width * i.height, 0);
+        if (largest.width * largest.height > maxImagePixels || decodedPixels > maxTotalPixels) {
           tooMany = true;
           break;
         }

@@ -267,6 +267,18 @@ describe("procesul copil sub prlimit: controlul real", () => {
     }, 30_000);
   });
 
+  it("suma pixelilor decodați peste plafon (în copil, independent de inventar) → pdf_too_complex", async () => {
+    const error = await readPdfInChild(await scannedPdf(), {
+      maxPages: 6,
+      minTextChars: 20,
+      maxImagePixels: 25_000_000,
+      maxTotalPixels: 1000,
+      deadline: Date.now() + 30_000,
+    }).catch((e: unknown) => e);
+    expect((error as PdfChildError).code).toBe("pdf_too_complex");
+    expect(activePdfChildren()).toBe(0);
+  }, 60_000);
+
   it("PDF normal: textul și imaginea scanată se întorc corect", async () => {
     const text = await readPdfInChild(textPdf(), {
       maxPages: 6,

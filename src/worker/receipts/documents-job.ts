@@ -176,7 +176,16 @@ export async function prepareDocument(
   let input: Buffer;
   try {
     if (!claimed.storageKey || !isStorageKey(claimed.storageKey)) return reject("file_missing");
-    input = Buffer.from(await deps.storage.get(claimed.storageKey));
+    // Citire plafonată la dimensiunea înregistrată: un fișier înlocuit pe disc (mai mare) nu
+    // ocolește limita de încărcare și nu ajunge întreg în memorie.
+    const parts: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of await deps.storage.openRead(claimed.storageKey)) {
+      size += chunk.byteLength;
+      if (size > claimed.sizeBytes) return reject("file_changed");
+      parts.push(Buffer.from(chunk));
+    }
+    input = Buffer.concat(parts, size);
   } catch (error) {
     if (error instanceof StorageNotFoundError) return reject("file_missing");
     throw error;

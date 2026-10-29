@@ -42,6 +42,8 @@ export type PreprocessLimits = Readonly<{
   maxPdfPages: number;
   /** Timpul maxim pentru tot documentul. */
   timeoutMs: number;
+  /** Doar teste: alt script pentru procesul copil PDF (de exemplu unul ostil). */
+  pdfChildScript?: string;
 }>;
 
 export const DEFAULT_PREPROCESS_TIMEOUT_MS = 60_000;
@@ -204,6 +206,8 @@ async function preprocessPdf(
       minTextChars: MIN_PDF_TEXT_CHARS,
       deadline,
       maxImagePixels: perImage,
+      maxTotalPixels: 2 * limits.maxImagePixels,
+      ...(limits.pdfChildScript ? { childScript: limits.pdfChildScript } : {}),
     });
   } catch (error) {
     if (error instanceof PdfChildError) throw new PreprocessError(error.code);
