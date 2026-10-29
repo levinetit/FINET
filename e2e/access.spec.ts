@@ -148,6 +148,10 @@ test("fără JWT Access, încărcarea și lista documentelor dau 403 (ruta exclu
   expect(await post.json()).toEqual({ error: { code: "forbidden", message: "Acces interzis." } });
   expect(post.headers()["content-security-policy"]).toMatch(/frame-ancestors 'none'/);
   expect((await request.get("/api/v1/documents", { maxRedirects: 0 })).status()).toBe(403);
+  expect((await request.head("/api/v1/documents", { maxRedirects: 0 })).status()).toBe(403);
+  expect(
+    (await request.fetch("/api/v1/documents", { method: "OPTIONS", maxRedirects: 0 })).status(),
+  ).toBe(403);
   const bad = await request.post("/api/v1/documents", {
     headers: { "Cf-Access-Jwt-Assertion": "a.b.c" },
     multipart: { files: { name: "bon.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(16) } },

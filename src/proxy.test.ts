@@ -376,7 +376,7 @@ describe("FAIL-CLOSED", () => {
     it("ruta exclusă din matcher (/api/v1/documents): aceeași verificare Access, înainte de handler", async () => {
       prodEnv();
       const run = vi.fn(async () => Response.json({ ok: true }));
-      for (const method of ["GET", "POST", "PUT", "DELETE"]) {
+      for (const method of ["GET", "HEAD", "POST", "OPTIONS"]) {
         const res = await guardAccess(
           new Request("https://finet.exemplu.invalid/api/v1/documents", {
             method,

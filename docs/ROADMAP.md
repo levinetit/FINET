@@ -185,7 +185,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 - migrația `0011_document_retention` + `admin cleanup-documents` în serviciul one-shot `finet-cleanup` (închide F9: programarea `cleanupTemp`);
 - E2E `receipts` cu serverul AI fals și workerul real în CI — ADR 0015.
 
-**Amânate din F6-C (motiv):** numele liniilor eliminate în raportul unirii (o linie în `receipt-job.ts`, fișier în lucru în paralel la F6-B; API/UI gata), unirea automată a încărcărilor separate cu același bon (se folosește „Mod bon lung”), E2E-ul bonurilor în modul `saas` (timpul jobului; pipeline-ul nu depinde de mod).
+**Amânate din F6-C (motiv):** unirea automată a încărcărilor separate cu același bon (se folosește „Mod bon lung”), E2E-ul bonurilor în modul `saas` (timpul jobului; pipeline-ul nu depinde de mod).
 
 **Rămâne:** `0008`–`0011` pe Supabase, programarea `finet-cleanup` (INFRA 4i), evaluarea pe bonuri reale, revizuirea `security`.
 

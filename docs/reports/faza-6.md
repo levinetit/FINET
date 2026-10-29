@@ -65,6 +65,7 @@
 - **Proxy-ul și încărcarea:** `/api/v1/documents` exact e exclusă din matcher-ul `src/proxy.ts` (Next 16 ar copia corpul în memorie și l-ar trunchia la 10 MB), iar ruta refăce aceeași verificare Cloudflare Access și aceleași antete (`src/lib/access-guard.ts`), înainte de sesiune și de corp.
 - **UI:** `/import` (zona de încărcare, contorul zilei, „Mod bon lung” cu reordonare prin butoane, mesajul de consimțământ, starea pe document cu polling blând), `/receipts` („De verificat” sus, istoricul cu toate categoriile, căutarea, acțiunile), `/receipts/[id]` (ecranul de verificare), comutatorul „Citirea bonurilor cu AI” în `/profile`, insigna „din bon” și „Vezi bonul”, „Scanează” în bara de jos pe telefon (în locul lui „Bugete”, mutat în „Mai mult”).
 - **Retenția:** migrația `0011_document_retention` (`expired_documents`, SECURITY DEFINER) și `admin cleanup-documents` (originalele expirate, apoi fișierele temporare orfane) în serviciul one-shot `finet-cleanup` (singurul cu storage-ul în scriere în afara web-ului).
+- **Workerul:** raportul unirii bonului lung păstrează și numele liniilor eliminate (≤ 80 de caractere), afișate tăiate pe ecranul de verificare; `queueAwaitingConsent` nu mai pune în coadă documente al căror original a fost șters la retenție.
 - **E2E:** proiectul `receipts` (`e2e/receipts.spec.ts`) cu serverul AI fals ca proces (`e2e/ai-mock-server.mjs`) și workerul real, pornite de CI în fundal cu secrete fictive; `access.spec.ts` verifică ruta exclusă din proxy pe serverul de producție.
 
 ## 5. Teste F6-C
@@ -97,7 +98,6 @@ Gazda avea ~0,9–1,1 GB RAM liber: nimic din `next build`, `tsc` complet, suita
 
 - E2E-ul bonurilor depinde de cron-ul `receipt.sweep` (un minut): plafoane de câteva minute pe test; o rulare lentă în CI poate depăși (reluare automată o dată).
 - Bugetul JavaScript al paginilor noi (`/receipts/[id]` are cel mai mare client) e verificat doar în CI.
-- Numele liniilor eliminate la unirea bonului lung nu sunt încă scrise de worker (o linie în `receipt-job.ts`, în lucru în paralel la F6-B); ecranul arată poza și rândul.
 - Unirea automată a două încărcări separate cu același bon nu există (se folosește „Mod bon lung”).
 - Programarea `finet-cleanup` (cron) e la operator; până atunci originalele cu EXIF/GPS rămân pe disc după retenție.
 - Revizuirea `security` a F6-C: de făcut.

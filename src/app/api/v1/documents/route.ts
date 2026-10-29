@@ -15,3 +15,14 @@ export const GET = (request: Request) =>
 /** Încarcă 1–4 fișiere (`multipart/form-data`), opțional ca bon lung (`longReceipt=true`). */
 export const POST = (request: Request) =>
   guardAccess(request, () => uploadDocumentsHandler(request, getAuthRuntime()));
+
+/**
+ * `OPTIONS` (preflight sau sondă): tot prin `guardAccess`, ca nicio metodă a căii excluse din
+ * proxy să nu răspundă fără verificarea Access. Fără CORS (aceeași origine). Celelalte metode
+ * primesc 405 de la Next, fără corp, înaintea oricărui handler.
+ */
+export const OPTIONS = (request: Request) =>
+  guardAccess(
+    request,
+    async () => new Response(null, { status: 204, headers: { Allow: "GET, POST" } }),
+  );

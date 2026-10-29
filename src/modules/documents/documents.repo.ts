@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 
 import type { DbOrTx, Tx } from "@/db";
 import { documentUsageDaily, documents, processingBatches } from "@/db/schema";
@@ -137,6 +137,8 @@ export async function queueAwaitingConsentRows(
         eq(documents.householdId, householdId),
         eq(documents.uploadedByUserId, userId),
         eq(documents.status, "awaiting_consent"),
+        // F6-C: un original șters la retenție nu mai poate fi procesat (ar rămâne „în coadă”).
+        isNotNull(documents.storageKey),
       ),
     )
     .returning({ id: documents.id });
