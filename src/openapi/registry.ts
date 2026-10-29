@@ -1427,7 +1427,7 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "statements",
     summary: "Încarcă un extras (PDF, CSV, XLSX sau ZIP) pe un cont.",
     description:
-      "`multipart/form-data`, un singur fișier ≤ 20 MB. Tipul se detectează după conținut. Contul trebuie să fie vizibil și deschis (cont personal al altui membru → 404). Cota zilnică (50 de fișiere/gospodărie; 409 `statement_daily_limit`) se consumă ÎNAINTE de citire, câte una pe fișier (un ZIP cu N fișiere = N). CSV/XLSX: fără `mapping` → `mapping_required` (sugestie + cel mult 15 rânduri de probă, nimic păstrat); cu `mapping` (JSON, schema `ColumnMapping`) → previzualizare. PDF: păstrat temporar (cel mult 24 h) și citit de worker în procesul copil limitat → `queued`; starea se urmărește cu `GET /api/v1/statements/uploads/{id}`. ZIP: fiecare fișier are rezultatul lui (`rejected` cu cod fix pentru cele necitibile); arhivele imbricate refuză tot ZIP-ul. Erori de citire: 422 cu codul (`unknown_bank`, `ambiguous_bank`, `multi_currency_statement`, `csv_invalid`, `xlsx_unsafe`, `zip_unsafe`, …). Ruta e exclusă din proxy-ul Next, cu aceeași verificare Cloudflare Access. Limită proprie de cereri (429).",
+      "`multipart/form-data`, un singur fișier ≤ 20 MB. Tipul se detectează după conținut. Contul trebuie să fie vizibil și deschis (cont personal al altui membru → 404). Cota zilnică (50 de fișiere/gospodărie; 409 `statement_daily_limit`) se consumă ÎNAINTE de citire, câte una pe fișier (un ZIP cu N fișiere = N). CSV/XLSX: fără `mapping` → `mapping_required` (sugestie + cel mult 15 rânduri de probă, nimic păstrat); cu `mapping` (JSON, schema `ColumnMapping`) → previzualizare. PDF: păstrat temporar (cel mult 24 h) și citit de worker în procesul copil limitat → `queued`; starea se urmărește cu `GET /api/v1/statements/uploads/{id}`. ZIP: fiecare fișier are rezultatul lui (`rejected` cu cod fix pentru cele necitibile); arhivele imbricate refuză tot ZIP-ul. Erori de citire: 422 cu codul (`unknown_bank`, `ambiguous_bank`, `multi_currency_statement`, `csv_invalid`, `xlsx_unsafe`, `zip_unsafe`, …). Ruta e exclusă din proxy-ul Next, cu aceeași verificare Cloudflare Access. Limită proprie de cereri (429). Cel mult 2 încărcări simultane pe proces (memoria serverului): altfel 503 `statement_upload_busy` cu `Retry-After`, corpul necitit.",
     multipart: {
       description: "Câmpurile text înaintea fișierului.",
       fields: {
@@ -1443,7 +1443,7 @@ export const OPERATIONS: readonly Operation[] = [
       description:
         "Rezultatul pe fiecare fișier (200: nimic nou, de exemplu cerere de mapare sau duplicat).",
     },
-    errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, TOO_LARGE, MEDIA, REUSED],
+    errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, TOO_LARGE, MEDIA, REUSED, 503],
   },
   {
     method: "GET",

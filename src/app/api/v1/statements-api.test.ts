@@ -13,6 +13,7 @@ import { type AuthEnv, type AuthFixture, authEnv, createAuthFixture } from "@/mo
 import { createUserWithHousehold } from "@/modules/auth/users.service";
 import { multipartRequest } from "@/modules/documents/testing";
 import { itemsToPdf } from "@/modules/statements/testing";
+import { tryAcquireUploadSlot } from "@/modules/statements/upload-slots";
 import { handleStatementParse } from "@/worker/statements/statement-jobs";
 
 import * as L from "./_lib/ledger-handlers";
@@ -174,6 +175,22 @@ describe.skipIf(!TEST_ADMIN_URL)("API extrase + potrivire + propuneri (F7-B)", (
     );
     // PDF-ul nu se citește în web: intră în coada workerului (refuzul vine de acolo).
     expect(unknownPdf.status).toBe(201);
+  });
+
+  it("cel mult 2 încărcări simultane pe proces (memoria): a treia → 503 cu Retry-After", async () => {
+    const a = tryAcquireUploadSlot()!;
+    const b = tryAcquireUploadSlot()!;
+    try {
+      const busy = await upload(A, CSV, [["accountId", accA]]);
+      expect(busy).toMatchObject({
+        status: 503,
+        body: { error: { code: "statement_upload_busy" } },
+      });
+    } finally {
+      a();
+      b();
+    }
+    expect((await upload(A, CSV, [["accountId", accA]])).status).toBe(200);
   });
 
   it("limita proprie de încărcare → 429 cu Retry-After", async () => {

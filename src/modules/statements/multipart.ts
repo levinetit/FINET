@@ -67,9 +67,11 @@ export async function readStatementMultipart(
       headers: { "content-type": contentType },
       limits: {
         files: 1,
-        fileSize: maxFileBytes,
+        // busboy marchează `truncated`/`valueTruncated` și la o valoare EXACT egală cu limita:
+        // +1 aici, iar plafonul real e verificat explicit mai jos (`size > max`, `length > max`).
+        fileSize: maxFileBytes + 1,
         fields: STATEMENT_FIELDS.length,
-        fieldSize: FIELD_MAX.mapping,
+        fieldSize: FIELD_MAX.mapping + 1,
         fieldNameSize: 32,
         // busboy semnalează `partsLimit` deja la atingerea plafonului: +1 (fișierele și câmpurile
         // în plus sunt refuzate oricum, mai sus).
@@ -108,6 +110,7 @@ export async function readStatementMultipart(
           continue;
         }
         if (!failure) chunks.push(chunk);
+        else chunks.length = 0;
       }
       if ((stream as { truncated?: boolean }).truncated) {
         fail(new StatementUploadError(413, "file_too_large"));
@@ -169,5 +172,8 @@ export async function readStatementMultipart(
   if (!closed) throw new StatementUploadError(400, "invalid_multipart");
   if (files === 0) throw new StatementUploadError(400, "no_files");
   if (size === 0) throw new StatementUploadError(400, "empty_file");
-  return { bytes: Buffer.concat(chunks, size), fields };
+  // O singură copie (bucățile se unesc o dată), apoi bucățile se eliberează imediat (M1).
+  const bytes = chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks, size);
+  chunks.length = 0;
+  return { bytes, fields };
 }

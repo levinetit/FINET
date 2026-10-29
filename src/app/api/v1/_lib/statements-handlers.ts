@@ -15,6 +15,10 @@ import {
 } from "@/modules/statements/statements.service";
 import { StatementError } from "@/modules/statements/types";
 import {
+  STATEMENT_UPLOAD_RETRY_AFTER_SECONDS,
+  tryAcquireUploadSlot,
+} from "@/modules/statements/upload-slots";
+import {
   type StatementUploadView,
   type UploadPartOutcome,
   cancelStatementUpload,
@@ -28,6 +32,7 @@ import {
 
 import {
   ApiError,
+  type ApiContext,
   type ApiDeps,
   currentHousehold,
   enforceRateLimit,
@@ -188,7 +193,32 @@ export function uploadStatementHandler(request: Request, d: StatementsApiDeps): 
   return handle(request, d, async (ctx) => {
     await enforceRateLimit(ctx, "api_statement_upload", ctx.limits.statementUpload);
     const hh = await currentHousehold(ctx);
-    let body;
+    // Memoria procesului web (M1): cel mult 2 încărcări simultane; restul 503, corpul necitit.
+    const release = tryAcquireUploadSlot();
+    if (!release) {
+      throw new ApiError(
+        503,
+        "statement_upload_busy",
+        "Se încarcă deja alte extrase. Încearcă din nou peste câteva secunde.",
+        { headers: { "Retry-After": String(STATEMENT_UPLOAD_RETRY_AFTER_SECONDS) } },
+      );
+    }
+    try {
+      return await uploadWithSlot(request, d, ctx, hh);
+    } finally {
+      release();
+    }
+  });
+}
+
+async function uploadWithSlot(
+  request: Request,
+  d: StatementsApiDeps,
+  ctx: ApiContext,
+  hh: string,
+): Promise<Response> {
+  {
+    let body: Awaited<ReturnType<typeof readStatementMultipart>>;
     try {
       body = await readStatementMultipart(request);
     } catch (error) {
@@ -223,7 +253,7 @@ export function uploadStatementHandler(request: Request, d: StatementsApiDeps): 
       }
       throw error;
     }
-  });
+  }
 }
 
 export function listUploadsHandler(request: Request, d: StatementsApiDeps): Promise<Response> {

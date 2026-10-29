@@ -112,6 +112,7 @@ const ERROR_DESCRIPTIONS: Readonly<Record<number, string>> = {
   422: "`Idempotency-Key` folosită pentru o altă cerere (`idempotency_key_reused`) sau un sold calculat care nu poate fi transmis exact (`amount_out_of_range`, peste 2^53 − 1). La încărcarea documentelor: `invalid_image` (imagine care nu poate fi citită).",
   429: "Prea multe cereri (`rate_limited`, antet `Retry-After`).",
   500: "Eroare internă (`internal_error`, fără detalii).",
+  503: "Serverul e ocupat (`statement_upload_busy`: prea multe încărcări de extrase simultane), antet `Retry-After`.",
 };
 
 const COMMON_ERRORS = [401, 429, 500];
