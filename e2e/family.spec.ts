@@ -129,6 +129,12 @@ function todayBucharest(): string {
 }
 
 test.describe(`familia (${MODE})`, () => {
+  // Contextele deschise de `pageAs` se închid după fiecare test (fluxurile SSE ale paginilor vechi
+  // nu rămân deschise; serverul are oricum plafonul cu evacuarea celei mai vechi conexiuni).
+  test.afterEach(async ({ browser }) => {
+    for (const ctx of browser.contexts()) await ctx.close();
+  });
+
   test.skip(MODE !== "personal", "Familia se testează E2E în modul personal.");
   test.describe.configure({ mode: "serial" });
 

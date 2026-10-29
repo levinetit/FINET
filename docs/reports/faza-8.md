@@ -19,7 +19,7 @@ Branch `phase/08-family`. Datele și serviciile (F8-A) sunt descrise în ADR 001
 
 | Comandă | Rezultat |
 |---|---|
-| `vitest run src/app/api/v1/family-api.test.ts` (9 teste: 401, invitații/token/idempotență, acceptare uniformă, 429, roluri/ultimul owner, împărțire + 409 `transaction_split` + solduri + decontare parțială cu replay + live filtrat, plafon SSE/puls/durată, `close` la comutare, plecare) | PASS |
+| `vitest run src/app/api/v1/family-api.test.ts` (9 teste: 401, invitații/token/idempotență, acceptare uniformă, 429, roluri/ultimul owner, împărțire + 409 `transaction_split` + solduri + decontare parțială cu replay + live filtrat, plafon SSE cu evacuarea celei mai vechi conexiuni/puls/durată, `close` la comutare, plecare cu închiderea imediată a fluxului) | PASS |
 | `vitest run ledger-api, receipts-api, idempotency, routes, openapi` | PASS (5 fișiere, 38 de teste, după F8-A final) |
 | `vitest run src/app/ui-rules.test.ts src/app/a11y-rules.test.ts src/app/contrast.test.ts src/app/_lib/family-ui.test.ts` | PASS (17) |
 | `vitest run src/proxy.test.ts src/app/smoke.test.ts src/app/_lib/next-path.test.ts` | PASS (81) |
@@ -39,6 +39,7 @@ Branch `phase/08-family`. Datele și serviciile (F8-A) sunt descrise în ADR 001
 - Acceptarea doar prin buton (`POST`), nu la deschiderea paginii.
 - Împărțirea din pagina tranzacției, nu din formularul de creare.
 - Comutatorul de gospodărie: pagină completă la Acasă după schimbare.
+- La plafonul de 4 conexiuni SSE per utilizator se evacuează cea mai veche (nu 429): o deconectare nedetectată nu blochează utilizatorul.
 
 ## 5. Riscuri și puncte deschise
 

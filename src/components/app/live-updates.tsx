@@ -13,8 +13,9 @@ import { ro } from "@/messages/ro";
  *
  * Rezerva: dacă fluxul nu se poate deschide de 3 ori la rând (proxy care bufferizează, 429, rețea),
  * pagina trece pe interogare periodică (reîncărcarea datelor la 60 s, doar cu fila vizibilă) și
- * reîncearcă fluxul la 5 minute. Evenimentul `close` (sesiune/apartenență schimbate) și
- * `reconnect` (durata maximă a fluxului) redeschid conexiunea.
+ * reîncearcă fluxul la 5 minute; la fel la `evicted` (alte file ale utilizatorului au luat cele 4
+ * conexiuni). Evenimentul `close` (sesiune/apartenență schimbate) și `reconnect` (durata maximă a
+ * fluxului) redeschid conexiunea.
  */
 
 const TYPES = new Set(["transaction", "transfer", "receipt", "split", "settlement", "member"]);
@@ -92,6 +93,12 @@ export function LiveUpdates() {
       // Sesiunea sau gospodăria s-au schimbat: o nouă conexiune (sau 401 → rezerva).
       es.addEventListener("close", () => reopen(1_000));
       es.addEventListener("reconnect", () => reopen(0));
+      // Prea multe file deschise: o filă mai nouă a luat conexiunea; aceasta trece pe rezervă
+      // (fără reconectare imediată, altfel filele și-ar lua conexiunea una alteia în buclă).
+      es.addEventListener("evicted", () => {
+        es.close();
+        startFallback();
+      });
       es.onerror = () => {
         // Cât timp `readyState` e CONNECTING, browserul reîncearcă singur (`retry: 5000`).
         if (es.readyState !== EventSource.CLOSED) return;

@@ -1376,7 +1376,7 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "family",
     summary: "Actualizările live ale gospodăriei curente (Server-Sent Events).",
     description:
-      'Flux `text/event-stream`. Evenimente: `ready` (la conectare, cu `retry: 5000`), `change` (`data: {"type":"transaction|transfer|receipt|split|settlement|member","id":"<uuid>"}` — DOAR tipul și id-ul, fără sume sau nume; datele se recitesc prin API, cu RLS), `close` (sesiunea sau apartenența nu mai sunt valide), `reconnect` (după 5 minute; clientul se reconectează). Comentariul `: ping` la 25 s (sub pragul de inactivitate al Cloudflare); la fiecare puls se reverifică sesiunea și apartenența. O tranzacție dintr-un cont personal ajunge doar la proprietarul contului. Cel mult 4 conexiuni per utilizator (429). ADR 0017.',
+      'Flux `text/event-stream`. Evenimente: `ready` (la conectare, cu `retry: 5000`), `change` (`data: {"type":"transaction|transfer|receipt|split|settlement|member","id":"<uuid>"}` — DOAR tipul și id-ul, fără sume sau nume; datele se recitesc prin API, cu RLS), `close` (sesiunea sau apartenența nu mai sunt valide; imediat la eliminare, plecare sau comutarea gospodăriei), `reconnect` (după 5 minute; clientul se reconectează), `evicted` (o conexiune mai nouă a aceluiași utilizator i-a luat locul). Comentariul `: ping` la 25 s (sub pragul de inactivitate al Cloudflare); la fiecare puls se reverifică sesiunea și apartenența. O tranzacție dintr-un cont personal ajunge doar la proprietarul contului. Cel mult 4 conexiuni per utilizator (la a cincea, cea mai veche primește `evicted`); 200 în total pe server (429). ADR 0017.',
     success: { status: 200, schema: null, sse: true, description: "Fluxul de evenimente." },
     errors: [VALIDATION, NOT_FOUND],
   },

@@ -542,23 +542,31 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 familie pe PostgreSQL real", () =>
     expect(liveConnectionsOf(idB)).toBe(0);
   });
 
-  it("SSE: plafon de 4 conexiuni per utilizator (429); puls cu reverificare; închidere după durata maximă", async () => {
+  it("SSE: la plafonul de 4 conexiuni per utilizator cea mai veche e evacuată; puls; durata maximă", async () => {
     const quick = { ...env, live: { heartbeatMs: 100, lifetimeMs: 3000 } };
     const opened = [];
     for (let i = 0; i < 4; i++) opened.push(await openEvents(C, quick));
-    const fifth = await F.eventsHandler(apiRequest("/api/v1/events", { bearer: C.bearer }), quick);
-    await assertContract(F.eventsHandler, fifth);
-    expect(fifth.status).toBe(429);
+    expect(liveConnectionsOf(idC)).toBe(4);
+    // A cincea conexiune e acceptată, iar prima primește `event: evicted` și se închide.
+    const fifth = await openEvents(C, quick);
+    expect(liveConnectionsOf(idC)).toBe(4);
+    let evicted = false;
+    for (let i = 0; i < 20 && !evicted; i++) {
+      const f = await opened[0]!.next(500);
+      if (f?.includes("event: evicted")) evicted = true;
+      if (f === "__end__") break;
+    }
+    expect(evicted).toBe(true);
     const frames: string[] = [];
     for (;;) {
-      const f = await opened[0]!.next(5000);
+      const f = await fifth.next(5000);
       if (f === null || f === "__end__") break;
       frames.push(f);
       if (f.includes("event: reconnect")) break;
     }
     expect(frames.some((f) => f.startsWith(": ping"))).toBe(true);
     expect(frames.some((f) => f.includes("event: reconnect"))).toBe(true);
-    for (const o of opened) o.abort();
+    for (const o of [...opened, fifth]) o.abort();
     await new Promise((r) => setTimeout(r, 300));
     expect(liveConnectionsOf(idC)).toBe(0);
   });
@@ -593,12 +601,18 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 familie pe PostgreSQL real", () =>
   });
 
   it("plecarea: B pleacă din HA (soldul decontat), revine în gospodăria lui; A rămâne singur", async () => {
+    // Puls lung: închiderea vine din plecare, nu din reverificare.
+    const slow = { ...env, live: { heartbeatMs: 600_000, lifetimeMs: 600_000 } };
+    const stream = await openEvents(B, slow);
     const r = await call(F.leaveHouseholdHandler, "/api/v1/family/leave", {
       bearer: B.bearer,
       method: "POST",
     });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.data).toEqual({ unsettledBalance: false });
+    const closing = await stream.next(1000);
+    expect(closing).toContain("event: close");
+    expect(liveConnectionsOf(idB)).toBe(0);
     const hs = await call(L.listHouseholdsHandler, "/api/v1/households", { bearer: B.bearer });
     const list = hs.body.data as { id: string; current: boolean }[];
     expect(list.map((h) => h.id)).toEqual([hhB]);

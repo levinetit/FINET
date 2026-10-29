@@ -39,7 +39,7 @@ import {
   listSplits,
   setTransactionSplit,
 } from "@/modules/family/splits.service";
-import { type LiveMessage, subscribeLive } from "@/modules/live/live-bus";
+import { type LiveMessage, closeLiveFor, subscribeLive } from "@/modules/live/live-bus";
 
 import {
   ApiError,
@@ -118,6 +118,8 @@ export function deleteMemberHandler(request: Request, d: ApiDeps, id: string): P
     await readOptionalJsonBody(request);
     const hh = await currentHousehold(ctx);
     const result: unknown = await removeMember(deps(d), ctx.actor, hh, userId);
+    // Fluxurile deschise ale celui scos se închid imediat (nu la următorul puls).
+    closeLiveFor(hh, userId);
     notifyLive(hh, "member", userId, householdAudience());
     return json({ data: { unsettledBalance: unsettledOf(result) } });
   });
@@ -144,6 +146,7 @@ export function leaveHouseholdHandler(request: Request, d: ApiDeps): Promise<Res
     parseWith(emptyBody, (await readOptionalJsonBody(request)) ?? {});
     const hh = await currentHousehold(ctx);
     const result: unknown = await leaveHousehold(deps(d), ctx.actor, hh);
+    closeLiveFor(hh, ctx.actor.userId);
     notifyLive(hh, "member", ctx.actor.userId, householdAudience());
     return json({ data: { unsettledBalance: unsettledOf(result) } });
   });
@@ -154,7 +157,11 @@ export function leaveHouseholdHandler(request: Request, d: ApiDeps): Promise<Res
 export function setActiveHouseholdHandler(request: Request, d: ApiDeps): Promise<Response> {
   return handle(request, d, async (ctx) => {
     const body = await readJsonBody(request);
-    return json({ data: await setActiveHousehold(deps(d), ctx.actor, body) });
+    const previous = await currentHousehold(ctx).catch(() => null);
+    const view = await setActiveHousehold(deps(d), ctx.actor, body);
+    // Fluxurile vechii gospodării se închid acum; clientul se reconectează la cea nouă.
+    if (previous && previous !== view.id) closeLiveFor(previous, ctx.actor.userId);
+    return json({ data: view });
   });
 }
 
@@ -335,8 +342,9 @@ export const SSE_HEADERS = {
  * `GET /api/v1/events`: Server-Sent Events pentru gospodăria CURENTĂ. Fiecare mesaj `change` are
  * DOAR `{ type, id }`. La fiecare puls (25 s, sub pragul de inactivitate al Cloudflare) se
  * reverifică sesiunea și apartenența (gospodăria curentă trebuie să fie aceeași); altfel fluxul
- * se închide cu `event: close`. Durata maximă 5 minute (`event: reconnect`), ca o sesiune revocată
- * sau un membru scos să nu rămână conectat. Plafon: 4 conexiuni per utilizator, 200 total (429).
+ * se închide cu `event: close` (imediat, fără puls, la eliminare/plecare/comutare: `closeLiveFor`).
+ * Durata maximă 5 minute (`event: reconnect`), ca o sesiune revocată să nu rămână conectată. Plafon:
+ * 4 conexiuni per utilizator (cea mai veche primește `event: evicted`), 200 în total (429).
  */
 export function eventsHandler(request: Request, d: ApiDeps): Promise<Response> {
   return handle(request, d, async (ctx) => {
@@ -360,11 +368,17 @@ export function eventsHandler(request: Request, d: ApiDeps): Promise<Response> {
         close();
       }
     };
-    const subscription = subscribeLive(hh, ctx.actor.userId, (m: LiveMessage) =>
-      write(`event: change\ndata: ${JSON.stringify({ type: m.type, id: m.id })}\n\n`),
+    const subscription = subscribeLive(
+      hh,
+      ctx.actor.userId,
+      (m: LiveMessage) =>
+        write(`event: change\ndata: ${JSON.stringify({ type: m.type, id: m.id })}\n\n`),
+      // `evicted`: o conexiune mai nouă a aceluiași utilizator a luat locul acesteia (plafonul);
+      // `close`: apartenența/gospodăria activă s-a schimbat (eliminare, plecare, comutare).
+      (reason) => close(`event: ${reason}\ndata: {}\n\n`),
     );
     if (!subscription) {
-      throw new ApiError(429, "rate_limited", "Prea multe conexiuni deschise.", {
+      throw new ApiError(429, "rate_limited", "Prea multe conexiuni deschise pe server.", {
         headers: { "Retry-After": "30" },
       });
     }

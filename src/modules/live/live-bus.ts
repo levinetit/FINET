@@ -37,10 +37,14 @@ export type LiveEvent = Readonly<{
 /** Ce ajunge efectiv la client: tipul și id-ul. */
 export type LiveMessage = Readonly<{ type: LiveEventType; id: string }>;
 
+/** Motivul închiderii forțate: `evicted` (plafonul per utilizator), `close` (apartenență schimbată). */
+export type LiveCloseReason = "evicted" | "close";
+
 type Subscriber = Readonly<{
   householdId: string;
   userId: string;
   send: (message: LiveMessage) => void;
+  close: (reason: LiveCloseReason) => void;
 }>;
 
 type BusState = {
@@ -60,26 +64,50 @@ function state(): BusState {
   return s;
 }
 
-/** Plafoanele conexiunilor (decizia mea): câteva file per utilizator, un plafon global mic. */
+/**
+ * Plafoanele conexiunilor (decizia mea): câteva file per utilizator, un plafon global mic. La
+ * plafonul per utilizator, conexiunea CEA MAI VECHE a lui e închisă (`evicted`) în favoarea celei
+ * noi: o deconectare nedetectată (o filă închisă brusc) nu poate bloca utilizatorul. Plafonul global
+ * refuză (429).
+ */
 export const LIVE_MAX_PER_USER = 4;
 export const LIVE_MAX_TOTAL = 200;
 
 export type Subscription = Readonly<{ unsubscribe: () => void }>;
 
 /**
- * Înregistrează un abonat. `null` dacă s-a atins plafonul per utilizator sau cel global (ruta
- * răspunde 429). `unsubscribe` e idempotent (se poate apela și la abort, și la închidere).
+ * Înregistrează un abonat. `null` dacă s-a atins plafonul global (ruta răspunde 429); la plafonul
+ * per utilizator, cel mai vechi abonat al lui primește `close("evicted")`. `close` trebuie să
+ * apeleze `unsubscribe`; `unsubscribe` e idempotent (abort, închidere, evacuare).
  */
 export function subscribeLive(
   householdId: string,
   userId: string,
   send: (message: LiveMessage) => void,
+  close: (reason: LiveCloseReason) => void,
 ): Subscription | null {
   const s = state();
   const user = userId.toLowerCase();
+  if ((s.perUser.get(user) ?? 0) >= LIVE_MAX_PER_USER) {
+    // `Set` păstrează ordinea inserării: primul găsit e cel mai vechi.
+    for (const old of s.subscribers) {
+      if (old.userId !== user) continue;
+      // Întâi scos din evidență (contorul scade o singură dată), apoi închis.
+      s.subscribers.delete(old);
+      const left = (s.perUser.get(user) ?? 1) - 1;
+      if (left <= 0) s.perUser.delete(user);
+      else s.perUser.set(user, left);
+      try {
+        old.close("evicted");
+      } catch {
+        // ignorat
+      }
+      break;
+    }
+  }
+  if (s.subscribers.size >= LIVE_MAX_TOTAL) return null;
   const count = s.perUser.get(user) ?? 0;
-  if (count >= LIVE_MAX_PER_USER || s.subscribers.size >= LIVE_MAX_TOTAL) return null;
-  const sub: Subscriber = { householdId: householdId.toLowerCase(), userId: user, send };
+  const sub: Subscriber = { householdId: householdId.toLowerCase(), userId: user, send, close };
   s.subscribers.add(sub);
   s.perUser.set(user, count + 1);
   let active = true;
@@ -87,7 +115,8 @@ export function subscribeLive(
     unsubscribe: () => {
       if (!active) return;
       active = false;
-      s.subscribers.delete(sub);
+      // Deja scos (evacuat): contorul a fost scăzut atunci.
+      if (!s.subscribers.delete(sub)) return;
       const left = (s.perUser.get(user) ?? 1) - 1;
       if (left <= 0) s.perUser.delete(user);
       else s.perUser.set(user, left);
@@ -107,6 +136,23 @@ export function publishLive(event: LiveEvent): void {
       sub.send(message);
     } catch {
       // Un abonat închis nu oprește livrarea către ceilalți.
+    }
+  }
+}
+
+/**
+ * Închide imediat fluxurile unui utilizator pentru o gospodărie (`close`): după eliminare, plecare
+ * sau comutarea gospodăriei active, ca evenimentele vechii gospodării să nu mai ajungă la el.
+ */
+export function closeLiveFor(householdId: string, userId: string): void {
+  const household = householdId.toLowerCase();
+  const user = userId.toLowerCase();
+  for (const sub of [...state().subscribers]) {
+    if (sub.householdId !== household || sub.userId !== user) continue;
+    try {
+      sub.close("close");
+    } catch {
+      // ignorat
     }
   }
 }
