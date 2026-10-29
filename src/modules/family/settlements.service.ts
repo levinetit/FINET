@@ -33,10 +33,10 @@ import { type CurrencyBalances, computeBalances, pairDebt, withinPairCap } from 
  * - orice membru înregistrează o decontare în care e una dintre părți; un `owner` o poate
  *   înregistra pentru oricare doi membri, dar DOAR ca stingere a unei datorii existente;
  * - cine declară că a PLĂTIT (`from`) poate stinge cel mult datoria lui curentă față de `to`
- *   (netting pe pereche, în moneda decontării): fără plată „peste datorie” care ar inversa sensul
- *   în favoarea lui. Dacă `from` e CREDITORUL perechii, decontarea e o corecție (i-a dat bani
- *   debitorului) și o poate face doar el. Cine declară că a PRIMIT (`to`) poate înregistra orice
- *   sumă (doar în defavoarea lui);
+ *   (netting pe pereche, în moneda decontării): fără plată „peste datorie” și fără nicio plată
+ *   dacă nu datorează nimic (nimeni nu își creează singur o creanță). Cine declară că a PRIMIT
+ *   (`to`) poate înregistra orice sumă (doar în defavoarea lui); o „corecție” în favoarea
+ *   creditorului o înregistrează deci debitorul, ca destinatar;
  * - anulează oricare dintre părți sau creatorul; un owner care nu e parte NU o anulează;
  *   anularea e definitivă (istoricul rămâne).
  * Aceleași reguli de cine scrie/anulează sunt în bază (politicile `settlements_*`); plafonul pe
@@ -120,12 +120,11 @@ export async function createSettlement(
     const debt = pairDebt(before, input.currency, input.fromUserId, input.toUserId);
     const allowed =
       me === input.toUserId || // a primit: orice sumă (doar în defavoarea lui)
-      (debt > 0n && amountMinor <= debt) || // stinge (parțial) o datorie existentă
-      (me === input.fromUserId && debt < 0n); // corecție a creditorului spre debitor
+      (debt > 0n && amountMinor <= debt); // plătitorul (sau un owner) stinge o datorie existentă
     if (!allowed) {
       throw new ConflictError(
         "settlement_exceeds_debt",
-        "Decontarea depășește datoria curentă dintre cei doi membri.",
+        "Poți înregistra o plată doar în limita datoriei tale curente; o sumă primită o înregistrează destinatarul.",
       );
     }
     const after = computeAfter(

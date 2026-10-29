@@ -843,7 +843,7 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
       expect(inv).toEqual({ used_at: null, revoked_at: null });
     });
 
-    it("M2: debitorul nu plătește peste datorie; creditorul face corecții; primitorul orice sumă", async () => {
+    it("M2: plătitorul doar în limita datoriei lui; creditorul nu-și creează creanțe; destinatarul orice sumă", async () => {
       const { hh, users } = await family(["M2a", "M2b", "M2c"]);
       const [a, b, c] = users as [Actor, Actor, Actor];
       const { transactionId } = await personalExpense(a, hh, 100, "Card M2a");
@@ -871,8 +871,12 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
       await expect(settle(c, c, a, 1)).rejects.toMatchObject({
         reason: "settlement_exceeds_debt",
       });
-      // Creditorul (A) face o corecție spre debitor: B datorează 60.
-      await settle(a, a, b, 10);
+      // Creditorul (A) NU poate înregistra singur o „plată” spre debitor (și-ar crea o creanță).
+      await expect(settle(a, a, b, 10)).rejects.toMatchObject({
+        reason: "settlement_exceeds_debt",
+      });
+      // Corecția în favoarea lui A o înregistrează B, ca destinatar: B datorează 60.
+      await settle(b, a, b, 10);
       expect(await pairBA()).toBe(60n);
       await settle(b, b, a, 60);
       expect(await pairBA()).toBe(0n);
@@ -920,9 +924,19 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
       // B îi datorează acum lui A exact plafonul (10 × 10^13).
       const pair = (await getBalances(deps(), a, hh)).currencies[0]!.pairs[0]!;
       expect(pair).toEqual({ debtorUserId: b.userId, creditorUserId: a.userId, amountMinor: cap });
-      // Corecția creditorului ar trece de plafon.
+      // Creditorul nu înregistrează singur o plată spre debitor; destinatarul (B) da, dar ar
+      // trece de plafon.
       await expect(
         createSettlement(deps(), a, hh, {
+          fromUserId: a.userId,
+          toUserId: b.userId,
+          amountMinor: 1,
+          currency: "RON",
+          settledOn: "2026-10-12",
+        }),
+      ).rejects.toMatchObject({ reason: "settlement_exceeds_debt" });
+      await expect(
+        createSettlement(deps(), b, hh, {
           fromUserId: a.userId,
           toUserId: b.userId,
           amountMinor: 1,
@@ -947,7 +961,7 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
         currency: "RON",
         settledOn: "2026-10-12",
       });
-      await createSettlement(deps(), a, hh, {
+      await createSettlement(deps(), b, hh, {
         fromUserId: a.userId,
         toUserId: b.userId,
         amountMinor: 1,
