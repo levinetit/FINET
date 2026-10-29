@@ -6,6 +6,7 @@ import * as L from "./ledger-handlers";
 import * as M from "./me-handlers";
 import * as P from "./planning-handlers";
 import * as D from "./documents-handlers";
+import * as F from "./family-handlers";
 import * as RC from "./receipts-handlers";
 import * as R from "./recurring-handlers";
 
@@ -148,6 +149,25 @@ const OPERATION_OF = new Map<unknown, string>([
   [RC.deleteReceiptHandler, "deleteReceipt"],
   [RC.confirmReceiptHandler, "confirmReceipt"],
   [RC.reprocessReceiptHandler, "reprocessReceipt"],
+  [F.setActiveHouseholdHandler, "setActiveHousehold"],
+  [F.listMembersHandler, "listFamilyMembers"],
+  [F.patchMemberHandler, "patchFamilyMember"],
+  [F.deleteMemberHandler, "removeFamilyMember"],
+  [F.transferOwnershipHandler, "transferFamilyOwnership"],
+  [F.leaveHouseholdHandler, "leaveHousehold"],
+  [F.listInvitesHandler, "listInvites"],
+  [F.createInviteHandler, "createInvite"],
+  [F.revokeInviteHandler, "revokeInvite"],
+  [F.acceptInviteHandler, "acceptInvite"],
+  [F.balancesHandler, "getFamilyBalances"],
+  [F.listSettlementsHandler, "listSettlements"],
+  [F.createSettlementHandler, "createSettlement"],
+  [F.cancelSettlementHandler, "cancelSettlement"],
+  [F.listSplitsHandler, "listSplits"],
+  [F.getSplitHandler, "getTransactionSplit"],
+  [F.putSplitHandler, "putTransactionSplit"],
+  [F.deleteSplitHandler, "deleteTransactionSplit"],
+  [F.eventsHandler, "getLiveEvents"],
 ]);
 
 /** Antetele obligatorii ale unui export CSV (F3-B). */
@@ -191,6 +211,17 @@ export async function assertContract(handler: unknown, response: Response): Prom
       /no-store/.test(h.get("cache-control") ?? "") ? null : "cache-control",
     ].filter((x) => x !== null);
     if (problems.length > 0) throw new Error(`${id}: antete greșite: ${problems.join(", ")}`);
+    return;
+  }
+  if (response.status === op.success.status && op.success.sse) {
+    // Fluxul SSE nu se citește aici (nu se termină): doar antetele obligatorii (ADR 0017).
+    const h = response.headers;
+    const problems = [
+      (h.get("content-type") ?? "").startsWith("text/event-stream") ? null : "content-type",
+      /no-transform/.test(h.get("cache-control") ?? "") ? null : "cache-control",
+      /no-store/.test(h.get("cache-control") ?? "") ? null : "no-store",
+    ].filter((x) => x !== null);
+    if (problems.length > 0) throw new Error(`${id}: antete SSE greșite: ${problems.join(", ")}`);
     return;
   }
   const text = await response.clone().text();

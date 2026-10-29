@@ -563,3 +563,101 @@ export const receiptReprocessResultSchema = z
   .meta({ title: "ReceiptReprocessResult" });
 
 export const dataOf = <T extends z.ZodType>(schema: T) => z.strictObject({ data: schema });
+
+// --- Familia (Faza 8, F8-B; ADR 0016, 0017) ----------------------------------------------------
+
+export const familyMemberSchema = z
+  .strictObject({
+    userId: uuid,
+    name: z.string(),
+    role: z.enum(HOUSEHOLD_ROLES),
+    joinedAt: instant,
+  })
+  .meta({ title: "FamilyMember" });
+
+export const inviteSchema = z
+  .strictObject({
+    id: uuid,
+    role: z.enum(HOUSEHOLD_ROLES),
+    status: z.enum(["active", "used", "revoked", "expired"]),
+    createdByUserId: uuid.nullable(),
+    createdAt: instant,
+    expiresAt: instant,
+    usedAt: instant.nullable(),
+    usedByUserId: uuid.nullable(),
+    revokedAt: instant.nullable(),
+  })
+  .meta({ title: "Invite", description: "O invitație, FĂRĂ token (în bază e doar hash-ul)." });
+
+export const createdInviteSchema = z
+  .strictObject({
+    invite: inviteSchema,
+    token: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43}$/)
+      .meta({
+        description: "Tokenul în clar (256 de biți, base64url). Apare O SINGURĂ DATĂ, aici.",
+      }),
+    joinPath: z.string().meta({ description: "Calea paginii de acceptare: `/join/<token>`." }),
+  })
+  .meta({ title: "CreatedInvite" });
+
+export const acceptInviteResultSchema = z
+  .strictObject({
+    householdId: uuid,
+    joined: z.boolean().meta({ description: "`false` = erai deja membru (nimic consumat)." }),
+  })
+  .meta({ title: "AcceptInviteResult" });
+
+export const memberExitResultSchema = z
+  .strictObject({
+    unsettledBalance: z.boolean().meta({
+      description: "`true` = rămăseseră solduri nedecontate (avertisment, nu eroare).",
+    }),
+  })
+  .meta({ title: "MemberExitResult" });
+
+export const splitSchema = z
+  .strictObject({
+    transactionId: uuid,
+    payerUserId: uuid,
+    currency,
+    totalMinor: minor,
+    shares: z.array(z.strictObject({ userId: uuid, shareMinor: minor })),
+    createdAt: instant,
+  })
+  .meta({ title: "Split" });
+
+export const balancesSchema = z
+  .strictObject({
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        pairs: z.array(
+          z.strictObject({ debtorUserId: uuid, creditorUserId: uuid, amountMinor: minor }),
+        ),
+        members: z.array(z.strictObject({ userId: uuid, netMinor: minor })),
+      }),
+    ),
+    formerMemberIds: z.array(uuid).meta({
+      description: "Utilizatorii din solduri care nu mai sunt membri („fost membru”; fără nume).",
+    }),
+    me: z.array(z.strictObject({ currency, owesMinor: minor, owedMinor: minor })),
+  })
+  .meta({ title: "Balances" });
+
+export const settlementSchema = z
+  .strictObject({
+    id: uuid,
+    fromUserId: uuid,
+    toUserId: uuid,
+    amountMinor: minor,
+    currency,
+    settledOn: date,
+    note: z.string().nullable(),
+    createdByUserId: uuid.nullable(),
+    createdAt: instant,
+    cancelledAt: instant.nullable(),
+    cancelledByUserId: uuid.nullable(),
+  })
+  .meta({ title: "Settlement" });

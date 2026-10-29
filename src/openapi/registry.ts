@@ -30,8 +30,24 @@ import { transferCreateSchema, transferUpdateSchema } from "@/modules/transfers/
 import { appEventsBatchSchema, consentsPutSchema } from "@/modules/usage/usage.schema";
 import { DOCUMENT_STATUSES, RECEIPT_STATUSES } from "@/db/schema";
 import { receiptConfirmSchema, receiptPatchSchema } from "@/modules/receipts/receipts.schema";
+import {
+  activeHouseholdSchema,
+  inviteAcceptSchema,
+  inviteCreateSchema,
+  roleChangeSchema,
+  settlementCreateSchema,
+  splitSetSchema,
+} from "@/modules/family/family.schema";
 
 import {
+  acceptInviteResultSchema,
+  balancesSchema,
+  createdInviteSchema,
+  familyMemberSchema,
+  inviteSchema,
+  memberExitResultSchema,
+  settlementSchema,
+  splitSchema,
   accountSchema,
   aiUsageSchema,
   budgetSchema,
@@ -102,6 +118,8 @@ export type Operation = Readonly<{
     binary?: readonly string[];
     /** Alt status de succes cu aceeași schemă (încărcarea: 200 când toate fișierele erau deja). */
     alsoStatus?: number;
+    /** Corpul e un flux `text/event-stream` (Server-Sent Events, Faza 8). */
+    sse?: boolean;
   }>;
   /** Codurile de eroare posibile, în afară de 401/429/500 (comune). */
   errors: readonly number[];
@@ -1128,6 +1146,239 @@ export const OPERATIONS: readonly Operation[] = [
     query: [MONTH_PARAM],
     success: { status: 200, schema: dataOf(monthlyReportSchema), description: "Raportul." },
     errors: [VALIDATION, REUSED],
+  },
+  // --- Familia (Faza 8, F8-B; ADR 0016, 0017) ------------------------------------------------
+  {
+    method: "PUT",
+    path: "/api/v1/households/active",
+    operationId: "setActiveHousehold",
+    tag: "households",
+    summary: "Setează gospodăria activă (comutatorul).",
+    description:
+      "Apartenența se verifică în bază, în aceeași tranzacție cu scrierea; o gospodărie străină sau inexistentă → 404. Preferința nu e o autorizare: la fiecare cerere API-ul o folosește doar dacă apartenența există încă (altfel cea mai veche gospodărie).",
+    body: { schema: activeHouseholdSchema },
+    success: {
+      status: 200,
+      schema: dataOf(householdSummarySchema),
+      description: "Gospodăria activă (`current: true`).",
+    },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/family/members",
+    operationId: "listFamilyMembers",
+    tag: "family",
+    summary: "Membrii gospodăriei curente (id, nume, rol; fără emailuri).",
+    success: { status: 200, schema: dataOf(z.array(familyMemberSchema)), description: "Membrii." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "PATCH",
+    path: pathOf("/api/v1/family/members"),
+    operationId: "patchFamilyMember",
+    tag: "family",
+    summary: "Schimbă rolul unui membru (`{id}` = id-ul utilizatorului; doar owner).",
+    description:
+      "Ultimul owner nu poate fi retrogradat (409 `last_owner`); pentru a preda rolul: `transfer-ownership`. Un member → 403.",
+    body: { schema: roleChangeSchema },
+    success: { status: 200, schema: dataOf(familyMemberSchema), description: "Membrul." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/family/members"),
+    operationId: "removeFamilyMember",
+    tag: "family",
+    summary: "Scoate un membru (doar owner; pentru tine: `POST /family/leave`).",
+    description:
+      "Conturile personale ale celui scos devin invizibile pentru toți; împărțirile și decontările rămân în istoric. `unsettledBalance: true` = rămăseseră solduri nedecontate (avertisment). 409: `last_owner`, `use_leave`.",
+    success: {
+      status: 200,
+      schema: dataOf(memberExitResultSchema),
+      description: "Membrul a fost scos.",
+    },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/family/members", "/transfer-ownership"),
+    operationId: "transferFamilyOwnership",
+    tag: "family",
+    summary: "Predă rolul de proprietar: ținta devine owner, tu devii member (atomic).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: {
+      status: 200,
+      schema: dataOf(z.array(familyMemberSchema)),
+      description: "Membrii, după transfer.",
+    },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/family/leave",
+    operationId: "leaveHousehold",
+    tag: "family",
+    summary: "Părăsește gospodăria curentă.",
+    description:
+      "409: `last_owner` (transferă întâi rolul), `sole_member` (gospodăria se șterge, nu se părăsește). `unsettledBalance: true` = rămăseseră solduri nedecontate (avertisment, nu eroare).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: {
+      status: 200,
+      schema: dataOf(memberExitResultSchema),
+      description: "Ai părăsit gospodăria.",
+    },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/family/invites",
+    operationId: "listInvites",
+    tag: "family",
+    summary: "Invitațiile gospodăriei, cu starea (doar owner; FĂRĂ tokenuri).",
+    success: { status: 200, schema: dataOf(z.array(inviteSchema)), description: "Invitațiile." },
+    errors: [VALIDATION, FORBIDDEN, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/family/invites",
+    operationId: "createInvite",
+    tag: "family",
+    summary: "Creează o invitație (doar owner); tokenul în clar apare O SINGURĂ DATĂ, aici.",
+    description:
+      "Valabilitate implicită 72 h (`expiresInHours` 1–168), rol implicit `member`. În bază se stochează doar SHA-256 al tokenului. NU acceptă `Idempotency-Key` (400): răspunsul memorat ar conține tokenul în clar. Limită: 20 de invitații / 24 h / gospodărie (409 `invite_limit`).",
+    body: { schema: inviteCreateSchema.unwrap(), optional: true },
+    success: { status: 201, schema: dataOf(createdInviteSchema), description: "Invitația creată." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/family/invites", "/revoke"),
+    operationId: "revokeInvite",
+    tag: "family",
+    summary:
+      "Revocă o invitație activă (doar owner). Deja folosită/revocată → 409 `invite_not_active`.",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 200, schema: dataOf(inviteSchema), description: "Invitația revocată." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/invites/accept",
+    operationId: "acceptInvite",
+    tag: "family",
+    summary: "Acceptă o invitație pentru utilizatorul autentificat (tokenul în corp).",
+    description:
+      "Token inexistent, malformat, expirat, folosit sau revocat → ACELAȘI 404 `invite_unavailable` (fără enumerare). Limită: 10 încercări / 15 min per utilizator, consumată și la tokenurile greșite (429 + `Retry-After`). Deja membru → `joined: false`, invitația nu se consumă. La intrare, gospodăria devine cea activă. Gospodărie plină → 409 `household_full`. Fără `Idempotency-Key`: acceptarea e natural idempotentă.",
+    body: { schema: inviteAcceptSchema },
+    success: { status: 200, schema: dataOf(acceptInviteResultSchema), description: "Rezultatul." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/family/balances",
+    operationId: "getFamilyBalances",
+    tag: "family",
+    summary: "Soldurile reciproce (perechi, net pe membru, pe monedă) și rezumatul tău.",
+    description:
+      "Calculate din împărțiri și decontările neanulate, `bigint`, fără conversie între monede. `me`: „Ai de dat” (`owesMinor`) și „Ai de primit” (`owedMinor`). Pot apărea și foști membri (id fără nume în lista membrilor). Peste 2^53 → 422.",
+    success: { status: 200, schema: dataOf(balancesSchema), description: "Soldurile." },
+    errors: [VALIDATION, NOT_FOUND, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/family/settlements",
+    operationId: "listSettlements",
+    tag: "family",
+    summary: "Decontările gospodăriei (cele mai noi întâi).",
+    query: [
+      {
+        name: "includeCancelled",
+        schema: boolParam,
+        description: "Și cele anulate (implicit nu).",
+      },
+      { name: "limit", schema: intParam, description: "Câte (1–200, implicit 100)." },
+    ],
+    success: {
+      status: 200,
+      schema: dataOf(z.array(settlementSchema)),
+      description: "Decontările.",
+    },
+    errors: [VALIDATION, NOT_FOUND, REUSED],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/family/settlements",
+    operationId: "createSettlement",
+    tag: "family",
+    summary: "Înregistrează o decontare (`fromUserId` i-a dat lui `toUserId` suma).",
+    description:
+      "Suma: `amountMinor` (întreg > 0) SAU `amount` text (`45,90`). O decontare parțială = o sumă mai mică decât soldul. Un member doar dacă e una dintre părți (altfel 403); un owner pentru oricare doi membri. Ambii trebuie să fie membri (400).",
+    body: { schema: settlementCreateSchema },
+    success: { status: 201, schema: dataOf(settlementSchema), description: "Decontarea." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/family/settlements", "/cancel"),
+    operationId: "cancelSettlement",
+    tag: "family",
+    summary: "Anulează o decontare (definitiv; istoricul rămâne). Deja anulată → 409.",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 200, schema: dataOf(settlementSchema), description: "Decontarea anulată." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/family/splits",
+    operationId: "listSplits",
+    tag: "family",
+    summary: "Ultimele împărțiri ale gospodăriei (cine, cât, cine a plătit; fără descrieri).",
+    query: [{ name: "limit", schema: intParam, description: "Câte (1–100, implicit 50)." }],
+    success: { status: 200, schema: dataOf(z.array(splitSchema)), description: "Împărțirile." },
+    errors: [VALIDATION, NOT_FOUND, REUSED],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/transactions", "/split"),
+    operationId: "getTransactionSplit",
+    tag: "family",
+    summary: "Împărțirea unei cheltuieli (orice membru; fără împărțire → 404).",
+    success: { status: 200, schema: dataOf(splitSchema), description: "Împărțirea." },
+    errors: [NOT_FOUND, REUSED],
+  },
+  {
+    method: "PUT",
+    path: pathOf("/api/v1/transactions", "/split"),
+    operationId: "putTransactionSplit",
+    tag: "family",
+    summary: "Setează sau înlocuiește împărțirea unei cheltuieli (doar plătitorul).",
+    description:
+      "Doar o cheltuială din contul TĂU personal (409 `split_requires_personal_account`, `split_not_expense`). Moduri: `equal` (`userIds`), `percent` (`basisPoints`, 1% = 100, suma exact 10000), `fixed` (`amountMinor`, suma exact totalul). 2–6 membri distincți. Rotunjirea e deterministă (ADR 0016, punctul 7). Cât timp împărțirea există, suma, contul și tipul tranzacției nu se schimbă și tranzacția nu se șterge (409 `transaction_split`).",
+    body: { schema: splitSetSchema },
+    success: { status: 200, schema: dataOf(splitSchema), description: "Împărțirea." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT, REUSED],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/transactions", "/split"),
+    operationId: "deleteTransactionSplit",
+    tag: "family",
+    summary: "Elimină împărțirea (doar plătitorul; altfel 409 `split_not_payer`).",
+    success: { status: 204, schema: null, description: "Eliminată." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/events",
+    operationId: "getLiveEvents",
+    tag: "family",
+    summary: "Actualizările live ale gospodăriei curente (Server-Sent Events).",
+    description:
+      'Flux `text/event-stream`. Evenimente: `ready` (la conectare, cu `retry: 5000`), `change` (`data: {"type":"transaction|transfer|receipt|split|settlement|member","id":"<uuid>"}` — DOAR tipul și id-ul, fără sume sau nume; datele se recitesc prin API, cu RLS), `close` (sesiunea sau apartenența nu mai sunt valide), `reconnect` (după 5 minute; clientul se reconectează). Comentariul `: ping` la 25 s (sub pragul de inactivitate al Cloudflare); la fiecare puls se reverifică sesiunea și apartenența. O tranzacție dintr-un cont personal ajunge doar la proprietarul contului. Cel mult 4 conexiuni per utilizator (429). ADR 0017.',
+    success: { status: 200, schema: null, sse: true, description: "Fluxul de evenimente." },
+    errors: [VALIDATION, NOT_FOUND],
   },
   // --- Exporturile CSV -----------------------------------------------------------------------
   {

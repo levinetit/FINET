@@ -52,6 +52,7 @@ import {
   readQuery,
   routeId,
 } from "./http";
+import { accountsAudience, notifyLive, widest } from "./live";
 
 /**
  * Handlerele registrului (`/api/v1/households`, `accounts`, `categories`, `transactions`,
@@ -298,17 +299,19 @@ export function createTransactionHandler(request: Request, d: ApiDeps): Promise<
     const body = await readJsonBody(request);
     const hh = await currentHousehold(ctx);
     // Etichetele se citesc cu `db` primit (tranzacția cheii), ca să vadă legăturile tocmai scrise.
-    return idempotentCreate(ctx, hh, body, async (db) => ({
-      status: 201,
-      body: {
-        data: await transactionJson(
-          db,
-          ctx,
-          hh,
-          await createTransaction(deps(db), ctx.actor, hh, body),
-        ),
-      },
-    }));
+    let created: TransactionView | null = null;
+    const response = await idempotentCreate(ctx, hh, body, async (db) => {
+      const view = await createTransaction(deps(db), ctx.actor, hh, body);
+      created = view;
+      return { status: 201, body: { data: await transactionJson(db, ctx, hh, view) } };
+    });
+    // Faza 8 (ADR 0017): evenimentul live DUPĂ commit; cont personal → doar proprietarul.
+    const done = created as TransactionView | null;
+    if (done && response.ok) {
+      const audience = await accountsAudience(d.db, ctx.actor, hh, [done.accountId]);
+      notifyLive(hh, "transaction", done.id, audience);
+    }
+    return response;
   });
 }
 
@@ -329,7 +332,16 @@ export function patchTransactionHandler(
     const transactionId = routeId(id);
     const body = await readJsonBody(request);
     const hh = await currentHousehold(ctx);
+    // Contul de dinainte: o mutare comun ↔ personal trebuie anunțată și celor care o pierd.
+    const before = await getTransaction(deps(d.db), ctx.actor, hh, transactionId);
     const view = await updateTransaction(deps(d.db), ctx.actor, hh, transactionId, body);
+    const audience = await accountsAudience(d.db, ctx.actor, hh, [before.accountId]);
+    notifyLive(
+      hh,
+      "transaction",
+      view.id,
+      widest(audience, await accountsAudience(d.db, ctx.actor, hh, [view.accountId])),
+    );
     return json({ data: await transactionJson(d.db, ctx, hh, view) });
   });
 }
@@ -343,7 +355,11 @@ export function deleteTransactionHandler(
     const transactionId = routeId(id);
     await readOptionalJsonBody(request);
     const hh = await currentHousehold(ctx);
+    // Publicul se calculează ÎNAINTE de ștergere (după ea, rândul nu mai există).
+    const before = await getTransaction(deps(d.db), ctx.actor, hh, transactionId);
+    const audience = await accountsAudience(d.db, ctx.actor, hh, [before.accountId]);
     await deleteTransaction(deps(d.db), ctx.actor, hh, transactionId);
+    notifyLive(hh, "transaction", transactionId, audience);
     return noBody();
   });
 }
@@ -354,10 +370,22 @@ export function createTransferHandler(request: Request, d: ApiDeps): Promise<Res
   return handle(request, d, async (ctx) => {
     const body = await readJsonBody(request);
     const hh = await currentHousehold(ctx);
-    return idempotentCreate(ctx, hh, body, async (db) => ({
-      status: 201,
-      body: { data: transferToJson(await createTransfer(deps(db), ctx.actor, hh, body)) },
-    }));
+    let created: { id: string; accounts: string[] } | null = null;
+    const response = await idempotentCreate(ctx, hh, body, async (db) => {
+      const view = await createTransfer(deps(db), ctx.actor, hh, body);
+      created = { id: view.id, accounts: [view.from.accountId, view.to.accountId] };
+      return { status: 201, body: { data: transferToJson(view) } };
+    });
+    const done = created as { id: string; accounts: string[] } | null;
+    if (done && response.ok) {
+      notifyLive(
+        hh,
+        "transfer",
+        done.id,
+        await accountsAudience(d.db, ctx.actor, hh, done.accounts),
+      );
+    }
+    return response;
   });
 }
 
@@ -376,6 +404,11 @@ export function patchTransferHandler(request: Request, d: ApiDeps, id: string): 
     const body = await readJsonBody(request);
     const hh = await currentHousehold(ctx);
     const view = await updateTransfer(deps(d.db), ctx.actor, hh, transferId, body);
+    const audience = await accountsAudience(d.db, ctx.actor, hh, [
+      view.from.accountId,
+      view.to.accountId,
+    ]);
+    notifyLive(hh, "transfer", view.id, audience);
     return json({ data: transferToJson(view) });
   });
 }
@@ -385,7 +418,13 @@ export function deleteTransferHandler(request: Request, d: ApiDeps, id: string):
     const transferId = routeId(id);
     await readOptionalJsonBody(request);
     const hh = await currentHousehold(ctx);
+    const before = await getTransfer(deps(d.db), ctx.actor, hh, transferId);
+    const audience = await accountsAudience(d.db, ctx.actor, hh, [
+      before.from.accountId,
+      before.to.accountId,
+    ]);
     await deleteTransfer(deps(d.db), ctx.actor, hh, transferId);
+    notifyLive(hh, "transfer", transferId, audience);
     return noBody();
   });
 }
