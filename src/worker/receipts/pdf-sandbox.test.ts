@@ -1,6 +1,9 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createDeflate } from "node:zlib";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildPdf, scannedPdf, textPdf } from "@/modules/documents/testing";
 
@@ -183,7 +186,7 @@ describe("procesul copil sub prlimit: controlul real", () => {
       maxPages: 6,
       minTextChars: 20,
       deadline: Date.now() + 60_000,
-      maxOutputPixels: 100_000_000,
+      maxImagePixels: 200_000_000,
     }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(PdfChildError);
     expect((error as PdfChildError).code).toBe("pdf_too_complex");
@@ -192,32 +195,95 @@ describe("procesul copil sub prlimit: controlul real", () => {
     expect(process.memoryUsage().rss - before).toBeLessThan(100 * 1024 * 1024);
   }, 120_000);
 
-  it("ieșire peste plafon → copilul ucis, pdf_too_complex", async () => {
-    const error = await readPdfInChild(await scannedPdf(), {
-      maxPages: 6,
-      minTextChars: 20,
-      deadline: Date.now() + 30_000,
-      maxOutputPixels: 1000,
-    }).catch((e: unknown) => e);
-    expect((error as PdfChildError).code).toBe("pdf_too_complex");
-    expect(activePdfChildren()).toBe(0);
-  }, 60_000);
+  describe("copil ostil (simulat): părintele nu alocă peste bugetul fix", () => {
+    let dir: string;
+    beforeAll(async () => {
+      dir = await mkdtemp(join(tmpdir(), "finet-fake-child-"));
+    });
+    afterAll(async () => {
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    const fake = async (name: string, code: string) => {
+      const path = join(dir, `${name}.mjs`);
+      await writeFile(path, code);
+      return path;
+    };
+    const run = (childScript: string) =>
+      readPdfInChild(textPdf(), {
+        maxPages: 6,
+        minTextChars: 20,
+        maxImagePixels: 25_000_000,
+        deadline: Date.now() + 30_000,
+        childScript,
+      }).catch((e: unknown) => e);
+
+    it.each([
+      [
+        "anunță o imagine de 200 MB",
+        `process.stdout.write(JSON.stringify({pages:1,text:[""],images:[{width:100,height:100,length:200*1024*1024}]})+"\\n"); setInterval(()=>{},1000);`,
+      ],
+      [
+        "anunță 10 octeți, trimite 4 MB",
+        `process.stdout.write(JSON.stringify({pages:1,text:[""],images:[{width:10,height:10,length:10}]})+"\\n"); process.stdout.write(Buffer.alloc(4*1024*1024,1)); setInterval(()=>{},1000);`,
+      ],
+      [
+        "antet fără sfârșit (8 MB fără linie nouă)",
+        `process.stdout.write(Buffer.alloc(8*1024*1024,65)); setInterval(()=>{},1000);`,
+      ],
+      [
+        "imagine declarată 40000×40000 (peste latura maximă)",
+        `process.stdout.write(JSON.stringify({pages:1,text:[""],images:[{width:40000,height:40000,length:1000}]})+"\\n"); setInterval(()=>{},1000);`,
+      ],
+      [
+        "suma imaginilor peste bugetul total (5 × 8 MB)",
+        `process.stdout.write(JSON.stringify({pages:5,text:["","","","",""],images:Array.from({length:5},()=>({width:2000,height:2000,length:8*1024*1024}))})+"\\n"); setInterval(()=>{},1000);`,
+      ],
+    ])(
+      "%s → ucis, pdf_too_complex, fără copil rămas",
+      async (_label, code) => {
+        const before = process.memoryUsage().rss;
+        const error = await run(await fake(`f${Math.random().toString(36).slice(2)}`, code));
+        expect(error).toBeInstanceOf(PdfChildError);
+        expect((error as PdfChildError).code).toBe("pdf_too_complex");
+        expect(activePdfChildren()).toBe(0);
+        // Plafonul antetului e 1 MB; corpul nu se alocă peste bugetul declarat valid (≤ 32 MB).
+        expect(process.memoryUsage().rss - before).toBeLessThan(48 * 1024 * 1024);
+      },
+      60_000,
+    );
+
+    it("timeout: copilul care nu răspunde e ucis (SIGKILL) la termen", async () => {
+      const script = await fake("hang", "setInterval(()=>{},1000);");
+      const error = await readPdfInChild(textPdf(), {
+        maxPages: 6,
+        minTextChars: 20,
+        maxImagePixels: 25_000_000,
+        deadline: Date.now() + 300,
+        childScript: script,
+      }).catch((e: unknown) => e);
+      expect((error as PdfChildError).code).toBe("preprocess_timeout");
+      expect(activePdfChildren()).toBe(0);
+    }, 30_000);
+  });
 
   it("PDF normal: textul și imaginea scanată se întorc corect", async () => {
     const text = await readPdfInChild(textPdf(), {
       maxPages: 6,
       minTextChars: 20,
       deadline: Date.now() + 30_000,
-      maxOutputPixels: 1_000_000,
+      maxImagePixels: 25_000_000,
     });
     expect(text.images).toBeNull();
     const scanned = await readPdfInChild(await scannedPdf(), {
       maxPages: 6,
       minTextChars: 20,
       deadline: Date.now() + 30_000,
-      maxOutputPixels: 1_000_000,
+      maxImagePixels: 25_000_000,
     });
     expect(scanned.images?.map((i) => [i.width, i.height])).toEqual([[300, 500]]);
+    // Copilul trimite JPEG (comprimat), nu raster brut.
+    expect(scanned.images![0]!.jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
     expect(activePdfChildren()).toBe(0);
   }, 60_000);
 });

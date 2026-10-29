@@ -26,7 +26,8 @@ import { PDF_CHILD_LIMITS, PdfChildError, readPdfInChild } from "./pdf-sandbox";
  * (`prlimit`: adrese, CPU, fără fișiere) și ucis cu SIGKILL la timeout (`pdf-sandbox.ts`;
  * acesta e controlul real): numărul de pagini (plafon), textul pe pagini; dacă PDF-ul nu are text
  * (scanat), imaginea cea mai mare de pe fiecare pagină e extrasă (fără randare, deci fără
- * `@napi-rs/canvas`) și trece prin același traseu ca o poză. Un PDF fără text și fără imagini
+ * `@napi-rs/canvas`), redimensionată și comprimată JPEG ÎN COPIL (părintele primește cel mult
+ * 32 MB în total), apoi trece prin același traseu ca o poză. Un PDF fără text și fără imagini
  * (desene vectoriale) e respins cu `pdf_no_content`.
  *
  * Timpul: un termen (`deadline`) pentru tot documentul, verificat între pași; sharp primește
@@ -88,19 +89,13 @@ export type Preprocessed =
 sharp.cache(false);
 sharp.concurrency(1);
 
-function sharpInput(
-  input: Buffer,
-  limits: PreprocessLimits,
-  deadline: number,
-  raw?: Readonly<{ width: number; height: number; channels: 1 | 2 | 3 | 4 }>,
-) {
+function sharpInput(input: Buffer, limits: PreprocessLimits, deadline: number) {
   const seconds = Math.ceil((deadline - Date.now()) / 1000);
   if (seconds <= 0) throw new PreprocessError("preprocess_timeout");
   return sharp(input, {
     limitInputPixels: limits.maxImagePixels,
     failOn: "error",
     sequentialRead: true,
-    ...(raw ? { raw } : {}),
   }).timeout({ seconds });
 }
 
@@ -208,7 +203,7 @@ async function preprocessPdf(
       maxPages: limits.maxPdfPages,
       minTextChars: MIN_PDF_TEXT_CHARS,
       deadline,
-      maxOutputPixels: 2 * limits.maxImagePixels,
+      maxImagePixels: perImage,
     });
   } catch (error) {
     if (error instanceof PdfChildError) throw new PreprocessError(error.code);
@@ -216,22 +211,12 @@ async function preprocessPdf(
   }
   if (read.images === null) return { kind: "text", pages: read.pages, text: read.text };
 
-  // 3. Scanat: imaginile extrase trec prin același traseu ca o poză.
+  // 3. Scanat: copilul a trimis deja JPEG-uri mici (≤ 2048 px); trec prin același traseu ca o
+  // poză (sharp re-verifică tipul și pixelii).
   const images: PreparedImage[] = [];
   for (const image of read.images) {
-    if (image.width * image.height > perImage) throw new PreprocessError("image_too_large");
     try {
-      const raw = image.data;
-      images.push(
-        await prepare(
-          sharpInput(raw, limits, deadline, {
-            width: image.width,
-            height: image.height,
-            channels: image.channels,
-          }),
-          deadline,
-        ),
-      );
+      images.push(await prepare(sharpInput(image.jpeg, limits, deadline), deadline));
     } catch (error) {
       throw mapSharpError(error);
     }

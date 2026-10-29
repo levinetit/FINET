@@ -4,12 +4,27 @@
 // neschimbat în `dist/tools/` de scripts/build-tools.mjs, ca să ruleze la fel în teste și în
 // imaginea `tools`. Nu primește mediul părintelui (fără URL-uri sau căi de secrete).
 //
-// Intrare: octeții PDF pe stdin; argumentele: maxPages, minTextChars, maxImagesPerPage.
-// Ieșire pe stdout: o linie JSON (`{pages,text,images:[{width,height,channels,length}]}` sau
-// `{error}`), urmată de pixelii bruți ai imaginilor, în ordine. Părintele plafonează ieșirea.
+// Intrare: octeții PDF pe stdin; argumentele: maxPages, minTextChars, maxImagesPerPage,
+// maxImagePixels, maxSidePx, maxImageBytes, maxTotalBytes.
+// Ieșire pe stdout: o linie JSON (`{pages,text,images:[{width,height,length}]}` sau `{error}`),
+// urmată de imaginile ca JPEG, în ordine. Imaginea extrasă e REDIMENSIONATĂ și COMPRIMATĂ aici
+// (≤ maxSidePx pe latura lungă, JPEG), ca părintele să primească doar câțiva MB, niciodată
+// raster brut (revizuirea de securitate: memoria părintelui). Părintele verifică antetul și
+// plafoanele înainte de a citi corpul.
+import sharp from "sharp";
 import { extractImages, extractText, getDocumentProxy } from "unpdf";
 
-const [maxPages, minTextChars, maxImagesPerPage] = process.argv.slice(2).map(Number);
+const [
+  maxPages,
+  minTextChars,
+  maxImagesPerPage,
+  maxImagePixels,
+  maxSidePx,
+  maxImageBytes,
+  maxTotalBytes,
+] = process.argv.slice(2).map(Number);
+sharp.cache(false);
+sharp.concurrency(1);
 
 async function readStdin() {
   const chunks = [];
@@ -55,6 +70,7 @@ try {
     } else {
       const images = [];
       const data = [];
+      let total = 0;
       let tooMany = false;
       for (let page = 1; page <= pages && !tooMany; page++) {
         const found = await extractImages(pdf, page);
@@ -65,15 +81,29 @@ try {
         found.sort((a, b) => b.width * b.height - a.width * a.height);
         const largest = found[0];
         if (!largest) continue;
-        images.push({
-          width: largest.width,
-          height: largest.height,
-          channels: largest.channels,
-          length: largest.data.byteLength,
-        });
-        data.push(
-          Buffer.from(largest.data.buffer, largest.data.byteOffset, largest.data.byteLength),
+        if (largest.width * largest.height > maxImagePixels) {
+          tooMany = true;
+          break;
+        }
+        const raw = Buffer.from(
+          largest.data.buffer,
+          largest.data.byteOffset,
+          largest.data.byteLength,
         );
+        const { data: jpeg, info } = await sharp(raw, {
+          raw: { width: largest.width, height: largest.height, channels: largest.channels },
+          limitInputPixels: maxImagePixels,
+        })
+          .resize({ width: maxSidePx, height: maxSidePx, fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 90 })
+          .toBuffer({ resolveWithObject: true });
+        total += jpeg.length;
+        if (jpeg.length > maxImageBytes || total > maxTotalBytes) {
+          tooMany = true;
+          break;
+        }
+        images.push({ width: info.width, height: info.height, length: jpeg.length });
+        data.push(jpeg);
       }
       if (tooMany) write({ error: "pdf_too_complex" });
       else write({ pages, text, images }, data);
