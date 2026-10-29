@@ -245,17 +245,20 @@ describe.skipIf(!TEST_ADMIN_URL)("extrase: RLS, drepturi și triggere (finet_app
         sql`delete from finet.statement_lines where import_id = ${imp.id} and row_no = 2 returning id`,
       );
     expect(await del(f.A.userId)).toHaveLength(1);
-    // Confirmare: previewed → imported.
-    await as(
-      f.A.userId,
-      f.HA,
-      sql`update finet.statement_imports set status = 'imported', imported_at = now(), imported_count = 1 where id = ${imp.id}`,
-    );
+    // Confirmare (ordinea serviciului): rândurile → imported cât importul e `previewed`, apoi
+    // importul → imported.
     await as(
       f.A.userId,
       f.HA,
       sql`update finet.statement_lines set state = 'imported' where import_id = ${imp.id}`,
     );
+    await as(
+      f.A.userId,
+      f.HA,
+      sql`update finet.statement_imports set status = 'imported', imported_at = now(), imported_count = 1 where id = ${imp.id}`,
+    );
+    // După confirmare: niciun rând nou, nicio schimbare de stare în afara anulării.
+    expect(await sqlState(() => newLine(f.A.userId, imp.id, common, 3))).toBe("42501");
     // Rândurile unui import confirmat nu se șterg; importul confirmat nu se șterge.
     expect(
       await as(
@@ -288,7 +291,13 @@ describe.skipIf(!TEST_ADMIN_URL)("extrase: RLS, drepturi și triggere (finet_app
         ),
       ),
     ).toBe("23514");
-    // Anularea e permisă, apoi totul e final.
+    // Anularea (ordinea serviciului): rândurile → cancelled cât importul e `imported`, apoi
+    // importul → cancelled; apoi totul e final.
+    await as(
+      f.A.userId,
+      f.HA,
+      sql`update finet.statement_lines set state = 'cancelled' where import_id = ${imp.id}`,
+    );
     expect(
       await upd(
         sql`status = 'cancelled', cancelled_at = now(), cancelled_by_user_id = ${f.A.userId}`,
@@ -297,11 +306,6 @@ describe.skipIf(!TEST_ADMIN_URL)("extrase: RLS, drepturi și triggere (finet_app
     expect(
       await upd(sql`status = 'imported', cancelled_at = null, cancelled_by_user_id = null`),
     ).toBe("23514");
-    await as(
-      f.A.userId,
-      f.HA,
-      sql`update finet.statement_lines set state = 'cancelled' where import_id = ${imp.id}`,
-    );
     expect(
       await sqlState(() =>
         as(
@@ -314,5 +318,69 @@ describe.skipIf(!TEST_ADMIN_URL)("extrase: RLS, drepturi și triggere (finet_app
     // După anulare, același fișier poate fi previzualizat din nou pe același cont.
     await newImport(f.A.userId, common, { c: "e" }).run();
     expect(await sqlState(() => newImport(f.A.userId, common, { c: "e" }).run())).toBe("23505");
+  });
+  it("inserarea rândurilor: doar în previzualizări, doar stări inițiale, fără legătură", async () => {
+    const imp = newImport(f.A.userId, common, { c: "1" });
+    await imp.run();
+    const insert = (state: string, tx: string | null) =>
+      as(
+        f.A.userId,
+        f.HA,
+        sql`insert into finet.statement_lines (household_id, import_id, account_id, currency,
+              row_no, occurred_on, direction, amount_minor, description, dedup_key, state,
+              transaction_id)
+            values (${f.HA}, ${imp.id}, ${common}, 'RON', 9, '2026-11-03', 'debit', 100, 'x',
+              ${sha("9")}, ${state}, ${tx})`,
+      );
+    expect(await sqlState(() => insert("imported", null))).toBe("42501");
+    expect(await sqlState(() => insert("cancelled", null))).toBe("42501");
+    expect(await sqlState(() => insert("new", txCommon))).toBe("42501");
+    // Un import nu se inserează direct ca `imported`/`cancelled`.
+    expect(
+      await sqlState(() => newImport(f.A.userId, common, { status: "imported", c: "2" }).run()),
+    ).toBe("42501");
+  });
+
+  it("legătura spre tranzacție: nu se golește și nu se repune de aplicație; o golește doar ștergerea tranzacției", async () => {
+    const imp = newImport(f.A.userId, common, { c: "3" });
+    await imp.run();
+    await newLine(f.A.userId, imp.id, common, 1);
+    const own = await createTransaction(f.deps, f.A, f.HA, {
+      accountId: common,
+      type: "expense",
+      amountMinor: 100,
+      occurredOn: "2026-11-03",
+    });
+    const own2 = await createTransaction(f.deps, f.A, f.HA, {
+      accountId: common,
+      type: "expense",
+      amountMinor: 100,
+      occurredOn: "2026-11-04",
+    });
+    const upd = (set: SQL) =>
+      sqlState(() =>
+        as(
+          f.A.userId,
+          f.HA,
+          sql`update finet.statement_lines set ${set} where import_id = ${imp.id}`,
+        ),
+      );
+    // Legătura doar odată cu `imported`.
+    expect(await upd(sql`transaction_id = ${own.id}`)).toBe("23514");
+    expect(await upd(sql`transaction_id = ${own.id}, state = 'imported'`)).toBeNull();
+    await as(
+      f.A.userId,
+      f.HA,
+      sql`update finet.statement_imports set status = 'imported', imported_at = now() where id = ${imp.id}`,
+    );
+    expect(await upd(sql`transaction_id = null`)).toBe("23514");
+    expect(await upd(sql`transaction_id = ${own2.id}`)).toBe("23514");
+    // Ștergerea tranzacției (ca aplicația) pune NULL prin cheia străină; rândul rămâne `imported`.
+    await as(f.A.userId, f.HA, sql`delete from finet.transactions where id = ${own.id}`);
+    const [row] = await f.admin<{ state: string; transaction_id: string | null }[]>`
+      select state, transaction_id from finet.statement_lines where import_id = ${imp.id}`;
+    expect(row).toEqual({ state: "imported", transaction_id: null });
+    // NULL → altă tranzacție după ce a fost legată: refuz.
+    expect(await upd(sql`transaction_id = ${own2.id}`)).toBe("23514");
   });
 });

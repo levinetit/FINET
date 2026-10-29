@@ -222,25 +222,51 @@ create trigger statement_imports_check_update
   before update on finet.statement_imports
   for each row execute function finet.statement_imports_check_update();
 --> statement-breakpoint
--- Stările rândurilor: `imported` → doar `cancelled`; `cancelled` e finală; legătura spre
--- tranzacție se pune o singură dată (NULL → id), apoi doar ștergerea tranzacției o golește.
+-- Stările rândurilor (revizuirea F7-A). Confirmarea (o singură tranzacție SQL): rândurile trec
+-- `new` → `imported` (cu legătura spre tranzacția creată) CÂT importul părinte e încă
+-- `previewed`, apoi importul devine `imported`. Anularea: rândurile `imported` → `cancelled` cât
+-- părintele e încă `imported`, apoi importul devine `cancelled`. Între `new`, `duplicate` și
+-- `skipped` se trece doar cât părintele e `previewed`. `cancelled` e finală; `imported` → doar
+-- `cancelled`. Legătura spre tranzacție se pune o singură dată, odată cu `imported`; aplicația nu
+-- o mai schimbă și nu o golește: o golește DOAR cheia străină (ON DELETE SET NULL), când
+-- tranzacția nu mai există.
 create function finet.statement_lines_check_update() returns trigger
   language plpgsql security invoker
   set search_path = pg_catalog
   as $$
+  declare
+    v_parent text;
+    v_linking boolean := old.transaction_id is null and new.transaction_id is not null;
   begin
-    if old.state = 'cancelled' and new.state <> 'cancelled' then
-      raise exception 'statement_lines: rândul e final'
-        using errcode = '23514', constraint = 'statement_lines_transition';
+    if old.transaction_id is not null
+       and new.transaction_id is distinct from old.transaction_id then
+      if new.transaction_id is not null
+         or exists (select 1 from finet.transactions t where t.id = old.transaction_id) then
+        raise exception 'statement_lines: legătura spre tranzacție nu se schimbă'
+          using errcode = '23514', constraint = 'statement_lines_transition';
+      end if;
     end if;
-    if old.state = 'imported' and new.state <> 'imported' and new.state <> 'cancelled' then
-      raise exception 'statement_lines: tranziție de stare nepermisă'
-        using errcode = '23514', constraint = 'statement_lines_transition';
-    end if;
-    if old.transaction_id is not null and new.transaction_id is not null
-       and new.transaction_id <> old.transaction_id then
-      raise exception 'statement_lines: legătura spre tranzacție nu se mută'
-        using errcode = '23514', constraint = 'statement_lines_transition';
+    if new.state is distinct from old.state or v_linking then
+      select i.status into v_parent from finet.statement_imports i where i.id = new.import_id;
+      if old.state = 'cancelled' then
+        raise exception 'statement_lines: rândul e final'
+          using errcode = '23514', constraint = 'statement_lines_transition';
+      elsif new.state = 'cancelled' then
+        if old.state <> 'imported' or v_parent is distinct from 'imported' then
+          raise exception 'statement_lines: tranziție de stare nepermisă'
+            using errcode = '23514', constraint = 'statement_lines_transition';
+        end if;
+      elsif old.state = 'imported' then
+        raise exception 'statement_lines: tranziție de stare nepermisă'
+          using errcode = '23514', constraint = 'statement_lines_transition';
+      elsif v_parent is distinct from 'previewed' then
+        raise exception 'statement_lines: importul nu mai e o previzualizare'
+          using errcode = '23514', constraint = 'statement_lines_transition';
+      end if;
+      if v_linking and new.state <> 'imported' then
+        raise exception 'statement_lines: doar un rând importat are tranzacție'
+          using errcode = '23514', constraint = 'statement_lines_transition';
+      end if;
     end if;
     return new;
   end
@@ -282,6 +308,8 @@ create policy statement_imports_insert on finet.statement_imports
   with check (household_id = (select finet.current_household_id())
          and (select finet.member_role(finet.current_household_id())) is not null
          and created_by_user_id = (select finet.current_user_id())
+         and (status = 'previewed' or status = 'failed')
+         and imported_at is null and cancelled_at is null
          and account_id in (select a.id from finet.accounts a
                              where a.household_id = (select finet.current_household_id())
                                and (a.owner_user_id is null
@@ -330,7 +358,13 @@ create policy statement_lines_insert on finet.statement_lines
          and account_id in (select a.id from finet.accounts a
                              where a.household_id = (select finet.current_household_id())
                                and (a.owner_user_id is null
-                                    or a.owner_user_id = (select finet.current_user_id()))));
+                                    or a.owner_user_id = (select finet.current_user_id())))
+         and (state = 'new' or state = 'duplicate' or state = 'skipped')
+         and transaction_id is null
+         and exists (select 1 from finet.statement_imports i
+                      where i.id = statement_lines.import_id
+                        and i.household_id = statement_lines.household_id
+                        and i.status = 'previewed'));
 --> statement-breakpoint
 create policy statement_lines_update on finet.statement_lines
   for update to finet_app
