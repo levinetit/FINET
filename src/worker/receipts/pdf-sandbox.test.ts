@@ -79,6 +79,54 @@ describe("inventarul pe octeți: fail-closed la fiecare ocolire", () => {
     expect(scan(pdfWithImageDict(dict))).toBe("pdf_image_unverifiable");
   });
 
+  describe("dimensiuni indirecte (`/Height N 0 R`): rezolvate doar fără ambiguitate", () => {
+    const num = (v: string) => latin1(v);
+    it("obiect unic cu un întreg direct → acceptat cu dimensiunile corecte (și `/Length` indirect)", () => {
+      expect(
+        scanPdfImages(pdfWithImageDict(`${BASE} /Width 2416 /Height 6 0 R`, [num("3400")]), LIMITS),
+      ).toEqual([{ width: 2416, height: 3400 }]);
+      expect(
+        scanPdfImages(
+          pdfWithImageDict(`${BASE} /Width 6 0 R /Height 7 0 R`, [num("300"), num("400")]),
+          LIMITS,
+        ),
+      ).toEqual([{ width: 300, height: 400 }]);
+    });
+
+    it.each([
+      ["obiect lipsă", `${BASE} /Width 10 /Height 9 0 R`, [num("400")]],
+      [
+        "obiect cu flux",
+        `${BASE} /Width 10 /Height 6 0 R`,
+        [latin1("<< /Length 3 >>\nstream\n400\nendstream")],
+      ],
+      ["obiect dicționar", `${BASE} /Width 10 /Height 6 0 R`, [num("<< /V 400 >>")]],
+      ["valoare neîntreagă", `${BASE} /Width 10 /Height 6 0 R`, [num("400.5")]],
+      ["valoare zero", `${BASE} /Width 10 /Height 6 0 R`, [num("0")]],
+      ["valoare negativă", `${BASE} /Width 10 /Height 6 0 R`, [num("-400")]],
+      ["peste 9 cifre", `${BASE} /Width 10 /Height 6 0 R`, [num("1234567890")]],
+      ["referință spre sine", `${BASE} /Width 10 /Height 6 0 R`, [num("6 0 R")]],
+      ["referință în lanț", `${BASE} /Width 10 /Height 6 0 R`, [num("7 0 R"), num("400")]],
+      ["generație diferită", `${BASE} /Width 10 /Height 6 1 R`, [num("400")]],
+    ])("%s → pdf_image_unverifiable", (_label, dict, extra) => {
+      expect(scan(pdfWithImageDict(dict, extra))).toBe("pdf_image_unverifiable");
+    });
+
+    it("obiect definit de două ori (actualizare incrementală) → refuzat", () => {
+      const pdf = Buffer.concat([
+        pdfWithImageDict(`${BASE} /Width 10 /Height 6 0 R`, [num("400")]),
+        latin1("6 0 obj\n40000\nendobj\n"),
+      ]);
+      expect(scan(pdf)).toBe("pdf_image_unverifiable");
+    });
+
+    it("plafoanele se aplică valorii rezolvate", () => {
+      expect(scan(pdfWithImageDict(`${BASE} /Width 40000 /Height 6 0 R`, [num("40000")]))).toBe(
+        "image_too_large",
+      );
+    });
+  });
+
   it("fontele cu #20 în nume (bonuri electronice) rămân acceptate", () => {
     expect(scan(pdfWithImageDict(`${BASE} /Width 10 /Height 10 /Name /Arial#20Bold`))).toBe(
       "acceptat",

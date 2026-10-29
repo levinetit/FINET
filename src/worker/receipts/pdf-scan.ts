@@ -9,7 +9,11 @@
  *   `/Im#61ge`);
  * - fluxuri de obiecte (`/Type /ObjStm`) într-un PDF cu imagini;
  * - în dicționarul unei imagini: cheile abreviate `/W`, `/H` (forma imaginilor inline), mai
- *   multe `/Width` sau `/Height`, valori indirecte (`N 0 R`) sau neîntregi;
+ *   multe `/Width` sau `/Height`, valori neîntregi; o valoare indirectă (`/Height 5 0 R`, produsă
+ *   de multe aplicații: Quartz, Skia, scanere) e acceptată DOAR dacă în text există exact O
+ *   definiție a obiectului cu acel număr, de forma `N G obj <întreg direct 1–9 cifre> endobj`
+ *   (fără flux, fără altă definiție a aceluiași număr — actualizări incrementale, dubluri —, fără
+ *   referințe în lanț); orice altceva → refuz;
  * - orice `/Subtype /Image` care nu ține de un obiect `N G obj … stream` delimitat (potrivirea
  *   nu trece peste `endobj`);
  * - imagini inline (`BI … ID`) vizibile în conținutul necomprimat;
@@ -68,14 +72,45 @@ function structuralText(input: Uint8Array): string {
 
 const DELIMITED_IMAGE_OBJECT = /\d+\s+\d+\s+obj\b((?:(?!\bendobj\b)[\s\S])*?)\bstream endstream/g;
 
-function onlyDirectInteger(dict: string, key: "Width" | "Height"): number {
-  const all = [...dict.matchAll(new RegExp(`/${key}(?![A-Za-z0-9])`, "g"))];
-  if (all.length !== 1) throw unverifiable();
-  const match = new RegExp(`/${key}\\s+(\\d{1,9})(?![\\d.])(\\s+\\d+\\s+R\\b)?`).exec(dict);
-  if (!match || match[2]) throw unverifiable();
-  const value = Number(match[1]);
+/** Un întreg zecimal de 1–9 cifre → număr ≥ 1, altfel refuz. */
+function positiveInteger(digits: string): number {
+  const value = Number(digits);
   if (!Number.isSafeInteger(value) || value < 1) throw unverifiable();
   return value;
+}
+
+/**
+ * Valoarea obiectului indirect `N G` DOAR dacă e neambiguă: în tot textul structural există o
+ * singură definiție `N <orice> obj` a numărului N, are generația G și conține exact un întreg
+ * direct (`N G obj 1234 endobj`). Un flux (`stream`), o referință (`M 0 R`, deci și un ciclu),
+ * un număr neîntreg, mai multe definiții (actualizări incrementale) sau lipsa definiției → refuz.
+ */
+function resolveIndirectInteger(text: string, objectNumber: string, generation: string): number {
+  const n = String(Number(objectNumber));
+  const definitions = [
+    ...text.matchAll(new RegExp(`(?<![0-9])0*${n}\\s+(\\d{1,5})\\s+obj\\b`, "g")),
+  ];
+  if (definitions.length !== 1) throw unverifiable();
+  const definition = definitions[0]!;
+  if (Number(definition[1]) !== Number(generation)) throw unverifiable();
+  const body = /^\s+(\d{1,9})\s+endobj\b/.exec(
+    text.slice(definition.index! + definition[0].length),
+  );
+  if (!body) throw unverifiable();
+  return positiveInteger(body[1]!);
+}
+
+function onlyDirectInteger(text: string, dict: string, key: "Width" | "Height"): number {
+  const all = [...dict.matchAll(new RegExp(`/${key}(?![A-Za-z0-9])`, "g"))];
+  if (all.length !== 1) throw unverifiable();
+  const match = new RegExp(
+    `/${key}\\s+(\\d{1,9})(?![\\d.])(?:\\s+(\\d{1,5})\\s+R(?![A-Za-z0-9]))?`,
+  ).exec(dict);
+  if (!match) throw unverifiable();
+  // Referință indirectă: rezolvată doar fără ambiguitate (vezi `resolveIndirectInteger`).
+  if (match[2] !== undefined) return resolveIndirectInteger(text, match[1]!, match[2]);
+  // Un număr direct urmat de altceva decât `G R` (de exemplu `10 0` fără R) rămâne valoarea.
+  return positiveInteger(match[1]!);
 }
 
 /** Imaginile declarate, cu regulile de mai sus (fără nicio decodare). */
@@ -100,8 +135,8 @@ export function scanPdfImages(input: Uint8Array, limits: PdfScanLimits): PdfImag
     if (!/\/Subtype\s*\/Image(?![A-Za-z0-9])/.test(dict)) continue;
     // Cheile abreviate ale imaginilor inline nu au ce căuta într-un XObject.
     if (/\/(?:W|H)(?![A-Za-z0-9])/.test(dict)) throw unverifiable();
-    const width = onlyDirectInteger(dict, "Width");
-    const height = onlyDirectInteger(dict, "Height");
+    const width = onlyDirectInteger(text, dict, "Width");
+    const height = onlyDirectInteger(text, dict, "Height");
     const pixels = width * height;
     if (pixels > limits.maxImagePixels) throw new PdfScanError("image_too_large");
     total += pixels;
