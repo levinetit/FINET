@@ -144,7 +144,8 @@ create policy app_downloads_migrator_erase_update on finet.app_downloads
 -- Ștergerea contului (5.6, 6.3 „GDPR”). PASUL FINAL, după ce aplicația (finet_app, sub RLS-ul
 -- utilizatorului) a șters gospodăriile în care era singurul membru, a ieșit din celelalte și a
 -- șters sesiunile, conturile de autentificare, preferințele, instalările și evenimentele lui.
--- Garda: utilizatorul din context există și NU mai e membru nicăieri (altfel 42501).
+-- Garda: utilizatorul din context există, NU e administratorul platformei și NU mai e membru
+-- nicăieri (altfel 42501).
 -- Apoi, în toate gospodăriile (inclusiv cele părăsite mai demult, unde conturile lui personale
 -- au rămas invizibile pentru toți, ADR 0016):
 --   1. jumătatea COMUNĂ a unui transfer personal ↔ comun devine o tranzacție obișnuită
@@ -173,6 +174,11 @@ create function finet.erase_current_user() returns text
     perform pg_advisory_xact_lock(hashtext('finet.erase_user:' || v_user::text));
     if not exists (select 1 from finet.users u where u.id = v_user) then
       return 'not_found';
+    end if;
+    -- Administratorul platformei nu se șterge din aplicație: bootstrap-ul e irepetabil (0001,
+    -- M5), deci platforma ar rămâne fără administrator; operatorul îl înlocuiește întâi.
+    if exists (select 1 from finet.users u where u.id = v_user and u.is_platform_admin) then
+      raise exception 'erase_current_user: administratorul platformei' using errcode = '42501';
     end if;
     if exists (select 1 from finet.household_members m where m.user_id = v_user) then
       raise exception 'erase_current_user: utilizatorul e încă membru al unei gospodării'

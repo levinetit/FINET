@@ -54,6 +54,7 @@ const DELETION_STATUS: Readonly<Record<AccountDeletionError["code"], number>> = 
   invalid_password: 400,
   reauth_required: 403,
   last_owner: 409,
+  platform_admin: 409,
   not_deletable: 409,
 };
 

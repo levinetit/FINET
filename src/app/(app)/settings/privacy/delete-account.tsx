@@ -74,6 +74,7 @@ export function DeleteAccount() {
       if (code === "invalid_password") setFields({ password: t.wrongPassword });
       else if (code === "reauth_required") setError(t.reauth);
       else if (code === "last_owner") setError(t.lastOwner);
+      else if (code === "platform_admin") setError(t.platformAdmin);
       else if (r.status === 429) setError(ro.login.rateLimited);
       else setError(t.error);
     } finally {
@@ -84,7 +85,7 @@ export function DeleteAccount() {
 
   if (loadError) return <Alert>{t.loadError}</Alert>;
   if (!preview) return <p aria-live="polite">{t.loading}</p>;
-  const blocked = preview.blockedHouseholds.length > 0;
+  const blocked = preview.blockedHouseholds.length > 0 || preview.platformAdmin;
 
   return (
     <div className="flex flex-col gap-4" data-testid="delete-account">
@@ -112,7 +113,12 @@ export function DeleteAccount() {
           <p className="text-sm text-muted-foreground">{t.history}</p>
         </div>
       ) : null}
-      {blocked ? (
+      {preview.platformAdmin ? (
+        <Alert tone="info" data-testid="platform-admin">
+          {t.platformAdmin}
+        </Alert>
+      ) : null}
+      {preview.blockedHouseholds.length > 0 ? (
         <Alert tone="info">
           <span>{t.blockedList}</span>
           <ul className="list-disc pl-5" data-testid="blocked-households">

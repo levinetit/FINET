@@ -7335,7 +7335,7 @@
           "me"
         ],
         "summary": "Șterge contul (ireversibil): parola curentă + confirmarea `ȘTERGE`.",
-        "description": "Conturile fără parolă (doar magic link) cer o sesiune creată în ultimele 15 minute (altfel 403 `reauth_required`). 400 `invalid_password` la parola greșită; 409 `last_owner` dacă e ultimul proprietar al unei gospodării cu alți membri. Conturile personale ale utilizatorului se șterg (nu devin comune); rândul utilizatorului se șterge sau, dacă e referit de împărțiri/decontări din istoricul altora, se anonimizează (`outcome: anonymized`). Sesiunile se închid.",
+        "description": "Conturile fără parolă (doar magic link) cer o sesiune creată în ultimele 15 minute (altfel 403 `reauth_required`). 400 `invalid_password` la parola greșită; 409 `last_owner` dacă e ultimul proprietar al unei gospodării cu alți membri; 409 `platform_admin` pentru administratorul platformei (bootstrap-ul e irepetabil). Conturile personale ale utilizatorului se șterg (nu devin comune); rândul utilizatorului se șterge sau, dacă e referit de împărțiri/decontări din istoricul altora, se anonimizează (`outcome: anonymized`). Sesiunile se închid.",
         "parameters": [
           {
             "$ref": "#/components/parameters/FinetClient"
@@ -7465,6 +7465,9 @@
                         "hasPassword": {
                           "type": "boolean"
                         },
+                        "platformAdmin": {
+                          "type": "boolean"
+                        },
                         "deletedHouseholds": {
                           "type": "array",
                           "items": {
@@ -7535,6 +7538,7 @@
                       },
                       "required": [
                         "hasPassword",
+                        "platformAdmin",
                         "deletedHouseholds",
                         "leftHouseholds",
                         "blockedHouseholds"

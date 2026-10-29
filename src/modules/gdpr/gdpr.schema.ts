@@ -25,6 +25,8 @@ export type DeletionHousehold = Readonly<{ id: string; name: string }>;
 export type DeletionPreview = Readonly<{
   /** Contul are parolă (altfel reautentificarea = o sesiune proaspătă). */
   hasPassword: boolean;
+  /** Administratorul platformei: ștergerea din aplicație e refuzată. */
+  platformAdmin: boolean;
   /** Gospodăriile în care e singurul membru: se șterg cu TOATE datele și fișierele lor. */
   deletedHouseholds: DeletionHousehold[];
   /** Gospodăriile cu alți membri din care iese; `unsettled` = are solduri nedecontate acolo. */
@@ -46,6 +48,7 @@ const householdRef = z.strictObject({ id: z.uuid(), name: z.string() });
 
 export const deletionPreviewSchema = z.strictObject({
   hasPassword: z.boolean(),
+  platformAdmin: z.boolean(),
   deletedHouseholds: z.array(householdRef),
   leftHouseholds: z.array(householdRef.extend({ unsettled: z.boolean() })),
   blockedHouseholds: z.array(householdRef),

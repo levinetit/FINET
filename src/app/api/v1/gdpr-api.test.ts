@@ -206,6 +206,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
     expect(prev.status).toBe(200);
     expect((await readJson(prev)).data).toMatchObject({
       hasPassword: true,
+      platformAdmin: true,
       blockedHouseholds: [{ id: ana.hh }],
     });
     const wrong = await call(G.deleteAccountHandler, "/api/v1/me/delete", {
@@ -228,8 +229,9 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
       bearer: ana.S.bearer,
       body: { password: PASS_A, confirm: "ȘTERGE" },
     });
+    // Ana e administratorul platformei (primul utilizator): refuz explicit, înaintea regulii L3.
     expect(blocked.status).toBe(409);
-    expect((await readJson(blocked)).error?.code).toBe("last_owner");
+    expect((await readJson(blocked)).error?.code).toBe("platform_admin");
 
     // Bogdan (membru în casa Anei + propria casă) se șterge.
     const csrf = await call(G.deleteAccountHandler, "/api/v1/me/delete", {

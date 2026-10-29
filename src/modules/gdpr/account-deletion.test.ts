@@ -293,6 +293,24 @@ describe.skipIf(!TEST_ADMIN_URL)("ștergerea contului (Postgres real, finet_app)
     expect(visible.map((x) => x.id).sort()).toEqual([common.id, ownerPersonal.id].sort());
   });
 
+  it("administratorul platformei: refuz 409 platform_admin, nimic șters; garda și în bază (42501)", async () => {
+    const a = await user("AdminDel");
+    await household(a, "Casa AdminDel");
+    await f.admin`update finet.users set is_platform_admin = true where id = ${a.userId}`;
+    const storage = new MemoryStorage();
+    expect((await previewAccountDeletion(f.db, a.userId)).platformAdmin).toBe(true);
+    await expect(del(storage, a)).rejects.toMatchObject({ code: "platform_admin" });
+    expect((await userRow(a.userId))?.status).toBe("active");
+    await f.admin`delete from finet.household_members where user_id = ${a.userId}`;
+    expect(
+      await sqlState(() =>
+        withRlsOn(f.db, { userId: a.userId }, (tx) =>
+          tx.execute(sql`select finet.erase_current_user()`),
+        ),
+      ),
+    ).toBe("42501");
+  });
+
   it("finet.erase_current_user: refuzată cât e încă membru (42501); pentru un utilizator inexistent întoarce not_found (idempotent)", async () => {
     const a = await user("EraseGuard");
     await household(a, "Casa EraseGuard");

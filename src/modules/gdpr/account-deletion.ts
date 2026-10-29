@@ -13,6 +13,7 @@ import {
   householdMembers,
   households,
   userPreferences,
+  users,
 } from "@/db/schema";
 import type { Storage } from "@/lib/storage";
 import { isKeyOfHousehold } from "@/lib/storage";
@@ -51,6 +52,8 @@ import type {
  *   din istoricul altora, se anonimizează („Cont șters”). Conturile personale NU devin comune;
  * - sesiunile, conturile de autentificare (hash-ul parolei), preferințele, instalările și
  *   evenimentele de utilizare se șterg; consimțămintele se revocă (și dispar odată cu rândul);
+ * - administratorul platformei NU își poate șterge contul din aplicație (409 `platform_admin`):
+ *   bootstrap-ul e irepetabil (M5), deci platforma ar rămâne fără administrator; garda e și în bază;
  * - totul într-O tranzacție (o eroare nu lasă nimic șters pe jumătate); idempotent: după succes
  *   sesiunea nu mai există (401), iar funcția din bază întoarce `not_found`.
  */
@@ -59,7 +62,8 @@ export const FRESH_SESSION_MINUTES = 15;
 
 export class AccountDeletionError extends Error {
   constructor(
-    readonly code: "invalid_password" | "reauth_required" | "last_owner" | "not_deletable",
+    readonly code:
+      "invalid_password" | "reauth_required" | "last_owner" | "platform_admin" | "not_deletable",
     message: string,
   ) {
     super(message);
@@ -115,6 +119,7 @@ function blocks(s: HouseholdState): boolean {
 /** Ce s-ar întâmpla la ștergere (fără să modifice nimic). */
 export async function previewAccountDeletion(db: Db, userId: string): Promise<DeletionPreview> {
   const hasPassword = (await findPasswordHash(db, userId)) !== null;
+  const platformAdmin = await isAdmin(db, userId);
   const memberships = await withRlsOn(db, { userId }, (tx) => myMemberships(tx, userId));
   const states: HouseholdState[] = [];
   for (const m of memberships) {
@@ -126,6 +131,7 @@ export async function previewAccountDeletion(db: Db, userId: string): Promise<De
   }
   return {
     hasPassword,
+    platformAdmin,
     deletedHouseholds: states.filter((s) => s.members <= 1).map(({ id, name }) => ({ id, name })),
     leftHouseholds: states
       .filter((s) => s.members > 1 && !blocks(s))
@@ -133,6 +139,17 @@ export async function previewAccountDeletion(db: Db, userId: string): Promise<De
     blockedHouseholds: states.filter(blocks).map(({ id, name }) => ({ id, name })),
   };
 }
+
+async function isAdmin(db: Db, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ admin: users.isPlatformAdmin })
+    .from(users)
+    .where(eq(users.id, userId));
+  return row?.admin === true;
+}
+
+export const PLATFORM_ADMIN_MESSAGE =
+  "Ești administratorul platformei: contul tău nu se poate șterge din aplicație. Operatorul trebuie să desemneze întâi alt administrator.";
 
 async function reauthenticate(
   db: Db,
@@ -220,6 +237,9 @@ export async function deleteAccount(
   const now = deps.now ? deps.now() : new Date();
   await reauthenticate(deps.db, session, input, now);
   const userId = session.userId;
+  if (await isAdmin(deps.db, userId)) {
+    throw new AccountDeletionError("platform_admin", PLATFORM_ADMIN_MESSAGE);
+  }
 
   const { result, keys } = await deps.db.transaction(async (outer) => {
     await outer.execute(

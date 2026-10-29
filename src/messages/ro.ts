@@ -1271,6 +1271,8 @@ export const ro = {
     wrongPassword: "Parola nu e corectă.",
     reauth: "Autentifică-te din nou (deconectare și conectare), apoi reia ștergerea în 15 minute.",
     lastOwner: "Ești ultimul proprietar al unei gospodării cu alți membri: transferă întâi rolul.",
+    platformAdmin:
+      "Ești administratorul platformei: contul nu se poate șterge din aplicație. Operatorul desemnează întâi alt administrator.",
     error: "Contul nu a putut fi șters. Încearcă din nou.",
   },
   // Faza 9 (F9-B, master prompt 6.5): pagina „Statistici” a administratorului.
