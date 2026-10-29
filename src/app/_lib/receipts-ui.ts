@@ -149,3 +149,17 @@ export function receiptQueryOf(
   if (tagId && uuid.test(tagId)) out.tagId = tagId.toLowerCase();
   return out;
 }
+
+/**
+ * De ce nu se poate confirma bonul din lipsă de cont: `none` = gospodăria nu are niciun cont
+ * deschis (nearhivat); `currency` = are conturi, dar niciunul în moneda bonului; `null` = există
+ * cel puțin un cont în moneda bonului. Doar pentru interfață: serverul refuză oricum confirmarea
+ * pe un cont cu altă monedă sau arhivat.
+ */
+export function confirmBlocker(
+  accounts: readonly Readonly<{ currency: string }>[],
+  currency: string,
+): "none" | "currency" | null {
+  if (accounts.some((a) => a.currency === currency)) return null;
+  return accounts.length === 0 ? "none" : "currency";
+}
