@@ -397,3 +397,27 @@ describe("bonul lung (unire în cod, fără LLM)", () => {
     expect(r.ok && r.mismatch).toBe(true);
   });
 });
+
+describe("cotele TVA din cod = seed-ul din migrația 0009", () => {
+  it("aceleași rânduri (rată, de la, până la)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const sql = readFileSync(
+      join(process.cwd(), "src/db/migrations/0009_receipt_pipeline.sql"),
+      "utf8",
+    );
+    const rows = [
+      ...sql.matchAll(
+        /\('RO', (\d+), date '(\d{4}-\d{2}-\d{2})', (null|date '(\d{4}-\d{2}-\d{2})')\)/g,
+      ),
+    ].map((m) => ({
+      rateBp: Number(m[1]),
+      validFrom: m[2]!,
+      validTo: m[4] ?? null,
+    }));
+    const key = (r: { rateBp: number; validFrom: string }) => `${r.rateBp}|${r.validFrom}`;
+    expect(rows.sort((a, b) => key(a).localeCompare(key(b)))).toEqual(
+      [...RO_VAT_RATES_FALLBACK].sort((a, b) => key(a).localeCompare(key(b))),
+    );
+  });
+});
