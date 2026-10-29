@@ -15,6 +15,8 @@ import {
   flushScans,
   isQuotaError,
   nextDue,
+  outcomeOf,
+  ownerHeaders,
   purgeForeign,
   retryNow,
   uploadForm,
@@ -170,7 +172,13 @@ describe("sincronizarea", () => {
       s.id === a.id ? response(201) : ({ kind: "network" } as const),
     );
     const result = await flushScans(store, deps(upload));
-    expect(result).toEqual({ uploaded: 1, waiting: 1, failed: 0, needsAuth: false });
+    expect(result).toEqual({
+      uploaded: 1,
+      waiting: 1,
+      failed: 0,
+      needsAuth: false,
+      ownerStale: false,
+    });
     const [left] = await store.list();
     expect(left).toMatchObject({ id: b.id, state: "pending", attempts: 1, nextAttemptAt: 12_000 });
     expect(left!.errorCode).toBe("offline_network");
@@ -273,5 +281,78 @@ describe("sincronizarea", () => {
     expect((await store.list()).map((s) => s.id).sort()).toEqual(
       [keep.id, keepOtherHousehold.id].sort(),
     );
+  });
+});
+
+describe("proprietarul impus de server (409 owner_mismatch)", () => {
+  const deps = (upload: (s: QueuedScan) => Promise<UploadOutcome>) => ({
+    owner: ANA,
+    now: () => 10_000,
+    upload,
+  });
+  const mismatch = (reason: string) =>
+    outcomeOf(409, { error: { code: "owner_mismatch", message: "x", reason } });
+
+  it("fiecare încărcare trimite utilizatorul și gospodăria intrării", () => {
+    const s = scan();
+    expect(ownerHeaders(s)).toEqual({
+      "X-FINET-Expected-User": ANA.userId,
+      "X-FINET-Expected-Household": ANA.householdId,
+    });
+  });
+
+  it("răspunsul → codul cozii: reason pentru conflicte, owner_mismatch după reason, doar [a-z_]", () => {
+    expect(mismatch("user")).toEqual({
+      kind: "response",
+      status: 409,
+      code: "owner_user_mismatch",
+    });
+    expect(mismatch("household")).toEqual({
+      kind: "response",
+      status: 409,
+      code: "owner_household_mismatch",
+    });
+    expect(outcomeOf(409, { error: { code: "conflict", reason: "daily_document_limit" } })).toEqual(
+      { kind: "response", status: 409, code: "daily_document_limit" },
+    );
+    expect(outcomeOf(413, { error: { code: "file_too_large" } })).toMatchObject({
+      code: "file_too_large",
+    });
+    expect(outcomeOf(500, { error: { code: "<script>" } })).toMatchObject({ code: null });
+    expect(outcomeOf(502, null)).toMatchObject({ code: null });
+    expect(decide(mismatch("user"), 1)).toEqual({ action: "foreign", sameUser: false });
+    expect(decide(mismatch("household"), 1)).toEqual({ action: "foreign", sameUser: true });
+  });
+
+  it("alt utilizator → intrarea se șterge, nu se retrimite, trecerea se oprește", async () => {
+    const store = new MemoryScanStore();
+    const a = scan();
+    const b = scan();
+    await store.put(a);
+    await store.put(b);
+    const upload = vi.fn(async () => mismatch("user"));
+    const result = await flushScans(store, deps(upload));
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(result.ownerStale).toBe(true);
+    expect((await store.list()).map((s) => s.id)).toEqual([b.id]);
+  });
+
+  it("aceeași persoană, altă gospodărie activă → păstrată (pentru după comutare), fără retrimitere imediată", async () => {
+    const store = new MemoryScanStore();
+    const a = scan();
+    await store.put(a);
+    const upload = vi.fn(async () => mismatch("household"));
+    const result = await flushScans(store, deps(upload));
+    expect(result.ownerStale).toBe(true);
+    const [kept] = await store.list();
+    expect(kept).toMatchObject({
+      id: a.id,
+      state: "pending",
+      errorCode: "owner_household_mismatch",
+      nextAttemptAt: 12_000,
+    });
+    // Nu e scadentă imediat: a doua trecere în același moment nu o retrimite.
+    await flushScans(store, deps(upload));
+    expect(upload).toHaveBeenCalledTimes(1);
   });
 });

@@ -136,6 +136,13 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
       description: q.description,
       schema: strip(requestSchema(q.schema)),
     })),
+    ...(op.headers ?? []).map((h) => ({
+      name: h.name,
+      in: "header",
+      required: false,
+      description: h.description,
+      schema: { type: "string", maxLength: 64 },
+    })),
     { $ref: "#/components/parameters/FinetClient" },
   ];
   if (op.idempotent) parameters.push({ $ref: "#/components/parameters/IdempotencyKey" });

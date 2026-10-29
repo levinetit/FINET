@@ -102,6 +102,8 @@ export type Operation = Readonly<{
   summary: string;
   description?: string;
   query?: readonly QueryParam[];
+  /** Antete opționale specifice operației (Faza 9: proprietarul așteptat la încărcare). */
+  headers?: readonly Readonly<{ name: string; description: string }>[];
   /** Corpul JSON (dacă există). `optional`: se poate trimite fără corp și fără Content-Type. */
   body?: Readonly<{ schema: z.ZodType; optional?: boolean }>;
   /** Corpul `multipart/form-data` (încărcarea documentelor, Faza 6): câmpuri text + fișiere. */
@@ -849,7 +851,19 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "documents",
     summary: "Încarcă 1–4 bonuri (poze JPEG/PNG/WebP sau PDF), opțional ca bon lung.",
     description:
-      "`multipart/form-data`, citit în flux. Tipul se detectează după conținut (nu după extensie sau `Content-Type`); HEIC/HEIF → 415 `heic_unsupported`; SVG/HTML/alte tipuri → 415. Plafoane: `MAX_UPLOAD_MB` pe fișier (implicit 10), ≤ 4 fișiere, pixeli, pagini PDF. Același fișier (SHA-256) → documentul existent (`duplicate: true`, 200), fără limită. Limita zilnică (409 `daily_document_limit`), cota (409 `storage_quota_exceeded`), bon lung cu o poză deja încărcată (409 `long_receipt_duplicate`), extrase (400, Faza 7). Starea inițială: `queued` cu consimțământul `externalAi`, altfel `awaiting_consent`. Ruta e exclusă din proxy-ul Next (ca fluxul să nu fie copiat în memorie), cu aceeași verificare Cloudflare Access. Fără `Idempotency-Key`: idempotentă prin SHA-256. Limită proprie de cereri (429).",
+      "`multipart/form-data`, citit în flux. Tipul se detectează după conținut (nu după extensie sau `Content-Type`); HEIC/HEIF → 415 `heic_unsupported`; SVG/HTML/alte tipuri → 415. Plafoane: `MAX_UPLOAD_MB` pe fișier (implicit 10), ≤ 4 fișiere, pixeli, pagini PDF. Același fișier (SHA-256) → documentul existent (`duplicate: true`, 200), fără limită. Limita zilnică (409 `daily_document_limit`), cota (409 `storage_quota_exceeded`), bon lung cu o poză deja încărcată (409 `long_receipt_duplicate`), extrase (400, Faza 7). Starea inițială: `queued` cu consimțământul `externalAi`, altfel `awaiting_consent`. Ruta e exclusă din proxy-ul Next (ca fluxul să nu fie copiat în memorie), cu aceeași verificare Cloudflare Access. Fără `Idempotency-Key`: idempotentă prin SHA-256 (și reîncercarea exactă a unui bon lung → 200 duplicat). Faza 9 (coada offline): cu `X-FINET-Expected-User` și/sau `X-FINET-Expected-Household`, ambele trebuie să coincidă cu utilizatorul sesiunii și cu gospodăria curentă, altfel 409 `owner_mismatch` (`reason`: `user` sau `household`), înainte de citirea corpului; fără ele nu se verifică nimic în plus. Limită proprie de cereri (429).",
+    headers: [
+      {
+        name: "X-FINET-Expected-User",
+        description:
+          "Opțional (coada offline): id-ul utilizatorului care a făcut scanarea. Dacă unul dintre antetele `X-FINET-Expected-*` e prezent, ambele sunt impuse; nepotrivire → 409 `owner_mismatch` (`reason: user`).",
+      },
+      {
+        name: "X-FINET-Expected-Household",
+        description:
+          "Opțional (coada offline): gospodăria în care a fost făcută scanarea; diferită de gospodăria curentă → 409 `owner_mismatch` (`reason: household`).",
+      },
+    ],
     multipart: {
       description: "Câmpurile text înaintea fișierelor.",
       fields: {

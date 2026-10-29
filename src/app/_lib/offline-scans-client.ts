@@ -18,6 +18,8 @@ import {
   isOwnedBy,
   isQuotaError,
   nextDue,
+  outcomeOf,
+  ownerHeaders,
   purgeForeign,
   retryNow,
   uploadForm,
@@ -51,7 +53,8 @@ export type EnqueueResult = Readonly<{ ok: true }> | Readonly<{ ok: false; code:
 const EMPTY: OfflineSnapshot = { available: false, scans: [], syncing: false, needsAuth: false };
 
 async function uploadScan(scan: QueuedScan, sink: (docs: UploadedDocuments) => void) {
-  const headers: Record<string, string> = {};
+  // Proprietarul așteptat: serverul refuză (409 `owner_mismatch`) dacă sesiunea s-a schimbat.
+  const headers: Record<string, string> = { ...ownerHeaders(scan) };
   const client = clientHeaderFor("/api/v1/documents");
   if (client) headers[CLIENT_HEADER_NAME] = client;
   let response: Response;
@@ -68,12 +71,32 @@ async function uploadScan(scan: QueuedScan, sink: (docs: UploadedDocuments) => v
   }
   const body = (await response.json().catch(() => null)) as {
     data?: { documents?: UploadedDocuments };
-    error?: { code?: unknown; reason?: unknown };
   } | null;
   if (response.ok && Array.isArray(body?.data?.documents)) sink(body.data.documents);
-  const raw = body?.error?.reason ?? body?.error?.code;
-  const code = typeof raw === "string" && /^[a-z_]{1,64}$/.test(raw) ? raw : null;
-  return { kind: "response", status: response.status, code } satisfies UploadOutcome;
+  return outcomeOf(response.status, body);
+}
+
+/**
+ * Proprietarul sesiunii, citit de la server (`GET /api/v1/me`: utilizatorul și gospodăria
+ * curentă, aceeași regulă ca la încărcare). `auth` = sesiune expirată; `null` = necunoscut
+ * (rețea, eroare): nu se încarcă nimic în trecerea aceasta.
+ */
+async function sessionOwner(): Promise<Owner | "auth" | null> {
+  try {
+    const response = await fetch("/api/v1/me", { credentials: "same-origin", cache: "no-store" });
+    if (response.status === 401 || response.status === 403) return "auth";
+    if (!response.ok) return null;
+    const body = (await response.json()) as {
+      data?: { user?: { id?: unknown }; household?: { id?: unknown } | null };
+    };
+    const userId = body.data?.user?.id;
+    const householdId = body.data?.household?.id;
+    return typeof userId === "string" && typeof householdId === "string"
+      ? { userId, householdId }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 class OfflineScans {
@@ -250,15 +273,31 @@ class OfflineScans {
   /** O trecere prin coadă (ignorată dacă alta rulează deja în filă sau în altă filă). */
   async flush(): Promise<void> {
     const store = this.store;
-    const owner = this.owner;
-    if (!store || !owner || this.flushing) return;
+    const initial = this.owner;
+    if (!store || !initial || this.flushing) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    let owner: Owner = initial;
     this.flushing = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     const run = async () => {
       this.emit({ syncing: true });
       try {
+        // Înainte de fiecare trecere: proprietarul sesiunii, recitit de la server (între timp se
+        // poate comuta gospodăria în altă filă sau se poate autentifica alt cont).
+        const current = await sessionOwner();
+        if (current === "auth") {
+          this.emit({ needsAuth: true });
+          return;
+        }
+        if (!current) return;
+        if (current.userId !== owner.userId || current.householdId !== owner.householdId) {
+          this.owner = current;
+          if (current.userId !== owner.userId) {
+            await purgeForeign(store, current.userId, Date.now());
+          }
+          owner = current;
+        }
         const result = await flushScans(store, {
           owner,
           now: () => Date.now(),
@@ -266,6 +305,15 @@ class OfflineScans {
             uploadScan(scan, (docs) => this.uploadListeners.forEach((fn) => fn(docs))),
         });
         this.emit({ needsAuth: result.needsAuth });
+        if (result.ownerStale) {
+          // Serverul a refuzat ca „străină” o intrare: proprietarul se recitește la trecerea următoare.
+          const fresh = await sessionOwner();
+          if (fresh && fresh !== "auth") {
+            if (fresh.userId !== owner.userId) await purgeForeign(store, fresh.userId, Date.now());
+            this.owner = fresh;
+            owner = fresh;
+          }
+        }
       } catch {
         // depozit indisponibil: următoarea ocazie
       }

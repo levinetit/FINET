@@ -25,6 +25,8 @@ describe.skipIf(!TEST_ADMIN_URL)("încărcarea documentelor prin handler (F6-A)"
   let env: DocumentsApiDeps;
   let A: Sessions;
   let root: string;
+  let anaId: string;
+  let anaHousehold: string;
 
   const send = async (
     parts: Parameters<typeof multipartRequest>[0],
@@ -44,13 +46,15 @@ describe.skipIf(!TEST_ADMIN_URL)("încărcarea documentelor prin handler (F6-A)"
       storage: new LocalStorage(root),
       limits: { mutations: { max: 100_000, windowSeconds: 60 } },
     };
-    await createUserWithHousehold(fx.db, {
+    const ana = await createUserWithHousehold(fx.db, {
       email: "ana@exemplu.ro",
       name: "Ana",
       password: PASS,
       firstUserBecomesAdmin: false,
       emailVerified: true,
     });
+    anaId = ana.userId;
+    anaHousehold = ana.householdId!;
     A = await sessionsFor(auth, "ana@exemplu.ro", PASS);
   });
   afterAll(async () => {
@@ -114,5 +118,40 @@ describe.skipIf(!TEST_ADMIN_URL)("încărcarea documentelor prin handler (F6-A)"
     );
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toMatch(/^\d+$/);
+  });
+
+  it("Faza 9: proprietarul așteptat (coada offline) — potrivire, alt utilizator, altă gospodărie, lipsă", async () => {
+    const auth = { authorization: `Bearer ${A.bearer}` };
+    const other = "7d5c0f8e-1b2a-4c3d-9e8f-0a1b2c3d4e5f";
+    const owner = (user: string | null, household: string | null) => ({
+      ...auth,
+      ...(user === null ? {} : { "X-FINET-Expected-User": user }),
+      ...(household === null ? {} : { "X-FINET-Expected-Household": household }),
+    });
+    const before = (await readdir(root, { recursive: true })).length;
+    for (const [headers, reason] of [
+      [owner(other, anaHousehold), "user"],
+      [owner(anaId, other), "household"],
+      [owner(anaId, null), "household"],
+      [owner(null, anaHousehold), "user"],
+      [owner("nu-e-uuid", anaHousehold), "user"],
+    ] as const) {
+      const r = await send([["files", await receiptLikeImage({ seed: 50 })]], headers);
+      expect([r.status, r.body.error?.code, r.body.error?.reason]).toEqual([
+        409,
+        "owner_mismatch",
+        reason,
+      ]);
+    }
+    // Respins înainte de stocare: niciun fișier nou.
+    expect((await readdir(root, { recursive: true })).length).toBe(before);
+    // Potrivire (inclusiv majuscule) → încărcat; fără antete → comportamentul vechi.
+    const ok = await send(
+      [["files", await receiptLikeImage({ seed: 51 })]],
+      owner(anaId.toUpperCase(), anaHousehold),
+    );
+    expect(ok.status).toBe(201);
+    const legacy = await send([["files", await receiptLikeImage({ seed: 52 })]], auth);
+    expect(legacy.status).toBe(201);
   });
 });

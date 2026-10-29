@@ -52,11 +52,14 @@ HTML static (`src/pwa/offline-page.ts`, ruta `src/app/offline/route.ts`), în ro
 |---|---|
 | 2xx (201 nou; 200 duplicat) | ștergere locală |
 | 401, 403 (sesiune sau Access expirate) | rămâne; trecerea se oprește, mesaj „autentifică-te” |
+| 409 `owner_mismatch` `reason: user` | ștergere locală (alt cont); trecerea se oprește, proprietarul se recitește |
+| 409 `owner_mismatch` `reason: household` | rămâne (pentru după comutare), fără retrimitere imediată; trecerea se oprește |
 | rețea, 408, 429, 5xx | rămâne; reîncercare la 2 s, 4 s, 8 s … ≤ 5 min |
 | 409 `daily_document_limit` | rămâne; reîncercare peste o oră |
 | 400, 404, 409 (cota, bon lung parțial duplicat), 413, 415, 422 | „Nu a putut fi încărcat”, cu motivul; „Reîncearcă” / „Șterge” |
 
 - **Fără `Idempotency-Key`:** încărcarea documentelor e idempotentă prin SHA-256 (ADR 0013), deci o retrimitere după un răspuns pierdut întoarce 200 `duplicate: true`. Pentru bonul lung, serverul răspundea 409 `long_receipt_duplicate`; F9-A adaugă **reîncercarea exactă**: aceleași poze, în aceeași ordine, același lot complet → 200 cu documentele existente (`created: 0`, același `batchId`); orice altă suprapunere rămâne 409 (`src/modules/documents/documents.service.ts`, `exactLongReceiptBatch`, testat pe PostgreSQL).
+- **Proprietarul impus de server (constatarea revizuirii F9-A):** filtrul din client nu ajunge (sesiunea sau gospodăria activă se pot schimba între salvare și trimitere: alt cont, comutare în altă filă). Fiecare încărcare din coadă trimite `X-FINET-Expected-User` și `X-FINET-Expected-Household`; `POST /api/v1/documents` le compară cu utilizatorul sesiunii și cu gospodăria curentă ÎNAINTE de citirea corpului și de stocare și răspunde 409 `owner_mismatch` (`reason: user|household`) la nepotrivire. Antetele sunt opționale (încărcarea online și clienții existenți nu se schimbă), dar impuse când există unul. Clientul: `reason: user` → intrarea se șterge (pozele altui cont nu rămân), `reason: household` → se păstrează (încărcare după comutare), fără retrimitere imediată; în ambele cazuri trecerea se oprește și proprietarul se recitește. În plus, înaintea fiecărei treceri clientul recitește proprietarul de la server (`GET /api/v1/me`: utilizatorul și gospodăria curentă, aceeași regulă `currentHouseholdIdOf` ca la încărcare); 401/403 → „autentifică-te”, eroare → nicio încărcare în trecerea aceea.
 - **Confidențialitate (decizia mea):** fiecare intrare poartă `userId` și `householdId`; se încarcă DOAR când ambele coincid cu sesiunea (gospodăria activă). La pornire se șterg intrările altor utilizatori; intrările aceluiași utilizator pentru altă gospodărie rămân (vizibile, cu „Șterge”; se încarcă după comutarea înapoi). La **deconectare** baza `finet-offline` se șterge complet (`deleteDatabase`). Pozele nu trec prin cache-ul SW.
 
 ### 5. Instalare și ghid

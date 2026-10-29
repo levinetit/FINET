@@ -1196,6 +1196,8 @@ export const ro = {
       offline_auth: "Autentifică-te din nou ca să se încarce.",
       daily_document_limit: "Limita de documente pe azi a fost atinsă; se reîncearcă mai târziu.",
       storage_quota_exceeded: "Spațiul de stocare al gospodăriei e plin.",
+      owner_household_mismatch:
+        "Scanarea a fost făcută în altă gospodărie: comută gospodăria ca să o încarci.",
       long_receipt_duplicate:
         "Una dintre poze a mai fost încărcată; bonul lung se încarcă din poze noi.",
     } as Record<string, string>,

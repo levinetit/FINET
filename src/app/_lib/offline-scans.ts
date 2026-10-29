@@ -15,7 +15,10 @@
  *   cu motivul și acțiunile „Reîncearcă” / „Șterge”;
  * - 401/403 (sesiune sau Access expirate): intrarea rămâne, sincronizarea se oprește până la
  *   următorul prilej (reconectare, deschiderea paginii);
- * - rețea, 429 și 5xx: reîncercare cu pauză crescătoare (2 s … 5 min).
+ * - rețea, 429 și 5xx: reîncercare cu pauză crescătoare (2 s … 5 min);
+ * - fiecare încărcare trimite proprietarul așteptat (`X-FINET-Expected-User` /
+ *   `X-FINET-Expected-Household`); serverul îl impune (409 `owner_mismatch`), deci o sesiune sau
+ *   o gospodărie schimbate între salvare și trimitere nu pot muta pozele în alt loc.
  */
 
 export const OFFLINE_DB_NAME = "finet-offline";
@@ -134,6 +137,8 @@ export type Decision =
   | Readonly<{ action: "delete" }>
   | Readonly<{ action: "retry"; delayMs: number; code: string }>
   | Readonly<{ action: "auth" }>
+  /** 409 `owner_mismatch` (ADR 0020): intrarea nu aparține sesiunii curente; nu se retrimite. */
+  | Readonly<{ action: "foreign"; sameUser: boolean }>
   | Readonly<{ action: "fail"; code: string }>;
 
 /** Ce face coada după un răspuns (tabelul din ADR 0020, testat cod cu cod). */
@@ -144,6 +149,11 @@ export function decide(outcome: UploadOutcome, attempts: number): Decision {
   const { status, code } = outcome;
   if (status >= 200 && status < 300) return { action: "delete" };
   if (status === 401 || status === 403) return { action: "auth" };
+  if (status === 409 && code === "owner_user_mismatch")
+    return { action: "foreign", sameUser: false };
+  if (status === 409 && code === "owner_household_mismatch") {
+    return { action: "foreign", sameUser: true };
+  }
   if (status === 429 || status === 408 || status >= 500) {
     return { action: "retry", delayMs: backoffDelay(attempts), code: "offline_server" };
   }
@@ -165,6 +175,11 @@ export type FlushResult = Readonly<{
   failed: number;
   /** Sesiunea sau Access au expirat: sincronizarea s-a oprit. */
   needsAuth: boolean;
+  /**
+   * Serverul a respins o intrare ca „străină” (`owner_mismatch`): proprietarul cunoscut de client e
+   * învechit (alt cont sau altă gospodărie activă); trecerea s-a oprit, proprietarul se recitește.
+   */
+  ownerStale: boolean;
 }>;
 
 /**
@@ -183,6 +198,7 @@ export async function purgeForeign(store: ScanStore, userId: string, now: number
 export async function flushScans(store: ScanStore, deps: FlushDeps): Promise<FlushResult> {
   let uploaded = 0;
   let needsAuth = false;
+  let ownerStale = false;
   for (const scan of await store.list()) {
     if (!isOwnedBy(scan, deps.owner) || scan.state !== "pending") continue;
     if (scan.nextAttemptAt > deps.now()) continue;
@@ -201,6 +217,21 @@ export async function flushScans(store: ScanStore, deps: FlushDeps): Promise<Flu
       await store.put({ ...scan, attempts, errorCode: "offline_auth" });
       needsAuth = true;
       break;
+    } else if (decision.action === "foreign") {
+      // Alt utilizator → pozele lui nu rămân aici; aceeași persoană, altă gospodărie → se păstrează
+      // pentru încărcarea după comutarea înapoi. În ambele cazuri: fără retrimitere acum.
+      if (decision.sameUser) {
+        await store.put({
+          ...scan,
+          attempts,
+          nextAttemptAt: deps.now() + backoffDelay(attempts),
+          errorCode: "owner_household_mismatch",
+        });
+      } else {
+        await store.remove(scan.id);
+      }
+      ownerStale = true;
+      break;
     } else if (decision.action === "retry") {
       await store.put({
         ...scan,
@@ -218,6 +249,7 @@ export async function flushScans(store: ScanStore, deps: FlushDeps): Promise<Flu
     waiting: rest.filter((s) => s.state === "pending").length,
     failed: rest.filter((s) => s.state === "failed").length,
     needsAuth,
+    ownerStale,
   };
 }
 
@@ -232,6 +264,37 @@ export function nextDue(scans: readonly QueuedScan[], owner: Owner): number | nu
 /** „Reîncearcă” pe o intrare cu eroare: înapoi în așteptare, scadentă imediat. */
 export function retryNow(scan: QueuedScan, now: number): QueuedScan {
   return { ...scan, state: "pending", nextAttemptAt: now, errorCode: null };
+}
+
+/** Antetele proprietarului așteptat (impuse de `POST /api/v1/documents`, ADR 0020). */
+export const EXPECTED_USER_HEADER = "X-FINET-Expected-User";
+export const EXPECTED_HOUSEHOLD_HEADER = "X-FINET-Expected-Household";
+
+export function ownerHeaders(scan: QueuedScan): Record<string, string> {
+  return {
+    [EXPECTED_USER_HEADER]: scan.userId,
+    [EXPECTED_HOUSEHOLD_HEADER]: scan.householdId,
+  };
+}
+
+/**
+ * Răspunsul serverului → rezultatul văzut de coadă: codul afișat e `reason` (conflictele) sau
+ * `code`; `owner_mismatch` devine `owner_user_mismatch` / `owner_household_mismatch` după
+ * `reason`. Doar coduri `[a-z_]` (fără text venit de la server).
+ */
+export function outcomeOf(status: number, body: unknown): UploadOutcome {
+  const error = (body as { error?: { code?: unknown; reason?: unknown } } | null)?.error;
+  const valid = (v: unknown) => (typeof v === "string" && /^[a-z_]{1,64}$/.test(v) ? v : null);
+  const code = valid(error?.code);
+  const reason = valid(error?.reason);
+  if (code === "owner_mismatch") {
+    return {
+      kind: "response",
+      status,
+      code: reason === "household" ? "owner_household_mismatch" : "owner_user_mismatch",
+    };
+  }
+  return { kind: "response", status, code: reason ?? code };
 }
 
 /** Corpul cererii: exact ce trimite încărcarea online (`kind`, `longReceipt`, `files`). */
