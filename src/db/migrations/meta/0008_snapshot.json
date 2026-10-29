@@ -1384,7 +1384,7 @@
       "checkConstraints": {
         "product_aliases_normalized_name_length": {
           "name": "product_aliases_normalized_name_length",
-          "value": "char_length(\"finet\".\"product_aliases\".\"normalized_name\") between 1 and 300 and \"finet\".\"product_aliases\".\"normalized_name\" = btrim(\"finet\".\"product_aliases\".\"normalized_name\")"
+          "value": "char_length(\"finet\".\"product_aliases\".\"normalized_name\") >= 1 and char_length(\"finet\".\"product_aliases\".\"normalized_name\") <= 300 and \"finet\".\"product_aliases\".\"normalized_name\" = btrim(\"finet\".\"product_aliases\".\"normalized_name\")"
         },
         "product_aliases_tag_ids_count": {
           "name": "product_aliases_tag_ids_count",

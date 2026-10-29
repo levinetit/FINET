@@ -126,7 +126,7 @@ CREATE TABLE "finet"."product_aliases" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "product_aliases_household_name_key" UNIQUE("household_id","normalized_name"),
-	CONSTRAINT "product_aliases_normalized_name_length" CHECK (char_length("finet"."product_aliases"."normalized_name") between 1 and 300 and "finet"."product_aliases"."normalized_name" = btrim("finet"."product_aliases"."normalized_name")),
+	CONSTRAINT "product_aliases_normalized_name_length" CHECK (char_length("finet"."product_aliases"."normalized_name") >= 1 and char_length("finet"."product_aliases"."normalized_name") <= 300 and "finet"."product_aliases"."normalized_name" = btrim("finet"."product_aliases"."normalized_name")),
 	CONSTRAINT "product_aliases_tag_ids_count" CHECK (cardinality("finet"."product_aliases"."tag_ids") <= 10 and array_position("finet"."product_aliases"."tag_ids", null) is null)
 );
 --> statement-breakpoint

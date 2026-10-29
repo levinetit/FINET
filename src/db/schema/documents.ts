@@ -463,7 +463,7 @@ export const productAliases = finet.table(
     index("product_aliases_category_id_idx").on(t.categoryId),
     check(
       "product_aliases_normalized_name_length",
-      sql`char_length(${t.normalizedName}) between 1 and 300 and ${t.normalizedName} = btrim(${t.normalizedName})`,
+      sql`char_length(${t.normalizedName}) >= 1 and char_length(${t.normalizedName}) <= 300 and ${t.normalizedName} = btrim(${t.normalizedName})`,
     ),
     check(
       "product_aliases_tag_ids_count",
