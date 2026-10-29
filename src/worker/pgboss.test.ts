@@ -10,7 +10,7 @@ import { createRecurringRule } from "@/modules/recurring/recurring.service";
 
 import { bossOptions } from "./boss";
 import { GENERATE_CRON, JOB_GENERATE } from "./jobs";
-import { enqueueGenerateNow, startWorker } from "./main";
+import { enqueueGenerateNow, safeHandler, startWorker } from "./main";
 import {
   JOB_RECEIPT_PROCESS,
   JOB_RECEIPT_SWEEP,
@@ -38,6 +38,39 @@ describe.skipIf(!TEST_ADMIN_URL)("pg-boss ca finet_app (Postgres real)", () => {
   afterAll(async () => {
     await boss?.stop({ graceful: false, timeout: 2000 }).catch(() => {});
     await fx?.close();
+  });
+
+  it("safeHandler: eroarea cu date (de exemplu parametrii SQL) NU ajunge în pgboss.job.output", async () => {
+    await boss.createQueue("test.safe", { retryLimit: 0 });
+    const logs: Record<string, unknown>[] = [];
+    await boss.work(
+      "test.safe",
+      safeHandler(
+        "test.safe",
+        (e) => void logs.push({ ...e }),
+        async () => {
+          const inner = Object.assign(new Error("params: LIDL DISCOUNT SRL 15,50 RO22891860"), {
+            code: "22021",
+          });
+          throw Object.assign(new Error("Failed query: insert ... params: LIDL DISCOUNT"), {
+            cause: inner,
+          });
+        },
+      ),
+    );
+    const id = await boss.send("test.safe", { x: 1 });
+    let output = "";
+    for (let i = 0; i < 60 && !output; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const rows = await fx.scratch.admin<{ state: string; output: string | null }[]>`
+        select state::text, output::text from pgboss.job where id = ${id!}`;
+      if (rows[0]?.state === "failed") output = rows[0].output ?? "{}";
+    }
+    await boss.offWork("test.safe");
+    expect(output).toContain("job_failed:22021");
+    expect(output).not.toContain("LIDL");
+    expect(output).not.toContain("RO22891860");
+    expect(logs).toEqual([{ event: "job_failed", job: "test.safe", code: "22021" }]);
   });
 
   it("pornește fără migrare: schema instalată, versiunea așteptată", async () => {

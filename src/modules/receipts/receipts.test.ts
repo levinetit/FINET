@@ -421,3 +421,18 @@ describe("cotele TVA din cod = seed-ul din migrația 0009", () => {
     );
   });
 });
+
+describe("textul PDF: fără NUL și caractere de control (Postgres refuză U+0000)", () => {
+  it("cleanMultilineText păstrează rândurile; pdfTextForPrompt nu trimite NUL", async () => {
+    const { cleanMultilineText } = await import("./normalize");
+    const { pdfTextForPrompt } = await import("./prompts");
+    expect(cleanMultilineText("LIDL\u0000SRL\r\nTOTAL\t15,50\u0007", 100)).toBe(
+      "LIDLSRL\nTOTAL 15,50",
+    );
+    expect(cleanMultilineText("\u0000\u0001", 100)).toBeNull();
+    const t = pdfTextForPrompt(["A\u0000B", "C\u001fD"]);
+    expect(t.includes("\u0000")).toBe(false);
+    expect(t.includes("\u001f")).toBe(false);
+    expect(t).toContain("AB");
+  });
+});

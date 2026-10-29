@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { cleanMultilineText } from "@/modules/receipts/normalize";
+
 /**
  * Citirea PDF-ului (pdf.js prin unpdf) într-un PROCES COPIL limitat de sistemul de operare
  * (revizuirile de securitate F6-A; ADR 0013). Acesta e controlul real contra PDF-urilor ostile
@@ -262,7 +264,8 @@ export function readPdfInChild(
       if (code !== 0 || !body || filled !== body.length) {
         return reject(new PdfChildError("pdf_too_complex"));
       }
-      const text = header.text as string[];
+      // Apărare în adâncime: textul copilului e neîncrezător; fără caractere de control/NUL.
+      const text = (header.text as string[]).map(cleanPdfText);
       if (!header.images) return resolve({ pages: header.pages!, text, images: null });
       let offset = 0;
       const images = header.images.map((i) => {
@@ -273,4 +276,9 @@ export function readPdfInChild(
       resolve({ pages: header.pages!, text, images });
     });
   });
+}
+
+/** Textul unei pagini PDF: fără NUL și caractere de control (Postgres refuză U+0000). */
+export function cleanPdfText(page: string): string {
+  return cleanMultilineText(page, 1_000_000) ?? "";
 }

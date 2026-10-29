@@ -64,7 +64,12 @@ try {
   } else if (pages > maxPages) {
     write({ error: "too_many_pages" });
   } else {
-    const text = (await extractText(pdf, { mergePages: false })).text.map((t) => t.trim());
+    // Caracterele de control (NUL inclus: un ToUnicode poate mapa un cod la U+0000, pe care
+    // Postgres îl refuză în `text`) se elimină aici; `\t` și `\n` rămân. Părintele curăță din nou.
+    const CONTROL = new RegExp("[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f]", "g");
+    const text = (await extractText(pdf, { mergePages: false })).text.map((t) =>
+      String(t).replace(CONTROL, "").trim(),
+    );
     const significant = text.join("").replace(/[^\p{L}\p{N}]/gu, "").length;
     if (significant >= minTextChars) {
       write({ pages, text, images: null });

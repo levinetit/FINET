@@ -14,6 +14,28 @@ const CONTROL = new RegExp(
   "g",
 );
 
+/**
+ * Text pe mai multe rânduri (textul unui PDF, `ocr_text`): aceleași caractere eliminate ca la
+ * `cleanText` (inclusiv NUL, pe care Postgres îl refuză în `text`), dar rândurile se păstrează
+ * (`\r\n`/`\r` → `\n`, tab → spațiu). Plafonat pe puncte de cod.
+ */
+export function cleanMultilineText(
+  raw: string | null | undefined,
+  maxLength: number,
+): string | null {
+  if (typeof raw !== "string") return null;
+  const s = raw
+    .normalize("NFC")
+    .replace(/\r\n?/g, "\n")
+    .replace(CONTROL, "")
+    .replace(/[\t\u00a0\u202f]+/g, " ")
+    .replace(/ {2,}/g, " ")
+    .trim();
+  if (s === "") return null;
+  const chars = Array.from(s);
+  return chars.length > maxLength ? chars.slice(0, maxLength).join("").trimEnd() : s;
+}
+
 /** Text liber de la model → text sigur de afișat/stocat (sau `null` dacă rămâne gol). */
 export function cleanText(raw: string | null | undefined, maxLength: number): string | null {
   if (typeof raw !== "string") return null;

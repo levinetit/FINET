@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@/lib/ai";
 
 import type { CategorizeRequest } from "./categorize";
+import { cleanMultilineText } from "./normalize";
 
 /**
  * Prompturile FIXE (master prompt 3.6; ADR 0014). Textul bonului (din PDF) și numele produselor
@@ -56,7 +57,10 @@ export function receiptVisionMessages(jpegs: readonly Buffer[]): ChatMessage[] {
 
 /** Textul unui PDF, plafonat; caracterele `<`/`>` neutralizate ca delimitatorul să rămână unic. */
 export function pdfTextForPrompt(pages: readonly string[]): string {
-  const joined = pages.join("\n\n--- pagina următoare ---\n\n").replace(/[<>]/g, " ");
+  const joined = pages
+    .map((p) => cleanMultilineText(p, MAX_PDF_TEXT_CHARS) ?? "")
+    .join("\n\n--- pagina următoare ---\n\n")
+    .replace(/[<>]/g, " ");
   return joined.length > MAX_PDF_TEXT_CHARS ? joined.slice(0, MAX_PDF_TEXT_CHARS) : joined;
 }
 

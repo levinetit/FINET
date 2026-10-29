@@ -83,8 +83,36 @@ export type RunningWorker = Readonly<{ boss: PgBoss; db: Db; stop: () => Promise
 
 /** Codul unei erori, fără mesaj (mesajele Postgres pot conține valori din rânduri). */
 export function errorCode(error: unknown): string {
-  const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" && /^[A-Za-z0-9_]{1,32}$/.test(code) ? code : "unknown";
+  // Drizzle învelește eroarea driverului (`cause`); se caută codul pe cel mult 5 niveluri.
+  let e: unknown = error;
+  for (let i = 0; i < 5 && e; i++) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === "string" && /^[A-Za-z0-9_]{1,32}$/.test(code)) return code;
+    e = (e as { cause?: unknown }).cause;
+  }
+  return "unknown";
+}
+
+/**
+ * Înfășoară handlerul unui job: orice eroare devine `Error("job_failed:<cod>")`, cu un cod fix
+ * (SQLSTATE sau `unknown`), niciodată eroarea originală. pg-boss serializează eroarea aruncată în
+ * `pgboss.job.output` (fără RLS, păstrat 7 zile, în backup), iar mesajul unei erori a bazei poate
+ * conține parametrii interogării, adică date financiare (revizuirea F6-A+B).
+ */
+export function safeHandler<A extends unknown[], R>(
+  job: string,
+  log: LogFn,
+  fn: (...args: A) => Promise<R>,
+): (...args: A) => Promise<R> {
+  return async (...args: A) => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      const code = errorCode(error);
+      log({ event: "job_failed", job, code });
+      throw new Error(`job_failed:${code}`);
+    }
+  };
 }
 
 export async function startWorker(options: WorkerOptions): Promise<RunningWorker> {
@@ -110,14 +138,22 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
   });
 
   const deps = { db, log };
-  await boss.work(JOB_GENERATE, { localConcurrency: 1 }, async () => {
-    const s = await handleGenerate(deps);
-    return { rules: s.rules, generated: s.generated, failed: s.failed };
-  });
-  await boss.work(JOB_GENERATE_NOW, { localConcurrency: 1 }, async ([job]) => {
-    const r = await handleGenerateNow(deps, job?.data);
-    return "rejected" in r ? r : { rules: r.rules, generated: r.generated, failed: r.failed };
-  });
+  await boss.work(
+    JOB_GENERATE,
+    { localConcurrency: 1 },
+    safeHandler(JOB_GENERATE, log, async () => {
+      const s = await handleGenerate(deps);
+      return { rules: s.rules, generated: s.generated, failed: s.failed };
+    }),
+  );
+  await boss.work(
+    JOB_GENERATE_NOW,
+    { localConcurrency: 1 },
+    safeHandler(JOB_GENERATE_NOW, log, async ([job]: { data?: unknown }[]) => {
+      const r = await handleGenerateNow(deps, job?.data);
+      return "rejected" in r ? r : { rules: r.rules, generated: r.generated, failed: r.failed };
+    }),
+  );
 
   const receipts = options.receipts;
   if (receipts) {
@@ -134,20 +170,28 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       limits: receipts.limits,
       ai: receipts.ai,
     };
-    await boss.work(JOB_RECEIPT_SWEEP, { localConcurrency: 1 }, async () => {
-      const enqueued = await handleReceiptSweep(receiptDeps, (documentId, householdId) =>
-        boss.send(
-          JOB_RECEIPT_PROCESS,
-          { documentId, householdId },
-          { singletonKey: documentId.toLowerCase() },
-        ),
-      );
-      return { enqueued };
-    });
-    await boss.work(JOB_RECEIPT_PROCESS, { localConcurrency: 1 }, async ([job]) => {
-      const r = await handleReceiptProcess(receiptDeps, job?.data);
-      return "rejected" in r ? r : { outcome: r.outcome };
-    });
+    await boss.work(
+      JOB_RECEIPT_SWEEP,
+      { localConcurrency: 1 },
+      safeHandler(JOB_RECEIPT_SWEEP, log, async () => {
+        const enqueued = await handleReceiptSweep(receiptDeps, (documentId, householdId) =>
+          boss.send(
+            JOB_RECEIPT_PROCESS,
+            { documentId, householdId },
+            { singletonKey: documentId.toLowerCase() },
+          ),
+        );
+        return { enqueued };
+      }),
+    );
+    await boss.work(
+      JOB_RECEIPT_PROCESS,
+      { localConcurrency: 1 },
+      safeHandler(JOB_RECEIPT_PROCESS, log, async ([job]: { data?: unknown }[]) => {
+        const r = await handleReceiptProcess(receiptDeps, job?.data);
+        return "rejected" in r ? r : { outcome: r.outcome };
+      }),
+    );
   }
 
   await heartbeatStart(db);
