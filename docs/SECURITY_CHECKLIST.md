@@ -544,5 +544,6 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Exportul GDPR (`/me/export`) include listele și articolele vizibile utilizatorului (sub RLS) | IMPLEMENTAT, fără test dedicat | `src/modules/gdpr/data-export.ts` | — |
 | API: 401 fără sesiune pe toate rutele, `Idempotency-Key` la creare (replay, reutilizare cu alt corp), validare strictă, limită de rată pe comparație și sugestii, evenimente live doar tip + id (lista personală doar la proprietar), contract OpenAPI la zi (`openapi --check`) | DONE (PG17) | `shopping-api.test.ts`, `node scripts/openapi.mjs --check` | 2026-10-30 · programmer (F10-A) |
 | CSRF pe mutațiile cu cookie ale listelor | NEVERIFICAT în teste dedicate (mecanismul comun al `/api/v1`) | — | — |
-| E2E (creare listă, bifare, apariție live la al doilea utilizator, comparație cu un bon sintetic) și axe pe paginile noi | NOT RUN local (CI) | `e2e/shopping.spec.ts` (de scris) | — |
+| E2E (creare listă din interfață, bifare la raft cu persistență, izolarea listei personale între gospodării, comparație cu un bon sintetic confirmat, zero încălcări CSP); actualizarea live între doi membri e acoperită doar de testul de integrare `shopping-api.test.ts` | SCRIS, NOT RUN local (CI) | `e2e/shopping.spec.ts` | — |
+| Axe pe paginile `/shopping-lists` | NEFĂCUT (nu e în `e2e/a11y.spec.ts`) | — | — |
 | Revizuirea `security` a F10-A | TODO | agentul `security` | — |

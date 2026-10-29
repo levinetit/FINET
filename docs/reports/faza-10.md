@@ -30,7 +30,7 @@ Mediu: `node:24` în container (`--memory` 400–850 MB), PostgreSQL 17 efemer `
 | `sh ops/docker/test-env-examples.sh` | PASS |
 | `tsc --noEmit` pe un tsconfig temporar cu fișierele F10-A (fără teste și E2E) | PASS |
 | `prettier --check` pe fișierele atinse | PASS |
-| E2E Playwright (`e2e/shopping.spec.ts`) | NOT RUN local (cere `next build`, nepermis pe host); în CI |
+| E2E Playwright (`e2e/shopping.spec.ts`: listă nouă + bifare, izolare listă personală, comparație cu bon sintetic, CSP) | SCRIS; `tsc` PASS pe spec; NOT RUN local (cere `next build`, nepermis pe host); în CI |
 | `eslint`, `pnpm test` complet, `next build` | NOT RUN local (memorie); în CI |
 
 ### 3. Decizia mea
@@ -42,7 +42,7 @@ Mediu: `node:24` în container (`--memory` 400–850 MB), PostgreSQL 17 efemer `
 
 ### 4. Puncte deschise
 
-- E2E (`e2e/shopping.spec.ts`) și axe pe paginile noi: de rulat în CI.
+- E2E (`e2e/shopping.spec.ts`): scris, nerulat; de validat în CI. Actualizarea live între doi membri nu are E2E (doar testul de integrare). Axe pe paginile noi: neadăugat în `e2e/a11y.spec.ts`.
 - Revizuirea `security` pentru F10-A; CSRF pe mutațiile listelor nu are test dedicat (mecanism comun al `/api/v1`).
 - Exportul GDPR include listele (`data-export.ts`), dar fără test dedicat.
 - Evaluarea calității potrivirii pe bonuri reale ale operatorului (în afara repo-ului): neîncepută.

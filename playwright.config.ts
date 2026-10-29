@@ -188,6 +188,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
+      // Listele de cumpărături (Faza 10, F10-A): utilizatorii `shopping` și `shopping2`; bonul
+      // confirmat este SINTETIC, inserat direct în baza de test (fără worker sau AI).
+      name: "shopping",
+      testMatch: /shopping\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // Doar fixture-ul `request`: nu pornește niciun browser.
       name: "access",
       testMatch: /access\.spec\.ts$/,
