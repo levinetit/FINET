@@ -18,7 +18,7 @@
 --
 -- Rollback (manual, de operator; după rollback ștergerea contului din aplicație nu mai merge):
 --   drop function finet.erase_current_user(), finet.aggregate_app_events(integer),
---     finet.usage_stats(boolean);
+--     finet.usage_stats(boolean), finet.existing_households(uuid[]);
 --   drop policy accounts_migrator_erase_select, accounts_migrator_erase_delete on finet.accounts;
 --   drop policy transactions_migrator_erase_select, transactions_migrator_erase_update,
 --     transactions_migrator_erase_delete on finet.transactions;
@@ -439,8 +439,24 @@ create function finet.usage_stats(p_include_members boolean) returns jsonb
   end
   $$;
 --> statement-breakpoint
+-- ---------------------------------------------------------------------------------------------
+-- Fișierele orfane (revizuirea F9): comanda `finet-admin cleanup-orphan-storage` află care dintre
+-- directoarele `households/<id>/` din storage NU mai au gospodărie în bază (o ștergere de cont al
+-- cărei pas „fișiere după commit” a eșuat). `finet_app` nu vede gospodăriile în care nu e membru
+-- (RLS), deci funcția (proprietarul citește `households` prin politica `households_migrator_read`)
+-- întoarce DOAR id-urile primite care EXISTĂ, cel mult 1000 pe apel (doar identificatori).
+-- ---------------------------------------------------------------------------------------------
+create function finet.existing_households(p_ids uuid[]) returns setof uuid
+  language sql stable security definer
+  set search_path = pg_catalog
+  as $$
+    select h.id
+      from finet.households h
+     where h.id = any (p_ids[1:1000])
+  $$;
+--> statement-breakpoint
 revoke all on function finet.erase_current_user(), finet.aggregate_app_events(integer),
-  finet.usage_stats(boolean) from public;
+  finet.usage_stats(boolean), finet.existing_households(uuid[]) from public;
 --> statement-breakpoint
 grant execute on function finet.erase_current_user(), finet.aggregate_app_events(integer),
-  finet.usage_stats(boolean) to finet_app;
+  finet.usage_stats(boolean), finet.existing_households(uuid[]) to finet_app;

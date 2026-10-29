@@ -15,6 +15,7 @@ import {
   resetPasswordByEmail,
 } from "@/modules/auth/users.service";
 import { LocalStorage, type Storage } from "@/lib/storage";
+import { OrphanSafetyError, cleanupOrphanStorage } from "@/modules/documents/orphans";
 import { expireDocumentFiles } from "@/modules/documents/retention";
 import { purgeIdempotencyKeys } from "@/modules/idempotency/idempotency";
 import { aggregateOldAppEvents } from "@/modules/usage/stats";
@@ -28,6 +29,12 @@ import { aggregateOldAppEvents } from "@/modules/usage/stats";
  *   admin.mjs add-member --household <id> --email <email> [--role member|owner]
  *   admin.mjs cleanup-idempotency
  *   admin.mjs aggregate-events
+ *   admin.mjs cleanup-orphan-storage [--yes] [--limit <n>]
+ *
+ * `cleanup-orphan-storage` (revizuirea F9, ADR 0021): directoarele `households/<id>/` din
+ * `STORAGE_DIR` fără gospodărie în bază (fișiere rămase după o ștergere de cont eșuată la pasul
+ * fișierelor). Implicit doar raport; `--yes` le șterge, cel mult `--limit` (implicit 100, max
+ * 1000). Fără `STORAGE_DIR` montat nu atinge nimic. Ieșirea: doar contoare.
  *
  * `aggregate-events` (F9-B, ADR 0021): retenția evenimentelor de utilizare (6.5): cele mai vechi
  * de 13 luni se agregă pe zi/versiune/platformă (`finet.aggregate_app_events`) și se șterg; scrie
@@ -64,6 +71,7 @@ const USAGE = [
   "  admin cleanup-idempotency",
   "  admin cleanup-documents [--temp-hours <ore>]",
   "  admin aggregate-events",
+  "  admin cleanup-orphan-storage [--yes] [--limit <n>]",
   "Parola se citește din stdin cu --password-stdin; altfel se generează și se afișează o dată.",
 ].join("\n");
 
@@ -82,8 +90,9 @@ const COMMANDS: Readonly<Record<string, readonly string[]>> = {
   "cleanup-idempotency": [],
   "cleanup-documents": ["temp-hours"],
   "aggregate-events": [],
+  "cleanup-orphan-storage": ["yes", "limit"],
 };
-const BOOLEAN_FLAGS = new Set(["password-stdin"]);
+const BOOLEAN_FLAGS = new Set(["password-stdin", "yes"]);
 
 export function parseArgs(argv: readonly string[]): { command: string; flags: Flags } {
   const [command, ...rest] = argv;
@@ -263,6 +272,40 @@ export async function main(io: AdminIo): Promise<number> {
           (mounted ? "" : " storage=empty"),
       );
       return r.failed > 0 ? 1 : 0;
+    }
+
+    if (command === "cleanup-orphan-storage") {
+      const raw = flags.limit;
+      if (
+        typeof raw === "string" &&
+        (!/^[0-9]{1,4}$/.test(raw) || Number(raw) < 1 || Number(raw) > 1000)
+      ) {
+        throw new UsageError("--limit: un număr întreg 1–1000");
+      }
+      const dir = io.env.STORAGE_DIR?.trim();
+      if (!dir || !isDirectory(dir)) {
+        io.err("finet-admin: STORAGE_DIR lipsește sau nu e montat");
+        return 1;
+      }
+      try {
+        const r = await cleanupOrphanStorage({
+          db,
+          storageDir: dir,
+          apply: flags.yes === true,
+          limit: typeof raw === "string" ? Number(raw) : undefined,
+        });
+        io.out(
+          `scanned=${r.scanned} orphans=${r.orphans} deleted=${r.deleted} skipped=${r.skipped}` +
+            (flags.yes === true ? "" : " dry_run=1"),
+        );
+        return 0;
+      } catch (error) {
+        if (error instanceof OrphanSafetyError) {
+          io.err(`finet-admin: refuz: ${error.message}`);
+          return 1;
+        }
+        throw error;
+      }
     }
 
     if (command === "aggregate-events") {

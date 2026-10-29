@@ -334,14 +334,14 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "me",
     summary: "Exportul complet al datelor contului: arhivă ZIP în flux.",
     description:
-      "JSON (profil, preferințe, consimțăminte, sesiuni fără tokenuri, instalări, evenimente; pe fiecare gospodărie: conturi, categorii, etichete, tranzacții și în CSV, bugete, obiective, recurențe, bonurile încărcate de utilizator cu liniile lor, împărțirile și decontările în care e parte, acțiunile lui din audit) și fișierele originale ale bonurilor lui. Doar ce vede utilizatorul (RLS: conturile personale ale altor membri nu apar). Fără parole, tokenuri sau chei. Cu cookie: doar `Sec-Fetch-Site: same-origin` sau `none` (altfel 403); 3 exporturi pe oră.",
+      "JSON (profil, preferințe, consimțăminte, sesiuni fără tokenuri, instalări, evenimente; pe fiecare gospodărie: conturi, categorii, etichete, tranzacții și în CSV, bugete, obiective, recurențe, bonurile încărcate de utilizator cu liniile lor, împărțirile și decontările în care e parte, acțiunile lui din audit) și fișierele originale ale bonurilor lui. Doar ce vede utilizatorul (RLS: conturile personale ale altor membri nu apar). Fără parole, tokenuri sau chei. Cu cookie: doar `Sec-Fetch-Site: same-origin` sau `none` (altfel 403); 3 exporturi pe oră. Arhiva fără ZIP64: dacă estimarea (fișierele bonurilor + tranzacțiile) depășește 4 GiB sau 65 535 de intrări, 413 `export_too_large` înainte de orice octet.",
     success: {
       status: 200,
       schema: null,
       binary: ["application/zip"],
       description: "Arhiva `finet-export.zip`.",
     },
-    errors: [VALIDATION, FORBIDDEN],
+    errors: [VALIDATION, FORBIDDEN, TOO_LARGE],
   },
   {
     method: "GET",

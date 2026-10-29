@@ -519,6 +519,9 @@ export const ro = {
     rateLimitedRetry: (seconds: number) =>
       `Prea multe exporturi într-un minut. Încearcă din nou peste ${seconds} ${seconds === 1 ? "secundă" : "secunde"}.`,
     error: "Exportul nu a reușit. Încearcă din nou.",
+    // F9-B (revizuirea F9): arhiva GDPR peste limitele formatului ZIP (4 GiB / 65 535 de fișiere).
+    archiveTooLarge:
+      "Arhiva ar depăși 4 GB sau 65.535 de fișiere. Cere operatorului exportul (sau șterge întâi bonuri vechi).",
   },
   tags: {
     title: "Etichete",

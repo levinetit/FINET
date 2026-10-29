@@ -1,3 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TEST_ADMIN_URL } from "@/db/testing";
@@ -248,6 +253,80 @@ describe.skipIf(!TEST_ADMIN_URL)("CLI admin pe PostgreSQL real", () => {
     expect(first).toEqual({ code: 0, out: "1", err: "" });
     expect((await run(["aggregate-events"])).out).toBe("0");
     expect((await run(["aggregate-events", "--x", "1"])).code).toBe(2);
+  });
+
+  it("cleanup-orphan-storage: dry-run implicit; --yes șterge DOAR directoarele fără gospodărie; plafon; fără STORAGE_DIR nu atinge nimic; refuză dacă totul pare orfan", async () => {
+    const owner = await createUserWithHousehold(fx.db, {
+      email: "orfane@exemplu.ro",
+      name: "Orfane",
+      password: null,
+      firstUserBecomesAdmin: false,
+      emailVerified: true,
+    });
+    const live = owner.householdId!;
+    const dir = mkdtempSync(join(tmpdir(), "finet-orphans-"));
+    try {
+      const root = join(dir, "households");
+      const ghost1 = randomUUID();
+      const ghost2 = randomUUID();
+      for (const id of [live, ghost1, ghost2]) {
+        mkdirSync(join(root, id, "documents"), { recursive: true });
+        writeFileSync(join(root, id, "documents", randomUUID()), "x");
+      }
+      writeFileSync(join(root, "nu-e-uuid"), "x");
+      const outside = mkdtempSync(join(tmpdir(), "finet-outside-"));
+      symlinkSync(outside, join(root, randomUUID()));
+      const env = { ...ENV, STORAGE_DIR: dir };
+
+      const dry = await run(["cleanup-orphan-storage"], "", env);
+      expect(dry).toEqual({
+        code: 0,
+        out: "scanned=3 orphans=2 deleted=0 skipped=2 dry_run=1",
+        err: "",
+      });
+      expect(existsSync(join(root, ghost1))).toBe(true);
+
+      const one = await run(["cleanup-orphan-storage", "--yes", "--limit", "1"], "", env);
+      expect(one.out).toBe("scanned=3 orphans=2 deleted=1 skipped=2");
+      const all = await run(["cleanup-orphan-storage", "--yes"], "", env);
+      expect(all.out).toBe("scanned=2 orphans=1 deleted=1 skipped=2");
+      expect(existsSync(join(root, ghost1)) || existsSync(join(root, ghost2))).toBe(false);
+      // Gospodăria existentă și ținta legăturii simbolice rămân.
+      expect(existsSync(join(root, live, "documents"))).toBe(true);
+      expect(existsSync(outside)).toBe(true);
+      rmSync(outside, { recursive: true, force: true });
+
+      expect((await run(["cleanup-orphan-storage", "--limit", "0"], "", env)).code).toBe(2);
+      const unmounted = await run(["cleanup-orphan-storage", "--yes"], "", {
+        ...ENV,
+        STORAGE_DIR: join(dir, "lipsa"),
+      });
+      expect(unmounted.code).toBe(1);
+      expect(unmounted.err).toContain("STORAGE_DIR");
+
+      // Doar directoare fără gospodărie (baza greșită?): refuz, nimic șters.
+      const wrong = mkdtempSync(join(tmpdir(), "finet-orphans-wrong-"));
+      try {
+        for (const id of [randomUUID(), randomUUID()])
+          mkdirSync(join(wrong, "households", id), { recursive: true });
+        const r = await run(["cleanup-orphan-storage", "--yes"], "", {
+          ...ENV,
+          STORAGE_DIR: wrong,
+        });
+        expect(r.code).toBe(1);
+        expect(r.err).toContain("refuz");
+        // Fără `households/`: nimic de făcut.
+        const empty = mkdtempSync(join(tmpdir(), "finet-orphans-empty-"));
+        expect(
+          (await run(["cleanup-orphan-storage"], "", { ...ENV, STORAGE_DIR: empty })).out,
+        ).toBe("scanned=0 orphans=0 deleted=0 skipped=0 dry_run=1");
+        rmSync(empty, { recursive: true, force: true });
+      } finally {
+        rmSync(wrong, { recursive: true, force: true });
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("refuză alt FINET_ROLE decât admin", async () => {

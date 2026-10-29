@@ -323,7 +323,7 @@ describe("readMigrations (fără bază)", () => {
     expect(code).not.toMatch(/grant[^;]*delete[^;]*on finet\.(household_invites|settlements)/i);
   });
 
-  it("0016_gdpr_stats: tabelul nou cu RLS ENABLE + FORCE și fără drepturi pentru aplicație; 3 funcții SECURITY DEFINER; politicile proprietarului legate de `finet.definer_scope`; CHECK-uri plate", () => {
+  it("0016_gdpr_stats: tabelul nou cu RLS ENABLE + FORCE și fără drepturi pentru aplicație; 4 funcții SECURITY DEFINER; politicile proprietarului legate de `finet.definer_scope`; CHECK-uri plate", () => {
     const m = readMigrations(MIGRATIONS_DIR).find((x) => x.tag === "0016_gdpr_stats")!;
     const text = m.statements.join("\n");
     const created = [...text.matchAll(/CREATE TABLE "finet"\."(\w+)"/g)].map((x) => x[1]!);
@@ -342,8 +342,13 @@ describe("readMigrations (fără bază)", () => {
         /create function finet\.(\w+)\([^)]*\)[^$]*?security definer\s+set search_path = pg_catalog/g,
       ),
     ].map((x) => x[1]);
-    expect(definers).toEqual(["erase_current_user", "aggregate_app_events", "usage_stats"]);
-    expect([...code.matchAll(/security\s+definer/gi)]).toHaveLength(3);
+    expect(definers).toEqual([
+      "erase_current_user",
+      "aggregate_app_events",
+      "usage_stats",
+      "existing_households",
+    ]);
+    expect([...code.matchAll(/security\s+definer/gi)]).toHaveLength(4);
     const policies = [
       ...code.matchAll(
         /create policy (\w+) on finet\.\w+\s+for (\w+) to (\w+)\s+(?:using|with check) \(([^\n]*)/g,
@@ -356,7 +361,7 @@ describe("readMigrations (fără bază)", () => {
       expect(p[4]).toMatch(/^current_setting\('finet\.definer_scope', true\)/);
     }
     expect(code).toContain(
-      "revoke all on function finet.erase_current_user(), finet.aggregate_app_events(integer),\n  finet.usage_stats(boolean) from public",
+      "revoke all on function finet.erase_current_user(), finet.aggregate_app_events(integer),\n  finet.usage_stats(boolean), finet.existing_households(uuid[]) from public",
     );
     // Administratorul e verificat în funcția statisticilor; ștergerea cere utilizatorul fără apartenențe.
     expect(code).toMatch(/u\.is_platform_admin and u\.status = 'active'/);

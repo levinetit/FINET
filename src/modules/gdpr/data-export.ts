@@ -1,6 +1,18 @@
 import "server-only";
 
-import { type SQL, and, asc, eq, gt, inArray, or } from "drizzle-orm";
+import {
+  type SQL,
+  and,
+  asc,
+  count,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sum,
+} from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 
 import { type Db, type Tx, withRlsOn } from "@/db";
@@ -30,7 +42,7 @@ import {
   users,
 } from "@/db/schema";
 import { type Storage, isKeyOfHousehold } from "@/lib/storage";
-import type { ZipEntryOptions, ZipSource } from "@/lib/zip";
+import { ZIP_MAX_BYTES, ZIP_MAX_ENTRIES, type ZipEntryOptions, type ZipSource } from "@/lib/zip";
 import { insertAudit } from "@/modules/auth/audit";
 import { exportTransactionsCsv } from "@/modules/exports/exports.service";
 
@@ -94,6 +106,77 @@ async function* jsonPages<T extends { id: string }>(
     after = rows[rows.length - 1]!.id;
   }
   yield Buffer.from(first ? "]\n" : "\n]\n");
+}
+
+// --- Verificarea dinaintea exportului (revizuirea F9) ---------------------------------------
+
+/** Intrările fixe: `README.txt`, `profil.json` și cele 14 fișiere de pe fiecare gospodărie. */
+export const FIXED_ENTRIES = 2;
+export const ENTRIES_PER_HOUSEHOLD = 14;
+/** Estimarea pe tranzacție (JSON + CSV, necomprimat) și rezerva pentru restul textului. */
+export const BYTES_PER_TRANSACTION = 4096;
+export const TEXT_RESERVE_BYTES = 64 * 1024 * 1024;
+
+export type ExportLimits = Readonly<{ maxBytes: number; maxEntries: number }>;
+export const DEFAULT_EXPORT_LIMITS: ExportLimits = Object.freeze({
+  maxBytes: ZIP_MAX_BYTES,
+  maxEntries: ZIP_MAX_ENTRIES,
+});
+
+export type ExportEstimate = Readonly<{ entries: number; bytes: number }>;
+
+/** Exportul nu încape în limitele ZIP (fără ZIP64): 413 cu cod fix, ÎNAINTE de flux. */
+export class ExportTooLargeError extends Error {
+  constructor() {
+    super("Exportul depășește dimensiunea maximă a unei arhive.");
+    this.name = "ExportTooLargeError";
+  }
+}
+
+/**
+ * Estimarea arhivei, sub RLS-ul utilizatorului (aceleași filtre ca exportul): fișierele bonurilor
+ * lui (`size_bytes`, doar cele cu fișier) și tranzacțiile vizibile, gospodărie cu gospodărie.
+ * Supraestimează textul (prag sigur), nu citește conținut.
+ */
+export async function estimateExport(db: Db, userId: string): Promise<ExportEstimate> {
+  const memberships = await inUser(db, userId, (tx) =>
+    tx
+      .select({ id: householdMembers.householdId })
+      .from(householdMembers)
+      .where(eq(householdMembers.userId, userId)),
+  );
+  let entries = FIXED_ENTRIES;
+  let bytes = TEXT_RESERVE_BYTES;
+  for (const { id: hh } of memberships) {
+    const r = await inHh(db, userId, hh, async (tx) => {
+      const [d] = await tx
+        .select({ n: count(), size: sum(documents.sizeBytes) })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.householdId, hh),
+            eq(documents.uploadedByUserId, userId),
+            isNotNull(documents.storageKey),
+            isNull(documents.fileDeletedAt),
+          ),
+        );
+      const [t] = await tx
+        .select({ n: count() })
+        .from(transactions)
+        .where(eq(transactions.householdId, hh));
+      return { files: Number(d?.n ?? 0), fileBytes: Number(d?.size ?? 0), tx: Number(t?.n ?? 0) };
+    });
+    entries += ENTRIES_PER_HOUSEHOLD + r.files;
+    bytes += r.fileBytes + r.tx * BYTES_PER_TRANSACTION;
+  }
+  return { entries, bytes };
+}
+
+export function assertExportFits(
+  e: ExportEstimate,
+  limits: ExportLimits = DEFAULT_EXPORT_LIMITS,
+): void {
+  if (e.entries > limits.maxEntries || e.bytes > limits.maxBytes) throw new ExportTooLargeError();
 }
 
 const README = (n: number) => `Exportul datelor tale din FINET

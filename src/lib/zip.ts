@@ -19,6 +19,10 @@ export type ZipEntryOptions = Readonly<{ method?: "deflate" | "store" }>;
 const MAX_U32 = 0xffffffff;
 const MAX_ENTRIES = 0xffff;
 
+/** Limitele formatului (fără ZIP64): dimensiunea arhivei și numărul de intrări. */
+export const ZIP_MAX_BYTES = MAX_U32;
+export const ZIP_MAX_ENTRIES = MAX_ENTRIES;
+
 type Central = Readonly<{
   name: Buffer;
   method: number;

@@ -43,6 +43,8 @@ export type RateLimitKind =
   | "invite_accept"
   // F9-B (GDPR): ștergerea contului (reautentificare cu parola) și exportul complet, pe utilizator.
   | "account_delete"
+  // Revizuirea F9: și o limită DOAR pe utilizator (independentă de IP), la ștergerea contului.
+  | "account_delete_user"
   | "gdpr_export";
 
 export type RateLimitResult = Readonly<{

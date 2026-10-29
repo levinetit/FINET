@@ -199,6 +199,22 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
     expect(audit?.metadata).toEqual({ households: 2 });
   });
 
+  it("exportul peste limitele ZIP (estimarea dinainte): 413 `export_too_large` JSON, fără niciun octet de arhivă", async () => {
+    for (const exportLimits of [
+      { maxBytes: 1, maxEntries: 65_535 },
+      { maxBytes: 4_294_967_295, maxEntries: 3 },
+    ]) {
+      const r = await G.dataExportHandler(
+        apiRequest("/api/v1/me/export", { bearer: bogdan.S.bearer }),
+        { ...env, exportLimits },
+      );
+      await assertContract(G.dataExportHandler, r);
+      expect(r.status).toBe(413);
+      expect(r.headers.get("content-type")).toContain("application/json");
+      expect((await readJson(r)).error?.code).toBe("export_too_large");
+    }
+  });
+
   it("previzualizarea și ștergerea: parola greșită → 400; fără „ȘTERGE” → 400; ultimul owner → 409; apoi succes și sesiunile închise", async () => {
     const prev = await call(G.deletionPreviewHandler, "/api/v1/me/deletion", {
       bearer: ana.S.bearer,
@@ -268,5 +284,39 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
       createHousehold(tx, { name: "Încă una" }),
     );
     expect(hh2).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("ștergerea contului: limită DOAR pe utilizator (independentă de IP): a 3-a încercare → 429, chiar cu limita IP+utilizator neatinsă", async () => {
+    const cezar = await makeUser("cezar@exemplu.ro", "Cezar", "parola-cezar-gdpr-123", false);
+    const config = {
+      ...env.config,
+      auth: {
+        ...env.config.auth,
+        rateLimits: {
+          ...env.config.auth.rateLimits,
+          passwordChange: { max: 1000, windowSeconds: 3600 },
+        },
+      },
+    };
+    const limited = { ...env, config, limits: { accountDelete: { max: 2, windowSeconds: 3600 } } };
+    const attempt = (ip: string) =>
+      G.deleteAccountHandler(
+        apiRequest("/api/v1/me/delete", {
+          bearer: cezar.S.bearer,
+          headers: { "x-forwarded-for": ip, "cf-connecting-ip": ip },
+          body: { password: "gresita-gresita-1", confirm: "ȘTERGE" },
+        }),
+        limited,
+      );
+    expect((await attempt("203.0.113.7")).status).toBe(400);
+    expect((await attempt("198.51.100.9")).status).toBe(400);
+    const r = await attempt("192.0.2.33");
+    await assertContract(G.deleteAccountHandler, r);
+    expect(r.status).toBe(429);
+    expect(r.headers.get("retry-after")).toMatch(/^[0-9]+$/);
+    // Contul nu a fost atins.
+    const [u] = await fx.scratch.admin<{ status: string }[]>`
+      select status from finet.users where id = ${cezar.id}`;
+    expect(u?.status).toBe("active");
   });
 });
