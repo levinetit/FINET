@@ -123,6 +123,30 @@ export async function revokeInviteRow(tx: Tx, householdId: string, id: string, n
   return rows[0] ?? null;
 }
 
+/**
+ * Revocă invitațiile ACTIVE create de `userId` în gospodărie (owner care pleacă, e scos sau e
+ * retrogradat; revizuirea M1). Rulează ca un owner actual (RLS-ul invitațiilor). Întoarce câte.
+ */
+export async function revokeInvitesCreatedBy(
+  tx: Tx,
+  householdId: string,
+  userId: string,
+): Promise<number> {
+  const rows = await tx
+    .update(householdInvites)
+    .set({ revokedAt: sql`now()` })
+    .where(
+      and(
+        eq(householdInvites.householdId, householdId),
+        eq(householdInvites.createdByUserId, userId),
+        isNull(householdInvites.usedAt),
+        isNull(householdInvites.revokedAt),
+      ),
+    )
+    .returning({ id: householdInvites.id });
+  return rows.length;
+}
+
 /** `finet.accept_invite`: gospodăria și dacă a fost o intrare nouă, sau `null` (uniform). */
 export async function acceptInviteRow(
   tx: Tx,

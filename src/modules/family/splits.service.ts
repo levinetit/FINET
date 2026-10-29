@@ -10,6 +10,7 @@ import { isValidId, parseInput } from "@/modules/ledger/input";
 import { selectTransaction } from "@/modules/transactions/transactions.repo";
 
 import { type FamilyDeps, inFamily } from "./context";
+import { loadHouseholdBalances, lockHouseholdBalances } from "./settlements.service";
 import {
   type SplitDbRow,
   deleteSplitRows,
@@ -30,6 +31,7 @@ import {
   splitByBasisPoints,
   splitEqually,
   splitFixed,
+  withinPairCap,
 } from "./split-math";
 
 /**
@@ -135,6 +137,7 @@ export async function setTransactionSplit(
         shares: "Toți participanții trebuie să fie membri ai gospodăriei.",
       });
     }
+    await lockHouseholdBalances(tx, m.householdId);
     await deleteSplitRows(tx, m.householdId, id);
     await insertSplitRows(
       tx,
@@ -147,6 +150,12 @@ export async function setTransactionSplit(
         currency: t.currency,
       })),
     );
+    // Plafonul soldurilor (revizuirea m4): nicio pereche a plătitorului peste PAIR_BALANCE_CAP.
+    if (
+      !withinPairCap(await loadHouseholdBalances(tx, m.householdId), actor.userId.toLowerCase())
+    ) {
+      throw new ConflictError("balance_limit", "Soldul dintre membri ar depăși plafonul permis.");
+    }
     await insertAudit(tx, actor.userId, m.householdId, {
       action: "transaction.split_set",
       targetType: "transaction",
@@ -174,7 +183,13 @@ export async function clearTransactionSplit(
     if (current.payerUserId !== actor.userId.toLowerCase()) {
       throw new ConflictError("split_not_payer", "Doar cine a plătit modifică împărțirea.");
     }
+    await lockHouseholdBalances(tx, m.householdId);
     await deleteSplitRows(tx, m.householdId, id);
+    if (
+      !withinPairCap(await loadHouseholdBalances(tx, m.householdId), actor.userId.toLowerCase())
+    ) {
+      throw new ConflictError("balance_limit", "Soldul dintre membri ar depăși plafonul permis.");
+    }
     await insertAudit(tx, actor.userId, m.householdId, {
       action: "transaction.split_cleared",
       targetType: "transaction",

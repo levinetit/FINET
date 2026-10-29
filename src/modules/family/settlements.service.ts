@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { Tx } from "@/db";
+import { sql } from "drizzle-orm";
+
 import { type Actor, ForbiddenError, NotFoundError } from "@/lib/authz";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { insertAudit } from "@/modules/auth/audit";
@@ -22,19 +24,39 @@ import {
   settlementCreateSchema,
   settlementListSchema,
 } from "./family.schema";
-import { type CurrencyBalances, computeBalances } from "./split-math";
+import { type CurrencyBalances, computeBalances, pairDebt, withinPairCap } from "./split-math";
 
 /**
- * Decontările și soldurile reciproce (Faza 8, ADR 0016).
+ * Decontările și soldurile reciproce (Faza 8, ADR 0016, punctul 8).
  *
- * Permisiuni (decizia mea): orice membru înregistrează o decontare în care e una dintre părți
- * (plătitor sau primitor); un `owner` o poate înregistra pentru oricare doi membri (de exemplu
- * pentru cineva fără cont activ în aplicație). Anulează creatorul sau un `owner`; anularea e
- * definitivă (istoricul rămâne). Aceleași reguli în bază (politicile `settlements_*`).
- * O decontare parțială = o decontare cu o sumă mai mică decât soldul; mai multe decontări se
- * adună. Soldurile se calculează în cod (`computeBalances`, `bigint`), din împărțiri și din
- * decontările neanulate, pe monedă, fără conversie.
+ * Permisiuni (decizia coordonatorului după revizuirea M2):
+ * - orice membru înregistrează o decontare în care e una dintre părți; un `owner` o poate
+ *   înregistra pentru oricare doi membri, dar DOAR ca stingere a unei datorii existente;
+ * - cine declară că a PLĂTIT (`from`) poate stinge cel mult datoria lui curentă față de `to`
+ *   (netting pe pereche, în moneda decontării): fără plată „peste datorie” care ar inversa sensul
+ *   în favoarea lui. Dacă `from` e CREDITORUL perechii, decontarea e o corecție (i-a dat bani
+ *   debitorului) și o poate face doar el. Cine declară că a PRIMIT (`to`) poate înregistra orice
+ *   sumă (doar în defavoarea lui);
+ * - anulează oricare dintre părți sau creatorul; un owner care nu e parte NU o anulează;
+ *   anularea e definitivă (istoricul rămâne).
+ * Aceleași reguli de cine scrie/anulează sunt în bază (politicile `settlements_*`); plafonul pe
+ * datorie e în serviciu, sub lock-ul soldurilor gospodăriei.
+ * Plafonul m4: soldul unei perechi rămâne ≤ `PAIR_BALANCE_CAP` după orice scriere.
  */
+
+/** Serializează scrierile care schimbă soldurile gospodăriei (verificări fără curse). */
+export async function lockHouseholdBalances(tx: Tx, householdId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`finet.family_balances:${householdId}`}))`,
+  );
+}
+
+function balanceLimit(): ConflictError {
+  return new ConflictError(
+    "balance_limit",
+    "Soldul dintre cei doi membri ar depăși plafonul permis.",
+  );
+}
 
 /** Soldurile gospodăriei (toate perechile, toate monedele). Vizibile tuturor membrilor. */
 export async function loadHouseholdBalances(
@@ -54,8 +76,14 @@ export async function getBalances(
   return inFamily(deps, actor, householdId, "member", async (tx, m) => {
     const currencies = await loadHouseholdBalances(tx, m.householdId);
     const me = actor.userId.toLowerCase();
+    const current = new Set((await selectMembers(tx, m.householdId)).map((x) => x.userId));
+    const former = new Set<string>();
+    for (const c of currencies) {
+      for (const x of c.members) if (!current.has(x.userId)) former.add(x.userId);
+    }
     return {
       currencies,
+      formerMemberIds: [...former].sort(),
       me: currencies.map((c) => {
         let owesMinor = 0n;
         let owedMinor = 0n;
@@ -86,6 +114,28 @@ export async function createSettlement(
     if (!members.has(input.fromUserId) || !members.has(input.toUserId)) {
       throw new ValidationError({ _: "Ambii utilizatori trebuie să fie membri ai gospodăriei." });
     }
+    await lockHouseholdBalances(tx, m.householdId);
+    const before = await loadHouseholdBalances(tx, m.householdId);
+    // Datoria curentă a lui `from` față de `to` (negativă: `from` e creditorul).
+    const debt = pairDebt(before, input.currency, input.fromUserId, input.toUserId);
+    const allowed =
+      me === input.toUserId || // a primit: orice sumă (doar în defavoarea lui)
+      (debt > 0n && amountMinor <= debt) || // stinge (parțial) o datorie existentă
+      (me === input.fromUserId && debt < 0n); // corecție a creditorului spre debitor
+    if (!allowed) {
+      throw new ConflictError(
+        "settlement_exceeds_debt",
+        "Decontarea depășește datoria curentă dintre cei doi membri.",
+      );
+    }
+    const after = computeAfter(
+      before,
+      input.currency,
+      input.fromUserId,
+      input.toUserId,
+      amountMinor,
+    );
+    if (!withinPairCap(after)) throw balanceLimit();
     const row = await insertSettlement(tx, {
       householdId: m.householdId,
       fromUserId: input.fromUserId,
@@ -131,12 +181,24 @@ export async function cancelSettlement(
   return inFamily(deps, actor, householdId, "member", async (tx, m) => {
     const current = await selectSettlement(tx, m.householdId, id);
     if (!current) throw new NotFoundError();
-    if (m.role !== "owner" && current.createdByUserId !== actor.userId.toLowerCase()) {
+    const me = actor.userId.toLowerCase();
+    if (![current.createdByUserId, current.fromUserId, current.toUserId].includes(me)) {
       throw new ForbiddenError();
     }
     if (current.cancelledAt) {
       throw new ConflictError("settlement_already_cancelled", "Decontarea e deja anulată.");
     }
+    await lockHouseholdBalances(tx, m.householdId);
+    // Anularea readuce datoria: soldul perechii trebuie să rămână sub plafon (m4).
+    const before = await loadHouseholdBalances(tx, m.householdId);
+    const after = computeAfter(
+      before,
+      current.currency,
+      current.toUserId,
+      current.fromUserId,
+      current.amountMinor,
+    );
+    if (!withinPairCap(after)) throw balanceLimit();
     const row = await cancelSettlementRow(tx, m.householdId, id, actor.userId, nowOf(deps));
     if (!row) {
       throw new ConflictError("settlement_already_cancelled", "Decontarea e deja anulată.");
@@ -148,4 +210,32 @@ export async function cancelSettlement(
     });
     return row;
   });
+}
+
+/**
+ * Soldurile după o decontare ipotetică `from → to` de `amount` (fără a scrie nimic): perechea
+ * atinsă e recalculată exact ca în `computeBalances`.
+ */
+function computeAfter(
+  before: readonly CurrencyBalances[],
+  currency: SettlementView["currency"],
+  from: string,
+  to: string,
+  amount: bigint,
+): CurrencyBalances[] {
+  const debt = pairDebt(before, currency, from, to) - amount;
+  return [
+    {
+      currency,
+      pairs:
+        debt === 0n
+          ? []
+          : [
+              debt > 0n
+                ? { debtorUserId: from, creditorUserId: to, amountMinor: debt }
+                : { debtorUserId: to, creditorUserId: from, amountMinor: -debt },
+            ],
+      members: [],
+    },
+  ];
 }

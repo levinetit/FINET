@@ -36,6 +36,10 @@
 --   drop trigger transactions_splits_sum_valid on finet.transactions;
 --   drop policy transactions_migrator_transfer_check on finet.transactions;
 --   drop policy accounts_migrator_personal_owner on finet.accounts;
+--   drop policy transactions_migrator_category_check on finet.transactions;
+--   drop policy recurring_rules_migrator_category_check on finet.recurring_rules;
+--   drop policy budgets_migrator_category_check on finet.budgets;
+--   drop function finet.category_used_elsewhere(uuid);
 --   drop policy household_members_migrator_join on finet.household_members;
 --   create or replace function finet.check_transfer_group(uuid) ... security invoker (0002);
 --   create or replace function finet.due_recurring_rules(date, integer) ... (textul din 0006);
@@ -267,18 +271,25 @@ create or replace function finet.check_transfer_group(p_group uuid) returns void
 -- Scadențele recurente (0006): o regulă pe un cont PERSONAL se generează DOAR în numele
 -- proprietarului contului (singurul care îl vede), dacă e încă membru activ; altfel regula e
 -- omisă (nu mai eșuează la nesfârșit în numele unui owner care nu vede contul). Proprietarul
--- (finet_migrator) vede din `accounts` doar coloanele conturilor personale de care are nevoie
--- aici (politica de mai jos; conturile comune îi rămân invizibile, deci `pa` e NULL pentru ele).
--- Aceeași semnătură, aceleași garduri, doar identificatori.
+-- (finet_migrator) vede conturile personale DOAR în interiorul funcțiilor care setează variabila
+-- tranzacției `finet.definer_scope` (`due_recurring` aici, `category_usage` în
+-- finet.category_used_elsewhere); în afara lor politica nu-i arată nimic. Conturile comune îi
+-- rămân invizibile (`pa` e NULL pentru ele). Aceeași semnătură, aceleași garduri, doar
+-- identificatori; funcția devine plpgsql (VOLATILE) ca să poată seta și reseta variabila.
 create policy accounts_migrator_personal_owner on finet.accounts
   for select to finet_migrator
-  using (owner_user_id is not null);
+  using (owner_user_id is not null
+         and current_setting('finet.definer_scope', true) in ('due_recurring', 'category_usage'));
 --> statement-breakpoint
 create or replace function finet.due_recurring_rules(p_today date, p_limit integer)
   returns table (rule_id uuid, household_id uuid, actor_user_id uuid)
-  language sql stable security definer
+  language plpgsql volatile security definer
   set search_path = pg_catalog
   as $$
+  #variable_conflict use_column
+  begin
+    perform set_config('finet.definer_scope', 'due_recurring', true);
+    return query
     select r.id, r.household_id, a.user_id
       from finet.recurring_rules r
       left join finet.accounts pa on pa.id = r.account_id and pa.owner_user_id is not null
@@ -296,8 +307,69 @@ create or replace function finet.due_recurring_rules(p_today date, p_limit integ
        and r.next_run_on <= least(p_today, (pg_catalog.now() at time zone 'Europe/Bucharest')::date)
        and (r.retry_after is null or r.retry_after <= pg_catalog.now())
      order by r.next_run_on, r.id
-     limit least(greatest(coalesce(p_limit, 0), 0), 1000)
+     limit least(greatest(coalesce(p_limit, 0), 0), 1000);
+    perform set_config('finet.definer_scope', '', true);
+  end
   $$;
+--> statement-breakpoint
+-- Ștergerea unei categorii comune (F8-A, revizuirea m1): un membru nu vede tranzacțiile și
+-- regulile din conturile personale ale altora și nici bugetele lor personale, deci nu poate ști
+-- singur dacă o categorie mai e folosită acolo (cheia străină ar fi refuzat ștergerea și ar fi
+-- dezvăluit folosirea; bugetele personale ar fi dispărut în cascadă). Funcția răspunde DOAR cu un
+-- boolean, pentru gospodăria curentă și utilizatorul din context (care trebuie să fie membru);
+-- serviciul ascunde atunci categoria în loc s-o șteargă. Proprietarul vede rândurile doar pentru
+-- categoria în curs de verificare (variabila `finet.checking_category`, setată numai aici).
+create policy transactions_migrator_category_check on finet.transactions
+  for select to finet_migrator
+  using (category_id = nullif(current_setting('finet.checking_category', true), '')::uuid
+         and household_id = (select finet.current_household_id()));
+--> statement-breakpoint
+create policy recurring_rules_migrator_category_check on finet.recurring_rules
+  for select to finet_migrator
+  using (category_id = nullif(current_setting('finet.checking_category', true), '')::uuid
+         and household_id = (select finet.current_household_id()));
+--> statement-breakpoint
+create policy budgets_migrator_category_check on finet.budgets
+  for select to finet_migrator
+  using (category_id = nullif(current_setting('finet.checking_category', true), '')::uuid
+         and household_id = (select finet.current_household_id()));
+--> statement-breakpoint
+create function finet.category_used_elsewhere(p_category_id uuid) returns boolean
+  language plpgsql volatile security definer
+  set search_path = pg_catalog
+  as $$
+  declare
+    v_user uuid := finet.current_user_id();
+    v_household uuid := finet.current_household_id();
+    v_used boolean;
+  begin
+    if v_user is null or v_household is null or p_category_id is null
+       or finet.member_role(v_household) is null then
+      return false;
+    end if;
+    perform set_config('finet.checking_category', p_category_id::text, true);
+    perform set_config('finet.definer_scope', 'category_usage', true);
+    select exists (select 1 from finet.transactions t
+                     join finet.accounts a on a.id = t.account_id
+                    where t.household_id = v_household and t.category_id = p_category_id
+                      and a.owner_user_id is not null and a.owner_user_id <> v_user)
+        or exists (select 1 from finet.recurring_rules r
+                     join finet.accounts a on a.id = r.account_id
+                    where r.household_id = v_household and r.category_id = p_category_id
+                      and a.owner_user_id is not null and a.owner_user_id <> v_user)
+        or exists (select 1 from finet.budgets b
+                    where b.household_id = v_household and b.category_id = p_category_id
+                      and b.scope = 'personal' and b.user_id <> v_user)
+      into v_used;
+    perform set_config('finet.checking_category', '', true);
+    perform set_config('finet.definer_scope', '', true);
+    return coalesce(v_used, false);
+  end
+  $$;
+--> statement-breakpoint
+revoke all on function finet.category_used_elsewhere(uuid) from public;
+--> statement-breakpoint
+grant execute on function finet.category_used_elsewhere(uuid) to finet_app;
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------
@@ -442,7 +514,13 @@ create function finet.accept_invite(p_token_hash text)
        and i.used_at is null
        and i.revoked_at is null
        and i.expires_at > pg_catalog.now()
-       for update;
+       -- Plasă de siguranță (revizuirea M1): cine a creat invitația trebuie să fie ÎNCĂ owner al
+       -- gospodăriei; altfel invitația e inutilizabilă (același răspuns uniform).
+       and exists (select 1 from finet.household_members c
+                    where c.household_id = i.household_id
+                      and c.user_id = i.created_by_user_id
+                      and c.role = 'owner')
+       for update of i;
     if not found then
       perform set_config('finet.accepting_invite', '', true);
       return;
@@ -663,7 +741,8 @@ create policy transaction_splits_delete on finet.transaction_splits
          and payer_user_id = (select finet.current_user_id()));
 --> statement-breakpoint
 -- Decontările: toți membrii le văd; un membru înregistrează o decontare în care e una dintre
--- părți, un owner pentru oricare doi membri; anulează creatorul sau un owner.
+-- părți, un owner pentru oricare doi membri; anulează oricare dintre părți sau creatorul (un owner
+-- care nu e parte și nu a creat-o NU o anulează; revizuirea M2).
 create policy settlements_select on finet.settlements
   for select to finet_app
   using (household_id = (select finet.current_household_id())
@@ -682,8 +761,7 @@ create policy settlements_cancel on finet.settlements
   for update to finet_app
   using (household_id = (select finet.current_household_id())
          and (select finet.member_role(finet.current_household_id())) is not null
-         and (created_by_user_id = (select finet.current_user_id())
-              or (select finet.member_role(finet.current_household_id())) = 'owner'))
+         and (select finet.current_user_id()) in (created_by_user_id, from_user_id, to_user_id))
   with check (household_id = (select finet.current_household_id())
               and cancelled_by_user_id = (select finet.current_user_id()));
 --> statement-breakpoint

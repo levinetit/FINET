@@ -8,6 +8,7 @@ import { ConflictError } from "@/lib/errors";
 import { createAccount, listAccounts } from "@/modules/accounts/accounts.service";
 import { testConfig } from "@/modules/auth/testing";
 import { createBudget, getBudgetStatuses } from "@/modules/budgets/budgets.service";
+import { createCategory, deleteCategory } from "@/modules/categories/categories.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { collectCsv, exportTransactionsCsv } from "@/modules/exports/exports.service";
 import { leaveHousehold } from "@/modules/family/members.service";
@@ -347,6 +348,59 @@ describe.skipIf(!TEST_ADMIN_URL)(
       const [saved] = await f.admin<{ account_id: string }[]>`
       select account_id from finet.transactions where id = ${ok.transactionId}`;
       expect(saved?.account_id).toBe(common);
+    });
+
+    it("m1: o categorie folosită doar în contul personal al altuia (sau într-un buget personal al lui) se ascunde, nu se șterge și nu dezvăluie folosirea prin eroare", async () => {
+      const shared = await createCategory(f.deps, f.A, f.HA, { name: "Hobby", kind: "expense" });
+      const tx = await createTransaction(f.deps, f.C, f.HA, {
+        accountId: personalC,
+        type: "expense",
+        amountMinor: 321,
+        occurredOn: day,
+        categoryId: shared.id,
+      });
+      // A nu vede nicio folosire: înainte de 0012-m1 ștergerea ar fi dat 409 reference_conflict.
+      expect(await deleteCategory(f.deps, f.A, f.HA, shared.id)).toEqual({
+        reassigned: 0,
+        hidden: true,
+      });
+      const [cat] = await f.admin<{ hidden: boolean }[]>`
+        select hidden from finet.categories where id = ${shared.id}`;
+      expect(cat?.hidden).toBe(true);
+      const [kept] = await f.admin<{ category_id: string }[]>`
+        select category_id from finet.transactions where id = ${tx.id}`;
+      expect(kept?.category_id).toBe(shared.id);
+      // Bugetul personal al lui C pe o categorie: nu dispare în cascadă la „ștergerea” lui A.
+      const other = await createCategory(f.deps, f.A, f.HA, { name: "Sport", kind: "expense" });
+      const budget = await createBudget(deps(), f.C, f.HA, {
+        categoryId: other.id,
+        amountMinor: 1_000,
+        currency: "RON",
+        scope: "personal",
+      });
+      expect((await deleteCategory(f.deps, f.A, f.HA, other.id)).hidden).toBe(true);
+      const [b] = await f.admin<{ n: number }[]>`
+        select count(*)::int as n from finet.budgets where id = ${budget.id}`;
+      expect(b?.n).toBe(1);
+      // Nefolosită nicăieri: se șterge ca înainte.
+      const free = await createCategory(f.deps, f.A, f.HA, { name: "Liberă", kind: "expense" });
+      expect(await deleteCategory(f.deps, f.A, f.HA, free.id)).toEqual({ reassigned: 0 });
+      // Funcția: doar boolean, doar pentru membri, fără context → false.
+      const [noCtx] = await f.fx.client<{ used: boolean }[]>`
+        select finet.category_used_elsewhere(${shared.id}::uuid) as used`;
+      expect(noCtx?.used).toBe(false);
+      const asB = await as(
+        f.B.userId,
+        f.HA,
+        sql`select finet.category_used_elsewhere(${shared.id}::uuid) as used`,
+      );
+      expect(asB[0]).toEqual({ used: false });
+      // Politica proprietarului pe conturile personale nu arată nimic în afara funcțiilor.
+      const outside = await f.admin.begin(async (t) => {
+        await t`set local role finet_migrator`;
+        return t<{ n: number }[]>`select count(*)::int as n from finet.accounts`;
+      });
+      expect(outside[0]?.n).toBe(0);
     });
 
     it("regulile recurente pe contul personal: invizibile altora; generate în numele proprietarului; omise după plecarea lui", async () => {

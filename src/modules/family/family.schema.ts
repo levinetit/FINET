@@ -218,6 +218,8 @@ export function settlementToJson(v: SettlementView) {
 
 export type BalancesView = Readonly<{
   currencies: readonly CurrencyBalances[];
+  /** Utilizatorii care apar în solduri, dar nu mai sunt membri (foști membri; istoricul rămâne). */
+  formerMemberIds: readonly string[];
   /** Rezumatul utilizatorului curent pe monedă: „Ai de dat” / „Ai de primit”. */
   me: ReadonlyArray<Readonly<{ currency: Currency; owesMinor: bigint; owedMinor: bigint }>>;
 }>;
@@ -233,6 +235,7 @@ export function balancesToJson(v: BalancesView) {
       })),
       members: c.members.map((m) => ({ userId: m.userId, netMinor: minorToJson(m.netMinor) })),
     })),
+    formerMemberIds: [...v.formerMemberIds],
     me: v.me.map((m) => ({
       currency: m.currency,
       owesMinor: minorToJson(m.owesMinor),

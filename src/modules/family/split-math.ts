@@ -189,3 +189,40 @@ export function isSettled(balances: readonly CurrencyBalances[], userId: string)
     c.pairs.every((p) => p.debtorUserId !== userId && p.creditorUserId !== userId),
   );
 }
+
+/**
+ * Cât îi datorează `debtor` lui `creditor` în `currency` (negativ = invers, 0 = nimic), după
+ * netting. Folosit la plafonul decontărilor și al soldurilor.
+ */
+export function pairDebt(
+  balances: readonly CurrencyBalances[],
+  currency: Currency,
+  debtor: string,
+  creditor: string,
+): bigint {
+  const c = balances.find((x) => x.currency === currency);
+  if (!c) return 0n;
+  for (const p of c.pairs) {
+    if (p.debtorUserId === debtor && p.creditorUserId === creditor) return p.amountMinor;
+    if (p.debtorUserId === creditor && p.creditorUserId === debtor) return -p.amountMinor;
+  }
+  return 0n;
+}
+
+/**
+ * Plafonul soldului unei perechi (revizuirea m4): 10^14 unități minore (1 miliard de lei), sub
+ * 2^53 / 6 (un membru are cel mult 5 perechi), deci niciun sold sau total nu depășește garda
+ * JSON. Verificat la orice scriere care schimbă soldurile (împărțire, decontare, anulare).
+ */
+export const PAIR_BALANCE_CAP = 100_000_000_000_000n;
+
+/** `true` dacă toate perechile care îl implică pe `userId` (sau toate, fără `userId`) ≤ plafon. */
+export function withinPairCap(balances: readonly CurrencyBalances[], userId?: string): boolean {
+  return balances.every((c) =>
+    c.pairs.every(
+      (p) =>
+        p.amountMinor <= PAIR_BALANCE_CAP ||
+        (userId !== undefined && p.debtorUserId !== userId && p.creditorUserId !== userId),
+    ),
+  );
+}

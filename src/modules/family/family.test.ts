@@ -73,6 +73,22 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
     return { hh, users };
   }
 
+  async function personalExpense(actor: Actor, hh: string, amountMinor: number, name: string) {
+    const acc = await createAccount(deps(), actor, hh, {
+      name,
+      type: "cash",
+      currency: "RON",
+      ownerUserId: actor.userId,
+    });
+    const t = await createTransaction(deps(), actor, hh, {
+      accountId: acc.id,
+      type: "expense",
+      amountMinor,
+      occurredOn: "2026-10-10",
+    });
+    return { accountId: acc.id, transactionId: t.id };
+  }
+
   async function invited(owner: Actor, hh: string, input: unknown = {}) {
     return createInvite(deps(), owner, hh, input);
   }
@@ -420,22 +436,6 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
 
   // ------------------------------------------------------------------------------------------
   describe("împărțiri, solduri, decontări", () => {
-    async function personalExpense(actor: Actor, hh: string, amountMinor: number, name: string) {
-      const acc = await createAccount(deps(), actor, hh, {
-        name,
-        type: "cash",
-        currency: "RON",
-        ownerUserId: actor.userId,
-      });
-      const t = await createTransaction(deps(), actor, hh, {
-        accountId: acc.id,
-        type: "expense",
-        amountMinor,
-        occurredOn: "2026-10-10",
-      });
-      return { accountId: acc.id, transactionId: t.id };
-    }
-
     it("toate modurile: suma părților = totalul (inclusiv rotunjiri), verificat și în bază", async () => {
       const { hh, users } = await family(["Sp1", "Sp2", "Sp3"]);
       const [a, b, c] = users as [Actor, Actor, Actor];
@@ -604,13 +604,6 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
       ]);
       expect(asA.me).toEqual([{ currency: "RON", owesMinor: 0n, owedMinor: 5_000n }]);
       expect(asB.me).toEqual([{ currency: "RON", owesMinor: 5_000n, owedMinor: 0n }]);
-      // B nu poate pleca cu sold nedecontat; A nu-l poate scoate.
-      await expect(leaveHousehold(deps(), b, hh)).rejects.toMatchObject({
-        reason: "balance_not_settled",
-      });
-      await expect(removeMember(deps(), a, hh, b.userId)).rejects.toMatchObject({
-        reason: "balance_not_settled",
-      });
       const partial = await createSettlement(deps(), b, hh, {
         fromUserId: b.userId,
         toUserId: a.userId,
@@ -713,33 +706,52 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
       await leaveHousehold(deps(), c, hh);
     });
 
-    it("permisiunile decontărilor: membru doar ca parte, owner pentru oricine; anulare creator/owner", async () => {
+    it("permisiunile decontărilor: parte sau owner (doar pe o datorie existentă); anulează părțile sau creatorul, nu un owner străin", async () => {
       const { hh, users } = await family(["Dec1", "Dec2", "Dec3"]);
       const [owner, m1, m2] = users as [Actor, Actor, Actor];
-      const input = (from: Actor, to: Actor) => ({
+      // m1 plătește 300 pentru toți trei: owner și m2 îi datorează câte 100.
+      const { transactionId } = await personalExpense(m1, hh, 300, "Card Dec2");
+      await setTransactionSplit(deps(), m1, hh, transactionId, {
+        mode: "equal",
+        userIds: users.map((u) => u.userId),
+      });
+      const input = (from: Actor, to: Actor, amountMinor = 100) => ({
         fromUserId: from.userId,
         toUserId: to.userId,
-        amountMinor: 100,
+        amountMinor,
         currency: "RON",
         settledOn: "2026-10-12",
       });
       await expect(createSettlement(deps(), m1, hh, input(m2, owner))).rejects.toBeInstanceOf(
         ForbiddenError,
       );
+      // Owner-ul (nu e parte) stinge o datorie existentă, nu mai mult.
+      await expect(createSettlement(deps(), owner, hh, input(m2, m1, 101))).rejects.toMatchObject({
+        reason: "settlement_exceeds_debt",
+      });
       const byOwner = await createSettlement(deps(), owner, hh, input(m2, m1));
-      const byM1 = await createSettlement(deps(), m1, hh, input(m1, m2));
+      // Primitorul (m1) înregistrează orice sumă primită.
+      const byM1 = await createSettlement(deps(), m1, hh, input(owner, m1));
+      // Un membru care nu e parte și nu a creat-o: nu anulează.
       await expect(cancelSettlement(deps(), m2, hh, byM1.id)).rejects.toBeInstanceOf(
         ForbiddenError,
       );
-      await expect(cancelSettlement(deps(), m1, hh, byOwner.id)).rejects.toBeInstanceOf(
-        ForbiddenError,
+      // O parte (m1 = primitorul) anulează decontarea creată de owner.
+      expect((await cancelSettlement(deps(), m1, hh, byOwner.id)).cancelledByUserId).toBe(
+        m1.userId,
       );
+      // Owner-ul anulează una în care e parte (plătitorul).
       expect((await cancelSettlement(deps(), owner, hh, byM1.id)).cancelledByUserId).toBe(
         owner.userId,
       );
       await expect(cancelSettlement(deps(), owner, hh, byM1.id)).rejects.toMatchObject({
         reason: "settlement_already_cancelled",
       });
+      // Owner-ul care nu e parte și nu a creat-o NU o anulează.
+      const byM2 = await createSettlement(deps(), m2, hh, input(m2, m1));
+      await expect(cancelSettlement(deps(), owner, hh, byM2.id)).rejects.toBeInstanceOf(
+        ForbiddenError,
+      );
       // Validare: aceeași persoană, străin, sumă invalidă, câmp nepermis.
       await expect(createSettlement(deps(), m1, hh, input(m1, m1))).rejects.toBeInstanceOf(
         ValidationError,
@@ -776,6 +788,178 @@ describe.skipIf(!TEST_ADMIN_URL)("familia (Postgres real, finet_app)", () => {
           sql`update finet.settlements set amount_minor = 1 where id = ${byOwner.id}`,
         ),
       ).toBe("42501");
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------
+  describe("revizuirea de securitate (M1, M2, m4)", () => {
+    it("M1: invitațiile unui owner scos, retrogradat sau plecat se revocă; plasa din bază le refuză oricum", async () => {
+      const { hh, users } = await family(["M1a", "M1b", "M1c"]);
+      const [o1, o2, o3] = users as [Actor, Actor, Actor];
+      await changeMemberRole(deps(), o1, hh, o2.userId, { role: "owner" });
+      await changeMemberRole(deps(), o1, hh, o3.userId, { role: "owner" });
+      const fromO2 = await invited(o2, hh);
+      const fromO3 = await invited(o3, hh);
+      const fromO1 = await invited(o1, hh);
+      // Retrogradare (o2), eliminare (o3): invitațiile lor devin revocate.
+      await changeMemberRole(deps(), o1, hh, o2.userId, { role: "member" });
+      await removeMember(deps(), o1, hh, o3.userId);
+      const status = async () =>
+        Object.fromEntries(
+          (await listInvites(deps(), o1, hh)).map((i) => [i.id, i.status] as const),
+        );
+      expect(await status()).toMatchObject({
+        [fromO2.invite.id]: "revoked",
+        [fromO3.invite.id]: "revoked",
+        [fromO1.invite.id]: "active",
+      });
+      const guest = await f.newUser("M1g");
+      for (const t of [fromO2.token, fromO3.token]) {
+        await expect(acceptInvite(acceptDeps(), guest, { token: t })).rejects.toBeInstanceOf(
+          InviteUnavailableError,
+        );
+      }
+      // Transferul de ownership revocă invitațiile celui care cedează.
+      await transferOwnership(deps(), o1, hh, o2.userId);
+      const [o1Invite] = await f.admin<{ revoked: boolean }[]>`
+        select revoked_at is not null as revoked from finet.household_invites
+         where id = ${fromO1.invite.id}`;
+      expect(o1Invite?.revoked).toBe(true);
+    }, 120_000);
+
+    it("M1: plasa din bază — creatorul retrogradat direct (ocolind serviciul) → invitația e inutilizabilă, răspuns uniform", async () => {
+      const { hh, users } = await family(["M1d", "M1e"]);
+      const [o1, o2] = users as [Actor, Actor];
+      await changeMemberRole(deps(), o1, hh, o2.userId, { role: "owner" });
+      const fromO2 = await invited(o2, hh);
+      await f.admin`update finet.household_members set role = 'member'
+                     where household_id = ${hh} and user_id = ${o2.userId}`;
+      const guest = await f.newUser("M1h");
+      await expect(
+        acceptInvite(acceptDeps(), guest, { token: fromO2.token }),
+      ).rejects.toBeInstanceOf(InviteUnavailableError);
+      const [inv] = await f.admin<{ used_at: Date | null; revoked_at: Date | null }[]>`
+        select used_at, revoked_at from finet.household_invites where id = ${fromO2.invite.id}`;
+      expect(inv).toEqual({ used_at: null, revoked_at: null });
+    });
+
+    it("M2: debitorul nu plătește peste datorie; creditorul face corecții; primitorul orice sumă", async () => {
+      const { hh, users } = await family(["M2a", "M2b", "M2c"]);
+      const [a, b, c] = users as [Actor, Actor, Actor];
+      const { transactionId } = await personalExpense(a, hh, 100, "Card M2a");
+      await setTransactionSplit(deps(), a, hh, transactionId, {
+        mode: "equal",
+        userIds: [a.userId, b.userId],
+      });
+      const settle = (actor: Actor, from: Actor, to: Actor, amountMinor: number) =>
+        createSettlement(deps(), actor, hh, {
+          fromUserId: from.userId,
+          toUserId: to.userId,
+          amountMinor,
+          currency: "RON",
+          settledOn: "2026-10-12",
+        });
+      const pairBA = async () =>
+        (await getBalances(deps(), a, hh)).currencies[0]?.pairs.find(
+          (p) => p.debtorUserId === b.userId && p.creditorUserId === a.userId,
+        )?.amountMinor ?? 0n;
+      // B îi datorează 50: nu poate declara 60 (ar inversa sensul în favoarea lui).
+      await expect(settle(b, b, a, 60)).rejects.toMatchObject({
+        reason: "settlement_exceeds_debt",
+      });
+      // Fără datorie (C ↔ A): nici declarația de plată, nici owner-ul nu o pot crea.
+      await expect(settle(c, c, a, 1)).rejects.toMatchObject({
+        reason: "settlement_exceeds_debt",
+      });
+      // Creditorul (A) face o corecție spre debitor: B datorează 60.
+      await settle(a, a, b, 10);
+      expect(await pairBA()).toBe(60n);
+      await settle(b, b, a, 60);
+      expect(await pairBA()).toBe(0n);
+      // Datoria stinsă: încă 1 → refuzat.
+      await expect(settle(b, b, a, 1)).rejects.toMatchObject({ reason: "settlement_exceeds_debt" });
+      // Primitorul poate înregistra orice sumă (în defavoarea lui): A „a primit” 5 de la B.
+      await settle(a, b, a, 5);
+      const pairs = (await getBalances(deps(), b, hh)).currencies[0]!.pairs;
+      expect(pairs).toEqual([
+        { debtorUserId: a.userId, creditorUserId: b.userId, amountMinor: 5n },
+      ]);
+    });
+
+    it("M2: plecarea și eliminarea nu mai sunt blocate de sold: `unsettledBalance`, fostul membru rămâne în solduri", async () => {
+      const { hh, users } = await family(["M2d", "M2e", "M2f"]);
+      const [owner, m1, m2] = users as [Actor, Actor, Actor];
+      const { transactionId } = await personalExpense(owner, hh, 300, "Card M2d");
+      await setTransactionSplit(deps(), owner, hh, transactionId, {
+        mode: "equal",
+        userIds: users.map((u) => u.userId),
+      });
+      expect(await leaveHousehold(deps(), m1, hh)).toEqual({ unsettledBalance: true });
+      expect(await removeMember(deps(), owner, hh, m2.userId)).toEqual({
+        unsettledBalance: true,
+      });
+      const view = await getBalances(deps(), owner, hh);
+      expect(view.formerMemberIds).toEqual([m1.userId, m2.userId].sort());
+      expect(view.me).toEqual([{ currency: "RON", owesMinor: 0n, owedMinor: 200n }]);
+      // Fără sold: `unsettledBalance: false`.
+      const other = await family(["M2g", "M2h"]);
+      expect(await leaveHousehold(deps(), other.users[1]!, other.hh)).toEqual({
+        unsettledBalance: false,
+      });
+    });
+
+    it("m4: soldul unei perechi nu trece de plafon (decontări, împărțiri, anulări)", async () => {
+      const { hh, users } = await family(["M4a", "M4b"]);
+      const [a, b] = users as [Actor, Actor];
+      // ~900 de decontări de 10^13 ar fi trecut de 2^53; aici aducem perechea la plafon direct.
+      const cap = 100_000_000_000_000n;
+      await f.admin`insert into finet.settlements
+          (household_id, from_user_id, to_user_id, amount_minor, currency, settled_on, created_by_user_id)
+        select ${hh}, ${a.userId}, ${b.userId}, 10000000000000, 'RON', '2026-10-01', ${a.userId}
+          from generate_series(1, 10)`;
+      // B îi datorează acum lui A exact plafonul (10 × 10^13).
+      const pair = (await getBalances(deps(), a, hh)).currencies[0]!.pairs[0]!;
+      expect(pair).toEqual({ debtorUserId: b.userId, creditorUserId: a.userId, amountMinor: cap });
+      // Corecția creditorului ar trece de plafon.
+      await expect(
+        createSettlement(deps(), a, hh, {
+          fromUserId: a.userId,
+          toUserId: b.userId,
+          amountMinor: 1,
+          currency: "RON",
+          settledOn: "2026-10-12",
+        }),
+      ).rejects.toMatchObject({ reason: "balance_limit" });
+      // O împărțire care ar crește datoria lui B.
+      const { transactionId } = await personalExpense(a, hh, 2, "Card M4a");
+      await expect(
+        setTransactionSplit(deps(), a, hh, transactionId, {
+          mode: "equal",
+          userIds: [a.userId, b.userId],
+        }),
+      ).rejects.toMatchObject({ reason: "balance_limit" });
+      // Stingerea parțială merge; anularea ei ar readuce perechea la plafon (încă permis), dar
+      // nu peste.
+      const partial = await createSettlement(deps(), b, hh, {
+        fromUserId: b.userId,
+        toUserId: a.userId,
+        amountMinor: 1,
+        currency: "RON",
+        settledOn: "2026-10-12",
+      });
+      await createSettlement(deps(), a, hh, {
+        fromUserId: a.userId,
+        toUserId: b.userId,
+        amountMinor: 1,
+        currency: "RON",
+        settledOn: "2026-10-12",
+      });
+      await expect(cancelSettlement(deps(), b, hh, partial.id)).rejects.toMatchObject({
+        reason: "balance_limit",
+      });
+      expect(JSON.stringify(balancesToJson(await getBalances(deps(), a, hh)))).toContain(
+        String(cap),
+      );
     });
   });
 

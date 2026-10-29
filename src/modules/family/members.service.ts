@@ -11,6 +11,7 @@ import { isValidId, parseInput } from "@/modules/ledger/input";
 import { type FamilyDeps, inFamily } from "./context";
 import {
   clearActiveHouseholdIf,
+  revokeInvitesCreatedBy,
   deleteMember,
   lockHouseholdMembers,
   selectMember,
@@ -19,7 +20,7 @@ import {
   updateMemberRole,
 } from "./family.repo";
 import { type MemberView, activeHouseholdSchema, roleChangeSchema } from "./family.schema";
-import { loadHouseholdBalances } from "./settlements.service";
+import { loadHouseholdBalances, lockHouseholdBalances } from "./settlements.service";
 import { isSettled } from "./split-math";
 
 /**
@@ -34,9 +35,11 @@ import { isSettled } from "./split-math";
  * (`household_members_guard_owner`, sub lock, pentru curse). Transferul e explicit:
  * `transferOwnership` promovează ținta și îl retrogradează pe owner, atomic.
  *
- * Plecarea / eliminarea (decizia mea, ADR 0016): blocate cât timp membrul are vreun sold reciproc
- * nenul (`balance_not_settled`; se decontează întâi, un owner poate înregistra decontarea).
- * Datele membrului RĂMÂN în gospodărie: tranzacțiile din conturile comune rămân ale tuturor;
+ * Plecarea / eliminarea (decizia coordonatorului după revizuirea M2, ADR 0016): NU sunt blocate de
+ * sold; soldul rămâne în istoric (cel plecat apare ca fost membru în solduri și decontări), iar
+ * serviciul întoarce `unsettledBalance` ca UI-ul să avertizeze. Invitațiile ACTIVE create de un
+ * owner care pleacă, e scos sau e retrogradat se revocă în aceeași tranzacție (revizuirea M1;
+ * plasa de siguranță: `finet.accept_invite` cere creatorul încă owner). Datele membrului RĂMÂN în gospodărie: tranzacțiile din conturile comune rămân ale tuturor;
  * conturile lui PERSONALE (și tot ce e legat de ele) devin invizibile pentru toți (nimeni altcineva
  * nu e proprietarul lor) și redevin vizibile doar dacă revine; regulile recurente pe ele nu se mai
  * generează (`due_recurring_rules` îl cere pe proprietar membru activ). Împărțirile și decontările
@@ -76,6 +79,8 @@ export async function changeMemberRole(
       if (member.role === "owner") {
         const owners = (await selectMembers(tx, m.householdId)).filter((x) => x.role === "owner");
         if (owners.length <= 1) throw lastOwner();
+        // Un owner retrogradat nu mai poate aduce pe nimeni: invitațiile lui active se revocă.
+        await revokeInvitesCreatedBy(tx, m.householdId, target);
       }
       await updateMemberRole(tx, m.householdId, target, input.role);
       await insertAudit(tx, actor.userId, m.householdId, {
@@ -106,6 +111,8 @@ export async function transferOwnership(
   return inFamily(deps, actor, householdId, "owner", async (tx, m) => {
     await lockHouseholdMembers(tx, m.householdId);
     if (!(await selectMember(tx, m.householdId, target))) throw new NotFoundError();
+    // Înaintea retrogradării (RLS-ul invitațiilor cere un owner): invitațiile actorului se revocă.
+    await revokeInvitesCreatedBy(tx, m.householdId, actor.userId);
     await updateMemberRole(tx, m.householdId, target, "owner");
     await updateMemberRole(tx, m.householdId, actor.userId, "member");
     await insertAudit(tx, actor.userId, m.householdId, {
@@ -117,14 +124,14 @@ export async function transferOwnership(
   });
 }
 
-async function assertSettled(tx: Tx, householdId: string, userId: string) {
-  const balances = await loadHouseholdBalances(tx, householdId);
-  if (!isSettled(balances, userId)) {
-    throw new ConflictError(
-      "balance_not_settled",
-      "Membrul are solduri nedecontate: înregistrează întâi decontările.",
-    );
-  }
+export type DepartureResult = Readonly<{
+  /** `true` dacă membrul plecat are solduri nedecontate (rămân în istoric; avertisment în UI). */
+  unsettledBalance: boolean;
+}>;
+
+async function hasUnsettledBalance(tx: Tx, householdId: string, userId: string) {
+  await lockHouseholdBalances(tx, householdId);
+  return !isSettled(await loadHouseholdBalances(tx, householdId), userId);
 }
 
 /** Un owner scoate alt membru (pe sine: `leaveHousehold`). */
@@ -133,23 +140,26 @@ export async function removeMember(
   actor: Actor,
   householdId: string,
   targetUserId: string,
-): Promise<void> {
+): Promise<DepartureResult> {
   if (!isValidId(targetUserId)) throw new NotFoundError();
   const target = targetUserId.toLowerCase();
   if (target === actor.userId.toLowerCase()) {
     throw new ConflictError("use_leave", "Pentru tine folosește „Părăsește gospodăria”.");
   }
-  await inFamily(deps, actor, householdId, "owner", async (tx, m) => {
+  return inFamily(deps, actor, householdId, "owner", async (tx, m) => {
     await lockHouseholdMembers(tx, m.householdId);
     const member = await selectMember(tx, m.householdId, target);
     if (!member) throw new NotFoundError();
-    await assertSettled(tx, m.householdId, target);
+    const unsettledBalance = await hasUnsettledBalance(tx, m.householdId, target);
+    await revokeInvitesCreatedBy(tx, m.householdId, target);
     await insertAudit(tx, actor.userId, m.householdId, {
       action: "household.member_removed",
       targetType: "user",
       targetId: target,
+      metadata: { unsettled: unsettledBalance },
     });
     if (!(await deleteMember(tx, m.householdId, target))) throw new NotFoundError();
+    return { unsettledBalance };
   });
 }
 
@@ -158,8 +168,8 @@ export async function leaveHousehold(
   deps: FamilyDeps,
   actor: Actor,
   householdId: string,
-): Promise<void> {
-  await inFamily(deps, actor, householdId, "member", async (tx, m) => {
+): Promise<DepartureResult> {
+  return inFamily(deps, actor, householdId, "member", async (tx, m) => {
     await lockHouseholdMembers(tx, m.householdId);
     const members = await selectMembers(tx, m.householdId);
     if (members.length <= 1) {
@@ -171,15 +181,18 @@ export async function leaveHousehold(
     if (m.role === "owner" && members.filter((x) => x.role === "owner").length <= 1) {
       throw lastOwner();
     }
-    await assertSettled(tx, m.householdId, actor.userId);
+    const unsettledBalance = await hasUnsettledBalance(tx, m.householdId, actor.userId);
+    if (m.role === "owner") await revokeInvitesCreatedBy(tx, m.householdId, actor.userId);
     // Auditul ÎNAINTE de ștergere: după ea, utilizatorul nu mai e membru (RLS pe audit_events).
     await insertAudit(tx, actor.userId, m.householdId, {
       action: "household.member_left",
       targetType: "user",
       targetId: actor.userId,
+      metadata: { unsettled: unsettledBalance },
     });
     await clearActiveHouseholdIf(tx, actor.userId, m.householdId);
     if (!(await deleteMember(tx, m.householdId, actor.userId))) throw new NotFoundError();
+    return { unsettledBalance };
   });
 }
 

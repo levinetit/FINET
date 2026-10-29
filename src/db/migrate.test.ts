@@ -277,11 +277,12 @@ describe("readMigrations (fără bază)", () => {
     expect(definers).toEqual([
       "check_transfer_group",
       "due_recurring_rules",
+      "category_used_elsewhere",
       "household_members_check_cap",
       "household_members_guard_owner",
       "accept_invite",
     ]);
-    expect([...code.matchAll(/security\s+definer/gi)]).toHaveLength(5);
+    expect([...code.matchAll(/security\s+definer/gi)]).toHaveLength(6);
     // Politicile noi ale proprietarului (finet_migrator): doar citiri înguste și inserarea
     // apartenenței în curs de acceptare.
     expect(
@@ -291,6 +292,9 @@ describe("readMigrations (fără bază)", () => {
     ).toEqual([
       "transactions_migrator_transfer_check:select",
       "accounts_migrator_personal_owner:select",
+      "transactions_migrator_category_check:select",
+      "recurring_rules_migrator_category_check:select",
+      "budgets_migrator_category_check:select",
       "household_members_migrator_join:insert",
       "household_invites_migrator_accept_read:select",
       "household_invites_migrator_accept_use:update",
@@ -304,6 +308,13 @@ describe("readMigrations (fără bază)", () => {
     const grantSelect = code.match(/grant select \(([^)]*)\) on finet\.household_invites/);
     expect(grantSelect?.[1]).not.toContain("token_hash");
     expect(code).toContain("grant execute on function finet.accept_invite(text) to finet_app");
+    expect(code).toContain(
+      "grant execute on function finet.category_used_elsewhere(uuid) to finet_app",
+    );
+    // Politica pe conturile personale a proprietarului e legată de o variabilă de tranzacție.
+    expect(code).toMatch(
+      /accounts_migrator_personal_owner on finet\.accounts\s+for select to finet_migrator\s+using \(owner_user_id is not null\s+and current_setting\('finet\.definer_scope', true\)/,
+    );
     expect(code).not.toMatch(/grant[^;]*delete[^;]*on finet\.(household_invites|settlements)/i);
   });
 

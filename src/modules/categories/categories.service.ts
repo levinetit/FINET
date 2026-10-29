@@ -9,6 +9,7 @@ import { isValidId, parseInput } from "@/modules/ledger/input";
 
 import {
   type CategoryRow,
+  categoryUsedElsewhere,
   countUsage,
   deleteCategoryRow,
   hasChildren,
@@ -162,6 +163,12 @@ export async function updateCategory(
  * Șterge o categorie personalizată (5.6). Folosită → cere `reassignTo` (o categorie vizibilă, de
  * același tip); tranzacțiile se mută în aceeași tranzacție SQL, apoi categoria se șterge.
  * Întoarce câte tranzacții au fost reasignate.
+ *
+ * Faza 8 (revizuirea m1, ADR 0016): dacă după reasignare categoria mai e folosită în rânduri pe
+ * care actorul NU le vede (conturile personale ale altor membri, bugetele lor personale), ea NU
+ * se șterge (cheia străină ar fi dezvăluit folosirea, iar bugetele personale ale altora ar fi
+ * dispărut în cascadă): se ASCUNDE (`hidden: true` în răspuns, mesaj neutru „încă folosită în
+ * gospodărie”). Se află doar un boolean, nu unde sau de către cine.
  */
 export async function deleteCategory(
   deps: LedgerDeps,
@@ -169,7 +176,7 @@ export async function deleteCategory(
   householdId: string,
   categoryId: string,
   rawOptions: unknown = {},
-): Promise<{ reassigned: number }> {
+): Promise<{ reassigned: number; hidden?: true }> {
   if (!isValidId(categoryId)) throw new NotFoundError();
   const options = parseInput(categoryDeleteSchema, rawOptions) ?? {};
   const id = categoryId.toLowerCase();
@@ -203,6 +210,16 @@ export async function deleteCategory(
         throw new ValidationError({ reassignTo: "Categoria are alt tip." });
       }
       reassigned = await reassignTransactions(tx, m.householdId, id, target.id);
+    }
+    if (await categoryUsedElsewhere(tx, id)) {
+      await updateCategoryRow(tx, m.householdId, id, { hidden: true });
+      await insertAudit(tx, actor.userId, m.householdId, {
+        action: "category.deleted",
+        targetType: "category",
+        targetId: id,
+        metadata: { reassigned, hidden: true },
+      });
+      return { reassigned, hidden: true };
     }
     if (!(await deleteCategoryRow(tx, m.householdId, id))) throw new NotFoundError();
     await insertAudit(tx, actor.userId, m.householdId, {
