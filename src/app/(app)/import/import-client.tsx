@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ro } from "@/messages/ro";
 
 import { apiFetch, goToLogin } from "../../_lib/api-client";
+import { type ScanSummary, offlineScans } from "../../_lib/offline-scans-client";
 import {
   ACCEPTED_TYPES,
   MAX_FILES,
@@ -72,10 +73,13 @@ export function ImportClient({
   initialUsage,
   initialRecent,
   externalAi,
+  maxUploadBytes,
 }: Readonly<{
   initialUsage: Usage;
   initialRecent: readonly RecentDocument[];
   externalAi: boolean;
+  /** `MAX_UPLOAD_MB` în octeți: plafonul pozelor păstrate offline (Faza 9). */
+  maxUploadBytes: number;
 }>) {
   const t = ro.imports;
   const hydrated = useHydrated();
@@ -90,6 +94,47 @@ export function ImportClient({
   const [usage, setUsage] = useState<Usage>(initialUsage);
   const [docs, setDocs] = useState<RecentDocument[]>([...initialRecent]);
   const seq = useRef(0);
+  // Faza 9 (ADR 0020): coada offline (IndexedDB) și starea conexiunii.
+  const queue = offlineScans();
+  const offline = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getServerSnapshot);
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine !== false);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+  // Documentele confirmate de server la încărcarea din coadă apar în „Încărcate recent”.
+  useEffect(
+    () =>
+      queue.onUploaded((created) => {
+        const fresh: RecentDocument[] = created.flatMap((d) =>
+          typeof d.id === "string" && typeof d.status === "string"
+            ? [
+                {
+                  id: d.id,
+                  status: d.status,
+                  errorCode: typeof d.errorCode === "string" ? d.errorCode : null,
+                  receiptId: null,
+                  batchId: typeof d.batchId === "string" ? d.batchId : null,
+                  documentOrder: typeof d.documentOrder === "number" ? d.documentOrder : null,
+                  createdAt: typeof d.createdAt === "string" ? d.createdAt : "",
+                },
+              ]
+            : [],
+        );
+        setDocs((current) => {
+          const ids = new Set(fresh.map((d) => d.id));
+          return [...fresh, ...current.filter((d) => !ids.has(d.id))];
+        });
+        setInfo(ro.offline.uploaded(1));
+      }),
+    [queue],
+  );
 
   const addFiles = useCallback(
     async (list: FileList | readonly File[]) => {
@@ -122,6 +167,10 @@ export function ImportClient({
       setError(problem);
       return;
     }
+    if (navigator.onLine === false) {
+      await saveOffline();
+      return;
+    }
     const form = new FormData();
     form.append("kind", "receipt");
     if (longReceipt) form.append("longReceipt", "true");
@@ -142,7 +191,9 @@ export function ImportClient({
           headers,
         });
       } catch {
-        setError(ro.ledger.errors.network);
+        // Fără rețea (Wi-Fi-ul magazinului poate „minți” despre `onLine`): pozele merg în coadă.
+        if (offline.available) await saveOffline();
+        else setError(ro.ledger.errors.network);
         return;
       }
       if (response.status === 401) return goToLogin();
@@ -175,6 +226,23 @@ export function ImportClient({
     } finally {
       setUploading(false);
     }
+  }
+
+  /** Păstrează selecția curentă în coada offline (ADR 0020). */
+  async function saveOffline() {
+    const result = await queue.enqueue(
+      picked.map((p) => p.file),
+      longReceipt,
+      maxUploadBytes,
+    );
+    if (!result.ok) {
+      setError(ro.offline.errors[result.code] ?? ro.offline.errors.offline_unavailable!);
+      return;
+    }
+    setInfo(ro.offline.savedOffline);
+    setPicked([]);
+    setLongReceipt(false);
+    if (inputRef.current) inputRef.current.value = "";
   }
 
   // Polling blând pentru documentele care încă se procesează.
@@ -225,6 +293,22 @@ export function ImportClient({
           <p className="text-sm text-muted-foreground">{t.statementsLater}</p>
         </div>
       </Card>
+
+      {!online ? (
+        <Alert tone="info" data-testid="offline-banner">
+          {offline.available ? ro.offline.offlineNow : ro.offline.unavailable}
+        </Alert>
+      ) : null}
+
+      {offline.scans.length > 0 ? (
+        <OfflineQueue
+          scans={offline.scans}
+          syncing={offline.syncing}
+          needsAuth={offline.needsAuth}
+          onRetry={(id) => void queue.retry(id)}
+          onRemove={(id) => void queue.remove(id)}
+        />
+      ) : null}
 
       {!externalAi ? (
         <Alert tone="info" data-testid="consent-missing">
@@ -373,7 +457,7 @@ export function ImportClient({
             onClick={() => void upload()}
             data-testid="upload"
           >
-            {uploading ? t.uploading : t.upload}
+            {uploading ? t.uploading : online ? t.upload : ro.offline.saveOffline}
           </Button>
           {picked.length > 0 ? (
             <Button variant="ghost" disabled={disabled} onClick={() => setPicked([])}>
@@ -430,5 +514,96 @@ export function ImportClient({
         )}
       </Card>
     </div>
+  );
+}
+
+const timeFormat = new Intl.DateTimeFormat("ro-RO", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Bucharest",
+});
+
+/** Lista încărcărilor în așteptare pe acest dispozitiv (Faza 9, ADR 0020). */
+function OfflineQueue({
+  scans,
+  syncing,
+  needsAuth,
+  onRetry,
+  onRemove,
+}: Readonly<{
+  scans: readonly ScanSummary[];
+  syncing: boolean;
+  needsAuth: boolean;
+  onRetry: (id: string) => void;
+  onRemove: (id: string) => void;
+}>) {
+  const t = ro.offline;
+  return (
+    <Card aria-labelledby="offline-title" data-testid="offline-queue">
+      <CardHeader>
+        <CardTitle id="offline-title">{t.title}</CardTitle>
+        <CardDescription>{t.hint}</CardDescription>
+      </CardHeader>
+      <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+        {syncing ? t.syncing : null}
+      </p>
+      {needsAuth ? <Alert tone="info">{t.needsAuth}</Alert> : null}
+      <ul className="flex flex-col divide-y divide-border">
+        {scans.map((s) => {
+          const what = t.entry(s.files, s.longReceipt);
+          return (
+            <li
+              key={s.id}
+              className="flex flex-wrap items-center justify-between gap-2 py-2"
+              data-testid="offline-scan"
+              data-state={s.state}
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="font-medium">
+                  {what} · {s.state === "failed" ? t.stateFailed : t.statePending}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {t.savedAt(timeFormat.format(new Date(s.createdAt)))}
+                </span>
+                {s.otherHousehold ? (
+                  <span className="text-sm text-muted-foreground">{t.otherHousehold}</span>
+                ) : s.errorCode ? (
+                  <span
+                    className={cn(
+                      "text-sm",
+                      s.state === "failed" ? "text-bad" : "text-muted-foreground",
+                    )}
+                  >
+                    {t.errors[s.errorCode] ?? documentErrorText(s.errorCode)}
+                  </span>
+                ) : null}
+              </span>
+              <span className="flex gap-2">
+                {s.state === "failed" && !s.otherHousehold ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={t.retryLabel(what)}
+                    onClick={() => onRetry(s.id)}
+                  >
+                    {t.retry}
+                  </Button>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={t.removeLabel(what)}
+                  onClick={() => onRemove(s.id)}
+                >
+                  {t.remove}
+                </Button>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }

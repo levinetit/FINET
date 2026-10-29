@@ -36,7 +36,14 @@ import {
   queueAwaitingConsent,
   uploadDocuments,
 } from "./documents.service";
-import { HOSTILE, jpegWithGpsExif, multipartRequest, receiptLikeImage, textPdf } from "./testing";
+import {
+  type FormPart,
+  HOSTILE,
+  jpegWithGpsExif,
+  multipartRequest,
+  receiptLikeImage,
+  textPdf,
+} from "./testing";
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
@@ -280,6 +287,45 @@ describe.skipIf(!TEST_ADMIN_URL)("documente (Postgres real, finet_app)", () => {
         ["files", await receiptLikeImage({ seed: 22 })],
       ]).catch((e: unknown) => e);
       expect((dup as ConflictError).reason).toBe("long_receipt_duplicate");
+      expect((await files(f.HA)).length).toBe(3);
+    });
+
+    it("Faza 9: reîncercarea EXACTĂ a unui bon lung → același lot, duplicat, nimic nou; altfel conflict", async () => {
+      const parts = await Promise.all([41, 42, 43].map((seed) => receiptLikeImage({ seed })));
+      const asLong = (list: readonly Buffer[]): FormPart[] => [
+        ["longReceipt", "true"],
+        ...list.map((p, i): FormPart => ["files", p, `${i}.jpg`]),
+      ];
+      const first = await upload(asLong(parts));
+      expect(first.created).toBe(3);
+      const [usage] = await f.admin<{ count: number }[]>`
+        select count from finet.document_usage_daily where household_id = ${f.HA}`;
+
+      // Coada offline retrimite exact aceeași cerere (răspunsul anterior s-a pierdut).
+      const again = await upload(asLong(parts));
+      expect(again.created).toBe(0);
+      expect(again.batchId).toBe(first.batchId);
+      expect(again.documents.map((d) => [d.id, d.duplicate, d.documentOrder])).toEqual(
+        first.documents.map((d) => [d.id, true, d.documentOrder]),
+      );
+      expect((await files(f.HA)).length).toBe(3);
+      const [usageAfter] = await f.admin<{ count: number }[]>`
+        select count from finet.document_usage_daily where household_id = ${f.HA}`;
+      expect(usageAfter!.count).toBe(usage!.count);
+
+      // Altă ordine, un subset sau o poză repetată nu sunt reîncercări exacte → conflict.
+      for (const variant of [
+        [parts[1]!, parts[0]!, parts[2]!],
+        [parts[0]!, parts[1]!],
+        [parts[0]!, parts[0]!, parts[1]!],
+      ]) {
+        const error = await upload(asLong(variant)).catch((e: unknown) => e);
+        expect((error as ConflictError).reason).toBe("long_receipt_duplicate");
+      }
+      // Alt utilizator din altă gospodărie cu aceleași poze: lot nou în gospodăria lui.
+      const other = await upload(asLong(parts), f.B, f.HB);
+      expect(other.created).toBe(3);
+      expect(other.batchId).not.toBe(first.batchId);
       expect((await files(f.HA)).length).toBe(3);
     });
   });

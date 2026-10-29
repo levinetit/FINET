@@ -319,6 +319,32 @@ describe("FAIL-CLOSED", () => {
       await expectForbidden(await call("/api/health"));
     });
 
+    it("Faza 9 (ADR 0020): fișierele PWA NU au excepție de la Access (403 fără JWT)", async () => {
+      prodEnv();
+      for (const path of [
+        "/sw.js",
+        "/manifest.webmanifest",
+        "/icons/icon-192.png",
+        "/icons/apple-touch-icon.png",
+        "/offline",
+        "/pwa/offline.js",
+        "/pwa/offline.css",
+        "/help",
+        "/settings",
+        "/settings/android",
+        "/api/v1/app/android/latest",
+        // F9-B (ADR 0021): GDPR și statistici, tot prin Access.
+        "/settings/privacy",
+        "/settings/statistics",
+        "/api/v1/me/export",
+        "/api/v1/me/deletion",
+        "/api/v1/me/delete",
+        "/api/v1/admin/stats",
+      ]) {
+        await expectForbidden(await call(path));
+      }
+    });
+
     it("JWT prezent, dar cheile Access nu pot fi obținute → 403 (nu 500, nu permis)", async () => {
       prodEnv();
       await expectForbidden(
@@ -665,6 +691,13 @@ describe("matcher-ul din src/proxy.ts", () => {
       "/api/v1/receipts",
       "/import",
       "/receipts",
+      // Faza 9: fișierele PWA trec prin proxy (Access + antete), ca orice altă cale.
+      "/sw.js",
+      "/manifest.webmanifest",
+      "/icons/icon-192.png",
+      "/offline",
+      "/pwa/offline.js",
+      "/api/v1/app/android/latest",
     ]) {
       expect(matches(path), path).toBe(true);
     }

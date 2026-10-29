@@ -6,12 +6,14 @@ import { useEffect, useRef, useState } from "react";
 
 import { Logo } from "@/app/_components/logo";
 import { cn } from "@/lib/utils";
+import { clearOfflineScans } from "@/app/_lib/offline-scans-idb";
 import { useHydrated } from "@/app/_lib/use-hydrated";
 import { ro } from "@/messages/ro";
 
 import {
   ChartIcon,
   FolderIcon,
+  HelpIcon,
   HomeIcon,
   ListIcon,
   LogoutIcon,
@@ -20,6 +22,7 @@ import {
   ReceiptIcon,
   RepeatIcon,
   ScanIcon,
+  SettingsIcon,
   TagIcon,
   TargetIcon,
   UserIcon,
@@ -51,6 +54,9 @@ const ITEMS = [
   { href: "/family", label: ro.nav.family, icon: UsersIcon, mobile: false },
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
+  // Faza 9: setările aplicației (instalare PWA, aplicația Android) și ghidul.
+  { href: "/settings", label: ro.nav.settings, icon: SettingsIcon, mobile: false },
+  { href: "/help", label: ro.nav.help, icon: HelpIcon, mobile: false },
 ] as const;
 
 const itemClass =
@@ -113,6 +119,9 @@ export function AppNav() {
         response.ok ||
         (response.status >= 400 && response.status < 500 && response.status !== 403)
       ) {
+        // Faza 9 (ADR 0020): pozele în așteptare (IndexedDB) nu rămân pe dispozitiv după
+        // deconectare (alt utilizator al aceluiași browser nu le vede și nu le încarcă).
+        await clearOfflineScans();
         const target = "/login";
         // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- navigare completă intenționată: sesiunea s-a schimbat, cache-ul routerului trebuie golit
         window.location.assign(target);
@@ -142,8 +151,11 @@ export function AppNav() {
       )}
     >
       <div className="hidden md:block">
-        <Link href="/dashboard" aria-label={`${ro.app.name}, ${ro.nav.dashboard}`}>
+        {/* Numele accesibil din conținut („FINET, Acasă”), fără `aria-label`: un aria-label care nu
+            conține textul vizibil al logoului încalcă WCAG 2.5.3 (axe: label-content-name-mismatch). */}
+        <Link href="/dashboard">
           <Logo className="text-3xl" />
+          <span className="sr-only">, {ro.nav.dashboard}</span>
         </Link>
         <p className="mt-1 text-sm text-muted-foreground">{ro.app.tagline}</p>
       </div>

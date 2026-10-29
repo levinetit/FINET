@@ -84,10 +84,34 @@ export function documentItemJson(d: DocumentListItem) {
   return { ...viewJson(d), receiptId: d.receiptId };
 }
 
+/**
+ * Faza 9 (ADR 0020): proprietarul AȘTEPTAT al unei încărcări din coada offline. Clientul trimite
+ * utilizatorul și gospodăria în care a fost făcută scanarea; dacă unul dintre antete e prezent,
+ * ambele trebuie să coincidă cu sesiunea (utilizatorul) și cu gospodăria curentă, altfel 409
+ * `owner_mismatch` (`reason`: `user` sau `household`), ÎNAINTE de citirea corpului și de stocare.
+ * Fără antete (încărcarea online obișnuită, clienții existenți): nicio verificare în plus.
+ */
+export const EXPECTED_USER_HEADER = "x-finet-expected-user";
+export const EXPECTED_HOUSEHOLD_HEADER = "x-finet-expected-household";
+
+export function assertExpectedOwner(request: Request, userId: string, householdId: string): void {
+  const user = request.headers.get(EXPECTED_USER_HEADER);
+  const household = request.headers.get(EXPECTED_HOUSEHOLD_HEADER);
+  if (user === null && household === null) return;
+  const same = (value: string | null, actual: string) =>
+    value !== null && value.trim().toLowerCase() === actual.toLowerCase();
+  const message = "Încărcarea aparține altui cont sau altei gospodării.";
+  if (!same(user, userId)) throw new ApiError(409, "owner_mismatch", message, { reason: "user" });
+  if (!same(household, householdId)) {
+    throw new ApiError(409, "owner_mismatch", message, { reason: "household" });
+  }
+}
+
 export function uploadDocumentsHandler(request: Request, d: DocumentsApiDeps): Promise<Response> {
   return handle(request, d, async (ctx) => {
     await enforceRateLimit(ctx, "api_document_upload", ctx.limits.documentUpload);
     const hh = await currentHousehold(ctx);
+    assertExpectedOwner(request, ctx.actor.userId, hh);
     try {
       const result = await uploadDocuments(
         {

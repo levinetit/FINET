@@ -18,6 +18,7 @@ describe("descărcarea exporturilor CSV", () => {
 
   it("mesaje clare pentru plafon (409) și rate limit (429)", () => {
     expect(exportErrorMessage(409, "export_too_large", null)).toBe(ro.exports.tooLarge);
+    expect(exportErrorMessage(413, undefined, null)).toBe(ro.exports.archiveTooLarge);
     expect(exportErrorMessage(429, undefined, null)).toBe(ro.exports.rateLimited);
     expect(exportErrorMessage(429, undefined, 30)).toBe(ro.exports.rateLimitedRetry(30));
     expect(exportErrorMessage(0, undefined, null)).toBe(ro.ledger.errors.network);

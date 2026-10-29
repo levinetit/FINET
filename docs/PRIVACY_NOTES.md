@@ -31,7 +31,7 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 
 ## Statistici de utilizare și URL-uri (Faza 2, revizuirea F2)
 - `client_installations` și `app_events` se scriu doar cu consimțământul `usage_stats` activ; la revocare (`PUT /api/v1/me/consents` cu `usageStats: false`) instalările și evenimentele utilizatorului se **șterg**. Cel mult 20 de instalări per utilizator.
-- **Retenția evenimentelor (TODO, Faza 9):** 13 luni, apoi agregare pe zi și versiune și ștergere (6.5); azi rămân până la revocare sau la ștergerea contului.
+- **Retenția evenimentelor (Faza 9, F9-B, ADR 0021):** 13 luni; apoi comanda zilnică `finet-admin aggregate-events` le agregă pe zi, nume, platformă, versiune, ecran și cod de eroare (fără utilizator, instalare sau gospodărie: agregat anonim) și le șterge. La revocarea `usage_stats` și la ștergerea contului, evenimentele utilizatorului se șterg.
 - **Căutarea în URL (LOW-3):** parametrul `q` din `GET /api/v1/transactions` (și din pagina de tranzacții) e în URL. Aplicația nu loghează URL-uri sau query string-uri (logurile ei au doar mesaje fixe), dar Cloudflare (tunel/Access), Traefik și eventualele proxy-uri pot înregistra URL-urile complete în jurnalele lor. Recomandare pentru operator: fără jurnale de acces cu query string pe hostname-ul FINET. Alternativă într-o fază viitoare: `POST /api/v1/transactions/search`.
 
 ## Documente încărcate (Faza 6, F6-A)
@@ -67,8 +67,23 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Invitațiile:** linkul se arată o singură dată celui care invită, doar în pagină (nu se salvează în browser); înainte de acceptare, pagina de invitație nu arată numele gospodăriei. Tokenul apare în calea URL-ului, deci poate rămâne în istoricul browserului și în jurnalele de acces ale Cloudflare/Traefik (unică folosință, expiră în ≤ 7 zile).
 - **Actualizările live (SSE):** evenimentele conțin doar tipul și id-ul obiectului, nu sume, nume sau descrieri; o tranzacție dintr-un cont personal nu generează eveniment pentru ceilalți membri. Evenimentele nu se stochează (memoria procesului web).
 
+## PWA și scanarea offline (Faza 9, F9-A; ADR 0020)
+- **Ce rămâne pe dispozitiv:** doar fișierele aplicației în cache-ul service worker-ului (cod JavaScript/CSS compilat, iconițe, manifestul, pagina „fără conexiune”). Nicio pagină cu date, niciun răspuns API.
+- **Pozele scanate fără rețea:** stau în IndexedDB-ul browserului (baza `finet-offline`), cu id-ul utilizatorului și al gospodăriei, până când serverul confirmă încărcarea; apoi se șterg. Plafoane: 10 încărcări, 50 MB, 7 zile (după 7 zile se șterg neîncărcate).
+- **Alt utilizator pe același browser:** pozele unui utilizator nu se încarcă niciodată în contul sau gospodăria altuia; la pornirea aplicației pentru alt utilizator ele se șterg, iar la **deconectare** se șterge toată baza.
+- **Pagina „fără conexiune”** afișează doar numărul încărcărilor în așteptare (nu pozele).
+- **Invitația de instalare:** se păstrează local doar preferința „nu mai arăta” (`localStorage`).
+- **Aplicația Android:** pagina de descărcare arată metadatele versiunii (fără date personale); codul QR se generează pe server, fără serviciu extern.
+
+## Export și ștergere GDPR, statistici (Faza 9, F9-B; ADR 0021)
+- **Exportul** (Setări → Datele mele, `GET /api/v1/me/export`): o arhivă ZIP cu profilul, preferințele, consimțămintele, sesiunile (data, expirarea, IP-ul și browserul, fără tokenuri), metodele de autentificare (fără parolă), instalările și evenimentele proprii; pe fiecare gospodărie: tot ce vede utilizatorul în aplicație (conturi, categorii, etichete, tranzacții în JSON și CSV, bugete, obiective, recurențe), bonurile încărcate de el cu fișierele lor, împărțirile și decontările în care e parte, acțiunile lui din jurnalul de audit. **Nu** conține conturile personale ale altor membri, numele sau emailurile altora, parole, tokenuri sau chei. 3 exporturi pe oră; auditat fără conținut. Limita arhivei: 4 GB și 65.535 de fișiere (formatul ZIP fără ZIP64); peste ea serverul refuză dinainte (413) și exportul îl face operatorul, din backup.
+- **Ștergerea contului** (Setări → Datele mele): cu parola și confirmarea „ȘTERGE”; imediată, fără fereastră de grație. Se șterg: gospodăriile în care era singurul membru (cu toate datele și fișierele), conturile lui personale din toate gospodăriile (cu tranzacțiile lor), bugetele personale, sesiunile, parola, preferințele, instalările, evenimentele; consimțămintele se revocă. Din gospodăriile cu alți membri iese; datele comune (conturile comune, tranzacțiile lor, documentele încărcate în gospodăria comună) rămân celorlalți. Dacă împărțiri sau decontări din istoricul celorlalți îl menționează, rândul lui rămâne **anonimizat** („Cont șters”, email înlocuit, cont dezactivat), altfel se șterge complet. Ultimul proprietar al unei gospodării cu alți membri transferă întâi rolul; administratorul platformei nu se poate șterge din aplicație (operatorul desemnează întâi altul). Pe dispozitiv, coada offline (IndexedDB) se golește.
+- **Fișierele** gospodăriilor șterse se șterg din storage după ștergerea din bază; o eroare rară de disc poate lăsa fișiere orfane (neservite de nicio rută), curățate de operator cu `finet-admin cleanup-orphan-storage` (ADR 0021).
+- **Backup-urile** (restic, Faza 3) păstrează datele șterse până la expirarea instantaneelor (7 zilnice, 4 săptămânale, 12 lunare): ștergerea nu rescrie backup-urile vechi. De menționat în politica de confidențialitate (`saas`).
+- **Statisticile** (Setări → Statistici, doar administratorul platformei): numere agregate (utilizatori activi, instalări și versiuni, login-uri, evenimente, ecrane, erori, apeluri AI și costul lor de operare); în `personal` și lista membrilor cu ultima activitate, platforma și versiunea aplicației. **Nicio** sumă, descriere, comerciant sau alt conținut financiar.
+
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
-- **Ștergerea:** regulile din master prompt 5.6 (Faza 2+) — **TODO**.
+- **Ștergerea:** regulile din master prompt 5.6 — implementate (Fazele 2–9; ștergerea contului în F9-B). Rămâne de decis expirarea datelor șterse din backup-uri (mai sus).
 - Loguri fără date sensibile: de verificat la fiecare fază (încă nu există loguri de aplicație).
 - Dacă aplicația trece în `saas`: politică publică, DPA-uri, lista împuterniciților, cookie-uri.

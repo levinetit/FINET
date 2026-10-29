@@ -1,0 +1,131 @@
+# FINET — versiunea majoră URMĂTOARE de PostgreSQL (master prompt 3.5; F9-B, ADR 0021):
+# săptămânal (și manual), testele pe `postgres:<VERSION+1>-alpine` și încercarea upgrade-ului
+# (dump pe <VERSION> → restaurare pe <VERSION+1>, amprenta identică, migrațiile „aplicate acum 0”).
+# Nu atinge producția; nu schimbă ops/postgres/VERSION (îl schimbă operatorul, după upgrade-ul
+# real din Supabase, docs/INFRA.md §7). Un eșec aici = o problemă de compatibilitate de rezolvat
+# ÎNAINTE de upgrade.
+name: pg-next
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pg-next
+  cancel-in-progress: true
+
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      current: ${{ steps.read.outputs.current }}
+      next: ${{ steps.read.outputs.next }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: ops/postgres/VERSION
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - id: read
+        run: |
+          major="$(tr -d '[:space:]' < ops/postgres/VERSION)"
+          printf '%s' "$major" | grep -Eq '^[0-9]+$' || { echo "VERSION invalid" >&2; exit 1; }
+          echo "current=$major" >> "$GITHUB_OUTPUT"
+          echo "next=$((major + 1))" >> "$GITHUB_OUTPUT"
+
+  next-major:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      # Serverul NOU (versiunea următoare): testele și ținta restaurării.
+      postgres:
+        image: postgres:${{ needs.versions.outputs.next }}-alpine
+        env:
+          POSTGRES_USER: finet
+          POSTGRES_PASSWORD: finet_ci
+          POSTGRES_DB: finet_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U finet -d finet_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      # Serverul VECHI (versiunea curentă): sursa dump-ului.
+      postgres_old:
+        image: postgres:${{ needs.versions.outputs.current }}-alpine
+        env:
+          POSTGRES_USER: finet
+          POSTGRES_PASSWORD: finet_ci
+          POSTGRES_DB: finet_upgrade
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U finet -d finet_upgrade"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://finet:finet_ci@localhost:5432/finet_test
+      APP_MODE: personal
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Activează pnpm (corepack)
+        run: corepack enable
+
+      - name: Instalează dependențele
+        run: pnpm install --frozen-lockfile
+
+      - name: Împachetează uneltele (runner-ul de migrații)
+        run: pnpm build:tools
+
+      - name: Bootstrap roluri pe ambele servere
+        run: |
+          docker exec -i ${{ job.services.postgres.id }} psql -U finet -d finet_test -v ON_ERROR_STOP=1 -q < ops/postgres/test-bootstrap.sql
+          docker exec -i ${{ job.services.postgres_old.id }} psql -U finet -d finet_upgrade -v ON_ERROR_STOP=1 -q < ops/postgres/test-bootstrap.sql
+
+      - name: Serverul vechi — migrații și datele de control
+        env:
+          FINET_ROLE: migrate
+          DATABASE_URL: ""
+          MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5433/finet_upgrade
+        run: |
+          node dist/tools/migrate.mjs
+          docker exec -i ${{ job.services.postgres_old.id }} psql -U finet -d finet_upgrade -v ON_ERROR_STOP=1 -q < ops/postgres/upgrade-seed.sql
+
+      - name: Încercarea upgrade-ului (dump vechi → restaurare nouă, amprenta)
+        run: |
+          docker exec ${{ job.services.postgres.id }} psql -U finet -d finet_test -qc "create database finet_upgrade"
+          docker run --rm --network host --memory=256m -v "$PWD/ops/postgres:/ops:ro" \
+            -e FINET_UPGRADE_TEST=1 \
+            -e OLD_URL=postgres://finet:finet_ci@localhost:5433/finet_upgrade \
+            -e NEW_URL=postgres://finet:finet_ci@localhost:5432/finet_upgrade \
+            -e NEW_MIGRATOR_URL=postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_upgrade \
+            --entrypoint sh postgres:${{ needs.versions.outputs.next }}-alpine /ops/upgrade-test.sh
+
+      - name: Migrații pe baza restaurată (aplicate acum 0)
+        env:
+          FINET_ROLE: migrate
+          DATABASE_URL: ""
+          MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_upgrade
+        run: |
+          set -o pipefail
+          node dist/tools/migrate.mjs | tee migrate-restored.log
+          grep -q "aplicate acum 0" migrate-restored.log
+
+      - name: Testele pe versiunea următoare
+        run: pnpm test

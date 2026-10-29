@@ -24,6 +24,7 @@ import { hasActiveConsent } from "@/modules/usage/consents";
 import {
   type DocumentRow,
   addUsage,
+  countBatchDocuments,
   deleteDocumentRow,
   insertBatch,
   insertDocumentRow,
@@ -121,6 +122,31 @@ export async function uploadDocuments(
   return registerUpload(deps, actor, householdId, upload);
 }
 
+/**
+ * Lotul bonului lung dacă `upload` îl reproduce exact: fiecare poză există deja, toate în ACELAȘI
+ * lot, pe poziția lor (`document_order = index + 1`, ca la inserare), iar lotul nu are alte documente. Altfel `null`.
+ */
+async function exactLongReceiptBatch(
+  tx: Tx,
+  householdId: string,
+  upload: ReceivedUpload,
+  seen: ReadonlyMap<string, DocumentRow>,
+): Promise<string | null> {
+  const rows = upload.files.map((f) => seen.get(f.sha256));
+  const first = rows[0];
+  if (!first?.batchId) return null;
+  if (new Set(upload.files.map((f) => f.sha256)).size !== upload.files.length) return null;
+  const inPlace = rows.every(
+    (r, i) =>
+      r !== undefined &&
+      r.batchId === first.batchId &&
+      r.documentOrder === upload.files[i]!.index + 1,
+  );
+  if (!inPlace) return null;
+  const count = await countBatchDocuments(tx, householdId, first.batchId);
+  return count === upload.files.length ? first.batchId : null;
+}
+
 /** Înregistrează fișierele deja primite (vezi ordinea din antetul modulului). */
 export async function registerUpload(
   deps: DocumentsDeps,
@@ -188,6 +214,23 @@ export async function registerUpload(
         fresh.push(f);
       }
       if (longReceipt && fresh.length !== upload.files.length) {
+        // Faza 9 (ADR 0020): reîncercarea EXACTĂ a unui bon lung deja încărcat (aceleași poze, în
+        // aceeași ordine, același lot complet; de exemplu coada offline, după un răspuns pierdut)
+        // întoarce lotul existent ca duplicat (200), ca încărcarea simplă. Orice altă suprapunere
+        // rămâne conflict.
+        const replayBatch =
+          fresh.length === 0 ? await exactLongReceiptBatch(tx, householdId, upload, seen) : null;
+        if (replayBatch) {
+          for (const f of upload.files) discard.push(f.key);
+          return {
+            documents: upload.files.map((f) => ({
+              ...documentView(seen.get(f.sha256)!),
+              duplicate: true,
+            })),
+            batchId: replayBatch,
+            created: 0,
+          };
+        }
         throw new ConflictError(
           "long_receipt_duplicate",
           "Una dintre poze a mai fost încărcată; bonul lung se încarcă din poze noi.",

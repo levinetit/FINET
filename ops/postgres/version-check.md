@@ -19,4 +19,4 @@
 - Alternativ: workflow GitHub Actions programat, doar dacă operatorul acceptă un secret `SUPABASE_ACCESS_TOKEN` în GitHub.
 
 ## Legătura cu CI
-`.github/workflows/ci.yml` rulează testele pe `postgres:<VERSION>-alpine`. Workflow-ul săptămânal care rulează testele și pe versiunea majoră următoare (master prompt 3.5) e și el **neimplementat**.
+`.github/workflows/ci.yml` rulează testele pe `postgres:<VERSION>-alpine`. Workflow-ul săptămânal care rulează testele și pe versiunea majoră următoare (master prompt 3.5) există din Faza 9 (F9-B): `.github/workflows/pg-next.yml` (testele + `ops/postgres/upgrade-test.sh`). Rămâne neimplementată doar notificarea despre versiunea oferită de Supabase (acest document).

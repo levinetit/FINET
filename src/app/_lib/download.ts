@@ -26,6 +26,8 @@ export function exportErrorMessage(
 ): string {
   if (status === 0) return ro.ledger.errors.network;
   if (status === 409 && reason === "export_too_large") return ro.exports.tooLarge;
+  // Arhiva GDPR (F9-B): 413 `export_too_large`, înainte de flux.
+  if (status === 413) return ro.exports.archiveTooLarge;
   if (status === 429) {
     return retryAfter ? ro.exports.rateLimitedRetry(retryAfter) : ro.exports.rateLimited;
   }

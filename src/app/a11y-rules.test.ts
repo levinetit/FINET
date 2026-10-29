@@ -93,4 +93,14 @@ describe("accesibilitate (reguli statice)", () => {
     expect(row).toMatch(/<ConfirmButton[^>]*\n\s*label=\{t\.reprocess\}/);
     expect(read("../components/ledger/confirm-button.tsx")).toMatch(/role="group"/);
   });
+
+  // Regresia CI F9-B (axe `label-content-name-mismatch`, WCAG 2.5.3): un `aria-label` pe un buton
+  // sau o legătură trebuie să conțină textul vizibil. Cazurile reparate nu mai au `aria-label`.
+  it("butonul „Nu, mulțumesc” și logoul din navigare au numele din textul vizibil (fără aria-label)", () => {
+    const pwa = readFileSync(join(APP, "../components/app/pwa-app.tsx"), "utf8");
+    const dismiss = pwa.slice(pwa.indexOf("onClick={dismiss}"), pwa.indexOf("{ro.pwa.notNow}"));
+    expect(dismiss).not.toContain("aria-label");
+    const nav = readFileSync(join(APP, "../components/app/app-nav.tsx"), "utf8");
+    expect(nav).not.toMatch(/<Link href="\/dashboard" aria-label=/);
+  });
 });
