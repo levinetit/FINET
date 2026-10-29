@@ -37,6 +37,7 @@ export type RateLimitKind =
   | "api_recurring_generate"
   // Încărcarea documentelor (F6-A), pe utilizator.
   | "api_document_upload"
+  | "api_statement_upload"
   // F6-C: reprocesarea unui bon (un nou apel AI plătit).
   | "api_receipt_reprocess"
   // F8-A: acceptarea unei invitații în gospodărie (contra ghicirii tokenurilor), pe utilizator.

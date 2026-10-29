@@ -59,6 +59,8 @@ export type ApiLimits = Readonly<{
   receiptReprocess: RateLimitRule;
   /** Acceptarea invitațiilor (Faza 8), pe utilizator, consumată și pentru tokenurile greșite. */
   inviteAccept: RateLimitRule;
+  /** Încărcarea extraselor (Faza 7), pe utilizator (în plus față de `mutations` și de cota zilnică). */
+  statementUpload: RateLimitRule;
 }>;
 
 /** Limitele implicite (decizia mea): generoase pentru un client real, mici pentru un abuz. */
@@ -75,6 +77,9 @@ export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
   receiptReprocess: Object.freeze({ max: 10, windowSeconds: 600 }),
   // F8-A (ADR 0016): 10 încercări de acceptare la 15 minute per utilizator.
   inviteAccept: Object.freeze({ ...DEFAULT_ACCEPT_LIMIT }),
+  // F7-B (decizia mea): 20 de încărcări de extrase la 10 minute per utilizator; fiecare PDF ține
+  // procesul copil al workerului ocupat până la 30 s CPU, iar cota zilnică e de 50 pe gospodărie.
+  statementUpload: Object.freeze({ max: 20, windowSeconds: 600 }),
 });
 
 export type ApiDeps = Readonly<{
@@ -346,7 +351,8 @@ export async function enforceRateLimit(
     | "api_export"
     | "api_recurring_generate"
     | "api_document_upload"
-    | "api_receipt_reprocess",
+    | "api_receipt_reprocess"
+    | "api_statement_upload",
   rule: RateLimitRule,
 ): Promise<void> {
   const result = await hitRateLimit(

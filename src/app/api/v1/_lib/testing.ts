@@ -9,6 +9,8 @@ import * as D from "./documents-handlers";
 import * as F from "./family-handlers";
 import * as RC from "./receipts-handlers";
 import * as R from "./recurring-handlers";
+import * as S from "./statements-handlers";
+import * as MT from "./matching-handlers";
 
 /**
  * Doar pentru testele de integrare ale API-ului `/api/v1`: construirea cererilor și sesiunile de
@@ -168,6 +170,22 @@ const OPERATION_OF = new Map<unknown, string>([
   [F.putSplitHandler, "putTransactionSplit"],
   [F.deleteSplitHandler, "deleteTransactionSplit"],
   [F.eventsHandler, "getLiveEvents"],
+  [S.uploadStatementHandler, "uploadStatement"],
+  [S.listUploadsHandler, "listStatementUploads"],
+  [S.getUploadHandler, "getStatementUpload"],
+  [S.cancelUploadHandler, "cancelStatementUpload"],
+  [S.listImportsHandler, "listStatementImports"],
+  [S.getImportHandler, "getStatementImport"],
+  [S.discardImportHandler, "discardStatementPreview"],
+  [S.confirmImportHandler, "confirmStatementImport"],
+  [S.cancelImportHandler, "cancelStatementImport"],
+  [S.coverageHandler, "getStatementCoverage"],
+  [MT.receiptMatchesHandler, "getReceiptMatches"],
+  [MT.decideMatchHandler, "decideReceiptMatch"],
+  [MT.matchQueueHandler, "listMatchQueue"],
+  [MT.listSuggestionsHandler, "listRecurringSuggestions"],
+  [MT.acceptSuggestionHandler, "acceptRecurringSuggestion"],
+  [MT.dismissSuggestionHandler, "dismissRecurringSuggestion"],
 ]);
 
 /** Antetele obligatorii ale unui export CSV (F3-B). */

@@ -1,7 +1,6 @@
 import "server-only";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { z } from "zod";
 
 import type { Tx } from "@/db";
 import {
@@ -17,9 +16,10 @@ import { ConflictError } from "@/lib/errors";
 import type { Currency } from "@/lib/money";
 import { insertAudit } from "@/modules/auth/audit";
 import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
-import { idSchema, isValidId, parseInput } from "@/modules/ledger/input";
+import { isValidId, parseInput } from "@/modules/ledger/input";
 import { dominantCategory } from "@/modules/receipts/receipts.service";
 
+import { matchDecisionSchema, matchQueueSchema } from "./matching.schema";
 import { MATCH_MAX_DAYS, MATCH_PROBABLE, type MatchReason, rankCandidates } from "./score";
 
 /**
@@ -61,15 +61,6 @@ export type ReceiptMatches = Readonly<{
   ambiguous: boolean;
   candidates: readonly MatchCandidate[];
 }>;
-
-export const matchDecisionSchema = z.strictObject({
-  transactionId: idSchema,
-  decision: z.enum(["confirm", "reject"]),
-});
-
-export const matchQueueSchema = z.strictObject({
-  limit: z.number().int().min(1).max(50).default(20),
-});
 
 type ReceiptRow = typeof receipts.$inferSelect;
 const CANDIDATE_LIMIT = 20;

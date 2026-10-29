@@ -19,6 +19,14 @@ import {
   RECURRING_FREQUENCIES,
   RECURRING_STATUSES,
   RECURRING_TYPES,
+  STATEMENT_BALANCE_STATUSES,
+  STATEMENT_BANKS,
+  STATEMENT_DIRECTIONS,
+  STATEMENT_FORMATS,
+  STATEMENT_IMPORT_STATUSES,
+  STATEMENT_LINE_KINDS,
+  STATEMENT_LINE_STATES,
+  STATEMENT_UPLOAD_STATUSES,
   THEMES,
   TRANSACTION_SOURCES,
   TRANSACTION_TYPES,
@@ -661,3 +669,192 @@ export const settlementSchema = z
     cancelledByUserId: uuid.nullable(),
   })
   .meta({ title: "Settlement" });
+
+// ---------------------------------------------------------------------------------------------
+// Faza 7 (F7-B): extrase, potrivire, propuneri de recurențe
+// ---------------------------------------------------------------------------------------------
+
+const code = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{1,63}$/)
+  .meta({ description: "Cod fix (fără conținut)." });
+
+export const statementLineSchema = z
+  .strictObject({
+    rowNo: int.min(1),
+    occurredOn: date,
+    direction: z.enum(STATEMENT_DIRECTIONS),
+    amountMinor: minor,
+    description: z.string(),
+    bankReference: z.string().nullable(),
+    kind: z.enum(STATEMENT_LINE_KINDS).meta({ description: "`fx` = schimb valutar (transfer)." }),
+    fxAmountMinor: minor.nullable(),
+    fxCurrency: currency.nullable(),
+    balanceAfterMinor: minor.nullable(),
+    state: z.enum(STATEMENT_LINE_STATES),
+    transactionId: uuid.nullable(),
+  })
+  .meta({ title: "StatementLine" });
+
+const statementImportBase = {
+  id: uuid,
+  accountId: uuid,
+  currency,
+  bank: z.enum(STATEMENT_BANKS),
+  format: z.enum(STATEMENT_FORMATS),
+  status: z.enum(STATEMENT_IMPORT_STATUSES),
+  periodStart: date.nullable(),
+  periodEnd: date.nullable(),
+  openingBalanceMinor: minor.nullable(),
+  closingBalanceMinor: minor.nullable(),
+  computedClosingMinor: minor.nullable(),
+  balanceStatus: z.enum(STATEMENT_BALANCE_STATUSES),
+  lineCount: int,
+  newCount: int,
+  duplicateCount: int,
+  pendingCount: int.meta({ description: "Tranzacții în așteptare (neimportate)." }),
+  importedCount: int,
+  warnings: z.array(code),
+  createdAt: instant,
+  importedAt: instant.nullable(),
+  cancelledAt: instant.nullable(),
+  lines: z.array(statementLineSchema).optional(),
+};
+
+export const statementImportSchema = z
+  .strictObject(statementImportBase)
+  .meta({ title: "StatementImport" });
+
+export const statementCancelResultSchema = z
+  .strictObject({
+    ...statementImportBase,
+    keptEdited: int.meta({ description: "Tranzacții modificate după import, păstrate." }),
+  })
+  .meta({ title: "StatementCancelResult" });
+
+export const statementUploadSchema = z
+  .strictObject({
+    id: uuid,
+    accountId: uuid,
+    currency,
+    status: z.enum(STATEMENT_UPLOAD_STATUSES),
+    errorCode: code.nullable(),
+    importId: uuid.nullable().meta({ description: "Previzualizarea produsă de worker." }),
+    partIndex: int,
+    sizeBytes: int,
+    createdAt: instant,
+    expiresAt: instant.meta({ description: "Fișierul se șterge cel târziu atunci (24 h)." }),
+    fileDeleted: z.boolean(),
+  })
+  .meta({ title: "StatementUpload" });
+
+const mappingSuggestion = z.strictObject({
+  mapping: z.record(z.string(), z.unknown()).meta({ description: "Maparea propusă (parțială)." }),
+  missing: z.array(z.string()),
+  template: z
+    .strictObject({ bank: z.enum(STATEMENT_BANKS), verified: z.literal(false) })
+    .nullable(),
+});
+
+export const statementUploadResultSchema = z
+  .strictObject({
+    parts: z.array(
+      z.discriminatedUnion("kind", [
+        z.strictObject({
+          index: int,
+          kind: z.literal("queued"),
+          upload: statementUploadSchema,
+          duplicate: z.boolean(),
+        }),
+        z.strictObject({
+          index: int,
+          kind: z.literal("preview"),
+          import: statementImportSchema,
+          alreadyImported: z.boolean(),
+          balanceReasons: z.array(code),
+        }),
+        z.strictObject({
+          index: int,
+          kind: z.literal("mapping_required"),
+          format: z.enum(["csv", "xlsx"]),
+          columnCount: int,
+          rowCount: int,
+          sample: z.array(z.array(z.string())),
+          suggestion: mappingSuggestion,
+        }),
+        z.strictObject({ index: int, kind: z.literal("rejected"), code }),
+      ]),
+    ),
+  })
+  .meta({ title: "StatementUploadResult" });
+
+export const coverageRowSchema = z
+  .strictObject({
+    accountId: uuid,
+    accountName: z.string(),
+    currency,
+    months: z.array(
+      z.strictObject({
+        month: z.string().regex(/^[0-9]{4}-[0-9]{2}$/),
+        status: z.enum(["complete", "partial", "missing"]),
+        coveredUntil: date.nullable(),
+        fromStart: z.boolean(),
+      }),
+    ),
+    missingMonths: z.array(z.string().regex(/^[0-9]{4}-[0-9]{2}$/)),
+  })
+  .meta({ title: "StatementCoverageRow" });
+
+export const receiptMatchesSchema = z
+  .strictObject({
+    receiptId: uuid,
+    status: z.enum(["needs_review", "saved"]),
+    merchantName: z.string().nullable(),
+    occurredOn: date,
+    totalMinor: minor,
+    currency,
+    ambiguous: z.boolean().meta({ description: "Mai mulți candidați apropiați ca scor." }),
+    candidates: z.array(
+      z.strictObject({
+        transactionId: uuid,
+        accountId: uuid,
+        occurredOn: date,
+        amountMinor: minor,
+        currency,
+        description: z.string().nullable(),
+        score: int.min(0).max(100),
+        probable: z.boolean(),
+        reasons: z.array(code),
+      }),
+    ),
+  })
+  .meta({ title: "ReceiptMatches" });
+
+export const matchDecisionResultSchema = z
+  .strictObject({
+    receiptId: uuid,
+    transactionId: uuid,
+    decision: z.enum(["confirm", "reject"]),
+    removedTransactionId: uuid
+      .nullable()
+      .meta({ description: "Tranzacția creată anterior din bon, ștearsă ca duplicat." }),
+  })
+  .meta({ title: "MatchDecisionResult" });
+
+export const recurringSuggestionSchema = z
+  .strictObject({
+    signature: z.string().regex(/^[0-9a-f]{64}$/),
+    accountId: uuid,
+    accountName: z.string(),
+    type: z.enum(RECURRING_TYPES),
+    currency,
+    description: z.string(),
+    merchant: z.string().nullable(),
+    categoryId: uuid.nullable(),
+    frequency: z.enum(["weekly", "monthly", "yearly"]),
+    amountMinor: minor,
+    occurrences: int,
+    lastOn: date,
+    nextOn: date,
+  })
+  .meta({ title: "RecurringSuggestion" });

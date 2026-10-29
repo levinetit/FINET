@@ -1,7 +1,6 @@
 import "server-only";
 
 import { and, eq, gte, inArray, ne } from "drizzle-orm";
-import { z } from "zod";
 
 import { accounts, recurringRules, recurringSuggestionDismissals, transactions } from "@/db/schema";
 import { type Actor, NotFoundError } from "@/lib/authz";
@@ -9,9 +8,10 @@ import { addDays } from "@/lib/calendar";
 import type { Currency } from "@/lib/money";
 import { insertAudit } from "@/modules/auth/audit";
 import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
-import { dateSchema, parseInput } from "@/modules/ledger/input";
+import { parseInput } from "@/modules/ledger/input";
 
 import type { RecurringRuleView } from "./recurring.schema";
+import { acceptSuggestionSchema, signatureSchema } from "./suggestions.schema";
 import { createRecurringRule, todayLocal } from "./recurring.service";
 import { type RecurringSuggestion, detectRecurring } from "./suggestions";
 
@@ -26,12 +26,6 @@ import { type RecurringSuggestion, detectRecurring } from "./suggestions";
 export const HISTORY_DAYS = 400;
 const HISTORY_LIMIT = 20_000;
 export const SUGGESTION_LIMIT = 50;
-
-export const signatureSchema = z.string().regex(/^[0-9a-f]{64}$/);
-export const acceptSuggestionSchema = z.strictObject({
-  /** Prima scadență a regulii; implicit următoarea dată așteptată. */
-  startOn: dateSchema.optional(),
-});
 
 export type SuggestionView = RecurringSuggestion & Readonly<{ accountName: string }>;
 
