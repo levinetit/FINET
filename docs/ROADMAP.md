@@ -15,7 +15,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 6 — Ingestia bonurilor | **în repo** (F6-A, F6-B, F6-C; de revizuit și de aplicat pe producție) | F6-A: migrația `0008_documents`, stocarea în flux, încărcarea cu validare după conținut, limite, deduplicare, consimțământ, preprocesarea în worker (sharp, pdf.js într-un proces copil limitat) — ADR 0013. F6-B: migrația `0009_receipt_pipeline`, clientul LiteLLM, jobul `receipt.process`, verificările 5.5 și scorul, categorisirea, bonul lung, bugetul global, fixtures sintetice și `pnpm eval:receipts` — ADR 0014. F6-C: API-ul public (`/api/v1/documents`, `/receipts`, `/ai/usage`), paginile `/import`, `/receipts`, `/receipts/[id]`, retenția originalelor (`0011`, `cleanup-documents`), E2E cu serverul AI fals și workerul — ADR 0015. Rămân `0008`–`0011` pe Supabase, evaluarea pe bonuri reale și revizuirea `security` |
 | 7 — Extrase bancare, potrivire, abonamente | neimplementat | |
 | 8 — Familie | **parțial** (F8-A și F8-B în repo) | F8-A: migrația `0012_family` (invitații, împărțiri cu verificare amânată a sumei, decontări, gospodăria activă, vizibilitatea personal/comun în RLS pe conturi, tranzacții, etichete, recurențe), serviciile `src/modules/family/` (invitații, membri, roluri, ultimul owner, comutator, împărțiri, solduri, decontări) — ADR 0016. F8-B: API-ul `/api/v1` al familiei, `/family`, `/join/[token]`, comutatorul, împărțirea pe tranzacție, widgetul de pe Acasă, actualizările live (SSE, ADR 0017), E2E `family`. Rămân `0012` pe Supabase, deploy-ul (INFRA 4k) și revizuirea `security` — vezi mai jos |
-| 9 — Hardening, PWA, offline | neimplementat | |
+| 9 — Hardening, PWA, offline | parțial (branch `phase/09-hardening`) | F9-A: manifest, iconițe, service worker, `/offline`, scanarea offline (IndexedDB), invitația de instalare, `/help`, `/settings`, `/settings/android`, `GET /api/v1/app/android/latest` (ADR 0020). F9-B: export/ștergere GDPR, „Statistici”, upgrade Postgres, audit Lighthouse/a11y, dovezi SECURITY_CHECKLIST |
 | 10 — Liste de cumpărături și prețuri | neimplementat | |
 | 11 — Fundația SaaS | neimplementat | |
 | 12 — Planuri, plăți, recomandări | neimplementat | |
@@ -269,7 +269,7 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
 | B — Autentificare și profil | neimplementat (API-ul web există din F1-B: login `bearer`, `/api/v1/me`, sesiuni) | Faza 1 + API `/api/v1/` |
 | C — Funcții de bază (dashboard, tranzacții, bugete) | neimplementat | Fazele 2–3 |
 | D — Recurențe și documente (bonuri, extrase, partajare) | neimplementat | Fazele 5–7 |
-| E — Stabilizare și livrare (APK semnat, GitHub Releases) | neimplementat | Faza 9 (pagina de descărcare) |
+| E — Stabilizare și livrare (APK semnat, GitHub Releases) | neimplementat | backend gata în F9-A: `GET /api/v1/app/android/latest`, `/settings/android` |
 
 Telefoanele ajung la FINET prin WARP (`ops/cloudflare/README.md`, pasul 5).
 
@@ -299,7 +299,8 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | Rută FINET | Echivalent finpulse | Faza | Stare |
 |---|---|---|---|
 | `/login` | `/login` | 1 | producție; Google și Facebook: Faza 11 (`saas`) |
-| `/profile` | `/settings` (parțial) | 1 | producție; setările complete și „Aplicația Android”: Faza 9 |
+| `/profile` | `/settings` (parțial) | 1 | producție |
+| `/settings`, `/settings/android` | `/settings` | 9 | branch (F9-A): ghidul de instalare PWA, aplicația Android (descărcare, QR, pași) |
 | `/accounts`, `/accounts/new`, `/accounts/[id]` | — | 2 | producție |
 | `/transactions`, `/transactions/new`, `/transactions/[id]` | listă de tranzacții din dashboard | 2 | producție |
 | `/transfers/new` | — | 2 | producție |
@@ -316,8 +317,8 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/statements/coverage` (nume provizoriu) | „Evidență extrase & acoperire” | 7 | planificat |
 | `/join/[token]` | — | 8 | branch (F8-B): acceptare prin buton (`POST`), mesaj uniform |
 | `/family` | membri, bugete comune, decontări | 8 | branch (F8-B): solduri, decontări, membri, invitații, împărțiri, comun vs personal; comutatorul în antet; împărțirea pe `/transactions/[id]`; widgetul pe `/dashboard` |
-| `/offline` | — (la finpulse dă 404) | 9 | planificat |
-| `/help` (ghid în aplicație) | `/help` | 9 | planificat |
+| `/offline` | — (la finpulse dă 404) | 9 | branch (F9-A): HTML static, servit din cache de service worker |
+| `/help` (ghid în aplicație) | `/help` | 9 | branch (F9-A) |
 | `/admin/statistics` (nume provizoriu) | — | 9 | planificat; statistici de utilizare, doar administrator |
 | `/shopping-lists` | `/shopping-lists` | 10 | planificat |
 | `/prices` (nume provizoriu) | prețuri pe magazin, inflație | 10 | planificat |

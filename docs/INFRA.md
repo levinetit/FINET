@@ -463,6 +463,39 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 
 **Rollback:** imaginea anterioară a `finet-web` (paginile și rutele familiei dispar; datele rămân). Migrația `0012`: comenzile din antet, doar cu backup și decizia operatorului (atenție: rollback-ul ei face din nou conturile personale vizibile tuturor).
 
+## 4l. Faza 9 (F9-A): PWA, offline, aplicația Android — pe producție (după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0020. **Fără migrație, fără variabilă de mediu nouă, fără secret nou.**
+
+1. **Imaginea** `finet` pentru commit-ul aprobat, apoi **redeploy `finet-web`** (aduce `/sw.js`, `/manifest.webmanifest`, `/icons/*`, `/offline`, `/pwa/*`, `/help`, `/settings`, `/settings/android`, `GET /api/v1/app/android/latest`). Workerul nu se schimbă.
+2. **Cloudflare Access: nu se schimbă nimic.** Toate căile de mai sus cer Access, ca restul aplicației. Manifestul e cerut cu credențiale. Opțional (decizia operatorului), dacă iconițele lipsesc la instalare: o aplicație Access de tip *Bypass* DOAR pe căile exacte `/manifest.webmanifest`, `/icons/icon-192.png`, `/icons/icon-512.png`, `/icons/icon-maskable-192.png`, `/icons/icon-maskable-512.png`, `/icons/apple-touch-icon.png` (fișiere statice, fără date) — și atunci și excepția exactă în aplicație (ADR 0020 §1; nefăcută acum). **Niciodată** bypass pe `/sw.js`, `/offline`, `/api/**` sau pe un prefix.
+3. **Verificări (browser, prin Access):**
+   - DevTools → Application → Service Workers: `/sw.js` activ, domeniul `/`; Cache Storage: un singur `finet-static-<BUILD_ID>` cu `/offline`, `/pwa/*`, iconițele, manifestul și `/_next/static/*` — **niciun** `/api/*`, nicio pagină;
+   - DevTools → Network → „Offline” → navighează la `/transactions` → pagina „Nu există conexiune la internet”;
+   - `/import` offline → o poză → „Păstrează pentru mai târziu” → „În așteptare (offline)”; înapoi online → dispare, documentul apare o singură dată;
+   - după un deploy nou: bannerul „Versiune nouă a aplicației disponibilă” → „Actualizează”.
+   ```bash
+   # fără Access, toate dau 403:
+   for p in /sw.js /manifest.webmanifest /icons/icon-192.png /offline /api/v1/app/android/latest; do
+     curl -s -o /dev/null -w "$p %{http_code}\n" "https://finet.<domeniu>$p"; done
+   ```
+4. **Aplicația Android (când există un release):** fișierul `<STORAGE_DIR>/app/android-latest.json` (în container: `${STORAGE_DIR}/app/android-latest.json`; pe host: volumul de storage al `finet-web`), proprietar uid-ul containerului, ≤ 16 KiB:
+   ```json
+   {
+     "versionName": "1.0.0",
+     "versionCode": 1,
+     "minSupportedVersionCode": 1,
+     "url": "https://github.com/<organizatie>/<repo>/releases/download/FINET-v1.0.0/finet-1.0.0.apk",
+     "sha256": "<64 de caractere hex din finet-1.0.0.apk.sha256>",
+     "sizeBytes": 23456789,
+     "notes": "Prima versiune.",
+     "publishedAt": "2026-11-01T10:00:00Z"
+   }
+   ```
+   Se citește la fiecare cerere (fără restart). Un fișier invalid înseamnă „indisponibil” (log `[android] android-latest.json: conținut invalid`). Verificare: `/settings/android` arată versiunea, suma și codul QR; `GET /api/v1/app/android/latest` → 200.
+
+**Rollback:** imaginea anterioară a `finet-web`. Service worker-ul deja instalat rămâne în browsere până la următoarea verificare: scriptul vechi lipsește (404) → browserul îl dezînregistrează singur; pentru o oprire imediată, utilizatorii pot șterge datele site-ului.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

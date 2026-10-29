@@ -67,6 +67,14 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Invitațiile:** linkul se arată o singură dată celui care invită, doar în pagină (nu se salvează în browser); înainte de acceptare, pagina de invitație nu arată numele gospodăriei. Tokenul apare în calea URL-ului, deci poate rămâne în istoricul browserului și în jurnalele de acces ale Cloudflare/Traefik (unică folosință, expiră în ≤ 7 zile).
 - **Actualizările live (SSE):** evenimentele conțin doar tipul și id-ul obiectului, nu sume, nume sau descrieri; o tranzacție dintr-un cont personal nu generează eveniment pentru ceilalți membri. Evenimentele nu se stochează (memoria procesului web).
 
+## PWA și scanarea offline (Faza 9, F9-A; ADR 0020)
+- **Ce rămâne pe dispozitiv:** doar fișierele aplicației în cache-ul service worker-ului (cod JavaScript/CSS compilat, iconițe, manifestul, pagina „fără conexiune”). Nicio pagină cu date, niciun răspuns API.
+- **Pozele scanate fără rețea:** stau în IndexedDB-ul browserului (baza `finet-offline`), cu id-ul utilizatorului și al gospodăriei, până când serverul confirmă încărcarea; apoi se șterg. Plafoane: 10 încărcări, 50 MB, 7 zile (după 7 zile se șterg neîncărcate).
+- **Alt utilizator pe același browser:** pozele unui utilizator nu se încarcă niciodată în contul sau gospodăria altuia; la pornirea aplicației pentru alt utilizator ele se șterg, iar la **deconectare** se șterge toată baza.
+- **Pagina „fără conexiune”** afișează doar numărul încărcărilor în așteptare (nu pozele).
+- **Invitația de instalare:** se păstrează local doar preferința „nu mai arăta” (`localStorage`).
+- **Aplicația Android:** pagina de descărcare arată metadatele versiunii (fără date personale); codul QR se generează pe server, fără serviciu extern.
+
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 (Faza 2+) — **TODO**.

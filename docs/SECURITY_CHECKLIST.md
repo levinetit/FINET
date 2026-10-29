@@ -398,3 +398,23 @@ Revizori: `programmer` = agentul care a implementat (auto-verificare, nu revizui
 | Owner care stinge unilateral o datorie și apoi elimină creditorul: acesta nu mai poate anula decontarea | ACCEPTED RISK (încredere de familie, Access); atenuare: dialogul de eliminare arată decontările active ale membrului | ADR 0016 §10, `members-panel.tsx` | 2026-10-29 · programmer (F8-A) |
 | Ștergerea categoriei nu depinde de rânduri invizibile (mai mulți membri → mereu ascunsă, răspuns identic) | DONE (PG17) | `categories.service.ts`, `categories.test.ts`, `family-rls.test.ts` | 2026-10-29 · programmer (F8-A) |
 | Revizuirea `security` a F8-B | TODO | agentul `security` | — |
+
+## 21. PWA, service worker, IndexedDB (F9-A, 2026-10-29; ADR 0020)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Nicio excepție nouă de la Cloudflare Access: `/sw.js`, `/manifest.webmanifest`, `/icons/*`, `/offline`, `/pwa/*`, `/help`, `/settings/android`, `GET /api/v1/app/android/latest` → 403 fără JWT | DONE (unitar + E2E scris) | `src/proxy.test.ts`, `e2e/access.spec.ts` (NOT RUN local) | 2026-10-29 · programmer (F9-A) |
+| Manifestul cerut cu `crossOrigin="use-credentials"` (altfel fără cookie Access) | DONE | `src/app/layout.tsx`, `src/pwa/pwa-files.test.ts`, `e2e/pwa.spec.ts` | 2026-10-29 · programmer (F9-A) |
+| Iconițele cerute de browser fără cookie la instalare | ACCEPTED RISK (iconiță generică; fără date); bypass Cloudflare doar pe căi exacte, decizia operatorului | ADR 0020 §1, INFRA 4l | 2026-10-29 · programmer (F9-A) |
+| SW: cache DOAR pentru asset-uri statice (`/_next/static/**` în producție, iconițe, manifest, fișierele `/offline`) și `/offline`; niciodată API, non-GET, altă origine, navigări, redirect, non-200, `no-store`/`private`, HTML (în afară de `/offline`) | DONE (unitar, codul servit în `node:vm`) | `src/pwa/sw.test.ts` | 2026-10-29 · programmer (F9-A) |
+| SW: pe `/api/**` și metodele non-GET nu apelează `respondWith` (încărcarea multipart și SSE neatinse) | DONE (unitar) | `src/pwa/sw.test.ts` | 2026-10-29 · programmer (F9-A) |
+| SW: precache validat înainte de scriere (pagina de login Access nu ajunge în cache); cache versionat cu BUILD_ID, curățarea versiunilor vechi, plafon 400 | DONE (unitar) | `src/pwa/sw.test.ts` | 2026-10-29 · programmer (F9-A) |
+| SW: fără `skipWaiting` automat; activare doar la clic, amânată cu formular necomis | DONE (unitar + cod) | `sw.test.ts`, `src/components/app/pwa.tsx` | 2026-10-29 · programmer (F9-A) |
+| `/offline`: HTML fix, fără sesiune/cookie, fără script/stil inline, fără `style=`, fără cereri de rețea în scriptul ei; CSP neschimbat | DONE (unitar) | `src/pwa/pwa-files.test.ts` | 2026-10-29 · programmer (F9-A) |
+| IndexedDB: pozele doar pe dispozitiv, cu `userId` + `householdId`; încărcate DOAR pentru proprietarul curent (gospodăria activă); intrările altor utilizatori șterse la pornire; TTL 7 zile; baza ștearsă la deconectare | DONE (unitar + E2E scris) | `offline-scans.test.ts`, `app-nav.tsx`, `e2e/pwa.spec.ts` (NOT RUN local) | 2026-10-29 · programmer (F9-A) |
+| Coada: ștergere locală doar după 2xx; erori permanente vizibile; o retrimitere nu creează documente noi (SHA-256; reîncercarea exactă a bonului lung → 200 duplicat) | DONE (unitar + PG17) | `offline-scans.test.ts`, `documents.test.ts` | 2026-10-29 · programmer (F9-A) |
+| Plafoane locale (10 intrări, 50 MB, tip JPEG/PNG, `MAX_UPLOAD_MB`), eroarea de cotă fără scrieri parțiale | DONE (unitar) | `offline-scans.test.ts` | 2026-10-29 · programmer (F9-A) |
+| `GET /api/v1/app/android/latest`: sesiune obligatorie, fișier validat strict (https, sha256, semver, ≤ 16 KiB), invalid → 404 fără conținut în log | DONE (PG17) | `src/app/api/v1/app-api.test.ts` | 2026-10-29 · programmer (F9-A) |
+| Codul QR generat local (fără dependență, fără JS în browser) | DONE (vectori python-qrcode) | `src/lib/qr.test.ts` | 2026-10-29 · programmer (F9-A) |
+| Audit axe pe paginile noi (`@axe-core/playwright`) | TODO (F9-B; dependența nu a fost adăugată: arbore `node_modules` comun) | — | — |
+| Revizuirea `security` a F9-A | TODO | agentul `security` | — |

@@ -178,5 +178,11 @@ Gospodăria e cea **curentă** (activă, dacă apartenența există încă; altf
 curl -sN https://finet.example/api/v1/events -H 'authorization: Bearer tokenFictiv.semnatura'
 ```
 
+## Aplicația Android (F9-A, ADR 0020)
+
+`GET /api/v1/app/android/latest` (sesiune cookie sau bearer) → `200 { data: { versionName, versionCode, minSupportedVersionCode, url, sha256, sizeBytes, notes, publishedAt } }` sau `404 android_release_unavailable` (nicio versiune publicată). Datele vin din `<STORAGE_DIR>/app/android-latest.json` (operatorul; `docs/INFRA.md` 4l). Aplicația îl cheamă cel mult o dată pe zi (promptul Android 12.1).
+
+Încărcarea documentelor (`POST /api/v1/documents`): reîncercarea EXACTĂ a unui bon lung deja încărcat (aceleași poze, aceeași ordine) întoarce acum `200` cu documentele existente (`duplicate: true`, același `batchId`), ca la încărcarea simplă; orice altă suprapunere rămâne `409 long_receipt_duplicate`.
+
 ## Evenimente de utilizare
 Lista fixă de nume: `app_open`, `login`, `logout`, `session_expired`, `screen_view`, `receipt_scan_started`, `receipt_uploaded`, `receipt_confirmed`, `statement_imported`, `transaction_created`, `share_import`, `update_prompt_shown`, `update_started`, `error_shown`, iar din Faza 3 `dashboard_viewed`, `report_viewed`, `budget_created`, `goal_created`, `goal_contribution_added`, `tag_created`, `export_downloaded`, iar din Faza 5 `recurring_created`, `recurring_generated` (ecranul nou: `recurring`) (doar numele, fără sume sau alte câmpuri). Ecranele și codurile de eroare: listele din `src/modules/usage/usage.schema.ts` (și din `docs/openapi.json`). Orice alt câmp (sumă, descriere, comerciant, text liber) respinge lotul cu 400. Cel mult 20 de evenimente pe lot; `occurredAt` cel mult 30 de zile în urmă.
