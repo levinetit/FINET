@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import sharp, { type Sharp } from "sharp";
 
 import {
   type AcceptedMime,
@@ -138,7 +138,7 @@ const SHARP_FORMAT: Readonly<Record<ImageMime, string>> = {
   "image/webp": "webp",
 };
 
-async function prepare(pipeline: sharp.Sharp, deadline: number): Promise<PreparedImage> {
+async function prepare(pipeline: Sharp, deadline: number): Promise<PreparedImage> {
   const { data, info } = await pipeline
     .rotate() // după orientarea EXIF; apoi metadatele nu se mai copiază în ieșire
     .resize({ width: MAX_SIDE_PX, height: MAX_SIDE_PX, fit: "inside", withoutEnlargement: true })

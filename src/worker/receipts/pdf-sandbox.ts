@@ -188,7 +188,11 @@ export function readPdfInChild(
         String(options.maxTotalPixels ?? 2 * options.maxImagePixels),
       ],
       // Mediu minim: un singur fir libuv (sharp/libvips), nimic din mediul workerului.
-      { stdio: ["pipe", "pipe", "ignore"], env: { UV_THREADPOOL_SIZE: "1" }, windowsHide: true },
+      {
+        stdio: ["pipe", "pipe", "ignore"],
+        env: { NODE_ENV: "production", UV_THREADPOOL_SIZE: "1" },
+        windowsHide: true,
+      },
     );
     active++;
     spawned++;

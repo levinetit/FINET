@@ -41,7 +41,10 @@ export interface Storage {
    * Salvează conținutul primit pe bucăți (fără a-l ține tot în memorie) și întoarce cheia.
    * O eroare a sursei sau depășirea `maxBytes` nu lasă niciun fișier în urmă.
    */
-  putStream(source: AsyncIterable<Uint8Array>, options?: PutOptions): Promise<StorageKey>;
+  putStream(
+    source: AsyncIterable<Uint8Array> | Iterable<Uint8Array>,
+    options?: PutOptions,
+  ): Promise<StorageKey>;
   /** Citește conținutul ca flux (pentru fișiere mari); `StorageNotFoundError` dacă nu există. */
   openRead(key: StorageKey): Promise<AsyncIterable<Uint8Array>>;
 }

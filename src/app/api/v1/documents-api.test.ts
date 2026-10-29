@@ -38,8 +38,9 @@ describe.skipIf(!TEST_ADMIN_URL)("încărcarea documentelor prin handler (F6-A)"
   beforeAll(async () => {
     fx = await createAuthFixture("finet_it_documents_api");
     root = await realpath(await mkdtemp(join(tmpdir(), "finet-docs-api-")));
+    const auth = authEnv(fx.db);
     env = {
-      ...authEnv(fx.db),
+      ...auth,
       storage: new LocalStorage(root),
       limits: { mutations: { max: 100_000, windowSeconds: 60 } },
     };
@@ -50,7 +51,7 @@ describe.skipIf(!TEST_ADMIN_URL)("încărcarea documentelor prin handler (F6-A)"
       firstUserBecomesAdmin: false,
       emailVerified: true,
     });
-    A = await sessionsFor(env, "ana@exemplu.ro", PASS);
+    A = await sessionsFor(auth, "ana@exemplu.ro", PASS);
   });
   afterAll(async () => {
     await fx?.close();

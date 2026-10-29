@@ -32,7 +32,7 @@ import {
   type UploadedDocument,
   uploadFieldsSchema,
 } from "./documents.schema";
-import { type ReceivedUpload, receiveMultipart } from "./multipart";
+import { type ReceivedFile, type ReceivedUpload, receiveMultipart } from "./multipart";
 
 /**
  * Documentele încărcate (Faza 6; ADR 0013): înregistrarea după încărcare, deduplicarea exactă,
@@ -155,7 +155,7 @@ export async function registerUpload(
 
     const result = await inHousehold(deps, actor, householdId, async (tx) => {
       const out: UploadedDocument[] = [];
-      const fresh: typeof upload.files = [];
+      const fresh: ReceivedFile[] = [];
       const seen = new Map<string, DocumentRow>();
 
       // 2. Deduplicarea exactă: înainte de orice limită.
