@@ -337,6 +337,8 @@ describe.skipIf(!TEST_ADMIN_URL)("11-C: înregistrarea publică", () => {
       limits,
     };
     const email = fresh();
+    // Mailurile din fundal ale testelor anterioare se termină ÎNAINTE de a număra.
+    await waitForBackgroundMail();
     const before = mailer.sent.length;
     for (let i = 0; i < 7; i++) {
       const res = await register(wide, email);
