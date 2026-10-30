@@ -22,6 +22,12 @@ export { XLSX_CONTENT_TYPE } from "./export-table";
  * - Determinist: aceeași intrare dă aceiași octeți (data fișierelor din arhiv e fixă).
  */
 
+/**
+ * Plafonul rândurilor într-un fișier Excel (F10-C): măsurat, 20.000 de rânduri × 10 coloane ocupă
+ * ~133 MB RSS și ~1 s (50.000: ~240 MB, 2,8 s), iar `finet-web` are 512 MB.
+ */
+export const XLSX_MAX_ROWS = 20_000;
+
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
 /** Eliminarea caracterelor care nu au voie în XML 1.0. */

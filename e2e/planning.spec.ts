@@ -501,4 +501,28 @@ test.describe(`planificarea (${MODE})`, () => {
     await expect(page).toHaveURL(/\/tags$/);
     await expect(page.getByRole("heading", { level: 1, name: "Etichete" })).toBeVisible();
   });
+
+  test("(i) exportul pentru contabil (F10-C): cardul de pe /receipts descarcă Excel și CSV", async ({
+    browser,
+    baseURL,
+  }) => {
+    const page = await pageAs(browser, baseURL!, "planning");
+    await page.goto("/receipts");
+    await expect(page.getByTestId("accounting-export")).toBeVisible();
+    const xlsx = page.waitForEvent("download");
+    await page.getByTestId("accounting-xlsx").click();
+    const xlsxFile = await xlsx;
+    expect(xlsxFile.suggestedFilename()).toBe("finet-contabilitate.xlsx");
+    expect((await readFile((await xlsxFile.path())!)).subarray(0, 2).toString()).toBe("PK");
+    const csv = page.waitForEvent("download");
+    await page.getByTestId("accounting-csv").click();
+    const csvFile = await csv;
+    expect(csvFile.suggestedFilename()).toBe("finet-contabilitate.csv");
+    const bytes = await readFile((await csvFile.path())!);
+    expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(bytes.subarray(3).toString("utf8")).toMatch(/^occurred_on;receipt_number;merchant;/);
+    // O perioadă nevalidă ascunde butoanele.
+    await page.getByLabel("De la").fill("2030-01-01");
+    await expect(page.getByTestId("accounting-xlsx")).toHaveCount(0);
+  });
 });

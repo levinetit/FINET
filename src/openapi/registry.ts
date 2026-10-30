@@ -1983,7 +1983,7 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "exports",
     summary: "Exportul Excel al tranzacțiilor (filtrele listei).",
     description:
-      "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 50.000 de rânduri. Peste plafon → 409 `export_too_large`. Suma are semn: cheltuielile și transferurile de ieșire sunt negative.",
+      "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 20.000 de rânduri. Peste plafon → 409 `export_too_large`. Suma are semn: cheltuielile și transferurile de ieșire sunt negative.",
     query: [...TRANSACTION_FILTERS],
     success: fileSuccess("xlsx", "finet-tranzactii.xlsx", "una pe rând."),
     errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
@@ -2045,7 +2045,7 @@ export const OPERATIONS: readonly Operation[] = [
     tag: "exports",
     summary: "Exportul pentru contabil (CSV): o linie per bon confirmat, pe o perioadă.",
     description:
-      "Format fix (docs/API.md): data, numărul bonului, comerciantul, CUI, baza și TVA pe cotele 0/5/9/11/19/21 %, altă cotă, brut fără cotă, TVA calculat și de pe bon, total linii și total bon (cu diferențele), contul și categoria. TVA se calculează pe grup de cotă, rotunjit o dată. Doar bonurile confirmate și vizibile (fără conturile personale ale altor membri). Perioada: `from` și `to`, cel mult 1.100 de zile; cel mult 50.000 de bonuri (peste: 409 `export_too_large`).",
+      "Format fix (docs/API.md): data, numărul bonului, comerciantul, CUI, baza și TVA pe cotele 0/5/9/11/19/21 %, altă cotă, brut fără cotă, TVA calculat și de pe bon, total linii și total bon (cu diferențele), contul și categoria. TVA se calculează pe grup de cotă, rotunjit o dată. Doar bonurile confirmate și vizibile (fără conturile personale ale altor membri). Perioada: `from` și `to`, cel mult 1.100 de zile; cel mult 50.000 de bonuri la CSV, 20.000 la Excel (peste: 409 `export_too_large`).",
     query: [FROM_PARAM, TO_PARAM, DIALECT_PARAM],
     success: csvSuccess("Fișierul `finet-contabilitate.csv`."),
     errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],

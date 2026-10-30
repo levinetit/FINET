@@ -85,7 +85,7 @@ curl -s https://finet.example/api/v1/transactions \
 | `GET/POST /api/v1/goals`, `GET/PATCH/DELETE /api/v1/goals/{id}`, `POST …/{id}/contributions`, `POST …/{id}/abandon` | obiectivele (`?status=`), contribuțiile, renunțarea (reluarea: `PATCH` cu `status: "active"`) |
 | `GET /api/v1/dashboard?month=&topCategories=` | dashboard-ul lunar pe monedă |
 | `GET /api/v1/reports/monthly?month=` | raportul lunar (structura de date) |
-| `GET /api/v1/exports/transactions.csv`, `/goals.csv`, `/budgets.csv?month=` | exporturile CSV (`?dialect=rfc4180|ro`) |
+| `GET /api/v1/exports/transactions.csv`, `/goals.csv`, `/budgets.csv?month=` | exporturile CSV (`?dialect=rfc4180|ro`); Excel/PDF și exportul contabil: vezi „Exporturi Excel și PDF” |
 | `POST /api/v1/transfers`, `GET/PATCH/DELETE /api/v1/transfers/{groupId}` | transferurile (aceeași monedă: `amountMinor`; monede diferite: `amountFromMinor` și `amountToMinor`) |
 
 ```bash
@@ -211,6 +211,12 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 - `POST /report-definitions/preview` `{ rules, period }` → rulează regulile primite fără să salveze nimic.
 - `GET /report-definitions/{id}/run?period=all|this_month|last_month|last_3_months|this_year` → total, bucăți, preț mediu pe unitate, proiecție anuală (estimare; `insufficient` sub 60 de zile / 10 bonuri) și istoricul liniilor cu legătură la bon. `409 too_many_lines` peste 100.000 de linii. Limită proprie: 30 / min per utilizator (rulare și previzualizare).
 - `GET /report-definitions/{id}/export.csv` → toate liniile potrivite (BOM, protecție contra formulelor CSV, `Sec-Fetch-Site` same-origin|none).
+
+## Exporturi Excel și PDF, export pentru contabil (F10-C, ADR 0024)
+- `GET /exports/transactions.xlsx|.pdf` (filtrele listei, ca la CSV), `/exports/goals.xlsx|.pdf`, `/exports/budgets.xlsx|.pdf?month=`: aceleași date și reguli ca CSV-ul (RLS, filtre, audit fără conținut, `Sec-Fetch-Site` pentru cookie, aceeași limită de cereri), cu coloane în română și sume exacte (la tranzacții, cu semn). Plafon: 20.000 de rânduri Excel, 3.000 PDF (CSV: 50.000); peste → 409 `export_too_large`.
+- `GET /exports/accounting.csv|.xlsx?from=&to=` (CSV: `dialect=rfc4180|ro`): un rând per bon CONFIRMAT, cu baza și TVA pe cotele 0/5/9/11/19/21 %, TVA calculat și de pe bon, totalul, diferențele de control, contul și categoria. TVA se calculează pe grup de cotă, rotunjit o dată (ADR 0024 §3); liniile fără cotă nu se estimează. Doar bonurile vizibile (fără conturile personale ale altor membri). `from`/`to` obligatorii, cel mult 1.100 de zile.
+- `GET /exports/receipts.xlsx|.pdf?from=&to=`: lista bonurilor din perioadă (fără defalcarea pe cote).
+- Antete: `Content-Disposition: attachment` cu nume fix (`finet-tranzactii.xlsx`, `finet-contabilitate.csv`, …), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.
 
 ## Aplicația Android (F9-A, ADR 0020)
 

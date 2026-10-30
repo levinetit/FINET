@@ -32,7 +32,7 @@ import {
   exportTransactionsTable,
 } from "@/modules/exports/tables.service";
 import { PDF_CONTENT_TYPE, PDF_MAX_ROWS, tableToPdf } from "@/lib/pdf";
-import { XLSX_CONTENT_TYPE, tableToXlsx } from "@/lib/xlsx";
+import { XLSX_CONTENT_TYPE, XLSX_MAX_ROWS, tableToXlsx } from "@/lib/xlsx";
 import { goalToJson } from "@/modules/goals/goals.schema";
 import {
   contributeToGoal,
@@ -501,10 +501,10 @@ function fileResponse(name: string, format: TableExportFormat, bytes: Uint8Array
   });
 }
 
-/** Plafonul rândurilor: Excel ca CSV-ul, PDF mult mai mic (un document de citit, nu de prelucrat). */
+/** Plafonul rândurilor: PDF 3.000 și Excel 20.000 (măsurat, vezi `XLSX_MAX_ROWS`); CSV-ul rămâne la 50.000. */
 function tableRowCap(d: ApiDeps, format: TableExportFormat): number {
   const csvCap = d.exportMaxRows ?? MAX_EXPORT_ROWS;
-  return format === "pdf" ? Math.min(csvCap, PDF_MAX_ROWS) : csvCap;
+  return Math.min(csvCap, format === "pdf" ? PDF_MAX_ROWS : XLSX_MAX_ROWS);
 }
 
 function tableOf(format: TableExportFormat, table: Parameters<typeof tableToXlsx>[0]): Uint8Array {
@@ -589,7 +589,7 @@ export function exportAccountingHandler(
       { from: query.from, to: query.to },
       {
         format,
-        maxRows: format === "pdf" ? tableRowCap(d, "pdf") : (d.exportMaxRows ?? MAX_EXPORT_ROWS),
+        maxRows: format === "csv" ? (d.exportMaxRows ?? MAX_EXPORT_ROWS) : tableRowCap(d, format),
       },
     );
     if (format === "csv") {

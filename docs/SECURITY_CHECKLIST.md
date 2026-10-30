@@ -566,3 +566,21 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Performanță pe ~50.000 de linii | MĂSURAT, NU sub o secundă: 0,1–6,7 s (mediana) pe PG17 cu 256 MB; de reluat pe Supabase | `perf-prices.test.ts` (`FINET_PERF=1`), INFRA 4p | 2026-10-29 · programmer (F10-B) |
 | E2E (raport predefinit pe bonuri sintetice confirmate, raport propriu, export CSV, „date insuficiente”, izolare) și axe pe `/insights` | NOT RUN local (CI) | `e2e/insights.spec.ts`, `e2e/a11y.spec.ts` | — |
 | Revizuirea `security` a F10-B | TODO | agentul `security` | — |
+
+## 27. Exporturi Excel/PDF și export pentru contabil (F10-C, partea 1, 2026-10-30; ADR 0024)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Aceleași reguli ca CSV-ul din Faza 3: sesiune (401), `Sec-Fetch-Site` pentru cookie (403 cross-site/same-site), limită proprie de cereri (429), nume de fișier fix, `no-store`, `nosniff` | DONE (PG17) | `exports-tables-api.test.ts`, `exports-accounting-api.test.ts` | 2026-10-30 · agent |
+| Izolare: altă gospodărie nu primește nimic al altuia; un membru nu vede bonurile din contul PERSONAL al altuia (agregat, Excel, CSV, PDF) | DONE (PG17) | `exports-accounting-api.test.ts` (vizibilitate), `exports-tables-api.test.ts` (izolare) | 2026-10-30 · agent |
+| Doar bonuri CONFIRMATE (`saved`) cu dată; cele `needs_review` și din alte perioade nu apar | DONE (PG17) | `exports-accounting-api.test.ts` | 2026-10-30 · agent |
+| Perioada obligatorie, ordonată, ≤ 1.100 de zile; parametri necunoscuți → 400; dialect CSV necunoscut → 400 (constatare de revizuire automată, MEDIUM; plus defensă în `csvRow`) | DONE | `exports-accounting-api.test.ts`, `csv.test.ts` | 2026-10-30 · agent |
+| Plafoane: CSV 50.000, Excel 20.000, PDF 3.000 de rânduri; peste → 409 `export_too_large` fără conținut parțial | DONE | `exports-tables-api.test.ts`; consum măsurat (INFRA 4q): Excel 20.000 ≈ 133 MB RSS | 2026-10-30 · agent |
+| Excel: textul liber nu devine formulă (celule `inlineStr`, fără `<f>`); caractere XML interzise eliminate; numele foii curățat; fișier valid pentru un cititor independent | DONE | `xlsx.test.ts` (inclusiv `python3 zipfile`+`ElementTree`); verificat manual cu `openpyxl` | 2026-10-30 · agent |
+| PDF: nu execută nimic (fără JavaScript, fără acțiuni, fără fonturi/imagini încorporate din date); textul din date intră doar ca șiruri hexazecimale | DONE | `pdf.ts` (revizuire de cod), `pdf.test.ts` | 2026-10-30 · agent |
+| Sume exacte (`bigint` → text zecimal, fără float); TVA pe grup de cotă, rotunjit o dată; liniile fără cotă nu se estimează; diferențele sunt coloane de control | DONE | `accounting.test.ts` | 2026-10-30 · agent |
+| Audit `export.downloaded`: doar `kind`, `rows` și (Excel/PDF) `format`, fără conținut | DONE (PG17) | testele de audit din ambele fișiere | 2026-10-30 · agent |
+| Randarea PDF în cititoare reale (Acrobat, Chrome, Preview) | NEVERIFICAT (doar `pdf.js` și poppler cu font de înlocuire) | — | — |
+| Deschiderea în Excel/LibreOffice desktop | NEVERIFICAT (doar `openpyxl`) | — | — |
+| Revizuirea `security` a F10-C | TODO | agentul `security` | — |
+

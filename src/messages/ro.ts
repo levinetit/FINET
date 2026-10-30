@@ -548,7 +548,7 @@ export const ro = {
     downloading: "Se pregătește…",
     done: "Fișierul a fost descărcat.",
     tooLarge:
-      "Exportul are prea multe rânduri (cel mult 50.000 pentru CSV și Excel, 3.000 pentru PDF). Restrânge filtrele, de exemplu la un interval de date mai scurt.",
+      "Exportul are prea multe rânduri (cel mult 50.000 pentru CSV, 20.000 pentru Excel, 3.000 pentru PDF). Restrânge filtrele, de exemplu la un interval de date mai scurt.",
     xlsx: "Export Excel",
     pdf: "Export PDF",
     // F10-C: exportul pentru contabil și lista bonurilor, pe o perioadă.

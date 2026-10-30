@@ -106,6 +106,12 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Exportul CSV al unui raport** conține liniile potrivite (nume de produse, sume, date): același regim ca exporturile CSV existente. Fără statistici între gospodării.
 - **Loguri:** fără nume de produse sau reguli în loguri, audit sau mesaje de eroare (coduri fixe).
 
+## Exporturi Excel/PDF și export pentru contabil (Faza 10, F10-C; ADR 0024)
+- **Ce conțin:** aceleași date ca exporturile CSV din Faza 3 (tranzacții, obiective, bugete) și, pentru contabil, bonurile CONFIRMATE din perioada aleasă (data, numărul, comerciantul, CUI, sumele, TVA, contul și categoria). Fișierul îl primește doar utilizatorul care l-a cerut, direct în browser; nu se stochează pe server și nu se trimite nicăieri.
+- **Cine vede ce:** regulile aplicației (RLS): un membru nu primește bonurile din contul PERSONAL al altui membru; altă gospodărie nu primește nimic.
+- **Audit:** `export.downloaded` cu tipul exportului, formatul și numărul de rânduri, fără conținut.
+- **Fără AI extern:** exporturile nu apelează niciun model.
+
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); extrasele PDF cel mult 24 h (F7-B); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 — implementate (Fazele 2–9; ștergerea contului în F9-B). Rămâne de decis expirarea datelor șterse din backup-uri (mai sus).
