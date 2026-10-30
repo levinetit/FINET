@@ -83,3 +83,23 @@ ADR 0029; branch `phase/11-public`; fără migrație.
 - Turnstile, OAuth, traducerea în engleză și expunerea publică: 11-C2/C3 (cer chei și decizii).
 - Curățarea conturilor neconfirmate și sursa de IP de încredere: înainte de `SIGNUP_ENABLED=1` public (INFRA 4u).
 
+## 11-C2 — Turnstile pe înregistrare
+
+ADR 0030; branch `phase/11-turnstile-oauth`; fără migrație.
+
+### 1. Ce s-a implementat
+
+- Configurare (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY_FILE`), verificator fail-closed, integrare în `POST /api/v1/register` (după limitele de rate, înainte de orice scriere), CSP doar pe `/register`, widget cu resetare după eșec, override compose pentru secret.
+- Fără chei, nimic nu se schimbă față de 11-C1.
+
+### 2. Teste rulate local (2026-10-31)
+
+| Comandă | Rezultat |
+|---|---|
+| `vitest run turnstile.test.ts register-api.test.ts config.test.ts consent.test.ts secret-files.test.ts` (PG17) | PASS (104 teste) |
+| E2E cu widget real | NU există (CI fără chei; regula „resurse doar de pe propriul domeniu” din `regressions (a)`) |
+
+### 3. OAuth Google/Facebook: NEIMPLEMENTAT, decizie necesară
+
+Codul curent blochează orice creare de utilizator prin Better Auth (`user.create.before` → `false`), `finet_app` nu poate scrie `status`/`is_platform_admin`, iar căile `/sign-in/social` și callback sunt în afara listei permise; Facebook nu garantează un email verificat. Fără un test care rulează callback-ul cu un furnizor simulat, nu livrez cod de legare de conturi „activ când apar cheile”. Opțiuni: (1) doar autentificare pentru conturi FINET existente și verificate, fără creare de cont; (2) și creare de cont, printr-o cale FINET dedicată; (3) amânare până există credențiale. Recomandare: (1), cu Google înaintea Facebook.
+

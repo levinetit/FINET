@@ -276,6 +276,52 @@ describe.skipIf(!TEST_ADMIN_URL)("11-C: înregistrarea publică", () => {
     }
   });
 
+  it("Turnstile (F11-C2): cu chei configurate token obligatoriu; fail-closed; fără scriere la respingere", async () => {
+    const verifier = vi.fn(async (token: string) => token === "token-bun");
+    const guarded = { ...open, turnstile: verifier } as AuthEnv & ApiDeps;
+    const email = fresh();
+    const count = async () =>
+      (
+        await fx.scratch.admin`select count(*)::int as n from finet.users where email = ${email}`
+      )[0]!.n;
+
+    // Lipsă → 400 `turnstile`, verificatorul nu e chemat, nimic scris, niciun email.
+    const sentBefore = mailer.sent.length;
+    const missing = await register(guarded, email);
+    expect(missing.status).toBe(400);
+    expect(missing.body.error.code).toBe("turnstile");
+    expect(verifier).not.toHaveBeenCalled();
+    // Token respins → același 400, tot fără scriere.
+    const bad = await register(guarded, email, { turnstileToken: "token-prost" });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.code).toBe("turnstile");
+    expect(await count()).toBe(0);
+    await waitForBackgroundMail();
+    expect(mailer.sent.length).toBe(sentBefore);
+    // Token bun → 202, cont creat.
+    const good = await register(guarded, email, { turnstileToken: "token-bun" });
+    expect(good.status).toBe(202);
+    expect(await count()).toBe(1);
+    // Un verificator care aruncă (rețea) trebuie tratat de handler ca respingere? Contractul îl
+    // face să întoarcă `false`; aici verificăm că o respingere nu lasă urme.
+    const down = { ...open, turnstile: async () => false } as AuthEnv & ApiDeps;
+    expect((await register(down, fresh(), { turnstileToken: "orice" })).status).toBe(400);
+    // Fără Turnstile configurat, câmpul e ignorat (nu e obligatoriu).
+    expect((await register(open, fresh(), { turnstileToken: "orice" })).status).toBe(202);
+  });
+
+  it("Turnstile e verificat DUPĂ limitele de rate: IP/email epuizat → 429 fără apel către Cloudflare", async () => {
+    const verifier = vi.fn(async () => true);
+    const guarded = { ...open, turnstile: verifier } as AuthEnv & ApiDeps;
+    const email = fresh();
+    for (let i = 0; i < 3; i++) {
+      expect((await register(guarded, email, { turnstileToken: "t" })).status).toBe(202);
+    }
+    verifier.mockClear();
+    expect((await register(guarded, email, { turnstileToken: "t" })).status).toBe(429);
+    expect(verifier).not.toHaveBeenCalled();
+  });
+
   it("rate limiting pe email: a patra cerere în aceeași oră → 429 cu Retry-After", async () => {
     const email = fresh();
     for (let i = 0; i < 3; i++) expect((await register(open, email)).status).toBe(202);

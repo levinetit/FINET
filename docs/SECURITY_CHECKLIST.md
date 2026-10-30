@@ -660,3 +660,15 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Curățarea conturilor neconfirmate | TODO (înainte de expunerea publică) | ADR 0029, limite | — |
 | Revizuirea `security` a Fazei 11-C1 | TODO | agentul `security` | — |
 
+## 33. Turnstile pe înregistrarea publică (Faza 11-C2, 2026-10-31; ADR 0030)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Verificare fail-closed (rețea, timeout, non-200, JSON invalid, `success:false`, gazdă diferită, token gol/prea lung) | DONE | `turnstile.test.ts` | 2026-10-31 · agent |
+| Cheile se dau împreună; secretul doar din fișier, doar rolul web, absent din mesajele de eroare | DONE | `config.test.ts` | 2026-10-31 · agent |
+| Turnstile după limitele de rate (fără amplificare către Cloudflare) și înainte de orice scriere; respingere → fără cont și fără email | DONE (PG17) | `register-api.test.ts` | 2026-10-31 · agent |
+| CSP Cloudflare doar pe `/register` și doar cu chei; restul paginilor neschimbat | DONE | `consent.test.ts` | 2026-10-31 · agent |
+| `remoteip` doar din sursă de încredere | DONE | `turnstile.test.ts` | 2026-10-31 · agent |
+| Widgetul real în browser (CI fără chei; regula „resurse doar de pe propriul domeniu”) | NEVERIFICAT în CI; de verificat manual cu cheile reale (INFRA 4v) | ADR 0030, limite | — |
+| Revizuirea `security` a Fazei 11-C2 | TODO | agentul `security` | — |
+

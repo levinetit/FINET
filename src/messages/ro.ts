@@ -77,6 +77,8 @@ export const ro = {
     rateLimited: "Prea multe încercări. Încearcă din nou mai târziu.",
     genericError: "Nu am putut trimite cererea. Încearcă din nou.",
     invalidFields: "Verifică emailul și numele.",
+    turnstileWait: "Așteaptă să se încheie verificarea anti-robot, apoi trimite din nou.",
+    turnstileFailed: "Verificarea anti-robot a eșuat. Încearcă din nou.",
   },
   registerComplete: {
     title: "Alege parola",

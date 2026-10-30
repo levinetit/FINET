@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isRequestAllowed } from "@/lib/access";
 import { verifierFor } from "@/lib/access-guard";
 import { getConfig } from "@/lib/config";
-import { isPublicSitePath } from "@/lib/site-paths";
+import { isPublicSitePath, isTurnstilePath } from "@/lib/site-paths";
 import {
   NONCE_HEADER,
   applySecurityHeaders,
@@ -49,16 +49,28 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const nonce = createNonce();
   // Analytics (Faza 11): domeniile Google în CSP doar pe paginile publice ale `saas`, cu ID setat.
   let analytics = false;
+  let turnstile = false;
   try {
     const config = getConfig();
     analytics =
       config.appMode === "saas" &&
       config.site.analyticsId !== null &&
       isPublicSitePath(request.nextUrl.pathname);
+    // Turnstile (F11-C2): doar pe `/register`, doar în `saas` cu înregistrarea deschisă și chei.
+    turnstile =
+      config.appMode === "saas" &&
+      config.auth.signupEnabled &&
+      config.auth.turnstile !== null &&
+      isTurnstilePath(request.nextUrl.pathname);
   } catch {
     analytics = false;
+    turnstile = false;
   }
-  const csp = buildCsp(nonce, { development: process.env.NODE_ENV === "development", analytics });
+  const csp = buildCsp(nonce, {
+    development: process.env.NODE_ENV === "development",
+    analytics,
+    turnstile,
+  });
   const referrer = referrerPolicyFor(request.nextUrl.pathname);
   if (!allowed) {
     const response = forbidden();

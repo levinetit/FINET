@@ -56,7 +56,14 @@ export type CspOptions = Readonly<{
    * permite domeniile etichetei Google (scriptul se încarcă oricum numai după consimțământ).
    */
   analytics?: boolean;
+  /**
+   * Doar pe `/register`, când Turnstile e configurat (F11-C2): scriptul, apelurile și iframe-ul
+   * widgetului vin de pe `challenges.cloudflare.com`. Nicio altă pagină nu primește aceste surse.
+   */
+  turnstile?: boolean;
 }>;
+
+const TURNSTILE_HOST = "https://challenges.cloudflare.com";
 
 const GA_SCRIPT = "https://www.googletagmanager.com";
 const GA_CONNECT =
@@ -70,12 +77,18 @@ export function buildCsp(nonce: string, options: CspOptions): string {
     [
       "script-src",
       (options.development ? `'self' ${n} 'unsafe-eval'` : `'self' ${n}`) +
-        (options.analytics ? ` ${GA_SCRIPT}` : ""),
+        (options.analytics ? ` ${GA_SCRIPT}` : "") +
+        (options.turnstile ? ` ${TURNSTILE_HOST}` : ""),
     ],
     ["style-src", options.development ? "'self' 'unsafe-inline'" : `'self' ${n}`],
     ["img-src", options.analytics ? `'self' data: ${GA_IMG}` : "'self' data:"],
     ["font-src", "'self'"],
-    ["connect-src", options.analytics ? `'self' ${GA_CONNECT}` : "'self'"],
+    [
+      "connect-src",
+      (options.analytics ? `'self' ${GA_CONNECT}` : "'self'") +
+        (options.turnstile ? ` ${TURNSTILE_HOST}` : ""),
+    ],
+    ...(options.turnstile ? ([["frame-src", TURNSTILE_HOST]] as [string, string][]) : []),
     ["frame-ancestors", "'none'"],
     ["object-src", "'none'"],
     ["base-uri", "'self'"],
