@@ -1889,6 +1889,59 @@ export const ro = {
       },
     ],
   },
+  // Faza 11 (ADR 0027): site-ul public al modului `saas` (prezentare, prețuri, termeni, confidențialitate).
+  site: {
+    nav: {
+      pricing: "Prețuri",
+      terms: "Termeni",
+      privacy: "Confidențialitate",
+      login: "Intră în cont",
+      register: "Creează cont",
+    },
+    landing: {
+      title: "FINET: finanțele tale și ale familiei, într-un singur loc",
+      lead: "Urmărești conturile, cheltuielile și bugetele, scanezi bonurile și vezi unde se duc banii.",
+      features: [
+        "Bonuri fiscale citite din poză sau PDF, cu verificarea ta înainte de salvare",
+        "Bugete, obiective și rapoarte pe luni, categorii și comercianți",
+        "Familie: conturi comune și personale, solduri și decontări",
+        "Extrase bancare, liste de cumpărături și prețuri pe produs",
+        "Export în CSV, Excel și PDF, plus exportul pentru contabil",
+        "Datele tale, sub controlul tău: export și ștergere direct din aplicație",
+      ],
+      cta: "Creează cont",
+      secondary: "Ai deja cont? Intră",
+    },
+    pricing: {
+      title: "Prețuri",
+      body: "Planurile și prețurile se publică aici odată cu activarea lor. Până atunci, serviciul nu are încă planuri plătite.",
+    },
+    terms: { title: "Termeni și condiții" },
+    privacy: { title: "Politica de confidențialitate" },
+    draft: {
+      title: "Text în curs de revizuire",
+      body: "Acesta este un proiect de lucru, nerevizuit juridic. Nu produce efecte până nu e revizuit și publicat de operator.",
+      incomplete: "Datele firmei care operează serviciul nu sunt completate încă.",
+    },
+    footer: {
+      operator: "Operator",
+      taxId: "CUI",
+      registration: "Reg. Comerțului",
+      address: "Sediu",
+      contact: "Contact",
+      missing: "de completat",
+      consumer: "Litigii pentru consumatori",
+      anpcSal: "ANPC SAL",
+      sol: "Platforma SOL (UE)",
+    },
+    consent: {
+      title: "Cookie-uri",
+      body: "Folosim cookie-uri strict necesare. Cu acordul tău, folosim și cookie-uri de analytics pentru a înțelege cum e folosit site-ul. Poți refuza fără niciun efect asupra serviciului.",
+      accept: "Accept analytics",
+      reject: "Refuz",
+      region: "Alegerea ta privind cookie-urile",
+    },
+  },
   // Faza 10 (F10-C): „Întreabă FINET” și rezumatul lunii (ADR 0025).
   ask: {
     eyebrow: "Întreabă FINET",

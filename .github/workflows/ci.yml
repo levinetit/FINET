@@ -356,12 +356,12 @@ jobs:
           E2E_AI_MOCK_URL: http://127.0.0.1:4010
         run: pnpm test:e2e
 
-      - name: E2E — modul saas (smoke, auth, ledger, planning, regressions, recurring, pwa, gdpr, a11y, shopping, insights, ask)
+      - name: E2E — modul saas (smoke, auth, ledger, planning, regressions, recurring, pwa, gdpr, a11y, shopping, insights, ask, site)
         env:
           E2E_APP_MODE: saas
           E2E_SERVER: dev
           APP_MODE: saas
-        run: pnpm test:e2e --project=smoke --project=auth --project=ledger --project=planning --project=regressions --project=recurring --project=pwa --project=gdpr --project=a11y --project=shopping --project=insights --project=ask
+        run: pnpm test:e2e --project=smoke --project=auth --project=ledger --project=planning --project=regressions --project=recurring --project=pwa --project=gdpr --project=a11y --project=shopping --project=insights --project=ask --project=site
 
       - name: Logurile workerului și ale serverului AI fals (la eșec; fără conținut de bonuri)
         if: failure()

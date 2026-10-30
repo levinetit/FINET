@@ -51,9 +51,12 @@ test.describe(`autentificare (${MODE})`, () => {
     await expect(page.getByRole("heading", { level: 1, name: "Profil" })).toBeVisible();
   });
 
-  test("`/` trimite la /login fără sesiune și la /dashboard cu sesiune", async ({ page }) => {
+  test("`/` trimite la /login (personal) sau arată prezentarea (saas) fără sesiune și la /dashboard cu sesiune", async ({
+    page,
+  }) => {
     await page.goto("/");
-    await expect(page).toHaveURL(/\/login$/);
+    if (MODE === "saas") await expect(page.getByTestId("landing-register")).toBeVisible();
+    else await expect(page).toHaveURL(/\/login$/);
     await loginOk(page, userEmail("main"), password());
     await page.goto("/");
     await expect(page).toHaveURL(/\/dashboard$/);

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isRequestAllowed } from "@/lib/access";
 import { verifierFor } from "@/lib/access-guard";
 import { getConfig } from "@/lib/config";
+import { isPublicSitePath } from "@/lib/site-paths";
 import {
   NONCE_HEADER,
   applySecurityHeaders,
@@ -46,7 +47,18 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   const nonce = createNonce();
-  const csp = buildCsp(nonce, { development: process.env.NODE_ENV === "development" });
+  // Analytics (Faza 11): domeniile Google în CSP doar pe paginile publice ale `saas`, cu ID setat.
+  let analytics = false;
+  try {
+    const config = getConfig();
+    analytics =
+      config.appMode === "saas" &&
+      config.site.analyticsId !== null &&
+      isPublicSitePath(request.nextUrl.pathname);
+  } catch {
+    analytics = false;
+  }
+  const csp = buildCsp(nonce, { development: process.env.NODE_ENV === "development", analytics });
   const referrer = referrerPolicyFor(request.nextUrl.pathname);
   if (!allowed) {
     const response = forbidden();
