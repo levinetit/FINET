@@ -73,6 +73,7 @@ const devServer = {
   command: `pnpm dev --port ${devPort} --hostname 127.0.0.1`,
   url: devURL,
   env: devEnv,
+  stdout: "pipe", // DIAG
   reuseExistingServer: !process.env.CI,
   timeout: 180_000,
 };

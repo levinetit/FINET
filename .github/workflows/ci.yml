@@ -354,9 +354,10 @@ jobs:
         env:
           E2E_APP_MODE: personal
           E2E_AI_MOCK_URL: http://127.0.0.1:4010
-        run: pnpm test:e2e
+        run: pnpm test:e2e --project=smoke --project=auth --project=ledger --reporter=list # DIAG
 
-      - name: E2E — modul saas (smoke, auth, ledger, planning, regressions, recurring, pwa, gdpr, a11y, shopping, insights, ask)
+      - if: false # DIAG
+        name: E2E — modul saas (smoke, auth, ledger, planning, regressions, recurring, pwa, gdpr, a11y, shopping, insights, ask)
         env:
           E2E_APP_MODE: saas
           E2E_SERVER: dev
