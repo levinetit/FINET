@@ -25759,6 +25759,123 @@
         }
       }
     },
+    "/api/v1/summary/monthly": {
+      "get": {
+        "operationId": "getMonthlySummary",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Rezumatul lunii: propoziții construite în cod din cifrele agregate.",
+        "description": "Luna cerută (implicit cea curentă, aceleași limite ca raportul lunar) comparată cu cea precedentă: totaluri, variația cheltuielilor, primele categorii, primul comerciant, starea bugetelor. Fiecare cifră din text e inserată din baza de date; nu se folosește niciun model AI. Etichetă fixă: „Rezumat automat, nu sfat financiar.” Vizibilitate ca la raportul lunar (fără conturile personale ale altor membri).",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "description": "Luna `YYYY-MM` (implicit luna curentă).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rezumatul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "month": {
+                          "type": "string",
+                          "pattern": "^[0-9]{4}-[0-9]{2}$"
+                        },
+                        "label": {
+                          "type": "string",
+                          "const": "Rezumat automat, nu sfat financiar."
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "empty",
+                                  "totals",
+                                  "change",
+                                  "top_categories",
+                                  "top_merchant",
+                                  "budgets"
+                                ]
+                              },
+                              "currency": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "RON",
+                                      "EUR",
+                                      "USD"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "currency",
+                              "text"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "month",
+                        "label",
+                        "lines"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/tags": {
       "get": {
         "operationId": "listTags",

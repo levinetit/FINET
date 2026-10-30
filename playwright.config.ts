@@ -195,6 +195,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
+      // „Întreabă FINET” și rezumatul lunii (Faza 10, F10-C): utilizatorul `ask`; datele se creează
+      // prin API (fără worker sau AI).
+      name: "ask",
+      testMatch: /ask\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // Rapoartele inteligente (Faza 10, F10-B): utilizatorii `insights` și `insights2`; bonurile
       // confirmate sunt SINTETICE, inserate direct în baza de test (fără worker sau AI).
       name: "insights",

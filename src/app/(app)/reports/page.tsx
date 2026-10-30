@@ -11,6 +11,7 @@ import { ro } from "@/messages/ro";
 import { listCategories } from "@/modules/categories/categories.service";
 import { monthlyReportToJson } from "@/modules/reports/reports.schema";
 import { getMonthlyReport } from "@/modules/reports/reports.service";
+import { getMonthlySummary } from "@/modules/summary/summary.service";
 
 import { load, requireLedgerPage } from "../../_lib/ledger-page";
 import { formatMinor } from "../../_lib/ledger-ui";
@@ -57,6 +58,10 @@ export default async function ReportsPage({
       categoryName: new Map(categories.map((c) => [c.id, c.name] as const)),
     };
   });
+  // F10-C: rezumatul lunii, construit în cod din aceleași cifre (fără AI).
+  const summary = await load(() =>
+    getMonthlySummary(deps, page.actor, householdId, { month: selection.month }),
+  );
   const bounds = monthBounds(selection.month);
   const name = (n: string | null) => n ?? ro.dashboard.uncategorized;
 
@@ -77,6 +82,22 @@ export default async function ReportsPage({
           <Card>
             <p className="text-muted-foreground" data-testid="report-empty">
               {t.empty}
+            </p>
+          </Card>
+        ) : null}
+        {summary.ok ? (
+          <Card aria-labelledby="report-summary" data-testid="report-summary">
+            <CardHeader>
+              <CardTitle id="report-summary">{ro.summary.title}</CardTitle>
+              <CardDescription>{ro.summary.hint}</CardDescription>
+            </CardHeader>
+            <ul className="flex flex-col gap-2">
+              {summary.value.lines.map((line) => (
+                <li key={`${line.code}-${line.currency ?? "all"}`}>{line.text}</li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-muted-foreground" data-testid="report-summary-label">
+              {summary.value.label}
             </p>
           </Card>
         ) : null}

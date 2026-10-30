@@ -8,6 +8,7 @@ import { systemCategoryId } from "@/modules/ledger/testing";
 import * as AH from "./_lib/ask-handlers";
 import type { ApiDeps } from "./_lib/http";
 import * as L from "./_lib/ledger-handlers";
+import * as SM from "./_lib/summary-handlers";
 import {
   type ApiInit,
   type Sessions,
@@ -277,5 +278,52 @@ describe.skipIf(!TEST_ADMIN_URL)("POST /api/v1/ask pe PostgreSQL real", () => {
       );
       expect(rows[0]!.n, t).toBe(0);
     }
+  });
+
+  describe("rezumatul lunii (GET /api/v1/summary/monthly)", () => {
+    async function summary(query: string, s: Sessions | null = A) {
+      const res = await SM.monthlySummaryHandler(
+        apiRequest(`/api/v1/summary/monthly${query}`, s ? { bearer: s.bearer } : {}),
+        env,
+      );
+      await assertContract(SM.monthlySummaryHandler as never, res);
+      const body = await readJson(res);
+      return { status: res.status, data: (body as { data?: Record<string, any> }).data };
+    }
+    const textOf = (d: Record<string, any>) =>
+      (d.lines as { text: string }[]).map((l) => l.text).join("\n");
+
+    it("martie: totaluri, categorii, comerciant, eticheta fixă", async () => {
+      const r = await summary("?month=2026-03");
+      expect(r.status).toBe(200);
+      expect(r.data!.label).toBe("Rezumat automat, nu sfat financiar.");
+      const text = textOf(r.data!);
+      expect(text).toContain("martie 2026");
+      expect(text).toContain("69,34"); // 12,34 + 50,00 + 7,00
+      expect(text).toContain("Kaufland");
+    });
+
+    it("luna curentă față de cea trecută; cifre din cont personal doar pentru proprietar", async () => {
+      const ana = await summary("", A);
+      const t = textOf(ana.data!);
+      expect(t).toContain("octombrie 2026");
+      expect(t).toContain("5.000,00"); // venitul
+      expect(t).toContain("cu 100% mai mici");
+      const cristi = await summary("?month=2026-09", C);
+      expect(textOf(cristi.data!)).toContain("100,00");
+      expect(textOf(cristi.data!)).not.toContain("999,00");
+      expect(textOf(cristi.data!)).not.toContain("Secret");
+      const anaSep = await summary("?month=2026-09", A);
+      expect(textOf(anaSep.data!)).toContain("1.099,00");
+    });
+
+    it("lună goală, 400 pentru lună nevalidă sau parametri necunoscuți, 401 fără sesiune", async () => {
+      expect(textOf((await summary("?month=2026-05")).data!)).toContain(
+        "Nu ai tranzacții înregistrate în mai 2026.",
+      );
+      expect((await summary("?month=2026-13")).status).toBe(400);
+      expect((await summary("?x=1")).status).toBe(400);
+      expect((await summary("", null)).status).toBe(401);
+    });
   });
 });

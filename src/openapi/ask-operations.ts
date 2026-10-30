@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { DB_CURRENCIES } from "@/db/schema";
 import { askBodySchema, askQuerySchema } from "@/modules/ask/query";
+import { SUMMARY_LABEL } from "@/modules/summary/summary";
 
 import type { Operation } from "./registry";
 import { dataOf } from "./schemas";
@@ -54,6 +55,18 @@ export const askResultSchema = z.discriminatedUnion("understood", [
   }),
 ]);
 
+const summarySchema = z.strictObject({
+  month: z.string().regex(/^[0-9]{4}-[0-9]{2}$/),
+  label: z.literal(SUMMARY_LABEL),
+  lines: z.array(
+    z.strictObject({
+      code: z.enum(["empty", "totals", "change", "top_categories", "top_merchant", "budgets"]),
+      currency: currency.nullable(),
+      text: z.string(),
+    }),
+  ),
+});
+
 export const ASK_OPERATIONS: readonly Operation[] = [
   {
     method: "POST",
@@ -66,5 +79,23 @@ export const ASK_OPERATIONS: readonly Operation[] = [
     body: { schema: askBodySchema },
     success: { status: 200, schema: dataOf(askResultSchema), description: "Răspunsul." },
     errors: [400, 403, 415, 413],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/summary/monthly",
+    operationId: "getMonthlySummary",
+    tag: "reports",
+    summary: "Rezumatul lunii: propoziții construite în cod din cifrele agregate.",
+    description:
+      "Luna cerută (implicit cea curentă, aceleași limite ca raportul lunar) comparată cu cea precedentă: totaluri, variația cheltuielilor, primele categorii, primul comerciant, starea bugetelor. Fiecare cifră din text e inserată din baza de date; nu se folosește niciun model AI. Etichetă fixă: „Rezumat automat, nu sfat financiar.” Vizibilitate ca la raportul lunar (fără conturile personale ale altor membri).",
+    query: [
+      {
+        name: "month",
+        schema: z.string().regex(/^[0-9]{4}-[0-9]{2}$/),
+        description: "Luna `YYYY-MM` (implicit luna curentă).",
+      },
+    ],
+    success: { status: 200, schema: dataOf(summarySchema), description: "Rezumatul." },
+    errors: [400],
   },
 ];
