@@ -16,6 +16,8 @@ export type SeedLine = Readonly<{
   totalMinor: number;
   kind?: "product" | "discount" | "deposit_sgr" | "bag" | "other";
   categoryId?: string | null;
+  /** Cota de pe linie, text `numeric` (ex. `"19.00"`); lipsă = necitită. */
+  vatRate?: string | null;
 }>;
 
 export type SeedReceipt = Readonly<{
@@ -31,6 +33,10 @@ export type SeedReceipt = Readonly<{
   status?: "saved" | "needs_review";
   /** `false`: bon confirmat fără tranzacție (ca după ștergerea tranzacției). */
   withTransaction?: boolean;
+  /** Numărul bonului, TVA-ul total și categoria tranzacției (exportul contabil, F10-C). */
+  number?: string | null;
+  vatTotalMinor?: number | null;
+  transactionCategoryId?: string | null;
 }>;
 
 export type SeededReceipt = Readonly<{ receiptId: string; transactionId: string | null }>;
@@ -52,23 +58,25 @@ export async function seedReceipt(admin: postgres.Sql, r: SeedReceipt): Promise<
   if (saved && r.withTransaction !== false) {
     transactionId = randomUUID();
     await admin`insert into finet.transactions (id, household_id, account_id, type, amount_minor,
-        currency, occurred_on, description, source, created_by_user_id)
+        currency, occurred_on, description, source, created_by_user_id, category_id)
       values (${transactionId}, ${r.householdId}, ${r.accountId}, 'expense', ${Math.max(total, 1)},
-        ${currency}, ${r.on}, 'Bon', 'receipt', ${r.actorId})`;
+        ${currency}, ${r.on}, 'Bon', 'receipt', ${r.actorId}, ${r.transactionCategoryId ?? null})`;
   }
   const receiptId = randomUUID();
   await admin`insert into finet.receipts (id, household_id, document_id, status, total_minor,
-      currency, occurred_on, merchant_name, merchant_tax_id, transaction_id)
+      currency, occurred_on, merchant_name, merchant_tax_id, transaction_id, receipt_number,
+      vat_total_minor)
     values (${receiptId}, ${r.householdId}, ${docId}, ${r.status ?? "saved"}, ${Math.max(total, 0)},
-      ${currency}, ${r.on}, ${r.merchant ?? null}, ${r.cui ?? null}, ${transactionId})`;
+      ${currency}, ${r.on}, ${r.merchant ?? null}, ${r.cui ?? null}, ${transactionId},
+      ${r.number ?? null}, ${r.vatTotalMinor ?? null})`;
   let position = 0;
   for (const l of r.lines) {
     position += 1;
     await admin`insert into finet.receipt_lines (receipt_id, household_id, position, raw_name,
-        normalized_name, quantity, unit_price_minor, line_total_minor, kind, category_id)
+        normalized_name, quantity, unit_price_minor, line_total_minor, kind, category_id, vat_rate)
       values (${receiptId}, ${r.householdId}, ${position}, ${l.name},
         ${normalizeProductName(l.name)}, ${l.quantity ?? "1"}, null, ${l.totalMinor},
-        ${l.kind ?? "product"}, ${l.categoryId ?? null})`;
+        ${l.kind ?? "product"}, ${l.categoryId ?? null}, ${l.vatRate ?? null})`;
   }
   return { receiptId, transactionId };
 }

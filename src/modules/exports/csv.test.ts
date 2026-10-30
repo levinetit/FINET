@@ -39,4 +39,9 @@ describe("CSV (RFC 4180 + protecție contra injecției)", () => {
     expect(csvRow([decimal(m, "ro"), text("a;b"), text("x,y")], "ro")).toBe('-12,34;"a;b";x,y\r\n');
     expect(csvRow([decimal(money(5n, "EUR"))])).toBe("0.05\r\n");
   });
+
+  it("un dialect necunoscut (defensă) cade pe virgulă, nu produce `undefined`", () => {
+    const row = csvRow([raw("a"), text("b,c")], "xx" as never);
+    expect(row).toBe('a,"b,c"\r\n');
+  });
 });

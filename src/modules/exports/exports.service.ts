@@ -50,16 +50,21 @@ import {
  * exportului și numărul de rânduri (pentru tranzacții, numărul din numărare).
  */
 
-async function auditExport(
+export type ExportKindName = "transactions" | "goals" | "budgets" | "receipts" | "accounting";
+export type ExportFormat = "csv" | "xlsx" | "pdf";
+
+export async function auditExport(
   tx: Tx,
   actor: Actor,
   householdId: string,
-  kind: "transactions" | "goals" | "budgets",
+  kind: ExportKindName,
   rows: number,
+  format: ExportFormat = "csv",
 ): Promise<void> {
   await insertAudit(tx, actor.userId, householdId, {
     action: "export.downloaded",
-    metadata: { kind, rows },
+    // CSV păstrează forma din Faza 3 (`kind` + `rows`); celelalte formate adaugă `format`.
+    metadata: format === "csv" ? { kind, rows } : { kind, rows, format },
   });
 }
 
@@ -129,28 +134,42 @@ export const BUDGET_COLUMNS = [
   "status",
 ] as const;
 
-function dialectOf(options: ExportOptions): CsvDialect {
+export function dialectOf(options: ExportOptions): CsvDialect {
   const parsed = dialectSchema.safeParse(options.dialect);
   if (!parsed.success) throw new ValidationError({ dialect: "Dialect CSV necunoscut." });
   return parsed.data ?? "rfc4180";
 }
 
+type TransactionRow = Awaited<ReturnType<typeof selectTransactionPage>>[number];
+export type TransactionNames = Readonly<{
+  accounts: ReadonlyMap<string, string>;
+  categories: ReadonlyMap<string, string>;
+  tags: ReadonlyMap<string, string>;
+}>;
+export type TransactionBatch =
+  | Readonly<{ kind: "start"; total: number; names: TransactionNames }>
+  | Readonly<{
+      kind: "page";
+      rows: readonly TransactionRow[];
+      tagIds: ReadonlyMap<string, readonly string[]>;
+    }>;
+
 /**
- * Exportul tranzacțiilor, ca fragmente de text (primul: BOM + antet). Filtrele sunt cele ale listei
- * (`transactionListSchema`), fără `cursor`, `limit` și `sort` (ordinea e fixă: cronologic).
+ * Citirea comună a tranzacțiilor pentru toate formatele: primul pas (validare, numărare, plafon,
+ * audit, nume) iese ca `start`, apoi paginile de cursor. `maxRows` și formatul vin de la apelant.
  */
-export async function* exportTransactionsCsv(
+export async function* transactionBatches(
   deps: PlanningDeps,
   actor: Actor,
   householdId: string,
-  rawQuery: unknown = {},
-  options: ExportOptions = {},
-): AsyncGenerator<string, void, undefined> {
+  rawQuery: unknown,
+  options: ExportOptions,
+  format: ExportFormat,
+): AsyncGenerator<TransactionBatch, void, undefined> {
   const query = parseInput(transactionListSchema, rawQuery) ?? {};
   if (query.cursor !== undefined || query.limit !== undefined || query.sort !== undefined) {
     throw new ValidationError({ _: "Exportul nu acceptă cursor, limit sau sort." });
   }
-  const dialect = dialectOf(options);
   const maxRows = options.maxRows ?? MAX_EXPORT_ROWS;
   const pageSize = options.pageSize ?? EXPORT_PAGE_SIZE;
   const filters = listFiltersOf(query);
@@ -164,7 +183,7 @@ export async function* exportTransactionsCsv(
         `Exportul are peste ${maxRows} de rânduri; restrânge filtrele (de exemplu intervalul).`,
       );
     }
-    await auditExport(tx, actor, m.householdId, "transactions", total);
+    await auditExport(tx, actor, m.householdId, "transactions", total, format);
     const accountNames = new Map(
       (await selectAccounts(tx, m.householdId, { includeArchived: true })).map((a) => [
         a.id,
@@ -173,14 +192,15 @@ export async function* exportTransactionsCsv(
     );
     const tagNames = new Map((await selectTags(tx, m.householdId)).map((t) => [t.id, t.name]));
     return {
-      householdId: m.householdId,
-      accounts: accountNames,
-      categories: await categoryNames(tx, m.householdId),
-      tags: tagNames,
+      total,
+      names: {
+        accounts: accountNames,
+        categories: await categoryNames(tx, m.householdId),
+        tags: tagNames,
+      },
     };
   });
-
-  yield CSV_BOM + csvHeader(TRANSACTION_COLUMNS, dialect);
+  yield { kind: "start", total: names.total, names: names.names };
 
   let cursor: Cursor | null = null;
   let written = 0;
@@ -204,13 +224,51 @@ export async function* exportTransactionsCsv(
       return { rows: slice, more: rows.length > limit, tagIds };
     });
     if (page.rows.length === 0) break;
+    yield { kind: "page", rows: page.rows, tagIds: page.tagIds };
+    written += page.rows.length;
+    if (!page.more) break;
+    const last = page.rows[page.rows.length - 1]!;
+    cursor = { sort: "date_asc", key: last.occurredOn, id: last.id };
+  }
+}
+
+export function tagList(names: TransactionNames, ids: readonly string[] | undefined): string {
+  return (ids ?? [])
+    .map((id) => names.tags.get(id) ?? "")
+    .filter((n) => n !== "")
+    .sort((a, b) => a.localeCompare(b, "ro"))
+    .join("|");
+}
+
+/**
+ * Exportul tranzacțiilor, ca fragmente de text (primul: BOM + antet). Filtrele sunt cele ale listei
+ * (`transactionListSchema`), fără `cursor`, `limit` și `sort` (ordinea e fixă: cronologic).
+ */
+export async function* exportTransactionsCsv(
+  deps: PlanningDeps,
+  actor: Actor,
+  householdId: string,
+  rawQuery: unknown = {},
+  options: ExportOptions = {},
+): AsyncGenerator<string, void, undefined> {
+  const dialect = dialectOf(options);
+  let names: TransactionNames | null = null;
+  for await (const batch of transactionBatches(
+    deps,
+    actor,
+    householdId,
+    rawQuery,
+    options,
+    "csv",
+  )) {
+    if (batch.kind === "start") {
+      names = batch.names;
+      yield CSV_BOM + csvHeader(TRANSACTION_COLUMNS, dialect);
+      continue;
+    }
     let chunk = "";
-    for (const r of page.rows) {
-      const tagList = (page.tagIds.get(r.id) ?? [])
-        .map((id) => names.tags.get(id) ?? "")
-        .filter((n) => n !== "")
-        .sort((a, b) => a.localeCompare(b, "ro"))
-        .join("|");
+    for (const r of batch.rows) {
+      const tags = tagList(names!, batch.tagIds.get(r.id));
       chunk += csvRow(
         [
           raw(r.id),
@@ -218,10 +276,10 @@ export async function* exportTransactionsCsv(
           raw(r.type),
           raw(r.transferDirection),
           raw(r.accountId),
-          text(names.accounts.get(r.accountId) ?? null),
+          text(names!.accounts.get(r.accountId) ?? null),
           raw(r.categoryId),
-          text(r.categoryId ? (names.categories.get(r.categoryId) ?? null) : null),
-          text(tagList === "" ? null : tagList),
+          text(r.categoryId ? (names!.categories.get(r.categoryId) ?? null) : null),
+          text(tags === "" ? null : tags),
           raw(r.amountMinor),
           raw(r.currency),
           decimal(money(r.amountMinor, r.currency), dialect),
@@ -235,11 +293,7 @@ export async function* exportTransactionsCsv(
         dialect,
       );
     }
-    written += page.rows.length;
     yield chunk;
-    if (!page.more) break;
-    const last = page.rows[page.rows.length - 1]!;
-    cursor = { sort: "date_asc", key: last.occurredOn, id: last.id };
   }
 }
 

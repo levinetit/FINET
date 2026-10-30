@@ -100,3 +100,88 @@ Mediu: `node:24` în container (`--memory` 400–900 MB), PostgreSQL 17 efemer `
 ### 5. Pe producție
 
 `docs/INFRA.md`, secțiunea **4p**. Nimic nu s-a aplicat.
+
+## F10-C — Exporturi, „Întreabă FINET”, rezumatul lunii
+
+F10-C se livrează în două părți: **partea 1** (exporturi Excel/PDF și export pentru contabil; ADR 0024; branch `phase/10-exports`, fără migrație) și **partea 2** („Întreabă FINET” și rezumatul lunii; ADR 0025; branch `phase/10-ask`, fără migrație).
+
+### Partea 1 — exporturi Excel/PDF și export pentru contabil
+
+#### 1. Ce s-a implementat
+
+- **Scriitori fără dependențe noi** (`src/lib/xlsx.ts`, `src/lib/pdf.ts`, model comun `export-table.ts`): Excel (OOXML în ZIP, valid în `openpyxl`) și PDF (Helvetica standard cu codificare proprie pentru diacritice și `/ToUnicode`; verificat cu `pdf.js` și randat cu poppler).
+- **Exporturi `.xlsx`/`.pdf`** pentru tranzacții, obiective, bugete, cu aceleași reguli ca CSV (RLS, filtre, audit, protecția `Sec-Fetch-Site`, limită de cereri); auditul adaugă `metadata.format`.
+- **Export pentru contabil** (CSV, Excel) și **lista bonurilor** (Excel, PDF) pe o perioadă: un rând per bon confirmat vizibil, TVA pe cote calculat din linii (rotunjit o dată pe grup), coloane de control pentru diferențele de TVA și de total.
+- **Interfață:** butoane Excel/PDF pe `/transactions`, `/goals`, `/budgets`; cardul „Export pentru contabil” pe `/receipts`.
+- **Documentație:** ADR 0024, API.md, INFRA 4q, ROADMAP, SECURITY_CHECKLIST §27, PRIVACY_NOTES.
+
+#### 2. Teste rulate local (2026-10-30)
+
+Mediu: `node:24` în container (`--memory` 600–1100 MB), PostgreSQL 17 efemer.
+
+| Comandă | Rezultat |
+|---|---|
+| `vitest run src/lib/xlsx.test.ts src/lib/pdf.test.ts` | PASS (11 + 9 teste) |
+| `vitest run src/modules/exports` (inclusiv `accounting.test.ts`, `csv.test.ts`) | PASS |
+| `vitest run src/app/api/v1/exports-tables-api.test.ts src/app/api/v1/exports-accounting-api.test.ts` (cu PG) | PASS (9 + 9 teste) |
+| `vitest run src/app/api/v1/planning-api.test.ts src/openapi src/app/_lib src/app/ui-rules.test.ts src/app/a11y-rules.test.ts` | PASS |
+| `node scripts/openapi.mjs --check` | PASS |
+| `openpyxl` (container `python:3.13-slim`) pe un fișier .xlsx generat | PASS: foaie, tipuri, date, formulă rămasă text |
+| Randare PDF cu poppler (cu font Liberation) | PASS vizual (tabel, antet, numerotare) |
+| `tsc --noEmit` pe `planning-handlers.ts` + modulele de export + componente + pagini (loturi) | PASS; `registry.ts`/`testing.ts`/rute: NOT RUN local (memorie), în CI |
+| E2E (`planning.spec.ts`: Excel/PDF din `/transactions`, cardul contabil din `/receipts`) | SCRIS; NOT RUN local (cere `next build`); în CI |
+| `eslint`, `pnpm test` complet, `next build` | NOT RUN local (memorie); în CI |
+| Consum măsurat: Excel 20.000 × 10 coloane / 50.000 / PDF 3.000 | ≈ 133 MB, 240 MB, 57 MB RSS; 1,0 s, 2,8 s, 0,5 s |
+
+#### 3. Decizia mea
+
+- Scriitori proprii în loc de dependențe (ADR 0024 §1); un singur font, fără grafice.
+- Plafoane după consumul măsurat (`finet-web` are 512 MB): Excel 20.000, PDF 3.000, CSV 50.000.
+- TVA calculat din linii, cu coloane de control; liniile fără cotă nu se estimează.
+- Suma are semn la tranzacții (cheltuieli și transferuri de ieșire negative).
+
+#### 4. Puncte deschise
+
+- PDF/Excel nedeschise în cititoare reale desktop (Acrobat, Excel); formatul contabil nu a fost validat de un contabil: coloanele și rotunjirea sunt decizia mea.
+- Pagină `/export` proprie: neimplementată (butoanele stau pe paginile datelor).
+- Revizuirea `security` a F10-C: neefectuată (a existat doar revizuirea automată pe commit: dialect CSV necunoscut, corectat).
+- Excel/PDF pentru bonuri se leagă de cotele citite pe linii: calitatea defalcării depinde de citirea bonului.
+
+#### 5. Pe producție
+
+`docs/INFRA.md`, secțiunea **4q**. Fără migrație; doar redeploy `finet-web`. Nimic nu s-a aplicat.
+
+### Partea 2 — „Întreabă FINET” și rezumatul lunii
+
+#### 1. Ce s-a implementat
+
+- **„Întreabă FINET”** (`src/modules/ask`): set închis de interogări (Zod strict), parser determinist pentru română (perioade, metrică, categorie, comerciant), executor sub RLS, `POST /api/v1/ask`; răspunsul arată interogarea folosită, iar o întrebare neînțeleasă primește un motiv fix (nu se ghicește). Pagina `/ask` cu exemple.
+- **Rezumatul lunii** (`src/modules/summary`): propoziții construite în cod din raportul lunar și cel al lunii precedente; `GET /api/v1/summary/monthly`; card pe `/reports`; eticheta fixă „Rezumat automat, nu sfat financiar.”.
+- **Documentație:** ADR 0025, API.md, INFRA 4r, ROADMAP, SECURITY_CHECKLIST §28, PRIVACY_NOTES.
+
+#### 2. Decizia mea — și diferența față de master prompt
+
+Master prompt-ul cere un **LLM local** pentru ambele funcții. Nu există LLM local, iar `finet-web` nu are acces la LiteLLM (configurația AI e doar pe worker). Am livrat nucleul determinist și **am amânat pasul cu LLM** (ADR 0025 §2): interogarea are exact forma pe care ar produce-o un model, deci un traducător se adaugă fără să schimbe executorul sau interfața. Costul: întrebări doar în formulările recunoscute; rezumatul e mai sec. Avantajul: nimic nu pleacă din aplicație, întrebările nu se păstrează, fără migrație.
+
+#### 3. Teste rulate local (2026-10-30)
+
+| Comandă | Rezultat |
+|---|---|
+| `vitest run src/modules/ask src/modules/summary src/app/api/v1/ask-api.test.ts` (cu PG) | PASS (10 + 5 + 13 teste) |
+| `vitest run src/app/ui-rules.test.ts src/app/a11y-rules.test.ts src/app/_lib src/app/smoke.test.ts` | PASS |
+| `node scripts/openapi.mjs --check` | PASS |
+| `tsc --noEmit` pe modulele, handlerele, pagina `/ask`, `/reports` și spec-ul E2E | PASS |
+| E2E (`e2e/ask.spec.ts`: întrebare înțeleasă, neînțeleasă, exemplu, rezumat, CSP) | SCRIS; NOT RUN local; în CI |
+| `eslint`, `pnpm test` complet, `next build` | NOT RUN local (memorie); în CI |
+
+#### 4. Puncte deschise
+
+- Pasul cu LLM (variantele din ADR 0025 §2) și migrația `0019`: decizia operatorului.
+- Parserul acoperă formulări apropiate de exemple; ce nu recunoaște primește „nu am înțeles”. Calitatea pe întrebări reale: neevaluată.
+- Revizuirea `security`; CSRF pe `POST /ask` fără test dedicat; performanța pe volume mari: nemăsurată.
+- Fără axe pe `/ask` în `e2e/a11y.spec.ts`.
+
+#### 5. Pe producție
+
+`docs/INFRA.md`, secțiunea **4r**. Fără migrație; doar redeploy `finet-web`. Nimic nu s-a aplicat.
+

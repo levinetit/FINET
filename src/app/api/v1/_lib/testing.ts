@@ -137,6 +137,16 @@ const OPERATION_OF = new Map<unknown, string>([
   [P.exportTransactionsHandler, "exportTransactionsCsv"],
   [P.exportGoalsHandler, "exportGoalsCsv"],
   [P.exportBudgetsHandler, "exportBudgetsCsv"],
+  [P.exportTransactionsXlsxHandler, "exportTransactionsXlsx"],
+  [P.exportTransactionsPdfHandler, "exportTransactionsPdf"],
+  [P.exportGoalsXlsxHandler, "exportGoalsXlsx"],
+  [P.exportGoalsPdfHandler, "exportGoalsPdf"],
+  [P.exportBudgetsXlsxHandler, "exportBudgetsXlsx"],
+  [P.exportBudgetsPdfHandler, "exportBudgetsPdf"],
+  [P.exportAccountingCsvHandler, "exportAccountingCsv"],
+  [P.exportAccountingXlsxHandler, "exportAccountingXlsx"],
+  [P.exportReceiptsXlsxHandler, "exportReceiptsXlsx"],
+  [P.exportReceiptsPdfHandler, "exportReceiptsPdf"],
   [R.listRecurringHandler, "listRecurring"],
   [R.createRecurringHandler, "createRecurring"],
   [R.recurringSummaryHandler, "getRecurringSummary"],
@@ -259,7 +269,7 @@ export async function assertContract(handler: unknown, response: Response): Prom
     const h = response.headers;
     const problems = [
       op.success.binary.includes(h.get("content-type") ?? "") ? null : "content-type",
-      /^attachment; filename="(bon-[0-9a-f-]{36}\.(jpg|png|webp|pdf)|finet-export\.zip)"$/.test(
+      /^attachment; filename="(bon-[0-9a-f-]{36}\.(jpg|png|webp|pdf)|finet-export\.zip|finet-[a-z]+\.(xlsx|pdf))"$/.test(
         h.get("content-disposition") ?? "",
       )
         ? null

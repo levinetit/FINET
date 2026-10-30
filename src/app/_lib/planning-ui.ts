@@ -165,6 +165,22 @@ export type ExportKind = "transactions" | "goals" | "budgets";
  * Adresa unui export CSV, mereu cu `dialect=ro` (`;`, virgulă zecimală, BOM; decizia
  * coordonatorului). `search` sunt parametrii deja validați (fără `sort`/`cursor`/`limit`).
  */
+export type TableExportFormat = "xlsx" | "pdf";
+
+/** Adresa unui export Excel sau PDF (F10-C): aceleași filtre ca la CSV, fără dialect. */
+export function exportTablePath(
+  kind: ExportKind,
+  format: TableExportFormat,
+  search: Readonly<Record<string, string>> = {},
+): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) {
+    if (value !== "") params.set(key, value);
+  }
+  const query = params.toString();
+  return `/api/v1/exports/${kind}.${format}${query === "" ? "" : `?${query}`}`;
+}
+
 export function exportPath(
   kind: ExportKind,
   search: Readonly<Record<string, string>> = {},

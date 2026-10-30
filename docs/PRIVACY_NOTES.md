@@ -106,6 +106,18 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Exportul CSV al unui raport** conține liniile potrivite (nume de produse, sume, date): același regim ca exporturile CSV existente. Fără statistici între gospodării.
 - **Loguri:** fără nume de produse sau reguli în loguri, audit sau mesaje de eroare (coduri fixe).
 
+## Exporturi Excel/PDF și export pentru contabil (Faza 10, F10-C; ADR 0024)
+- **Ce conțin:** aceleași date ca exporturile CSV din Faza 3 (tranzacții, obiective, bugete) și, pentru contabil, bonurile CONFIRMATE din perioada aleasă (data, numărul, comerciantul, CUI, sumele, TVA, contul și categoria). Fișierul îl primește doar utilizatorul care l-a cerut, direct în browser; nu se stochează pe server și nu se trimite nicăieri.
+- **Cine vede ce:** regulile aplicației (RLS): un membru nu primește bonurile din contul PERSONAL al altui membru; altă gospodărie nu primește nimic.
+- **Audit:** `export.downloaded` cu tipul exportului, formatul și numărul de rânduri, fără conținut.
+- **Fără AI extern:** exporturile nu apelează niciun model.
+
+## „Întreabă FINET” și rezumatul lunii (Faza 10, F10-C partea 2; ADR 0025)
+- **Fără AI extern:** întrebarea se transformă în cod într-o interogare simplă; nimic nu pleacă din aplicație și nu se apelează niciun model.
+- **Întrebarea nu se păstrează:** nu intră în baza de date, în audit, în exporturi sau în loguri; răspunsul se afișează o dată. Se trimite în corpul unei cereri `POST`, nu în adresă.
+- **Cine vede ce:** cifrele provin din tranzacțiile pe care utilizatorul le vede (conturile personale ale altor membri nu intră).
+- **Rezumatul lunii:** text construit în aplicație din cifrele raportului lunar; eticheta „Rezumat automat, nu sfat financiar.”.
+
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); extrasele PDF cel mult 24 h (F7-B); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 — implementate (Fazele 2–9; ștergerea contului în F9-B). Rămâne de decis expirarea datelor șterse din backup-uri (mai sus).

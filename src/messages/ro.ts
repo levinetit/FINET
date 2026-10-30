@@ -549,7 +549,22 @@ export const ro = {
     downloading: "Se pregătește…",
     done: "Fișierul a fost descărcat.",
     tooLarge:
-      "Exportul are prea multe rânduri (peste 50.000). Restrânge filtrele, de exemplu la un interval de date mai scurt.",
+      "Exportul are prea multe rânduri (cel mult 50.000 pentru CSV, 20.000 pentru Excel, 3.000 pentru PDF). Restrânge filtrele, de exemplu la un interval de date mai scurt.",
+    xlsx: "Export Excel",
+    pdf: "Export PDF",
+    // F10-C: exportul pentru contabil și lista bonurilor, pe o perioadă.
+    accounting: {
+      title: "Export pentru contabil",
+      hint: "Un rând per bon confirmat, cu baza și TVA pe cote, totalul, contul și categoria. Doar bonurile pe care le poți vedea; formatul e fix (vezi documentația).",
+      from: "De la",
+      to: "Până la",
+      invalid:
+        "Alege o perioadă validă (cel mult 1.100 de zile, data de început înaintea celei de sfârșit).",
+      csv: "Contabil (CSV)",
+      xlsx: "Contabil (Excel)",
+      listXlsx: "Lista bonurilor (Excel)",
+      listPdf: "Lista bonurilor (PDF)",
+    },
     rateLimited: "Prea multe exporturi într-un minut. Încearcă din nou peste un minut.",
     rateLimitedRetry: (seconds: number) =>
       `Prea multe exporturi într-un minut. Încearcă din nou peste ${seconds} ${seconds === 1 ? "secundă" : "secunde"}.`,
