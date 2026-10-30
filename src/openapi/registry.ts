@@ -59,6 +59,7 @@ import {
   splitSetSchema,
 } from "@/modules/family/family.schema";
 
+import { ASK_OPERATIONS } from "./ask-operations";
 import { PRICES_OPERATIONS } from "./prices-operations";
 import {
   coverageRowSchema,
@@ -1952,6 +1953,8 @@ export const OPERATIONS: readonly Operation[] = [
   },
   // --- Prețuri, inflație, rapoarte de micro-cheltuieli (Faza 10, F10-B; ADR 0023) -----------
   ...PRICES_OPERATIONS,
+  // --- „Întreabă FINET” (Faza 10, F10-C; ADR 0025) ------------------------------------------
+  ...ASK_OPERATIONS,
 ];
 
 /** Operația după metodă și cale (pentru testele de contract). */

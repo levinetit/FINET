@@ -14,6 +14,7 @@ import * as R from "./recurring-handlers";
 import * as S from "./statements-handlers";
 import * as MT from "./matching-handlers";
 import * as SH from "./shopping-handlers";
+import * as AH from "./ask-handlers";
 import * as PR from "./prices-handlers";
 
 /**
@@ -216,6 +217,7 @@ const OPERATION_OF = new Map<unknown, string>([
   [PR.listReportDefinitionsHandler, "listReportDefinitions"],
   [PR.createReportDefinitionHandler, "createReportDefinition"],
   [PR.previewReportHandler, "previewReportRules"],
+  [AH.askHandler, "askFinet"],
   [PR.getReportDefinitionHandler, "getReportDefinition"],
   [PR.patchReportDefinitionHandler, "patchReportDefinition"],
   [PR.deleteReportDefinitionHandler, "deleteReportDefinition"],

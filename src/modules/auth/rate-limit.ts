@@ -51,7 +51,9 @@ export type RateLimitKind =
   | "gdpr_export"
   // F10-A: rularea comparației listă ↔ bon și sugestiile de produse, pe utilizator.
   | "api_shopping_compare"
-  | "api_shopping_suggest";
+  | "api_shopping_suggest"
+  // F10-C: „Întreabă FINET” (citește tranzacțiile din perioadă), pe utilizator.
+  | "api_ask";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;
