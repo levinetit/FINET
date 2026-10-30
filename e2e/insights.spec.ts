@@ -164,8 +164,12 @@ test.describe(`rapoarte inteligente (${MODE})`, () => {
       "insufficient",
     );
     await expect(page.getByTestId("report-projection")).toContainText("Date insuficiente");
-    await expect(page.getByTestId("report-lines")).toContainText("PUNGA RAFIE");
-    await expect(page.getByTestId("report-lines")).not.toContainText("MENAJ");
+    await expect(page.getByRole("table", { name: "Istoricul liniilor" })).toContainText(
+      "PUNGA RAFIE",
+    );
+    await expect(page.getByRole("table", { name: "Istoricul liniilor" })).not.toContainText(
+      "MENAJ",
+    );
     await expect(page.getByTestId("report-advice")).toBeVisible();
 
     // Încă 10 bonuri pe ~100 de zile → destule zile și bonuri pentru o estimare.

@@ -54,7 +54,6 @@ export function pickId(raw: string | string[] | undefined): string | null {
 /** Textul unei căutări din URL: scurt, fără caractere de control. */
 export function pickText(raw: string | string[] | undefined, max: number): string {
   const value = (Array.isArray(raw) ? raw[0] : raw) ?? "";
-  // eslint-disable-next-line no-control-regex -- eliminăm caracterele de control din textul din URL
   return value
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .trim()
