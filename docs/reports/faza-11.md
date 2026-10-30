@@ -92,6 +92,14 @@ ADR 0031; branch `phase/11-english`; fără migrație.
 - Textele publice în engleză (`src/messages/en-site.ts`, tipul derivat din `ro.site`), textele juridice traduse (ciorne, sub `SITE_LEGAL_REVIEWED`), comutator RO/EN, limba din cookie explicit `finet_lang` (NICIODATĂ din `Accept-Language`), `<html lang>` prin antet intern de proxy.
 - Doar `/`, `/pricing`, `/terms`, `/privacy`, `/support`; aplicația, `/login` și `/register*` rămân în română (`/login` are 0,5 KiB rezervă în buget).
 - `docs/EXPOSURE.md`: ce trebuie decis și schimbat înainte de expunerea publică. `proxy.ts` nu a fost relaxat.
+## 11-C2 — Turnstile pe înregistrare
+
+ADR 0030; branch `phase/11-turnstile-oauth`; fără migrație.
+
+### 1. Ce s-a implementat
+
+- Configurare (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY_FILE`), verificator fail-closed, integrare în `POST /api/v1/register` (după limitele de rate, înainte de orice scriere), CSP doar pe `/register`, widget cu resetare după eșec, override compose pentru secret.
+- Fără chei, nimic nu se schimbă față de 11-C1.
 
 ### 2. Teste rulate local (2026-10-31)
 
@@ -105,4 +113,10 @@ ADR 0031; branch `phase/11-english`; fără migrație.
 
 - Revizuirea umană a traducerilor juridice; fără URL-uri pe limbă/hreflang (SEO în engleză); aplicația nu e tradusă (decizie a operatorului).
 - Expunerea publică: toate punctele din `docs/EXPOSURE.md` (politica Access, excepția de cod, sursa IP, WAF, SMTP, marcă).
+| `vitest run turnstile.test.ts register-api.test.ts config.test.ts consent.test.ts secret-files.test.ts` (PG17) | PASS (104 teste) |
+| E2E cu widget real | NU există (CI fără chei; regula „resurse doar de pe propriul domeniu” din `regressions (a)`) |
+
+### 3. OAuth Google/Facebook: NEIMPLEMENTAT, decizie necesară
+
+Codul curent blochează orice creare de utilizator prin Better Auth (`user.create.before` → `false`), `finet_app` nu poate scrie `status`/`is_platform_admin`, iar căile `/sign-in/social` și callback sunt în afara listei permise; Facebook nu garantează un email verificat. Fără un test care rulează callback-ul cu un furnizor simulat, nu livrez cod de legare de conturi „activ când apar cheile”. Opțiuni: (1) doar autentificare pentru conturi FINET existente și verificate, fără creare de cont; (2) și creare de cont, printr-o cale FINET dedicată; (3) amânare până există credențiale. Recomandare: (1), cu Google înaintea Facebook.
 

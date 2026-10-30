@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CONSENT_COOKIE, consentCookie, consentSignals, parseConsent } from "./consent";
-import { CONSUMER_LINKS, isPublicSitePath } from "./site-paths";
+import { CONSUMER_LINKS, isPublicSitePath, isTurnstilePath } from "./site-paths";
 import { buildCsp } from "./security-headers";
 
 describe("consimțământul pentru analytics (Consent Mode v2)", () => {
@@ -59,5 +59,27 @@ describe("paginile publice și CSP", () => {
     // Restul directivelor neschimbate.
     expect(on).toContain("default-src 'self'");
     expect(on).toContain("frame-ancestors 'none'");
+  });
+});
+
+describe("Turnstile și CSP (F11-C2)", () => {
+  it("surse Cloudflare doar cu opțiunea `turnstile`, inclusiv frame-src; altfel nimic", () => {
+    const off = buildCsp("abc", { development: false });
+    expect(off).not.toContain("challenges.cloudflare.com");
+    expect(off).not.toContain("frame-src");
+    const on = buildCsp("abc", { development: false, turnstile: true });
+    expect(on).toContain("script-src 'self' 'nonce-abc' https://challenges.cloudflare.com");
+    expect(on).toContain("connect-src 'self' https://challenges.cloudflare.com");
+    expect(on).toContain("frame-src https://challenges.cloudflare.com");
+    // Restul rămâne strict.
+    expect(on).toContain("default-src 'self'");
+    expect(on).toContain("frame-ancestors 'none'");
+    expect(on).not.toContain("unsafe-inline");
+  });
+  it("doar `/register` (cu sau fără slash final) încarcă Turnstile", () => {
+    for (const p of ["/register", "/register/"]) expect(isTurnstilePath(p), p).toBe(true);
+    for (const p of ["/register/complete", "/login", "/", "/support", "/registers", ""]) {
+      expect(isTurnstilePath(p), p).toBe(false);
+    }
   });
 });

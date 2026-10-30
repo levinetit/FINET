@@ -21,10 +21,12 @@ export const metadata: Metadata = { title: ro.register.title };
 export default function RegisterPage() {
   let mode: string | null = null;
   let open = false;
+  let turnstileSiteKey: string | null = null;
   try {
     const config = getConfig();
     mode = config.appMode;
     open = config.auth.signupEnabled && config.notify.smtp !== null;
+    turnstileSiteKey = config.auth.turnstile?.siteKey ?? null;
   } catch {
     mode = null;
   }
@@ -40,7 +42,7 @@ export default function RegisterPage() {
         {open ? (
           <>
             <p className="mb-5 text-muted-foreground">{ro.register.intro}</p>
-            <RegisterForm />
+            <RegisterForm turnstileSiteKey={turnstileSiteKey} />
             <p className="mt-5 text-center text-sm">
               <Link href="/login">{ro.register.backToLogin}</Link>
             </p>
