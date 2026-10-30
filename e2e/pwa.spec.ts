@@ -1,7 +1,7 @@
-import { type Browser, type BrowserContext, type Page, expect, test } from "@playwright/test";
+import { type Browser, type BrowserContext, type Page, expect } from "@playwright/test";
 import sharp from "sharp";
 
-import { MODE, type UserKind, loginOk, password, userEmail } from "./fixtures";
+import { MODE, type UserKind, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * PWA și scanarea offline (Faza 9, ADR 0020; proiectul `pwa`). Același server de dezvoltare și

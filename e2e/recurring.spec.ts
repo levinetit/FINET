@@ -4,10 +4,9 @@ import {
   type BrowserContext,
   type Page,
   expect,
-  test,
 } from "@playwright/test";
 
-import { MODE, type UserKind, loginOk, password, userEmail } from "./fixtures";
+import { MODE, type UserKind, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * Plățile recurente în browser (F5-B, proiectul `recurring`): o regulă lunară cu start în trecut
