@@ -135,7 +135,12 @@ test.describe(`liste de cumpărături (${MODE})`, () => {
       await page.getByTestId("add-item-submit").click();
       await expect(page.getByRole("list", { name: "Articole" })).toContainText(item);
     }
+    // Bifarea e optimistă: așteptăm răspunsul serverului înainte de reîncărcare (altfel cererea se anulează).
+    const saved = page.waitForResponse(
+      (r) => r.request().method() === "PATCH" && /\/items\/[0-9a-f-]{36}$/.test(r.url()),
+    );
     await page.getByLabel("Bifează: lapte").check();
+    expect((await saved).status()).toBe(200);
     await expect(page.getByText("1 din 3 bifate")).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("Bifează: lapte")).toBeChecked();
@@ -207,7 +212,7 @@ test.describe(`liste de cumpărături (${MODE})`, () => {
     await expect(page.getByRole("heading", { name: /^Potrivite/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /^Neplanificate/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /^Uitate/ })).toBeVisible();
-    await expect(page.getByText("SAMPON HAIR 400ML")).toBeVisible();
+    await expect(page.getByTestId("unplanned-line")).toContainText("SAMPON HAIR 400ML");
   });
 
   test("(d) zero încălcări CSP pe paginile noi", async ({ browser, baseURL }) => {
