@@ -660,3 +660,19 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Curățarea conturilor neconfirmate | TODO (înainte de expunerea publică) | ADR 0029, limite | — |
 | Revizuirea `security` a Fazei 11-C1 | TODO | agentul `security` | — |
 
+## 35. Autentificarea cu Google, doar conturi existente (Faza 11-C2, 2026-10-31; ADR 0032)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Fără furnizor configurat, `/sign-in/social` și `/callback/google` dau 404; în `personal` configurarea e eroare | DONE | `google-oauth.test.ts`, `config.test.ts` | 2026-10-31 · agent |
+| Nicio creare de cont: email necunoscut → `signup_disabled`, zero utilizatori și conturi noi | DONE (PG17, Better Auth 1.7.13) | `google-oauth.test.ts` | 2026-10-31 · agent |
+| Legare doar cu email local verificat ȘI `email_verified` de la Google; Google nu e „de încredere” | DONE (PG17) | `google-oauth.test.ts` (neverificat local, neverificat Google) | 2026-10-31 · agent |
+| Fără preluare de cont: același `sub` cu alt email → sesiunea proprietarului legat; niciun cont Google legat de alt utilizator | DONE (PG17) | `google-oauth.test.ts` | 2026-10-31 · agent |
+| Cont dezactivat: nicio sesiune; stare falsificată sau lipsă: respins fără apel extern | DONE (PG17) | `google-oauth.test.ts` | 2026-10-31 · agent |
+| Jetoanele OAuth nu se păstrează (acces, reîmprospătare, id, scope = null) | DONE (PG17) | `google-oauth.test.ts` | 2026-10-31 · agent |
+| Doar cele trei scope-uri de identitate; un singur apel extern (schimbul de cod) | DONE | `google-oauth.test.ts` | 2026-10-31 · agent |
+| Rate limiting pe pornirea fluxului; erorile nu reflectă valori din URL | DONE | `google-oauth.test.ts`, `login/page.tsx` | 2026-10-31 · agent |
+| Testat cu Google REAL | NEVERIFICAT (fără credențiale); INFRA 4w | ADR 0032, limite | — |
+| Facebook | NEIMPLEMENTAT intenționat (ADR 0032 §5) | — | — |
+| Revizuirea `security` a Fazei 11-C2 (OAuth) | TODO | agentul `security` | — |
+

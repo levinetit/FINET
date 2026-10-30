@@ -148,6 +148,14 @@ export type AuthConfig = Readonly<{
    * pornește). Chiar pornită, ruta există doar dacă SMTP e configurat (verificarea emailului).
    */
   signupEnabled: boolean;
+  /**
+   * Autentificarea cu Google (Faza 11-C2, ADR 0030), doar `saas`, DOAR pentru conturi FINET
+   * existente cu email verificat (fără creare de cont, fără alți furnizori). `clientSecret` vine
+   * DOAR din `GOOGLE_CLIENT_SECRET_FILE`, doar în rolul web. `null` = oprită (ambele valori lipsesc).
+   */
+  oauth: Readonly<{
+    google: Readonly<{ clientId: string; clientSecret: string }> | null;
+  }>;
   rateLimits: Readonly<{
     /** Login-ul web (parolă), pe IP + email normalizat. */
     login: RateLimitRule;
@@ -382,6 +390,16 @@ const envSchema = z.object({
   SITE_CONTACT_EMAIL: z.string().trim().email().max(200).optional(),
   SITE_LEGAL_REVIEWED: z.enum(["0", "1"]).optional(),
   SIGNUP_ENABLED: z.enum(["0", "1"]).optional(),
+  GOOGLE_CLIENT_ID: z
+    .string()
+    .trim()
+    .regex(/^[0-9A-Za-z._-]{10,200}$/)
+    .optional(),
+  GOOGLE_CLIENT_SECRET: z
+    .string()
+    .trim()
+    .regex(/^[0-9A-Za-z._-]{10,200}$/)
+    .optional(),
   SITE_ANALYTICS_ID: z
     .string()
     .trim()
@@ -533,6 +551,8 @@ export function parseConfig(
     // Cheia „Întreabă FINET” (F10-C): doar serverul web (workerul are propria cheie).
     if (knownRole !== "web") {
       forbidden.set("AI_ASK_API_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
+      // Secretul clientului Google (F11-C2): autentificarea o face serverul web.
+      forbidden.set("GOOGLE_CLIENT_SECRET", `nu e permisă când FINET_ROLE=${knownRole}`);
     }
   }
   const secrets = knownRole
@@ -719,6 +739,22 @@ export function parseConfig(
       });
     }
   }
+  // Autentificarea cu Google (F11-C2): doar `saas`, secretul doar din fișier, ambele valori împreună.
+  if (e.GOOGLE_CLIENT_SECRET !== undefined && !secrets.fromFile.has("GOOGLE_CLIENT_SECRET")) {
+    issues.push({
+      variable: "GOOGLE_CLIENT_SECRET",
+      problem: "se dă doar prin GOOGLE_CLIENT_SECRET_FILE",
+    });
+  }
+  if ((e.GOOGLE_CLIENT_ID === undefined) !== (e.GOOGLE_CLIENT_SECRET === undefined)) {
+    issues.push({
+      variable: e.GOOGLE_CLIENT_ID === undefined ? "GOOGLE_CLIENT_ID" : "GOOGLE_CLIENT_SECRET_FILE",
+      problem: "ID-ul și secretul clientului Google se dau împreună",
+    });
+  }
+  if (e.GOOGLE_CLIENT_ID !== undefined && e.APP_MODE !== "saas") {
+    issues.push({ variable: "GOOGLE_CLIENT_ID", problem: "este permis doar când APP_MODE=saas" });
+  }
   if (role === "web" && e.AI_ASK === "1") {
     if (e.AI_BASE_URL === undefined) {
       issues.push({ variable: "AI_BASE_URL", problem: "e necesară când AI_ASK=1" });
@@ -859,6 +895,12 @@ export function parseConfig(
       secret: e.BETTER_AUTH_SECRET ?? null,
       hibpEnabled: e.AUTH_HIBP_ENABLED === "true",
       signupEnabled: e.SIGNUP_ENABLED === "1",
+      oauth: Object.freeze({
+        google:
+          role === "web" && e.GOOGLE_CLIENT_ID !== undefined && e.GOOGLE_CLIENT_SECRET !== undefined
+            ? Object.freeze({ clientId: e.GOOGLE_CLIENT_ID, clientSecret: e.GOOGLE_CLIENT_SECRET })
+            : null,
+      }),
       rateLimits: Object.freeze({
         login: Object.freeze({
           max: int(e.AUTH_LOGIN_MAX_ATTEMPTS, DEFAULTS.loginMax),

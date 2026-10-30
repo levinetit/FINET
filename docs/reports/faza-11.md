@@ -83,3 +83,12 @@ ADR 0029; branch `phase/11-public`; fără migrație.
 - Turnstile, OAuth, traducerea în engleză și expunerea publică: 11-C2/C3 (cer chei și decizii).
 - Curățarea conturilor neconfirmate și sursa de IP de încredere: înainte de `SIGNUP_ENABLED=1` public (INFRA 4u).
 
+## 11-C2 (OAuth) — autentificarea cu Google, doar conturi existente
+
+ADR 0032; branch `phase/11-oauth`; fără migrație. Decizia operatorului: login doar pentru conturi existente.
+
+- Implementat: configurare (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET_FILE`), cale deschisă doar cu furnizor configurat, `disableSignUp`, legare doar cu email verificat local ȘI la Google, jetoane șterse, buton pe `/login`, mesaj fix la eroare.
+- Teste (PG17, Better Auth 1.7.13, furnizor simulat): `google-oauth.test.ts` (10 teste: 404 fără furnizor, legare + sesiune + audit + fără jetoane, necunoscut, neverificat local, neverificat la Google, dezactivat, stare falsificată/lipsă, același `sub` cu alt email, rate limit), `config.test.ts`.
+- NEVERIFICAT cu Google real (fără credențiale); procedura e în INFRA 4w. Facebook: neimplementat intenționat (ADR 0032 §5).
+- Bugetul JS: `/login` trece la 190 KiB (`docs/PERFORMANCE.md`); cifra măsurată se completează după CI.
+

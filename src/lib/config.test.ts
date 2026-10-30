@@ -753,6 +753,36 @@ describe("furnizorul AI (F6-B, ADR 0014)", () => {
     });
   });
 
+  it("Google OAuth (F11-C2): doar saas; ID + secret împreună; secretul doar din fișier și doar în rolul web", () => {
+    expect(parseConfig(DEV).auth.oauth.google).toBeNull();
+    const SAAS_G = {
+      ...DEV,
+      APP_MODE: "saas",
+      GOOGLE_CLIENT_ID: "id-client-fals-0123456789",
+      GOOGLE_CLIENT_SECRET_FILE: KEY_FILE,
+    } as const;
+    expect(parseConfig(SAAS_G).auth.oauth.google).toEqual({
+      clientId: "id-client-fals-0123456789",
+      clientSecret: "sk-cheie-virtuala-fictiva-0123",
+    });
+    // În personal e o eroare (nu un cod mort tăcut).
+    expect(issuesOf({ ...SAAS_G, APP_MODE: "personal" })).toContain("GOOGLE_CLIENT_ID");
+    expect(issuesOf({ ...SAAS_G, GOOGLE_CLIENT_ID: undefined })).toEqual(["GOOGLE_CLIENT_ID"]);
+    expect(issuesOf({ ...SAAS_G, GOOGLE_CLIENT_SECRET_FILE: undefined })).toEqual([
+      "GOOGLE_CLIENT_SECRET_FILE",
+    ]);
+    expect(
+      issuesOf({
+        ...SAAS_G,
+        GOOGLE_CLIENT_SECRET_FILE: undefined,
+        GOOGLE_CLIENT_SECRET: "secret-in-clar-0123456",
+      }),
+    ).toContain("GOOGLE_CLIENT_SECRET");
+    expect(issuesOf({ ...WORKER, GOOGLE_CLIENT_SECRET_FILE: KEY_FILE })).toContain(
+      "GOOGLE_CLIENT_SECRET_FILE",
+    );
+  });
+
   it("site-ul public (F11): fără valori implicite; ready doar cu datele firmei complete ȘI textele revizuite", () => {
     const empty = parseConfig(DEV).site;
     expect(empty).toEqual({

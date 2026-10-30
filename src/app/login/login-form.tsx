@@ -12,7 +12,7 @@ import { apiFetch } from "../_lib/api-client";
 import { safeNextPath } from "../_lib/next-path";
 import { useHydrated } from "../_lib/use-hydrated";
 
-type Status = "idle" | "password" | "magic";
+type Status = "idle" | "password" | "magic" | "google";
 
 /** Mesajul pentru un 429: cu minutele din `Retry-After`, dacă există. */
 function rateLimitMessage(retryAfter: number | null): string {
@@ -24,9 +24,14 @@ function rateLimitMessage(retryAfter: number | null): string {
  * `src/modules/auth/handler.ts`, deci cu normalizarea emailului și rate limiting. Mesajele sunt
  * uniforme: nu spun dacă emailul are cont.
  */
-export function LoginForm({ next, magicLink }: Readonly<{ next: string; magicLink: boolean }>) {
+export function LoginForm({
+  next,
+  magicLink,
+  google,
+  oauthError,
+}: Readonly<{ next: string; magicLink: boolean; google: boolean; oauthError: boolean }>) {
   const [status, setStatus] = useState<Status>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(oauthError ? ro.login.googleError : null);
   const [info, setInfo] = useState<string | null>(null);
   const hydrated = useHydrated();
 
@@ -78,6 +83,25 @@ export function LoginForm({ next, magicLink }: Readonly<{ next: string; magicLin
     else setError(ro.login.genericError);
   }
 
+  async function onGoogle() {
+    setInfo(null);
+    setStatus("google");
+    setError(null);
+    const result = await apiFetch("/api/auth/sign-in/social", {
+      method: "POST",
+      body: { provider: "google", callbackURL: safeNextPath(next), errorCallbackURL: "/login" },
+    });
+    const url = (result.raw as { url?: unknown } | null)?.url;
+    // Navigăm doar spre Google (răspunsul vine de la serverul nostru, dar verificăm destinația).
+    if (result.ok && typeof url === "string" && url.startsWith("https://accounts.google.com/")) {
+      window.location.assign(url);
+      return;
+    }
+    setStatus("idle");
+    if (result.status === 429) setError(rateLimitMessage(result.retryAfter));
+    else setError(ro.login.googleError);
+  }
+
   const busy = status !== "idle" || !hydrated;
   return (
     <form
@@ -119,6 +143,14 @@ export function LoginForm({ next, magicLink }: Readonly<{ next: string; magicLin
       <Button type="submit" disabled={busy}>
         {status === "password" ? ro.login.submitting : ro.login.submit}
       </Button>
+      {google ? (
+        <>
+          <p className="text-center text-xs text-muted-foreground">{ro.login.or}</p>
+          <Button variant="outline" disabled={busy} onClick={() => void onGoogle()}>
+            {status === "google" ? ro.login.googleStarting : ro.login.google}
+          </Button>
+        </>
+      ) : null}
       {magicLink ? (
         <>
           <p className="text-center text-xs text-muted-foreground">{ro.login.or}</p>
