@@ -548,7 +548,9 @@ export const ro = {
     downloading: "Se pregătește…",
     done: "Fișierul a fost descărcat.",
     tooLarge:
-      "Exportul are prea multe rânduri (peste 50.000). Restrânge filtrele, de exemplu la un interval de date mai scurt.",
+      "Exportul are prea multe rânduri (cel mult 50.000 pentru CSV și Excel, 3.000 pentru PDF). Restrânge filtrele, de exemplu la un interval de date mai scurt.",
+    xlsx: "Export Excel",
+    pdf: "Export PDF",
     rateLimited: "Prea multe exporturi într-un minut. Încearcă din nou peste un minut.",
     rateLimitedRetry: (seconds: number) =>
       `Prea multe exporturi într-un minut. Încearcă din nou peste ${seconds} ${seconds === 1 ? "secundă" : "secunde"}.`,

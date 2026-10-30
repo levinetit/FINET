@@ -9,6 +9,7 @@ import {
   countDelta,
   deltaView,
   exportPath,
+  exportTablePath,
   formatAbsMinor,
   formatDate,
   formatDayShort,
@@ -125,6 +126,18 @@ describe("scalarea graficelor în întregi", () => {
     expect(progressLength(250)).toBe(100);
     expect(progressLength(-3)).toBe(0);
     expect(progressLength(0)).toBe(0);
+  });
+});
+
+describe("adresele exporturilor Excel/PDF (F10-C)", () => {
+  it("aceleași filtre, fără dialect și fără parametri goi", () => {
+    expect(exportTablePath("goals", "xlsx")).toBe("/api/v1/exports/goals.xlsx");
+    expect(exportTablePath("budgets", "pdf", { month: "2026-10" })).toBe(
+      "/api/v1/exports/budgets.pdf?month=2026-10",
+    );
+    expect(exportTablePath("transactions", "xlsx", { dateFrom: "2026-10-01", q: "" })).toBe(
+      "/api/v1/exports/transactions.xlsx?dateFrom=2026-10-01",
+    );
   });
 });
 

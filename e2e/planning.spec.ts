@@ -329,6 +329,22 @@ test.describe(`planificarea (${MODE})`, () => {
     expect(url.searchParams.get("dialect")).toBe("ro");
     expect(url.searchParams.get("merchant")).toBe(merchant);
     expect([...url.searchParams.keys()].sort()).toEqual(["dialect", "merchant"]);
+
+    // F10-C: aceleași filtre în Excel și PDF (arhiv ZIP, respectiv %PDF-).
+    const xlsx = page.waitForEvent("download");
+    await page.getByTestId("export-transactions-xlsx").click();
+    const xlsxFile = await xlsx;
+    expect(xlsxFile.suggestedFilename()).toBe("finet-tranzactii.xlsx");
+    expect((await readFile((await xlsxFile.path())!)).subarray(0, 2).toString()).toBe("PK");
+    const pdf = page.waitForEvent("download");
+    await page.getByTestId("export-transactions-pdf").click();
+    const pdfFile = await pdf;
+    expect(pdfFile.suggestedFilename()).toBe("finet-tranzactii.pdf");
+    expect((await readFile((await pdfFile.path())!)).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(requests).toHaveLength(3);
+    const tableUrl = new URL(requests[1]!);
+    expect(tableUrl.searchParams.get("dialect")).toBeNull();
+    expect(tableUrl.searchParams.get("merchant")).toBe(merchant);
   });
 
   test("(f) izolare: alt utilizator nu vede bugetele, obiectivele, etichetele și exportul", async ({

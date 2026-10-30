@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ExportButton } from "@/components/planning/export-button";
+import { TableExportButtons } from "@/components/planning/table-export-buttons";
 import { MonthSelector } from "@/components/planning/month-selector";
 import { BudgetAlert, BudgetLine, budgetName } from "@/components/planning/summary";
 import { Alert } from "@/components/ui/alert";
@@ -100,11 +101,16 @@ export default async function BudgetsPage({
                   ))}
                 </ul>
               )}
-              <div className="mt-4">
+              <div className="mt-4 flex flex-wrap items-start gap-3">
                 <ExportButton
                   path={exportPath("budgets", { month: selection.month })}
                   label={t.exportCsv}
                   filename="finet-bugete.csv"
+                  testId="export-budgets"
+                />
+                <TableExportButtons
+                  kind="budgets"
+                  search={{ month: selection.month }}
                   testId="export-budgets"
                 />
               </div>

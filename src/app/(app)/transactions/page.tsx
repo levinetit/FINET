@@ -4,6 +4,7 @@ import { unstable_rethrow } from "next/navigation";
 
 import { Field } from "@/components/ledger/field";
 import { ExportButton } from "@/components/planning/export-button";
+import { TableExportButtons } from "@/components/planning/table-export-buttons";
 import { TagDot } from "@/components/planning/tag-chip";
 import { Alert } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
@@ -329,12 +330,19 @@ export default async function TransactionsPage({
             </h2>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <p className="text-sm text-muted-foreground">{t.exportHint}</p>
-              <ExportButton
-                path={exportPath("transactions", exportSearch(filters.query))}
-                label={t.exportCsv}
-                filename="finet-tranzactii.csv"
-                testId="export-transactions"
-              />
+              <div className="flex flex-wrap items-start gap-3">
+                <ExportButton
+                  path={exportPath("transactions", exportSearch(filters.query))}
+                  label={t.exportCsv}
+                  filename="finet-tranzactii.csv"
+                  testId="export-transactions"
+                />
+                <TableExportButtons
+                  kind="transactions"
+                  search={exportSearch(filters.query)}
+                  testId="export-transactions"
+                />
+              </div>
             </div>
           </Card>
         ) : null}
