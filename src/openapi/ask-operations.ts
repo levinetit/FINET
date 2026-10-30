@@ -41,11 +41,9 @@ const answerSchema = z.discriminatedUnion("kind", [
 export const askResultSchema = z.discriminatedUnion("understood", [
   z.strictObject({
     understood: z.literal(true),
-    source: z
-      .enum(["rules", "ai"])
-      .meta({
-        description: "`rules` = parserul din cod; `ai` = tradusă de un model extern (ADR 0026).",
-      }),
+    source: z.enum(["rules", "ai"]).meta({
+      description: "`rules` = parserul din cod; `ai` = tradusă de un model extern (ADR 0026).",
+    }),
     query: askQuerySchema,
     queryText: z.string(),
     period: z.strictObject({ from: date, to: date, label: z.string() }),
