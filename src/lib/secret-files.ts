@@ -38,6 +38,8 @@ export const SECRET_VARIABLES = [
   "AI_API_KEY",
   // Cheia DEDICATĂ a „Întreabă FINET” (F10-C, ADR 0026): doar rolul web, doar cu `AI_ASK=1`.
   "AI_ASK_API_KEY",
+  // Secretul clientului OAuth Google (F11-C2, ADR 0030): doar rolul web, doar din fișier.
+  "GOOGLE_CLIENT_SECRET",
   // Cheia secretă Cloudflare Turnstile (F11-C2, ADR 0030): doar rolul web, doar din fișier.
   "TURNSTILE_SECRET_KEY",
 ] as const;

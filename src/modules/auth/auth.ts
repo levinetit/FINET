@@ -103,6 +103,22 @@ export const ALLOWED_AUTH_PATHS: ReadonlySet<string> = new Set([
   "/error",
 ]);
 
+/**
+ * Autentificarea cu Google (F11-C2, ADR 0030): căile Better Auth necesare, permise DOAR când
+ * furnizorul e configurat (altfel rămân 404, ca până acum): pornirea fluxului și întoarcerea
+ * furnizorului, pe un id de furnizor din lista configurată.
+ */
+export function enabledOAuthProviders(config: Config): readonly string[] {
+  return config.appMode === "saas" && config.auth.oauth.google ? ["google"] : [];
+}
+
+export function isOAuthAuthPath(sub: string, providers: readonly string[]): boolean {
+  if (providers.length === 0) return false;
+  if (sub === "/sign-in/social") return true;
+  const m = /^\/callback\/([a-z0-9_-]+)$/.exec(sub);
+  return m !== null && providers.includes(m[1]!);
+}
+
 /** Căile cu parametru permise (callback-ul linkului de resetare: `/reset-password/<token>`). */
 export const ALLOWED_AUTH_PREFIXES: readonly string[] = ["/reset-password/"];
 
@@ -148,6 +164,9 @@ export function createAuth(deps: AuthDeps) {
   const origin = new URL(baseURL).origin;
   const secure = baseURL.startsWith("https://") || config.nodeEnv === "production";
 
+  const oauthProviders = enabledOAuthProviders(config);
+  const google = oauthProviders.includes("google") ? config.auth.oauth.google : null;
+
   const plugins = [
     bearer({ requireSignature: true }),
     ...(mailer
@@ -188,7 +207,8 @@ export function createAuth(deps: AuthDeps) {
       // Doar nivelul și mesajul: argumentele pot conține obiecte cu date personale.
       log: (level, message) => console.error(`[auth] ${level}: ${message}`),
     },
-    disabledPaths: [...DISABLED_AUTH_PATHS],
+    // `/sign-in/social` se deschide doar cu un furnizor configurat (F11-C2); restul rămâne închis.
+    disabledPaths: DISABLED_AUTH_PATHS.filter((p) => !(google && p === "/sign-in/social")),
     rateLimit: { enabled: false },
     user: {
       additionalFields: {
@@ -206,7 +226,38 @@ export function createAuth(deps: AuthDeps) {
       updateAge: SESSION_UPDATE_AGE_SECONDS,
       cookieCache: { enabled: false },
     },
-    account: { accountLinking: { enabled: false } },
+    account: google
+      ? {
+          // Doar autentificare pentru conturi FINET EXISTENTE (F11-C2, ADR 0030): Better Auth leagă
+          // contul Google de utilizatorul cu același email DOAR dacă emailul local e verificat ȘI
+          // Google declară `email_verified` (Google NU e în `trustedProviders`: altfel ar trece și
+          // cu un email neverificat). Nu se actualizează numele/poza, iar la fiecare autentificare
+          // nu se scriu jetoane (`finet_app` nu poate actualiza decât parola din `auth_accounts`).
+          accountLinking: {
+            enabled: true,
+            trustedProviders: [],
+            allowDifferentEmails: false,
+            requireLocalEmailVerified: true,
+            updateUserInfoOnLink: false,
+          },
+          updateAccountOnSignIn: false,
+        }
+      : { accountLinking: { enabled: false } },
+    ...(google
+      ? {
+          socialProviders: {
+            google: {
+              clientId: google.clientId,
+              clientSecret: google.clientSecret,
+              // Niciun cont nou prin Google: utilizatorul necunoscut primește eroare ÎNAINTE de orice
+              // scriere (`disableSignUp` se verifică înainte de `user.create.before`).
+              disableSignUp: true,
+              prompt: "select_account" as const,
+            },
+          },
+          onAPIError: { errorURL: `${baseURL}/login` },
+        }
+      : {}),
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,
@@ -264,6 +315,24 @@ export function createAuth(deps: AuthDeps) {
           before: async () => false,
         },
       },
+      account: {
+        create: {
+          // Minimizarea datelor (F11-C2): după autentificare nu apelăm API-urile Google, deci nu
+          // păstrăm jetoanele (acces, reîmprospătare, id) în `auth_accounts`; rămân doar furnizorul și
+          // identificatorul contului.
+          before: async (account) => ({
+            data: {
+              ...account,
+              accessToken: null,
+              refreshToken: null,
+              idToken: null,
+              accessTokenExpiresAt: null,
+              refreshTokenExpiresAt: null,
+              scope: null,
+            },
+          }),
+        },
+      },
       session: {
         create: {
           before: async (session, ctx) => {
@@ -287,7 +356,11 @@ export function createAuth(deps: AuthDeps) {
               targetType: "session",
               targetId: session.id,
               metadata: {
-                method: path?.startsWith("/magic-link") ? "magic_link" : "password",
+                method: path?.startsWith("/magic-link")
+                  ? "magic_link"
+                  : path?.startsWith("/callback/")
+                    ? "google"
+                    : "password",
                 platform: client ? "android" : "web",
               },
             });

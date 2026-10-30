@@ -3,7 +3,7 @@ import "server-only";
 import type { Db } from "@/db";
 import type { Config, RateLimitRule } from "@/lib/config";
 
-import { type FinetAuth, isAllowedAuthPath } from "./auth";
+import { type FinetAuth, enabledOAuthProviders, isAllowedAuthPath, isOAuthAuthPath } from "./auth";
 import { checkPasswordPolicy, PASSWORD_PROBLEM_MESSAGES } from "./password";
 import {
   type RateLimitKind,
@@ -86,6 +86,7 @@ export function authSubpath(pathname: string): string | null {
 /** Căile cu rate limiting (și, deci, doar cu corp JSON). */
 const LIMITED_PATHS = new Set([
   "/sign-in/email",
+  "/sign-in/social",
   "/sign-in/magic-link",
   "/request-password-reset",
   "/forget-password",
@@ -120,6 +121,9 @@ function limitsFor(
           : { kind: "login", rule: limits.login, subject: email },
       ];
     }
+    case "/sign-in/social":
+      // Pornirea fluxului Google (F11-C2): aceeași găleată ca login-ul, pe IP, subiect fix.
+      return [{ kind: "login", rule: limits.login, subject: "oauth-start" }];
     case "/sign-in/magic-link":
     case "/request-password-reset":
     case "/forget-password":
@@ -173,7 +177,9 @@ export async function handleAuthRequest(
     return notFound();
   }
   // M1: doar căile din lista permisă ajung la Better Auth.
-  if (!isAllowedAuthPath(sub)) return notFound();
+  if (!isAllowedAuthPath(sub) && !isOAuthAuthPath(sub, enabledOAuthProviders(config))) {
+    return notFound();
+  }
 
   const policy = { accessVerified: config.access.required };
   const headers = withTrustedClientIp(request.headers, policy);

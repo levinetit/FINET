@@ -22,10 +22,24 @@ function magicLinkEnabled(): boolean {
   }
 }
 
+/** Butonul Google (F11-C2, ADR 0030) doar când furnizorul e configurat (flag fără secrete). */
+function googleEnabled(): boolean {
+  try {
+    const config = getConfig();
+    return config.appMode === "saas" && config.auth.oauth.google !== null;
+  } catch {
+    return false;
+  }
+}
+
 export default async function LoginPage({
   searchParams,
 }: Readonly<{ searchParams: Promise<Record<string, string | string[] | undefined>> }>) {
-  const next = safeNextPath((await searchParams).next);
+  const params = await searchParams;
+  const next = safeNextPath(params.next);
+  // Orice `?error=` de la Better Auth (după o autentificare Google respinsă) → un mesaj fix; valoarea
+  // din URL nu se afișează niciodată.
+  const oauthError = typeof params.error === "string" && params.error !== "";
   if (await getPageSession()) redirect(next);
 
   return (
@@ -37,7 +51,12 @@ export default async function LoginPage({
       <Card>
         <h1 className="mb-1 text-2xl font-bold">{ro.login.title}</h1>
         <p className="mb-5 text-sm text-muted-foreground">{ro.login.subtitle}</p>
-        <LoginForm next={next} magicLink={magicLinkEnabled()} />
+        <LoginForm
+          next={next}
+          magicLink={magicLinkEnabled()}
+          google={googleEnabled()}
+          oauthError={oauthError}
+        />
       </Card>
       <p className="text-center text-sm text-muted-foreground">{ro.login.noAccount}</p>
     </main>

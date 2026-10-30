@@ -55,6 +55,10 @@ export const ro = {
     rateLimitedRetry: (minutes: number) =>
       `Prea multe încercări. Încearcă din nou peste ${minutes} ${minutes === 1 ? "minut" : "minute"}.`,
     genericError: "Autentificarea nu a reușit. Încearcă din nou.",
+    google: "Continuă cu Google",
+    googleStarting: "Se deschide Google...",
+    googleError:
+      "Autentificarea cu Google nu a reușit. Contul FINET trebuie să existe deja, cu emailul confirmat; poți folosi emailul și parola.",
     missingFields: "Completează emailul și parola.",
     noAccount: "Conturile se creează de administratorul gospodăriei.",
   },
