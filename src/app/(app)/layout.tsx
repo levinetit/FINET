@@ -4,7 +4,10 @@ import { AppNav } from "@/components/app/app-nav";
 import { LiveUpdates } from "@/components/app/live-updates";
 import { InstallPrompt, OfflineSync } from "@/components/app/pwa-app";
 import { HouseholdSwitcher, type SwitcherHousehold } from "@/components/family/household-switcher";
+import { Announcements, FeedbackLink } from "@/components/site/announcements";
+import { getConfig } from "@/lib/config";
 import { ro } from "@/messages/ro";
+import { listActiveAnnouncements } from "@/modules/admin/admin.service";
 import { listMyHouseholds } from "@/modules/households/households.service";
 
 import { getPageSession } from "../_lib/session";
@@ -35,6 +38,21 @@ export default async function AppLayout({ children }: Readonly<{ children: React
       households = [];
     }
   }
+  // Faza 11-B (ADR 0028): anunțurile și legătura de feedback, doar în `saas`, doar cu sesiune.
+  let saas = false;
+  try {
+    saas = getConfig().appMode === "saas";
+  } catch {
+    saas = false;
+  }
+  let notices: Awaited<ReturnType<typeof listActiveAnnouncements>> = [];
+  if (saas && session) {
+    try {
+      notices = await listActiveAnnouncements(session.runtime.db, session.userId);
+    } catch {
+      notices = [];
+    }
+  }
   // Faza 9: coada scanărilor offline, legată de utilizator și de gospodăria activă (ADR 0020).
   const currentHousehold = households.find((h) => h.current)?.id ?? null;
   return (
@@ -54,11 +72,13 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           </div>
         ) : null}
         {session ? <LiveUpdates /> : null}
+        {saas ? <Announcements items={notices} /> : null}
         {session ? <InstallPrompt /> : null}
         {session && currentHousehold ? (
           <OfflineSync userId={session.userId} householdId={currentHousehold} />
         ) : null}
         {children}
+        {saas && session ? <FeedbackLink /> : null}
       </main>
     </div>
   );

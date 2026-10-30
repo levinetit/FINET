@@ -629,3 +629,19 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Legături ANPC SAL și SOL pe fiecare pagină publică | DONE | `e2e/site.spec.ts` | 2026-10-31 · agent |
 | Revizuirea `security` a Fazei 11-A | TODO | agentul `security` | — |
 
+## 31. Feedback, anunțuri, erori, panou de administrare `saas` (Faza 11-B, 2026-10-31; ADR 0028)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Toate rutele noi dau 404 în `personal` (inclusiv pentru un administrator); `/admin/*` dă 404 non-administratorilor și 401 fără sesiune | DONE (PG17) | `admin-api.test.ts`, `e2e/admin.spec.ts` | 2026-10-31 · agent |
+| RLS ENABLE + FORCE pe `feedback`, `announcements`, `app_errors`; autorul își vede doar feedback-ul propriu; UPDATE-ul unui non-administrator nu atinge niciun rând; INSERT în numele altuia respins | DONE (PG17) | `admin-api.test.ts` (izolare), `migrate.test.ts` | 2026-10-31 · agent |
+| Funcțiile de administrare: SECURITY DEFINER, `search_path = pg_catalog`, verifică administratorul (`42501` altfel), doar coloane nefinanciare | DONE (PG17) | `migrate.test.ts` (conținut), `admin-api.test.ts` (chei exacte) | 2026-10-31 · agent |
+| `app_errors` fără scriere directă pentru `finet_app`; doar `record_app_error`; valori invalide ignorate (rută cu parametri, cod cu spații, câmpuri în plus), cel mult 500 de erori distincte | DONE (PG17; plafonul de 500: NEVERIFICAT în test) | `admin-api.test.ts`, `migrate.test.ts` | 2026-10-31 · agent |
+| Un administrator nu își poate schimba propriul cont; un cont dezactivat pierde sesiunea; stare nevalidă → 400 | DONE (PG17) | `admin-api.test.ts` | 2026-10-31 · agent |
+| Acțiunile de schimbare se auditează (țintă + stare, fără conținut) | DONE (PG17) | `admin-api.test.ts` | 2026-10-31 · agent |
+| Validare strictă (câmpuri necunoscute, tip, lungimi, `userId` din corp) pe feedback, anunțuri, stări | DONE (PG17) | `admin-api.test.ts` | 2026-10-31 · agent |
+| Mesajele de feedback (text liber) pot conține date personale: se șterg cu contul; interfața avertizează să nu se scrie date financiare | DONE (cod); ștergerea în cascadă nu are test dedicat | `0020_admin_feedback.sql`, `ro.feedback.intro` | — |
+| Limită de cereri pe feedback/erori: doar limita generală a mutațiilor; spam de erori limitat de cheia de amprentă și de plafonul de 500 | PARȚIAL | ADR 0028 | — |
+| Audit în gospodăria administratorului (vizibil membrilor ei) | CUNOSCUT (ADR 0028 §4) | — | — |
+| Revizuirea `security` a Fazei 11-B | TODO | agentul `security` | — |
+

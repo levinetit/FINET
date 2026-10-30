@@ -84,11 +84,18 @@ export type AuditAction =
   | "consent.granted"
   | "consent.revoked"
   // GDPR (F9-B): doar numărul de gospodării exportate, fără conținut.
-  | "user.data_exported";
+  | "user.data_exported"
+  // Panoul de administrare (Faza 11-B): doar id-ul țintei și starea nouă, fără conținut.
+  | "admin.user_status_changed"
+  | "admin.feedback_status_changed"
+  | "admin.announcement_created"
+  | "admin.announcement_updated";
 
 export type AuditEvent = Readonly<{
   action: AuditAction;
   targetType?:
+    | "feedback"
+    | "announcement"
     | "user"
     | "session"
     | "household"

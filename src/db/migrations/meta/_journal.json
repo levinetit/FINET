@@ -134,6 +134,13 @@
       "when": 1795100000000,
       "tag": "0019_ask_finet_task",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795200000000,
+      "tag": "0020_admin_feedback",
+      "breakpoints": true
     }
   ]
 }

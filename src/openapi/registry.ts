@@ -60,6 +60,7 @@ import {
   splitSetSchema,
 } from "@/modules/family/family.schema";
 
+import { ADMIN_OPERATIONS } from "./admin-operations";
 import { ASK_OPERATIONS } from "./ask-operations";
 import { PRICES_OPERATIONS } from "./prices-operations";
 import {
@@ -2085,6 +2086,8 @@ export const OPERATIONS: readonly Operation[] = [
   ...PRICES_OPERATIONS,
   // --- „Întreabă FINET” (Faza 10, F10-C; ADR 0025) ------------------------------------------
   ...ASK_OPERATIONS,
+  // --- Feedback, anunțuri, erori, panou de administrare (Faza 11-B; ADR 0028) -----------------
+  ...ADMIN_OPERATIONS,
 ];
 
 /** Operația după metodă și cale (pentru testele de contract). */

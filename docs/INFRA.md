@@ -650,3 +650,12 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 6. **Verificare după deploy:** în Profil apare „Întreabă FINET cu AI”; fără acord, o întrebare formulată liber („ce sumă mi-au luat alimentele luna trecută”) răspunde „Nu am înțeles” cu indiciul pentru activare și `select count(*) from finet.ai_calls where task = 'ask_finet'` rămâne 0; după acord, aceeași întrebare răspunde cu `source: ai`, iar `ai_calls` are un rând `ask_finet`/`ok`; o întrebare pe care parserul o înțelege („Cât am cheltuit luna trecută?”) NU creează rând; `docker logs finet-web` nu conține textul întrebărilor sau cheia.
 7. **Oprire rapidă:** `AI_ASK=0` în `finet.env` și redeploy fără fișierul suplimentar; datele rămân neatinse.
 
+## 4t. Faza 11-B: feedback, anunțuri, erori, administrare — pe producție (după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0028. Funcțiile există doar în modul `saas`; pe producția `personal` migrația ar crea doar tabele goale și funcții neapelate (rutele dau 404), deci aplicarea e **opțională** până când există un deploy `saas`. Dacă se aplică:
+
+1. **Imaginile `finet` (web) și `finet:tools`** pentru commit-ul aprobat (CI), apoi **backup** al schemei `finet`.
+2. **Migrația `0020_admin_feedback`** (rolul `migrate`; „aplicate acum 1”): trei tabele cu RLS ENABLE + FORCE și șase funcții SECURITY DEFINER; nicio modificare a tabelelor existente. Rollback: antetul fișierului, manual, cu backup.
+3. **Redeploy `finet-web`**; fără variabile sau secrete noi.
+4. **Primul administrator în `saas`:** primul utilizator creat cu `finet-admin create-user` devine administrator al platformei. **Verificare:** un utilizator obișnuit primește 404 pe `/admin`; administratorul vede panoul; `select count(*) from finet.feedback` crește după un feedback; `select * from finet.audit_events where action like 'admin.%'` conține doar id-uri și stări.
+
