@@ -40,6 +40,7 @@ const devEnv: Record<string, string> = {
   ...(process.env as Record<string, string>),
   ...webRole,
   NODE_ENV: "development",
+  NODE_OPTIONS: `--require ${process.cwd()}/e2e/diag-http.cjs`, // DIAG
   APP_MODE: appMode,
   CF_ACCESS_REQUIRED: "false",
   // Originea exactă a serverului: Better Auth (`trustedOrigins`) și CSRF-ul din `/api/v1`
