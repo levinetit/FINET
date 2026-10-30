@@ -227,7 +227,7 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 - `GET /admin/users|households|jobs|feedback|errors|announcements` (paginat: `limit` ≤ 200, `offset`), `PATCH /admin/users/{id}` `{ status: active|disabled }`, `PATCH /admin/feedback/{id}` `{ status }`, `POST /admin/announcements`, `PATCH /admin/announcements/{id}`: doar administratorul platformei; ORICE alt utilizator primește 404. Nicio dată financiară; acțiunile de schimbare se auditează.
 
 ## Înregistrarea publică (F11-C, ADR 0029; doar `saas` cu `SIGNUP_ENABLED=1` și SMTP: altfel 404)
-- Rute FĂRĂ sesiune, cu verificare `Origin` și rate limiting pe IP/email. `POST /register` `{ email, name, acceptTerms: true }` → 202 `{ data: { status: "pending" } }` (același răspuns pentru orice adresă; parola NU se trimite aici). `POST /register/complete` `{ token, password }` → 200 `{ data: { status: "verified" } }`; 400 `password` (politica; linkul nu se consumă), 410 `invalid_token` (modificat, expirat sau deja folosit). Linkul din email: `/register/complete?token=…`.
+- Rute FĂRĂ sesiune, cu verificare `Origin` și rate limiting pe IP/email. `POST /register` `{ email, name, acceptTerms: true }` → 202 `{ data: { status: "pending" } }` (același răspuns pentru orice adresă; parola NU se trimite aici). `POST /register/complete` `{ token, password }` → 200 `{ data: { status: "verified" } }`; 400 `password` (politica; linkul nu se consumă), 410 `invalid_token` (modificat, expirat sau deja folosit). Linkul din email: `/register/complete?token=…`. Cu Turnstile configurat (ADR 0030), `POST /register` cere `turnstileToken` (tokenul widgetului; de unică folosință, 5 minute); lipsa sau respingerea → 400 cod `turnstile`, fără cont creat.
 
 ## Aplicația Android (F9-A, ADR 0020)
 

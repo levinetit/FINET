@@ -148,6 +148,12 @@ export type AuthConfig = Readonly<{
    * pornește). Chiar pornită, ruta există doar dacă SMTP e configurat (verificarea emailului).
    */
   signupEnabled: boolean;
+  /**
+   * Cloudflare Turnstile pe înregistrare (Faza 11-C2, ADR 0030): `siteKey` (public) și `secretKey`
+   * (DOAR din `TURNSTILE_SECRET_KEY_FILE`, DOAR rolul web). `null` = fără Turnstile (ambele chei
+   * lipsesc); una singură e o eroare de configurare.
+   */
+  turnstile: Readonly<{ siteKey: string; secretKey: string }> | null;
   rateLimits: Readonly<{
     /** Login-ul web (parolă), pe IP + email normalizat. */
     login: RateLimitRule;
@@ -382,6 +388,16 @@ const envSchema = z.object({
   SITE_CONTACT_EMAIL: z.string().trim().email().max(200).optional(),
   SITE_LEGAL_REVIEWED: z.enum(["0", "1"]).optional(),
   SIGNUP_ENABLED: z.enum(["0", "1"]).optional(),
+  TURNSTILE_SITE_KEY: z
+    .string()
+    .trim()
+    .regex(/^[0-9A-Za-z_-]{10,100}$/)
+    .optional(),
+  TURNSTILE_SECRET_KEY: z
+    .string()
+    .trim()
+    .regex(/^[0-9A-Za-z_-]{10,200}$/)
+    .optional(),
   SITE_ANALYTICS_ID: z
     .string()
     .trim()
@@ -533,6 +549,8 @@ export function parseConfig(
     // Cheia „Întreabă FINET” (F10-C): doar serverul web (workerul are propria cheie).
     if (knownRole !== "web") {
       forbidden.set("AI_ASK_API_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
+      // Cheia secretă Turnstile (F11-C2): verificarea o face serverul web.
+      forbidden.set("TURNSTILE_SECRET_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
     }
   }
   const secrets = knownRole
@@ -719,6 +737,20 @@ export function parseConfig(
       });
     }
   }
+  // Turnstile (F11-C2): cheia secretă doar din fișier, ambele chei împreună sau niciuna.
+  if (e.TURNSTILE_SECRET_KEY !== undefined && !secrets.fromFile.has("TURNSTILE_SECRET_KEY")) {
+    issues.push({
+      variable: "TURNSTILE_SECRET_KEY",
+      problem: "se dă doar prin TURNSTILE_SECRET_KEY_FILE",
+    });
+  }
+  if ((e.TURNSTILE_SITE_KEY === undefined) !== (e.TURNSTILE_SECRET_KEY === undefined)) {
+    issues.push({
+      variable:
+        e.TURNSTILE_SITE_KEY === undefined ? "TURNSTILE_SITE_KEY" : "TURNSTILE_SECRET_KEY_FILE",
+      problem: "cheia site și cheia secretă Turnstile se dau împreună",
+    });
+  }
   if (role === "web" && e.AI_ASK === "1") {
     if (e.AI_BASE_URL === undefined) {
       issues.push({ variable: "AI_BASE_URL", problem: "e necesară când AI_ASK=1" });
@@ -859,6 +891,10 @@ export function parseConfig(
       secret: e.BETTER_AUTH_SECRET ?? null,
       hibpEnabled: e.AUTH_HIBP_ENABLED === "true",
       signupEnabled: e.SIGNUP_ENABLED === "1",
+      turnstile:
+        role === "web" && e.TURNSTILE_SITE_KEY !== undefined && e.TURNSTILE_SECRET_KEY !== undefined
+          ? Object.freeze({ siteKey: e.TURNSTILE_SITE_KEY, secretKey: e.TURNSTILE_SECRET_KEY })
+          : null,
       rateLimits: Object.freeze({
         login: Object.freeze({
           max: int(e.AUTH_LOGIN_MAX_ATTEMPTS, DEFAULTS.loginMax),

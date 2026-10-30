@@ -47,6 +47,8 @@ export const registerInputSchema = z
     email: emailSchema,
     name: z.string().trim().min(1).max(100),
     acceptTerms: z.literal(true),
+    /** Tokenul widgetului Turnstile; obligatoriu doar când Turnstile e configurat (ADR 0030). */
+    turnstileToken: z.string().min(1).max(2048).optional(),
   })
   .strict();
 

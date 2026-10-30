@@ -753,6 +753,47 @@ describe("furnizorul AI (F6-B, ADR 0014)", () => {
     });
   });
 
+  it("Turnstile (F11-C2): chei împreună, secretul doar din fișier și doar în rolul web", () => {
+    expect(parseConfig(DEV).auth.turnstile).toBeNull();
+    const WEB_TS = {
+      ...DEV,
+      SIGNUP_ENABLED: "1",
+      TURNSTILE_SITE_KEY: "0x4AAAAAAAcheiepublica",
+      TURNSTILE_SECRET_KEY_FILE: KEY_FILE,
+    } as const;
+    expect(parseConfig(WEB_TS).auth.turnstile).toEqual({
+      siteKey: "0x4AAAAAAAcheiepublica",
+      secretKey: "sk-cheie-virtuala-fictiva-0123",
+    });
+    // Una singură cheie e o eroare (nu un Turnstile pe jumătate activ).
+    expect(issuesOf({ ...WEB_TS, TURNSTILE_SITE_KEY: undefined })).toEqual(["TURNSTILE_SITE_KEY"]);
+    expect(issuesOf({ ...WEB_TS, TURNSTILE_SECRET_KEY_FILE: undefined })).toEqual([
+      "TURNSTILE_SECRET_KEY_FILE",
+    ]);
+    // Secretul în clar e refuzat și nu apare în mesaj.
+    expect(
+      issuesOf({
+        ...WEB_TS,
+        TURNSTILE_SECRET_KEY_FILE: undefined,
+        TURNSTILE_SECRET_KEY: "secret-in-clar-0123456",
+      }),
+    ).toContain("TURNSTILE_SECRET_KEY");
+    try {
+      parseConfig({
+        ...WEB_TS,
+        TURNSTILE_SECRET_KEY_FILE: undefined,
+        TURNSTILE_SECRET_KEY: "secret-in-clar-0123456",
+      });
+    } catch (e) {
+      expect(String(e)).not.toContain("secret-in-clar");
+    }
+    // Alte roluri nu primesc secretul.
+    expect(issuesOf({ ...WORKER, TURNSTILE_SECRET_KEY_FILE: KEY_FILE })).toContain(
+      "TURNSTILE_SECRET_KEY_FILE",
+    );
+    expect(issuesOf({ ...DEV, TURNSTILE_SITE_KEY: "scurt" })).toContain("TURNSTILE_SITE_KEY");
+  });
+
   it("site-ul public (F11): fără valori implicite; ready doar cu datele firmei complete ȘI textele revizuite", () => {
     const empty = parseConfig(DEV).site;
     expect(empty).toEqual({

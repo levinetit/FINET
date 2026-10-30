@@ -12,15 +12,19 @@ import { ro } from "@/messages/ro";
 import { apiFetch } from "../_lib/api-client";
 import { useHydrated } from "../_lib/use-hydrated";
 
+import { TurnstileWidget } from "./turnstile-widget";
+
 /**
  * Pasul 1 al înregistrării (ADR 0029): `POST /api/v1/register`. Răspunsul e același indiferent dacă
  * adresa are deja cont, deci mesajul de succes nu spune nimic despre asta.
  */
-export function RegisterForm() {
+export function RegisterForm({ turnstileSiteKey }: Readonly<{ turnstileSiteKey: string | null }>) {
   const t = ro.register;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [resetKey, setResetKey] = useState(0);
   const hydrated = useHydrated();
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -33,15 +37,29 @@ export function RegisterForm() {
       setError(t.missingFields);
       return;
     }
+    if (turnstileSiteKey && !token) {
+      setError(t.turnstileWait);
+      return;
+    }
     setBusy(true);
     setError(null);
     const result = await apiFetch("/api/v1/register", {
       method: "POST",
-      body: { email, name, acceptTerms: true },
+      body: { email, name, acceptTerms: true, ...(token ? { turnstileToken: token } : {}) },
     });
     setBusy(false);
-    if (result.ok) setSent(true);
-    else if (result.status === 429) setError(t.rateLimited);
+    if (result.ok) {
+      setSent(true);
+      return;
+    }
+    // Tokenul Turnstile e de unică folosință: după orice eșec, widgetul își cere unul nou.
+    if (turnstileSiteKey) {
+      setToken(null);
+      setResetKey((k) => k + 1);
+    }
+    if (result.status === 429) setError(t.rateLimited);
+    else if (result.status === 400 && result.error?.code === "turnstile")
+      setError(t.turnstileFailed);
     else if (result.status === 400) setError(t.invalidFields);
     else setError(t.genericError);
   }
@@ -97,8 +115,11 @@ export function RegisterForm() {
           .
         </Label>
       </div>
+      {turnstileSiteKey ? (
+        <TurnstileWidget siteKey={turnstileSiteKey} onToken={setToken} resetKey={resetKey} />
+      ) : null}
       <Alert id="register-error">{error}</Alert>
-      <Button type="submit" disabled={busy || !hydrated}>
+      <Button type="submit" disabled={busy || !hydrated || (turnstileSiteKey !== null && !token)}>
         {busy ? t.submitting : t.submit}
       </Button>
     </form>

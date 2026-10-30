@@ -23,3 +23,12 @@ export const CONSUMER_LINKS = Object.freeze({
   anpcSal: "https://anpc.ro/ce-este-sal/",
   sol: "https://ec.europa.eu/consumers/odr",
 });
+
+/**
+ * Singura pagină care încarcă widgetul Turnstile (F11-C2, ADR 0030) și al cărei CSP permite
+ * `challenges.cloudflare.com`: formularul de înregistrare. `/register/complete` și `/login` nu.
+ */
+export function isTurnstilePath(pathname: string): boolean {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return path === "/register";
+}
