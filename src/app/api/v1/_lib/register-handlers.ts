@@ -10,8 +10,9 @@ import {
   registerAccount,
   registerInputSchema,
 } from "@/modules/auth/registration";
-import { CsrfError } from "@/modules/auth/session";
 import { trustedClientIp } from "@/modules/auth/request";
+import { CsrfError } from "@/modules/auth/session";
+import { type TurnstileVerifier, createTurnstileVerifier } from "@/modules/auth/turnstile";
 
 import { type ApiDeps, ApiError, errorPayload, json, parseWith, readJsonBody } from "./http";
 
@@ -34,6 +35,24 @@ function mailerOf(deps: ApiDeps): Mailer | null {
     };
   }
   return defaultMailer.mailer;
+}
+
+let defaultTurnstile: { key: string; verifier: TurnstileVerifier } | null = null;
+
+/** Verificatorul din deps (teste) sau din configurație; `null` = Turnstile neconfigurat. */
+function turnstileOf(deps: ApiDeps): TurnstileVerifier | null {
+  if (deps.turnstile !== undefined) return deps.turnstile;
+  const cfg = deps.config.auth.turnstile;
+  if (!cfg) return null;
+  const hostname = new URL(deps.config.appUrl ?? "http://localhost:3000").hostname;
+  const key = `${cfg.secretKey}@${hostname}`;
+  if (defaultTurnstile?.key !== key) {
+    defaultTurnstile = {
+      key,
+      verifier: createTurnstileVerifier({ secretKey: cfg.secretKey, hostname }),
+    };
+  }
+  return defaultTurnstile.verifier;
 }
 
 function openOr404(deps: ApiDeps): Mailer {
@@ -96,6 +115,18 @@ export async function registerHandler(request: Request, deps: ApiDeps): Promise<
         : SHARED_RULE),
     });
     await limit(deps, request, now, "register", input.email, deps.config.auth.rateLimits.email);
+    // Turnstile DUPĂ limitele de rate (serverul nostru nu poate fi folosit ca amplificator către
+    // Cloudflare) și ÎNAINTE de orice scriere. Lipsa, respingerea sau o eroare de rețea: același
+    // 400 (fail-closed), fără detalii despre motiv.
+    const verifier = turnstileOf(deps);
+    if (verifier) {
+      const ip = trustedClientIp(request.headers, { accessVerified: deps.config.access.required });
+      const passed =
+        input.turnstileToken !== undefined && (await verifier(input.turnstileToken, ip));
+      if (!passed) {
+        throw new ApiError(400, "turnstile", "Verificarea anti-robot a eșuat. Încearcă din nou.");
+      }
+    }
     await registerAccount(
       { db: deps.db, config: deps.config, mailer, ...(deps.now ? { now: deps.now } : {}) },
       input,

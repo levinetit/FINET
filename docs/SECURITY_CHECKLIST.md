@@ -660,6 +660,30 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Curățarea conturilor neconfirmate | TODO (înainte de expunerea publică) | ADR 0029, limite | — |
 | Revizuirea `security` a Fazei 11-C1 | TODO | agentul `security` | — |
 
+## 34. Engleza pe paginile publice `saas` și expunerea publică (Faza 11-C3, 2026-10-31; ADR 0031)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Limba din cookie explicit, niciodată din `Accept-Language`; valori alterate → română | DONE | `site-locale.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
+| `<html lang>` dinamic doar prin antet intern pus de proxy (suprascris la fiecare cerere); `en` doar în `saas`, pe cale publică | DONE | `site-locale.test.ts`, `a11y-rules.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
+| Paritate chei/liste între `ro.site` și `enSite`; fără valori goale sau diacritice românești în engleză | DONE | `site-locale.test.ts` | 2026-10-31 · agent |
+| Textele juridice englezești: aceleași secțiuni, datele firmei inserate, „to be completed” când lipsesc, ciornă sub `SITE_LEGAL_REVIEWED` | DONE (textul NU e revizuit juridic) | `site-locale.test.ts` | 2026-10-31 · agent |
+| Cookie-ul `finet_lang` nu conține date personale; politica (ciornă) îl menționează | DONE | `legal.ts` | 2026-10-31 · agent |
+| `proxy.ts` nealterat în privința Access: nicio cale nu devine publică | DONE | `proxy.test.ts` (neschimbat, verde) | 2026-10-31 · agent |
+| Expunerea publică: politica Access, excepția de cod, sursa IP, WAF, SMTP, juridic, marcă | TODO (decizii ale operatorului) | `docs/EXPOSURE.md` | — |
+| Revizuirea `security` a Fazei 11-C3 | TODO | agentul `security` | — |
+## 33. Turnstile pe înregistrarea publică (Faza 11-C2, 2026-10-31; ADR 0030)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Verificare fail-closed (rețea, timeout, non-200, JSON invalid, `success:false`, gazdă diferită, token gol/prea lung) | DONE | `turnstile.test.ts` | 2026-10-31 · agent |
+| Cheile se dau împreună; secretul doar din fișier, doar rolul web, absent din mesajele de eroare | DONE | `config.test.ts` | 2026-10-31 · agent |
+| Turnstile după limitele de rate (fără amplificare către Cloudflare) și înainte de orice scriere; respingere → fără cont și fără email | DONE (PG17) | `register-api.test.ts` | 2026-10-31 · agent |
+| CSP Cloudflare doar pe `/register` și doar cu chei; restul paginilor neschimbat | DONE | `consent.test.ts` | 2026-10-31 · agent |
+| `remoteip` doar din sursă de încredere | DONE | `turnstile.test.ts` | 2026-10-31 · agent |
+| Widgetul real în browser (CI fără chei; regula „resurse doar de pe propriul domeniu”) | NEVERIFICAT în CI; de verificat manual cu cheile reale (INFRA 4v) | ADR 0030, limite | — |
+| Revizuirea `security` a Fazei 11-C2 | TODO | agentul `security` | — |
+
 ## 35. Autentificarea cu Google, doar conturi existente (Faza 11-C2, 2026-10-31; ADR 0032)
 
 | Punct | Stare | Dovadă | Data · revizor |
@@ -675,4 +699,3 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Testat cu Google REAL | NEVERIFICAT (fără credențiale); INFRA 4w | ADR 0032, limite | — |
 | Facebook | NEIMPLEMENTAT intenționat (ADR 0032 §5) | — | — |
 | Revizuirea `security` a Fazei 11-C2 (OAuth) | TODO | agentul `security` | — |
-

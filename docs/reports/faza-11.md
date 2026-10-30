@@ -83,6 +83,43 @@ ADR 0029; branch `phase/11-public`; fără migrație.
 - Turnstile, OAuth, traducerea în engleză și expunerea publică: 11-C2/C3 (cer chei și decizii).
 - Curățarea conturilor neconfirmate și sursa de IP de încredere: înainte de `SIGNUP_ENABLED=1` public (INFRA 4u).
 
+## 11-C3 — Engleza pe paginile publice și documentul de expunere
+
+ADR 0031; branch `phase/11-english`; fără migrație.
+
+### 1. Ce s-a implementat
+
+- Textele publice în engleză (`src/messages/en-site.ts`, tipul derivat din `ro.site`), textele juridice traduse (ciorne, sub `SITE_LEGAL_REVIEWED`), comutator RO/EN, limba din cookie explicit `finet_lang` (NICIODATĂ din `Accept-Language`), `<html lang>` prin antet intern de proxy.
+- Doar `/`, `/pricing`, `/terms`, `/privacy`, `/support`; aplicația, `/login` și `/register*` rămân în română (`/login` are 0,5 KiB rezervă în buget).
+- `docs/EXPOSURE.md`: ce trebuie decis și schimbat înainte de expunerea publică. `proxy.ts` nu a fost relaxat.
+## 11-C2 — Turnstile pe înregistrare
+
+ADR 0030; branch `phase/11-turnstile-oauth`; fără migrație.
+
+### 1. Ce s-a implementat
+
+- Configurare (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY_FILE`), verificator fail-closed, integrare în `POST /api/v1/register` (după limitele de rate, înainte de orice scriere), CSP doar pe `/register`, widget cu resetare după eșec, override compose pentru secret.
+- Fără chei, nimic nu se schimbă față de 11-C1.
+
+### 2. Teste rulate local (2026-10-31)
+
+| Comandă | Rezultat |
+|---|---|
+| `vitest run site-locale.test.ts a11y-rules.test.ts ui-rules.test.ts smoke.test.ts consent.test.ts` | PASS (22 teste) |
+| `eslint`, `tsc`, `prettier` pe fișierele modificate | PASS |
+| E2E (`e2e/site.spec.ts`: română implicită cu `en-US`, comutare, `<html lang>`, titlu, subsol, pagini juridice, login rămâne `ro`) | SCRIS; NOT RUN local; în CI |
+
+### 3. Puncte deschise
+
+- Revizuirea umană a traducerilor juridice; fără URL-uri pe limbă/hreflang (SEO în engleză); aplicația nu e tradusă (decizie a operatorului).
+- Expunerea publică: toate punctele din `docs/EXPOSURE.md` (politica Access, excepția de cod, sursa IP, WAF, SMTP, marcă).
+| `vitest run turnstile.test.ts register-api.test.ts config.test.ts consent.test.ts secret-files.test.ts` (PG17) | PASS (104 teste) |
+| E2E cu widget real | NU există (CI fără chei; regula „resurse doar de pe propriul domeniu” din `regressions (a)`) |
+
+### 3. OAuth Google/Facebook: NEIMPLEMENTAT, decizie necesară
+
+Codul curent blochează orice creare de utilizator prin Better Auth (`user.create.before` → `false`), `finet_app` nu poate scrie `status`/`is_platform_admin`, iar căile `/sign-in/social` și callback sunt în afara listei permise; Facebook nu garantează un email verificat. Fără un test care rulează callback-ul cu un furnizor simulat, nu livrez cod de legare de conturi „activ când apar cheile”. Opțiuni: (1) doar autentificare pentru conturi FINET existente și verificate, fără creare de cont; (2) și creare de cont, printr-o cale FINET dedicată; (3) amânare până există credențiale. Recomandare: (1), cu Google înaintea Facebook.
+
 ## 11-C2 (OAuth) — autentificarea cu Google, doar conturi existente
 
 ADR 0032; branch `phase/11-oauth`; fără migrație. Decizia operatorului: login doar pentru conturi existente.
@@ -91,4 +128,3 @@ ADR 0032; branch `phase/11-oauth`; fără migrație. Decizia operatorului: login
 - Teste (PG17, Better Auth 1.7.13, furnizor simulat): `google-oauth.test.ts` (10 teste: 404 fără furnizor, legare + sesiune + audit + fără jetoane, necunoscut, neverificat local, neverificat la Google, dezactivat, stare falsificată/lipsă, același `sub` cu alt email, rate limit), `config.test.ts`.
 - NEVERIFICAT cu Google real (fără credențiale); procedura e în INFRA 4w. Facebook: neimplementat intenționat (ADR 0032 §5).
 - Bugetul JS: `/login` trece la 190 KiB (`docs/PERFORMANCE.md`); cifra măsurată se completează după CI.
-

@@ -149,6 +149,12 @@ export type AuthConfig = Readonly<{
    */
   signupEnabled: boolean;
   /**
+   * Cloudflare Turnstile pe înregistrare (Faza 11-C2, ADR 0030): `siteKey` (public) și `secretKey`
+   * (DOAR din `TURNSTILE_SECRET_KEY_FILE`, DOAR rolul web). `null` = fără Turnstile (ambele chei
+   * lipsesc); una singură e o eroare de configurare.
+   */
+  turnstile: Readonly<{ siteKey: string; secretKey: string }> | null;
+  /**
    * Autentificarea cu Google (Faza 11-C2, ADR 0030), doar `saas`, DOAR pentru conturi FINET
    * existente cu email verificat (fără creare de cont, fără alți furnizori). `clientSecret` vine
    * DOAR din `GOOGLE_CLIENT_SECRET_FILE`, doar în rolul web. `null` = oprită (ambele valori lipsesc).
@@ -390,6 +396,16 @@ const envSchema = z.object({
   SITE_CONTACT_EMAIL: z.string().trim().email().max(200).optional(),
   SITE_LEGAL_REVIEWED: z.enum(["0", "1"]).optional(),
   SIGNUP_ENABLED: z.enum(["0", "1"]).optional(),
+  TURNSTILE_SITE_KEY: z
+    .string()
+    .trim()
+    .regex(/^[0-9A-Za-z_-]{10,100}$/)
+    .optional(),
+  TURNSTILE_SECRET_KEY: z
+    .string()
+    .trim()
+    .regex(/^[0-9A-Za-z_-]{10,200}$/)
+    .optional(),
   GOOGLE_CLIENT_ID: z
     .string()
     .trim()
@@ -553,6 +569,8 @@ export function parseConfig(
       forbidden.set("AI_ASK_API_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
       // Secretul clientului Google (F11-C2): autentificarea o face serverul web.
       forbidden.set("GOOGLE_CLIENT_SECRET", `nu e permisă când FINET_ROLE=${knownRole}`);
+      // Cheia secretă Turnstile (F11-C2): verificarea o face serverul web.
+      forbidden.set("TURNSTILE_SECRET_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
     }
   }
   const secrets = knownRole
@@ -755,6 +773,20 @@ export function parseConfig(
   if (e.GOOGLE_CLIENT_ID !== undefined && e.APP_MODE !== "saas") {
     issues.push({ variable: "GOOGLE_CLIENT_ID", problem: "este permis doar când APP_MODE=saas" });
   }
+  // Turnstile (F11-C2): cheia secretă doar din fișier, ambele chei împreună sau niciuna.
+  if (e.TURNSTILE_SECRET_KEY !== undefined && !secrets.fromFile.has("TURNSTILE_SECRET_KEY")) {
+    issues.push({
+      variable: "TURNSTILE_SECRET_KEY",
+      problem: "se dă doar prin TURNSTILE_SECRET_KEY_FILE",
+    });
+  }
+  if ((e.TURNSTILE_SITE_KEY === undefined) !== (e.TURNSTILE_SECRET_KEY === undefined)) {
+    issues.push({
+      variable:
+        e.TURNSTILE_SITE_KEY === undefined ? "TURNSTILE_SITE_KEY" : "TURNSTILE_SECRET_KEY_FILE",
+      problem: "cheia site și cheia secretă Turnstile se dau împreună",
+    });
+  }
   if (role === "web" && e.AI_ASK === "1") {
     if (e.AI_BASE_URL === undefined) {
       issues.push({ variable: "AI_BASE_URL", problem: "e necesară când AI_ASK=1" });
@@ -901,6 +933,10 @@ export function parseConfig(
             ? Object.freeze({ clientId: e.GOOGLE_CLIENT_ID, clientSecret: e.GOOGLE_CLIENT_SECRET })
             : null,
       }),
+      turnstile:
+        role === "web" && e.TURNSTILE_SITE_KEY !== undefined && e.TURNSTILE_SECRET_KEY !== undefined
+          ? Object.freeze({ siteKey: e.TURNSTILE_SITE_KEY, secretKey: e.TURNSTILE_SECRET_KEY })
+          : null,
       rateLimits: Object.freeze({
         login: Object.freeze({
           max: int(e.AUTH_LOGIN_MAX_ATTEMPTS, DEFAULTS.loginMax),

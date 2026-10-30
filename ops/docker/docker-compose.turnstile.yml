@@ -1,0 +1,19 @@
+# Cloudflare Turnstile pe înregistrarea publică (Faza 11-C2, ADR 0030): fișier compose SUPLIMENTAR,
+# opțional, doar pentru un deploy `saas`. Dă serverului web cheia SECRETĂ ca secret Docker, în
+# `/run/secrets/finet_turnstile_secret`; cheia site (publică) se pune în `finet.env` ca
+# `TURNSTILE_SITE_KEY`. Cele două chei se dau împreună (altfel configurația refuză pornirea).
+# Folosire (se adaugă la celelalte fișiere compose deja folosite pentru `finet-web`):
+#   docker compose -f ops/docker/docker-compose.yml -f ops/docker/docker-compose.turnstile.yml \
+#     --env-file /srv/finet/compose/compose.env up -d finet-web
+# Fișierul secretului (`${FINET_SECRETS_DIR}/finet_turnstile_secret`, uid 1000, mod 400) conține
+# DOAR cheia secretă a widgetului (docs/INFRA.md, „4v”).
+secrets:
+  finet_turnstile_secret:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_turnstile_secret
+
+services:
+  finet-web:
+    secrets:
+      - finet_turnstile_secret
+    environment:
+      TURNSTILE_SECRET_KEY_FILE: /run/secrets/finet_turnstile_secret

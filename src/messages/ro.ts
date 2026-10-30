@@ -81,6 +81,8 @@ export const ro = {
     rateLimited: "Prea multe încercări. Încearcă din nou mai târziu.",
     genericError: "Nu am putut trimite cererea. Încearcă din nou.",
     invalidFields: "Verifică emailul și numele.",
+    turnstileWait: "Așteaptă să se încheie verificarea anti-robot, apoi trimite din nou.",
+    turnstileFailed: "Verificarea anti-robot a eșuat. Încearcă din nou.",
   },
   registerComplete: {
     title: "Alege parola",
@@ -1974,6 +1976,8 @@ export const ro = {
       support: "Suport",
       login: "Intră în cont",
       register: "Creează cont",
+      language: "Limba",
+      skip: "Sari la conținut",
     },
     landing: {
       title: "FINET: finanțele tale și ale familiei, într-un singur loc",

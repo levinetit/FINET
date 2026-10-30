@@ -667,6 +667,15 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 2. **Înainte de `SIGNUP_ENABLED=1` pe un deploy accesibil public** (toate, nu opțional): Turnstile implementat (11-C2) sau înregistrare doar din rețea controlată; textele juridice revizuite (`SITE_LEGAL_REVIEWED=1`, datele firmei complete); sursa IP de încredere stabilită (altfel limitele pe IP sunt comune); politica Cloudflare Access/WAF pentru `/register`, `/register/complete`, `/api/v1/register*`; plan pentru curățarea conturilor neconfirmate; un SMTP cu SPF/DKIM/DMARC (linkurile de confirmare trebuie să ajungă).
 3. **Verificare** (după deschidere, pe un email de test): cererea de pe alt `Origin` → 403; `POST /api/v1/register` → 202; emailul conține linkul `/register/complete?token=…`; parola aleasă permite autentificarea; același link a doua oară → 410; `select email_verified from finet.users where email = '<test>'` → `true`; `select action from finet.audit_events where action = 'user.email_verified'`.
 
+## 4v. Faza 11-C2: Turnstile pe `/register` — pe producție (după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune. ADR 0030. **Fără migrație.** Doar pentru un deploy `saas`; pe `personal` nu are efect.
+
+1. **Cheile**, din Cloudflare (Turnstile, widget „Managed”, domeniul aplicației): cheia site (publică) în `finet.env` ca `TURNSTILE_SITE_KEY=…`; cheia secretă ca fișier: `printf '%s' '<cheia-secretă>' | sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_turnstile_secret` (NU o pune în `finet.env`, în istoricul shell-ului sau într-un mesaj).
+2. **Redeploy `finet-web`** cu `-f ops/docker/docker-compose.turnstile.yml` ADĂUGAT la fișierele compose deja folosite (inclusiv `docker-compose.ask.yml`, dacă e cazul: lista de fișiere trebuie să fie completă la fiecare redeploy).
+3. **Verificare** (browser, pe adresa publică): pe `/register` apare widgetul și butonul se activează după verificare; în consolă nu apar încălcări CSP; `/login` și `/register/complete` NU încarcă nimic de la `challenges.cloudflare.com`; un POST fără token la `/api/v1/register` → `400 turnstile`. Cu o cheie secretă greșită, orice înregistrare e respinsă (fail-closed), nu acceptată.
+4. `SIGNUP_ENABLED=1` rămâne subordonat restului listei din 4u (texte juridice revizuite, sursă de IP de încredere, curățarea conturilor neconfirmate, politica Access pentru căile publice).
+
 ## 4w. Faza 11-C2: autentificarea cu Google — pe producție (după revizuiri)
 
 Agentul nu a rulat nimic din această secțiune. ADR 0032. **Fără migrație.** Doar `APP_MODE=saas`; doar conturi FINET existente cu email verificat (fără creare de cont).
@@ -675,4 +684,3 @@ Agentul nu a rulat nimic din această secțiune. ADR 0032. **Fără migrație.**
 2. **Configurare:** `GOOGLE_CLIENT_ID=…` în `finet.env`; secretul ca fișier: `printf '%s' '<secret>' | sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_google_client_secret` și, în compose, `GOOGLE_CLIENT_SECRET_FILE: /run/secrets/finet_google_client_secret` + secretul montat în `finet-web` (ca la `finet_turnstile_secret`; lista de fișiere compose trebuie să fie completă la fiecare redeploy). NU pune secretul în `finet.env`.
 3. **Verificare** (browser, cont de test existent, cu email verificat și parolă): „Continuă cu Google” deschide Google; după alegerea contului revii în aplicație autentificat; `select provider_id, account_id, access_token, refresh_token, id_token from finet.auth_accounts where provider_id = 'google'` arată `access_token`, `refresh_token`, `id_token` goale; un cont Google cu alt email → înapoi la `/login` cu mesajul fix, fără utilizator nou (`select count(*) from finet.users` neschimbat); un cont FINET cu email neverificat → același mesaj.
 4. Rezerva: ștergerea variabilelor `GOOGLE_*` și redeploy opresc complet fluxul (căile revin la 404); conturile Google legate rămân inerte în `auth_accounts`.
-

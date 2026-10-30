@@ -40,6 +40,8 @@ export const SECRET_VARIABLES = [
   "AI_ASK_API_KEY",
   // Secretul clientului OAuth Google (F11-C2, ADR 0030): doar rolul web, doar din fișier.
   "GOOGLE_CLIENT_SECRET",
+  // Cheia secretă Cloudflare Turnstile (F11-C2, ADR 0030): doar rolul web, doar din fișier.
+  "TURNSTILE_SECRET_KEY",
 ] as const;
 
 export type SecretVariable = (typeof SECRET_VARIABLES)[number];
