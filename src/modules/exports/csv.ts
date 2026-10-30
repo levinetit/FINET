@@ -43,7 +43,7 @@ function quote(value: string, delimiter: string): string {
 }
 
 export function csvRow(cells: readonly CsvCell[], dialect: CsvDialect = "rfc4180"): string {
-  const d = DELIMITER[dialect];
+  const d = DELIMITER[dialect] ?? ","; // defensă: un dialect necunoscut nu produce `undefined`
   return (
     cells
       .map((c) => {

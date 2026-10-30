@@ -3787,7 +3787,7 @@
             },
             "headers": {
               "Content-Disposition": {
-                "description": "`attachment; filename=\"bon-<id>.<ext>\"` (nume generat de server).",
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
                 "schema": {
                   "type": "string"
                 }
@@ -3850,6 +3850,177 @@
           },
           "404": {
             "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/accounting.csv": {
+      "get": {
+        "operationId": "exportAccountingCsv",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul pentru contabil (CSV): o linie per bon confirmat, pe o perioadă.",
+        "description": "Format fix (docs/API.md): data, numărul bonului, comerciantul, CUI, baza și TVA pe cotele 0/5/9/11/19/21 %, altă cotă, brut fără cotă, TVA calculat și de pe bon, total linii și total bon (cu diferențele), contul și categoria. TVA se calculează pe grup de cotă, rotunjit o dată. Doar bonurile confirmate și vizibile (fără conturile personale ale altor membri). Perioada: `from` și `to`, cel mult 1.100 de zile; cel mult 50.000 de bonuri la CSV, 20.000 la Excel (peste: 409 `export_too_large`).",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "description": "Prima zi a perioadei, `YYYY-MM-DD` (obligatoriu).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Ultima zi a perioadei, `YYYY-MM-DD` (obligatoriu; cel mult 1.100 de zile de la `from`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "name": "dialect",
+            "in": "query",
+            "required": false,
+            "description": "`rfc4180` (implicit: virgulă, punct zecimal) sau `ro` (`;`, virgulă zecimală, pentru Excel în română).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "rfc4180",
+                "ro"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-contabilitate.csv`. UTF-8 cu BOM, CRLF, ghilimele RFC 4180; celulele de text liber care încep cu = + - @ TAB CR primesc un apostrof. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "text/csv; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` cu un nume fix (fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/accounting.xlsx": {
+      "get": {
+        "operationId": "exportAccountingXlsx",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul pentru contabil (Excel), același format ca CSV, cu rând de totaluri.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "description": "Prima zi a perioadei, `YYYY-MM-DD` (obligatoriu).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Ultima zi a perioadei, `YYYY-MM-DD` (obligatoriu; cel mult 1.100 de zile de la `from`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-contabilitate.xlsx`: un bon pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -3935,6 +4106,144 @@
         }
       }
     },
+    "/api/v1/exports/budgets.pdf": {
+      "get": {
+        "operationId": "exportBudgetsPdf",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul PDF al bugetelor active vizibile, cu starea într-o lună.",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "description": "Luna `YYYY-MM` (implicit luna curentă în fusul gospodăriei, `Europe/Bucharest`). Acceptat: de la aceeași lună de acum 5 ani (60 de luni în urmă) până la luna curentă; în afara intervalului → 400.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-bugete.pdf`: un buget pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/budgets.xlsx": {
+      "get": {
+        "operationId": "exportBudgetsXlsx",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul Excel al bugetelor active vizibile, cu starea într-o lună.",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "description": "Luna `YYYY-MM` (implicit luna curentă în fusul gospodăriei, `Europe/Bucharest`). Acceptat: de la aceeași lună de acum 5 ani (60 de luni în urmă) până la luna curentă; în afara intervalului → 400.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-bugete.xlsx`: un buget pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/exports/goals.csv": {
       "get": {
         "operationId": "exportGoalsCsv",
@@ -3987,6 +4296,288 @@
           },
           "403": {
             "$ref": "#/components/responses/E403"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/goals.pdf": {
+      "get": {
+        "operationId": "exportGoalsPdf",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul PDF al obiectivelor (toate stările).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-obiective.pdf`: un obiectiv pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/goals.xlsx": {
+      "get": {
+        "operationId": "exportGoalsXlsx",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul Excel al obiectivelor (toate stările).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-obiective.xlsx`: un obiectiv pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/receipts.pdf": {
+      "get": {
+        "operationId": "exportReceiptsPdf",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Lista bonurilor confirmate pe o perioadă (PDF, cel mult 3.000 de bonuri).",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "description": "Prima zi a perioadei, `YYYY-MM-DD` (obligatoriu).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Ultima zi a perioadei, `YYYY-MM-DD` (obligatoriu; cel mult 1.100 de zile de la `from`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-bonuri.pdf`: un bon pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/receipts.xlsx": {
+      "get": {
+        "operationId": "exportReceiptsXlsx",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Lista bonurilor confirmate pe o perioadă (Excel).",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "description": "Prima zi a perioadei, `YYYY-MM-DD` (obligatoriu).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Ultima zi a perioadei, `YYYY-MM-DD` (obligatoriu; cel mult 1.100 de zile de la `from`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-bonuri.xlsx`: un bon pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
           },
           "422": {
             "$ref": "#/components/responses/E422"
@@ -4175,6 +4766,404 @@
             "headers": {
               "Content-Disposition": {
                 "description": "`attachment; filename=\"…\"` cu un nume fix (fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/transactions.pdf": {
+      "get": {
+        "operationId": "exportTransactionsPdf",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul PDF al tranzacțiilor (filtrele listei).",
+        "description": "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 3.000 de rânduri (pentru mai multe, Excel sau CSV). Peste plafon → 409 `export_too_large`. Suma are semn: cheltuielile și transferurile de ieșire sunt negative.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Căutare în descriere și comerciant.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "description": "Doar tranzacțiile contului.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "description": "Doar tranzacțiile categoriei.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "tagIds",
+            "in": "query",
+            "required": false,
+            "description": "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele (sau TOATE, cu `tagMatch=all`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36}){0,9}$"
+            }
+          },
+          {
+            "name": "tagMatch",
+            "in": "query",
+            "required": false,
+            "description": "Potrivirea etichetelor: `any` (implicit, oricare) sau `all` (toate). Doar împreună cu `tagIds` (altfel 400 `validation_failed`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "any",
+                "all"
+              ]
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "required": false,
+            "description": "Comerciantul conține textul (fără majuscule).",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Tipul.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "income",
+                "expense",
+                "transfer"
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Sursa.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "receipt",
+                "statement",
+                "recurring"
+              ]
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "description": "De la data (inclusiv).",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "description": "Până la data (inclusiv).",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "amountMinMinor",
+            "in": "query",
+            "required": false,
+            "description": "Suma minimă (unități minore).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "amountMaxMinor",
+            "in": "query",
+            "required": false,
+            "description": "Suma maximă (unități minore).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-tranzactii.pdf`: una pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/exports/transactions.xlsx": {
+      "get": {
+        "operationId": "exportTransactionsXlsx",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul Excel al tranzacțiilor (filtrele listei).",
+        "description": "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 20.000 de rânduri. Peste plafon → 409 `export_too_large`. Suma are semn: cheltuielile și transferurile de ieșire sunt negative.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Căutare în descriere și comerciant.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "description": "Doar tranzacțiile contului.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "description": "Doar tranzacțiile categoriei.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "tagIds",
+            "in": "query",
+            "required": false,
+            "description": "Id-uri de etichete separate prin virgulă (1–10, distincte): tranzacțiile care au CEL PUȚIN UNA dintre ele (sau TOATE, cu `tagMatch=all`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36}){0,9}$"
+            }
+          },
+          {
+            "name": "tagMatch",
+            "in": "query",
+            "required": false,
+            "description": "Potrivirea etichetelor: `any` (implicit, oricare) sau `all` (toate). Doar împreună cu `tagIds` (altfel 400 `validation_failed`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "any",
+                "all"
+              ]
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "required": false,
+            "description": "Comerciantul conține textul (fără majuscule).",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Tipul.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "income",
+                "expense",
+                "transfer"
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Sursa.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "receipt",
+                "statement",
+                "recurring"
+              ]
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "description": "De la data (inclusiv).",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "description": "Până la data (inclusiv).",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "amountMinMinor",
+            "in": "query",
+            "required": false,
+            "description": "Suma minimă (unități minore).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "amountMaxMinor",
+            "in": "query",
+            "required": false,
+            "description": "Suma maximă (unități minore).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-tranzactii.xlsx`: una pe rând. Sume exacte, monedele nu se însumează. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "`nosniff`.",
                 "schema": {
                   "type": "string"
                 }
@@ -8177,7 +9166,7 @@
             },
             "headers": {
               "Content-Disposition": {
-                "description": "`attachment; filename=\"bon-<id>.<ext>\"` (nume generat de server).",
+                "description": "`attachment; filename=\"…\"` (nume generat de server, fără date ale utilizatorului).",
                 "schema": {
                   "type": "string"
                 }

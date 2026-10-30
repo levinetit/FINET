@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ExportButton } from "@/components/planning/export-button";
+import { TableExportButtons } from "@/components/planning/table-export-buttons";
 import { GoalLine } from "@/components/planning/summary";
 import { Alert } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
@@ -87,13 +88,14 @@ export default async function GoalsPage() {
             );
           })
         )}
-        <div>
+        <div className="flex flex-wrap items-start gap-3">
           <ExportButton
             path={exportPath("goals")}
             label={t.exportCsv}
             filename="finet-obiective.csv"
             testId="export-goals"
           />
+          <TableExportButtons kind="goals" testId="export-goals" />
         </div>
       </div>
     </>

@@ -21,7 +21,18 @@ import {
   exportBudgetsCsv,
   exportGoalsCsv,
   exportTransactionsCsv,
+  MAX_EXPORT_ROWS,
 } from "@/modules/exports/exports.service";
+import { exportAccountingTable } from "@/modules/exports/accounting.service";
+import { dialectOf } from "@/modules/exports/exports.service";
+import { tableToCsv } from "@/modules/exports/table-csv";
+import {
+  exportBudgetsTable,
+  exportGoalsTable,
+  exportTransactionsTable,
+} from "@/modules/exports/tables.service";
+import { PDF_CONTENT_TYPE, PDF_MAX_ROWS, tableToPdf } from "@/lib/pdf";
+import { XLSX_CONTENT_TYPE, XLSX_MAX_ROWS, tableToXlsx } from "@/lib/xlsx";
 import { goalToJson } from "@/modules/goals/goals.schema";
 import {
   contributeToGoal,
@@ -333,6 +344,7 @@ export const EXPORT_FILENAMES = {
   transactions: "finet-tranzactii.csv",
   goals: "finet-obiective.csv",
   budgets: "finet-bugete.csv",
+  accounting: "finet-contabilitate.csv",
 } as const;
 
 type ExportKind = keyof typeof EXPORT_FILENAMES;
@@ -462,3 +474,137 @@ export function exportBudgetsHandler(request: Request, d: ApiDeps): Promise<Resp
     return csvText("budgets", text);
   });
 }
+
+// --- Exporturile Excel și PDF (Faza 10, F10-C; ADR 0024) -----------------------------------
+
+/** Numele fișierelor Excel/PDF: fixe, fără date ale utilizatorului. */
+export const TABLE_EXPORT_FILENAMES = {
+  transactions: "finet-tranzactii",
+  goals: "finet-obiective",
+  budgets: "finet-bugete",
+} as const;
+
+export type TableExportFormat = "xlsx" | "pdf";
+type TableExportKind = keyof typeof TABLE_EXPORT_FILENAMES;
+
+/** Răspunsul binar al unui export: nume fix, `no-store`, `nosniff`. */
+function fileResponse(name: string, format: TableExportFormat, bytes: Uint8Array): Response {
+  return new Response(new Uint8Array(bytes), {
+    status: 200,
+    headers: {
+      "Content-Type": format === "xlsx" ? XLSX_CONTENT_TYPE : PDF_CONTENT_TYPE,
+      "Content-Disposition": `attachment; filename="${name}.${format}"`,
+      "Content-Length": String(bytes.byteLength),
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+/** Plafonul rândurilor: PDF 3.000 și Excel 20.000 (măsurat, vezi `XLSX_MAX_ROWS`); CSV-ul rămâne la 50.000. */
+function tableRowCap(d: ApiDeps, format: TableExportFormat): number {
+  const csvCap = d.exportMaxRows ?? MAX_EXPORT_ROWS;
+  return Math.min(csvCap, format === "pdf" ? PDF_MAX_ROWS : XLSX_MAX_ROWS);
+}
+
+function tableOf(format: TableExportFormat, table: Parameters<typeof tableToXlsx>[0]): Uint8Array {
+  return format === "xlsx" ? tableToXlsx(table) : tableToPdf(table);
+}
+
+export function exportTableHandler(
+  request: Request,
+  d: ApiDeps,
+  kind: TableExportKind,
+  format: TableExportFormat,
+): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const options = {
+      format,
+      maxRows: tableRowCap(d, format),
+      ...(d.exportPageSize === undefined ? {} : { pageSize: d.exportPageSize }),
+    };
+    if (kind === "transactions") {
+      const rawQuery = transactionQueryOf(readQuery(request, TRANSACTION_FILTER_QUERY));
+      const hh = await exportGuard(ctx);
+      const table = await exportTransactionsTable(
+        planning(d.db, ctx),
+        ctx.actor,
+        hh,
+        rawQuery,
+        options,
+      );
+      return fileResponse(TABLE_EXPORT_FILENAMES[kind], format, tableOf(format, table));
+    }
+    if (kind === "goals") {
+      readQuery(request, {});
+      const hh = await exportGuard(ctx);
+      const table = await exportGoalsTable(planning(d.db, ctx), ctx.actor, hh, options);
+      return fileResponse(TABLE_EXPORT_FILENAMES[kind], format, tableOf(format, table));
+    }
+    const query = readQuery(request, { month: "string" });
+    const hh = await exportGuard(ctx);
+    const month = await monthOf(ctx, hh, query.month);
+    const table = await exportBudgetsTable(planning(d.db, ctx), ctx.actor, hh, { month }, options);
+    return fileResponse(TABLE_EXPORT_FILENAMES[kind], format, tableOf(format, table));
+  });
+}
+
+export const exportTransactionsXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "transactions", "xlsx");
+export const exportTransactionsPdfHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "transactions", "pdf");
+export const exportGoalsXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "goals", "xlsx");
+export const exportGoalsPdfHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "goals", "pdf");
+export const exportBudgetsXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "budgets", "xlsx");
+export const exportBudgetsPdfHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "budgets", "pdf");
+
+/** Exportul pentru contabil (CSV/Excel) și lista bonurilor (Excel/PDF), pe o perioadă aleasă. */
+export function exportAccountingHandler(
+  request: Request,
+  d: ApiDeps,
+  kind: "accounting" | "receipts",
+  format: "csv" | "xlsx" | "pdf",
+): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const query = readQuery(request, {
+      from: "string",
+      to: "string",
+      ...(format === "csv" ? DIALECT_QUERY : {}),
+    });
+    // Dialect necunoscut → 400 (ca la celelalte exporturi CSV), înainte de orice citire.
+    const dialect =
+      format === "csv"
+        ? dialectOf({ dialect: query.dialect as CsvDialect | undefined })
+        : undefined;
+    const hh = await exportGuard(ctx);
+    const table = await exportAccountingTable(
+      planning(d.db, ctx),
+      ctx.actor,
+      hh,
+      kind,
+      { from: query.from, to: query.to },
+      {
+        format,
+        maxRows: format === "csv" ? (d.exportMaxRows ?? MAX_EXPORT_ROWS) : tableRowCap(d, format),
+      },
+    );
+    if (format === "csv") {
+      return csvText("accounting", tableToCsv(table, dialect));
+    }
+    const name = kind === "accounting" ? "finet-contabilitate" : "finet-bonuri";
+    return fileResponse(name, format, tableOf(format, table));
+  });
+}
+
+export const exportAccountingCsvHandler = (request: Request, d: ApiDeps) =>
+  exportAccountingHandler(request, d, "accounting", "csv");
+export const exportAccountingXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportAccountingHandler(request, d, "accounting", "xlsx");
+export const exportReceiptsXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportAccountingHandler(request, d, "receipts", "xlsx");
+export const exportReceiptsPdfHandler = (request: Request, d: ApiDeps) =>
+  exportAccountingHandler(request, d, "receipts", "pdf");

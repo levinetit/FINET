@@ -352,7 +352,7 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/budgets`, `/budgets/new`, `/budgets/[id]` | bugete în dashboard | 3 | branch |
 | `/goals`, `/goals/new`, `/goals/[id]` | `/goals` | 3 | branch |
 | `/reports` | `/reports` (de bază) | 3; micro-cheltuieli în 10 | branch |
-| exporturi CSV (în `/reports` și `/transactions`) | `/export` (CSV) | 3 | branch; pagină `/export` proprie cu Excel și PDF: Faza 10 |
+| exporturi CSV (în `/reports` și `/transactions`) | `/export` (CSV) | 3 | branch; Excel și PDF pe `/transactions`, `/goals`, `/budgets`, export pentru contabil pe `/receipts` (F10-C, ADR 0024); pagină `/export` proprie: neimplementată |
 | `/recurring`, `/recurring/new`, `/recurring/[id]` | `/recurring` | 5 | branch |
 | `/receipts`, `/receipts/[id]` | `/receipts` | 6 | branch (F6-C) |
 | `/import` | `/import` | 6 (bonuri), 7 (extrase) | branch (F6-C bonuri; F7-B extrase: fila „Extras bancar”, `?tip=extras`) |
