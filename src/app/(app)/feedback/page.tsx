@@ -12,8 +12,9 @@ export const metadata: Metadata = { title: ro.feedback.title };
 
 /** Feedback și bug-uri (F11-B, ADR 0028): doar `saas` (404 altfel), fără date financiare. */
 export default async function FeedbackPage() {
-  siteConfigOrNotFound();
+  // Întâi sesiunea: anonimul ajunge la /login ca pe orice rută privată; abia apoi 404 în `personal`.
   const page = await requireLedgerPage("/feedback");
+  siteConfigOrNotFound();
   const t = ro.feedback;
   return (
     <>

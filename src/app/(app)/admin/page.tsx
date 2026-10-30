@@ -30,8 +30,9 @@ export const metadata: Metadata = {
  * feedback, anunțuri și erori.
  */
 export default async function AdminPage() {
-  siteConfigOrNotFound();
+  // Întâi sesiunea: anonimul ajunge la /login ca pe orice rută privată; abia apoi 404 în `personal`.
   const session = await requirePageSession("/admin");
+  siteConfigOrNotFound();
   const db = session.runtime.db;
   if (!(await isAdmin(db, session.userId))) notFound();
   const t = ro.admin;
