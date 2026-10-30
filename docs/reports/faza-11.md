@@ -57,3 +57,29 @@ ADR 0028; branch `phase/11-admin`; migrația `0020_admin_feedback`.
 - Auditul administratorului apare în gospodăria lui (ADR 0028 §4).
 - Rămân în Faza 11: Turnstile, OAuth Google/Facebook, `/help` public, traducerea în engleză, expunerea publică (11-C).
 
+## 11-C1 — Înregistrare publică în doi pași și pagina `/support`
+
+ADR 0029; branch `phase/11-public`; fără migrație.
+
+### 1. Ce s-a implementat
+
+- `POST /api/v1/register` (email, nume, termeni) și `POST /api/v1/register/complete` (link semnat + parolă): doar `saas` cu `SIGNUP_ENABLED=1` și SMTP; închis implicit. Parola o alege cel care primește emailul (nu există cont cu parolă înainte de confirmare).
+- Token HMAC fără tabel nou, unică folosință; răspuns identic pentru orice adresă; CSRF prin `Origin`; rate limiting pe email și IP.
+- `/register` (formular sau mesaj „încă nu e deschisă”), `/register/complete`, `/support` (public, în `(site)`), legătură în antet.
+- Ghidul `/help` (Faza 9) rămâne autentificat; public e `/support`.
+
+### 2. Teste rulate local (2026-10-31)
+
+| Comandă | Rezultat |
+|---|---|
+| `vitest run src/app/api/v1/register-api.test.ts` (PG17) | PASS (8 teste) |
+| `vitest run src/openapi src/app/api/routes.test.ts src/lib src/modules/auth src/app/{ui-rules,a11y-rules,smoke}.test.ts src/app/_lib` | PASS |
+| `eslint`, `tsc`, `prettier` pe fișierele modificate | PASS |
+| E2E (`e2e/site.spec.ts`: `/support`, `/register` închis, API 404, personal 404) | SCRIS; NOT RUN local; în CI |
+
+### 3. Puncte deschise
+
+- Fluxul complet nu are E2E în browser: CI nu are un sink de email (nu există mailpit). Fluxul e acoperit la nivel API cu un mailer injectat (`register-api.test.ts`); formularele sunt verificate doar prin regulile statice de UI.
+- Turnstile, OAuth, traducerea în engleză și expunerea publică: 11-C2/C3 (cer chei și decizii).
+- Curățarea conturilor neconfirmate și sursa de IP de încredere: înainte de `SIGNUP_ENABLED=1` public (INFRA 4u).
+

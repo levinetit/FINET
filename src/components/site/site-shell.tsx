@@ -35,6 +35,7 @@ export function SiteShell({
           <Link href="/pricing">{t.nav.pricing}</Link>
           <Link href="/terms">{t.nav.terms}</Link>
           <Link href="/privacy">{t.nav.privacy}</Link>
+          <Link href="/support">{t.nav.support}</Link>
           <Link href="/login" className={buttonClasses("outline")}>
             {t.nav.login}
           </Link>

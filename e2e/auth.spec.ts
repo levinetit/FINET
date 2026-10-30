@@ -62,16 +62,18 @@ test.describe(`autentificare (${MODE})`, () => {
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
-  test("/register: 404 în personal; mesaj „nu e disponibilă încă” în saas", async ({ page }) => {
+  test("/register: 404 în personal; mesaj „nu e deschisă încă” în saas (închisă implicit)", async ({
+    page,
+  }) => {
     const response = await page.goto("/register");
     if (MODE === "personal") {
       expect(response?.status()).toBe(404);
       await expect(page.getByRole("heading", { name: "Pagina nu există" })).toBeVisible();
     } else {
-      // Înregistrarea publică vine în Faza 11; până atunci pagina spune asta, iar API-ul de
-      // sign-up rămâne închis (404).
+      // Înregistrarea publică e închisă implicit (`SIGNUP_ENABLED`, ADR 0029): pagina spune asta,
+      // iar API-ul de sign-up Better Auth rămâne închis (404).
       expect(response?.status()).toBe(200);
-      await expect(page.getByText(/nu e disponibilă încă/)).toBeVisible();
+      await expect(page.getByText(/nu e deschisă încă/)).toBeVisible();
     }
     const signUp = await page.request.post("/api/auth/sign-up/email", {
       data: { email: `nou-${Date.now()}@finet.test`, password: "parola-noua-12345", name: "Nou" },

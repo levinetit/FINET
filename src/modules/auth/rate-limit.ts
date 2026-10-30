@@ -53,7 +53,10 @@ export type RateLimitKind =
   | "api_shopping_compare"
   | "api_shopping_suggest"
   // F10-C: „Întreabă FINET” (citește tranzacțiile din perioadă), pe utilizator.
-  | "api_ask";
+  | "api_ask"
+  // F11-C: înregistrarea publică, pe IP + email și pe IP singur (contra creării în masă de conturi).
+  | "register"
+  | "register_ip";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

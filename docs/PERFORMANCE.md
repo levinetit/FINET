@@ -15,7 +15,7 @@ Creat în Faza 4 (ADR 0010). Două măsurători: mărimea JavaScript-ului trimis
   "defaultKiB": 200,
   "routes": {
     "/login": 180,
-    "/register": 180
+    "/register": 190
   }
 }
 ```
@@ -73,3 +73,6 @@ O bază nouă (migrațiile reale, rolurile `finet_migrator`/`finet_app`), 50.000
 - Agregările dashboard-ului folosesc deja indexul pe interval; totalurile pe 12 luni citesc toată gospodăria (inevitabil fără tabele pre-agregate; sub 0,1 s la 50.000 de rânduri). Fără alt index.
 - Exportul complet rămâne ~4,5 s: după index, timpul e dominat de aplicație (50 de pagini a câte 1.000 de rânduri, câte o tranzacție RLS per pagină, sortarea etichetelor cu `localeCompare`, compunerea CSV). Sub plafonul de 50.000 e acceptabil; o optimizare (pagini mai mari, `Intl.Collator` reutilizat) rămâne în `docs/ROADMAP.md`.
 - Căutarea `q` (`ILIKE '%…%'` pe descriere/comerciant/note) e un `Seq Scan` filtrat (~0,1 s). Un index `pg_trgm` ar cere extensia pe Supabase: amânat (`docs/ROADMAP.md`).
+
+**Recalibrare în Faza 11-C1 (2026-10-30):** `/register` și `/register/complete` au acum formulare (înregistrarea în doi pași, ADR 0029) și măsoară 182,0 și 181,9 KiB în CI (înainte erau pagini fără formular, sub 180). Pragul `/register` (care se aplică și `/register/complete`) trece la 190 KiB (≈ + 4 % peste maximul măsurat); `/login` rămâne la 180 (179,5). Creșterea vine din formular + `apiFetch` + componentele UI folosite, nu din baza comună.
+

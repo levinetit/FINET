@@ -645,3 +645,18 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Audit în gospodăria administratorului (vizibil membrilor ei) | CUNOSCUT (ADR 0028 §4) | — | — |
 | Revizuirea `security` a Fazei 11-B | TODO | agentul `security` | — |
 
+## 32. Înregistrarea publică `saas` și pagina de suport (Faza 11-C1, 2026-10-31; ADR 0029)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Rutele există doar în `saas` cu `SIGNUP_ENABLED=1` și SMTP; altfel 404 (și în `personal`, chiar cu flag) | DONE (PG17) | `register-api.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
+| Primul utilizator NU devine administrator pe această cale (nici pe o bază goală) | DONE (PG17) | `register-api.test.ts` | 2026-10-31 · agent |
+| Parola nu trece prin pasul 1; contul neverificat nu are credențiale; parola o alege cine primește emailul | DONE (PG17) | `register-api.test.ts` (fără `auth_accounts` înainte de pasul 2) | 2026-10-31 · agent |
+| Link semnat HMAC (scop, expirare 48 h, email legat de utilizator), unică folosință; parolă respinsă nu îl consumă | DONE (PG17) | `register-api.test.ts` (modificat, alt secret, alt email, expirat, reutilizat) | 2026-10-31 · agent |
+| Răspuns identic pentru adresă nouă/existentă (202), emailuri în fundal | DONE (PG17); nemăsurat timpul efectiv | `register-api.test.ts` | 2026-10-31 · agent |
+| CSRF (`Origin`), doar JSON, schemă strictă, rate limiting pe email și pe IP | DONE (PG17); IP de încredere doar prin Access | `register-api.test.ts` | 2026-10-31 · agent |
+| `/register*` nu sunt pagini cu analytics/CSP relaxat | DONE | `consent.test.ts` | 2026-10-31 · agent |
+| Anti-bot (Turnstile) | TODO (11-C2); `SIGNUP_ENABLED` rămâne 0 pe deploy public până atunci | ADR 0029 §5 | — |
+| Curățarea conturilor neconfirmate | TODO (înainte de expunerea publică) | ADR 0029, limite | — |
+| Revizuirea `security` a Fazei 11-C1 | TODO | agentul `security` | — |
+

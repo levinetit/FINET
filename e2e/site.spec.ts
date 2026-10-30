@@ -11,10 +11,15 @@ import { MODE, test } from "./fixtures";
 test.describe(`site public (${MODE})`, () => {
   if (MODE === "personal") {
     test("paginile publice nu există în personal: 404; `/` duce la login", async ({ page }) => {
-      for (const path of ["/pricing", "/terms", "/privacy"]) {
+      for (const path of ["/pricing", "/terms", "/privacy", "/support", "/register"]) {
         const response = await page.goto(path);
         expect(response?.status(), path).toBe(404);
       }
+      const api = await page.request.post("/api/v1/register", {
+        data: { email: "x@exemplu.ro", name: "X", acceptTerms: true },
+        headers: { Origin: new URL(page.url()).origin },
+      });
+      expect(api.status()).toBe(404);
       await page.goto("/");
       await expect(page).toHaveURL(/\/login$/);
     });
@@ -51,6 +56,33 @@ test.describe(`site public (${MODE})`, () => {
       await expect(page.getByTestId("legal-footer")).toBeVisible();
       await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
     }
+  });
+
+  test("suport: secțiuni, contact „de completat”, subsol legal; ghidul /help rămâne privat", async ({
+    page,
+  }) => {
+    const response = await page.goto("/support");
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1, name: "Suport" })).toBeVisible();
+    await expect(page.getByTestId("support-sections").locator("section")).toHaveCount(7);
+    await expect(page.getByTestId("legal-footer")).toBeVisible();
+    // Ghidul din aplicație cere autentificare (anonimul ajunge la login).
+    await page.goto("/help");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("înregistrarea e închisă implicit: /register explică, /register/complete și API-ul dau 404", async ({
+    page,
+  }) => {
+    await page.goto("/register");
+    await expect(page.getByTestId("register-unavailable")).toBeVisible();
+    await expect(page.getByLabel("Email")).toHaveCount(0);
+    expect((await page.goto("/register/complete?token=x"))?.status()).toBe(404);
+    const api = await page.request.post("/api/v1/register", {
+      data: { email: "x@exemplu.ro", name: "X", acceptTerms: true },
+      headers: { Origin: new URL(page.url()).origin },
+    });
+    expect(api.status()).toBe(404);
   });
 
   test("prețuri: fără sume inventate", async ({ page }) => {

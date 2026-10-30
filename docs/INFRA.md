@@ -659,3 +659,11 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 3. **Redeploy `finet-web`**; fără variabile sau secrete noi.
 4. **Primul administrator în `saas`:** primul utilizator creat cu `finet-admin create-user` devine administrator al platformei. **Verificare:** un utilizator obișnuit primește 404 pe `/admin`; administratorul vede panoul; `select count(*) from finet.feedback` crește după un feedback; `select * from finet.audit_events where action like 'admin.%'` conține doar id-uri și stări.
 
+## 4u. Faza 11-C1: înregistrarea publică și `/support` — pe producție (după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0029. **Fără migrație.** Nimic nu se schimbă pe producția `personal` (rutele dau 404). În `saas`, înregistrarea e **închisă implicit**.
+
+1. **Imaginea** `finet` (web) pentru commit-ul aprobat (CI), apoi redeploy `finet-web`. Variabila nouă: `SIGNUP_ENABLED` (`0` implicit; `1` deschide `/register` și `POST /api/v1/register*`, doar în `saas` și doar cu SMTP configurat).
+2. **Înainte de `SIGNUP_ENABLED=1` pe un deploy accesibil public** (toate, nu opțional): Turnstile implementat (11-C2) sau înregistrare doar din rețea controlată; textele juridice revizuite (`SITE_LEGAL_REVIEWED=1`, datele firmei complete); sursa IP de încredere stabilită (altfel limitele pe IP sunt comune); politica Cloudflare Access/WAF pentru `/register`, `/register/complete`, `/api/v1/register*`; plan pentru curățarea conturilor neconfirmate; un SMTP cu SPF/DKIM/DMARC (linkurile de confirmare trebuie să ajungă).
+3. **Verificare** (după deschidere, pe un email de test): cererea de pe alt `Origin` → 403; `POST /api/v1/register` → 202; emailul conține linkul `/register/complete?token=…`; parola aleasă permite autentificarea; același link a doua oară → 410; `select email_verified from finet.users where email = '<test>'` → `true`; `select action from finet.audit_events where action = 'user.email_verified'`.
+

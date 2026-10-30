@@ -17309,6 +17309,207 @@
         }
       }
     },
+    "/api/v1/register": {
+      "post": {
+        "operationId": "registerAccount",
+        "tags": [
+          "register"
+        ],
+        "summary": "Începe înregistrarea: email, nume și acceptarea termenilor (pasul 1 din 2).",
+        "description": "Fără sesiune. Doar modul `saas` cu `SIGNUP_ENABLED=1` și SMTP configurat: altfel 404. Cererea de pe alt `Origin` primește 403. Răspunsul (202) este IDENTIC indiferent dacă adresa are deja cont: pentru o adresă nouă (sau neconfirmată) se trimite emailul cu linkul de confirmare, pentru una cu cont se trimite un mesaj „ai deja un cont”. Parola NU se trimite aici: o alege proprietarul adresei în pasul 2. Primul utilizator al unei platforme noi NU devine administrator pe această cale.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "maxLength": 254
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "acceptTerms": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "email",
+                  "name",
+                  "acceptTerms"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Primit; emailul se trimite în fundal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "const": "pending"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/register/complete": {
+      "post": {
+        "operationId": "completeRegistration",
+        "tags": [
+          "register"
+        ],
+        "summary": "Termină înregistrarea: linkul din email și parola aleasă (pasul 2 din 2).",
+        "description": "Fără sesiune. Doar modul `saas` cu `SIGNUP_ENABLED=1` și SMTP configurat: altfel 404. Cererea de pe alt `Origin` primește 403. Linkul e semnat, expiră în 48 de ore și se folosește o singură dată. Parola respectă politica (10–128 de caractere, HIBP dacă e activat); o parolă respinsă (400, cod `password`) NU consumă linkul. Un link invalid, expirat sau deja folosit răspunde 410 (cod `invalid_token`).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 600
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "token",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Emailul e confirmat și parola setată.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "const": "verified"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "410": {
+            "$ref": "#/components/responses/E410"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/report-definitions": {
       "get": {
         "operationId": "listReportDefinitions",

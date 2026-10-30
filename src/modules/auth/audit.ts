@@ -22,6 +22,7 @@ export type AuditAction =
   | "auth.session_revoked"
   | "auth.sessions_revoked_others"
   | "user.created"
+  | "user.email_verified"
   | "household.member_added"
   // Familia (Faza 8): doar CINE, pe ce obiect și rolul; fără tokenuri, sume sau nume.
   | "household.invite_created"
