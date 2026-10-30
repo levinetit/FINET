@@ -195,6 +195,12 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
+      // Site-ul public al modului `saas` (Faza 11): fără autentificare, fără utilizatori proprii.
+      name: "site",
+      testMatch: /site\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // „Întreabă FINET” și rezumatul lunii (Faza 10, F10-C): utilizatorul `ask`; datele se creează
       // prin API (fără worker sau AI).
       name: "ask",

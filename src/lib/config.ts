@@ -188,6 +188,26 @@ export type Config = Readonly<{
   storage: StorageConfig;
   documents: DocumentsConfig;
   access: AccessConfig;
+  /**
+   * Site-ul public (Faza 11, ADR 0027), doar în modul `saas`: datele firmei care operează serviciul
+   * (obligatorii legal în footer), confirmarea că textele juridice au fost revizuite de un om și,
+   * opțional, identificatorul Google Analytics (încărcat doar după consimțământ, doar pe paginile
+   * publice). Nicio valoare nu are implicit: lipsa lor lasă site-ul în starea „de completat”
+   * (`ready: false`), cu noindex și bannerul de ciornă.
+   */
+  site: Readonly<{
+    company: Readonly<{
+      name: string | null;
+      taxId: string | null;
+      registrationNo: string | null;
+      address: string | null;
+      email: string | null;
+    }>;
+    legalReviewed: boolean;
+    analyticsId: string | null;
+    /** Datele firmei complete ȘI textele juridice revizuite. */
+    ready: boolean;
+  }>;
   /** Token intern opțional pentru `/api/health` detaliat fără JWT Access (monitorizare). */
   healthToken: string | null;
   auth: AuthConfig;
@@ -342,6 +362,25 @@ const envSchema = z.object({
   AI_RESPONSE_FORMAT: z.enum(["json_schema", "json_object", "none"]).optional(),
   AI_LIST_MATCH: z.enum(["0", "1"]).optional(),
   AI_ASK: z.enum(["0", "1"]).optional(),
+  SITE_COMPANY_NAME: z.string().trim().min(2).max(200).optional(),
+  SITE_COMPANY_TAX_ID: z
+    .string()
+    .trim()
+    .regex(/^(RO)?\d{2,10}$/)
+    .optional(),
+  SITE_COMPANY_REGISTRATION: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]\d{1,2}\/\d{1,6}\/\d{4}$/)
+    .optional(),
+  SITE_COMPANY_ADDRESS: z.string().trim().min(5).max(300).optional(),
+  SITE_CONTACT_EMAIL: z.string().trim().email().max(200).optional(),
+  SITE_LEGAL_REVIEWED: z.enum(["0", "1"]).optional(),
+  SITE_ANALYTICS_ID: z
+    .string()
+    .trim()
+    .regex(/^G-[A-Z0-9]{4,20}$/)
+    .optional(),
   AI_ASK_API_KEY: z
     .string()
     .min(8)
@@ -788,6 +827,22 @@ export function parseConfig(
       retentionDays: int(e.RECEIPT_IMAGE_RETENTION_DAYS, DEFAULTS.retentionDays),
       duplicateMaxDistance,
     }),
+    site: (() => {
+      const company = Object.freeze({
+        name: e.SITE_COMPANY_NAME ?? null,
+        taxId: e.SITE_COMPANY_TAX_ID ?? null,
+        registrationNo: e.SITE_COMPANY_REGISTRATION ?? null,
+        address: e.SITE_COMPANY_ADDRESS ?? null,
+        email: e.SITE_CONTACT_EMAIL ?? null,
+      });
+      const legalReviewed = e.SITE_LEGAL_REVIEWED === "1";
+      return Object.freeze({
+        company,
+        legalReviewed,
+        analyticsId: e.SITE_ANALYTICS_ID ?? null,
+        ready: legalReviewed && Object.values(company).every((v) => v !== null),
+      });
+    })(),
     access: Object.freeze({
       required: accessRequired,
       teamDomain: e.CF_ACCESS_TEAM_DOMAIN ?? null,

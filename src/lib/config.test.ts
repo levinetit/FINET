@@ -753,6 +753,42 @@ describe("furnizorul AI (F6-B, ADR 0014)", () => {
     });
   });
 
+  it("site-ul public (F11): fără valori implicite; ready doar cu datele firmei complete ȘI textele revizuite", () => {
+    const empty = parseConfig(DEV).site;
+    expect(empty).toEqual({
+      company: { name: null, taxId: null, registrationNo: null, address: null, email: null },
+      legalReviewed: false,
+      analyticsId: null,
+      ready: false,
+    });
+    const company = {
+      SITE_COMPANY_NAME: "Exemplu SRL",
+      SITE_COMPANY_TAX_ID: "RO12345678",
+      SITE_COMPANY_REGISTRATION: "J40/1234/2020",
+      SITE_COMPANY_ADDRESS: "Str. Exemplu 1, București",
+      SITE_CONTACT_EMAIL: "contact@exemplu.ro",
+    } as const;
+    expect(parseConfig({ ...DEV, ...company }).site.ready).toBe(false); // nerevizuite
+    expect(parseConfig({ ...DEV, SITE_LEGAL_REVIEWED: "1" }).site.ready).toBe(false); // fără date
+    const ready = parseConfig({
+      ...DEV,
+      ...company,
+      SITE_LEGAL_REVIEWED: "1",
+      SITE_ANALYTICS_ID: "G-ABC123XYZ9",
+    }).site;
+    expect(ready).toMatchObject({ ready: true, legalReviewed: true, analyticsId: "G-ABC123XYZ9" });
+    expect(ready.company.registrationNo).toBe("J40/1234/2020");
+    for (const [name, bad] of [
+      ["SITE_COMPANY_TAX_ID", "abc"],
+      ["SITE_COMPANY_REGISTRATION", "J40-1234-2020"],
+      ["SITE_CONTACT_EMAIL", "nu-e-email"],
+      ["SITE_ANALYTICS_ID", "UA-123"],
+      ["SITE_LEGAL_REVIEWED", "da"],
+    ] as const) {
+      expect(issuesOf({ ...DEV, [name]: bad }), name).toEqual([name]);
+    }
+  });
+
   it("AI_BASE_URL doar către o gazdă permisă (anti-SSRF); limitele numerice", () => {
     expect(issuesOf({ ...DEV, AI_BASE_URL: "http://169.254.169.254/latest" })).toEqual([
       "AI_BASE_URL",

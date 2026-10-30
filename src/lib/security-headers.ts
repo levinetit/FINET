@@ -49,17 +49,33 @@ export function createNonce(): string {
   return Buffer.from(bytes).toString("base64");
 }
 
-export type CspOptions = Readonly<{ development: boolean }>;
+export type CspOptions = Readonly<{
+  development: boolean;
+  /**
+   * Doar pe paginile publice ale site-ului `saas`, când există un identificator Google Analytics:
+   * permite domeniile etichetei Google (scriptul se încarcă oricum numai după consimțământ).
+   */
+  analytics?: boolean;
+}>;
+
+const GA_SCRIPT = "https://www.googletagmanager.com";
+const GA_CONNECT =
+  "https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com";
+const GA_IMG = "https://www.google-analytics.com https://www.googletagmanager.com";
 
 export function buildCsp(nonce: string, options: CspOptions): string {
   const n = `'nonce-${nonce}'`;
   const directives: [string, string][] = [
     ["default-src", "'self'"],
-    ["script-src", options.development ? `'self' ${n} 'unsafe-eval'` : `'self' ${n}`],
+    [
+      "script-src",
+      (options.development ? `'self' ${n} 'unsafe-eval'` : `'self' ${n}`) +
+        (options.analytics ? ` ${GA_SCRIPT}` : ""),
+    ],
     ["style-src", options.development ? "'self' 'unsafe-inline'" : `'self' ${n}`],
-    ["img-src", "'self' data:"],
+    ["img-src", options.analytics ? `'self' data: ${GA_IMG}` : "'self' data:"],
     ["font-src", "'self'"],
-    ["connect-src", "'self'"],
+    ["connect-src", options.analytics ? `'self' ${GA_CONNECT}` : "'self'"],
     ["frame-ancestors", "'none'"],
     ["object-src", "'none'"],
     ["base-uri", "'self'"],

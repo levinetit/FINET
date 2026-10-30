@@ -617,3 +617,15 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Accesul rețea web → LiteLLM (firewall, rețea Docker) și cheia virtuală dedicată cu plafon | NEFĂCUT (pas de operator, INFRA 4s) | — | — |
 | Revizuirea `security` a pasului LLM | TODO | agentul `security` | — |
 
+## 30. Site-ul public `saas` (Faza 11-A, 2026-10-31; ADR 0027)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Rutele publice (`/pricing`, `/terms`, `/privacy`) dau 404 în `personal`; `/` duce la `/login` ca înainte | DONE (cod); E2E în CI | `e2e/site.spec.ts`, `src/lib/site.ts` | 2026-10-31 · agent |
+| CSP strict (`'self'`) pe toată aplicația; domeniile Google doar pe cele patru pagini publice și doar cu `SITE_ANALYTICS_ID` | DONE | `consent.test.ts` (CSP), `src/proxy.ts` | 2026-10-31 · agent |
+| Analytics: semnalele Consent Mode v2 implicit `denied`; `gtag.js` se încarcă doar după „Accept”; reclamele mereu `denied`; fără ID nu există banner și nu pleacă cereri către Google | DONE (unit + E2E fără ID); cu ID și Google real: NEVERIFICAT | `consent.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
+| Datele firmei fără valori implicite, validate la pornire; lipsa lor e vizibilă în subsol și blochează indexarea | DONE | `config.test.ts` | 2026-10-31 · agent |
+| Textele juridice sunt ciorne marcate vizibil; indexarea doar cu `SITE_LEGAL_REVIEWED=1` și datele complete | DONE (mecanism); revizuirea juridică: NEFĂCUTĂ (om) | `e2e/site.spec.ts`, ADR 0027 §2 | — |
+| Legături ANPC SAL și SOL pe fiecare pagină publică | DONE | `e2e/site.spec.ts` | 2026-10-31 · agent |
+| Revizuirea `security` a Fazei 11-A | TODO | agentul `security` | — |
+
