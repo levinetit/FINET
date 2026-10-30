@@ -40,6 +40,8 @@ export type RateLimitKind =
   | "api_statement_upload"
   // F6-C: reprocesarea unui bon (un nou apel AI plătit).
   | "api_receipt_reprocess"
+  // F10-B: rularea/previzualizarea rapoartelor de micro-cheltuieli (citesc liniile bonurilor).
+  | "api_report_run"
   // F8-A: acceptarea unei invitații în gospodărie (contra ghicirii tokenurilor), pe utilizator.
   | "invite_accept"
   // F9-B (GDPR): ștergerea contului (reautentificare cu parola) și exportul complet, pe utilizator.

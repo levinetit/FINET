@@ -98,7 +98,11 @@
     },
     {
       "name": "reports",
-      "description": "Dashboard-ul și raportul lunar (Faza 3)."
+      "description": "Dashboard-ul, raportul lunar (Faza 3) și rapoartele de micro-cheltuieli (Faza 10)."
+    },
+    {
+      "name": "prices",
+      "description": "Prețurile pe produs și comerciant, inflația personală (Faza 10)."
     },
     {
       "name": "exports",
@@ -6964,6 +6968,384 @@
         }
       }
     },
+    "/api/v1/inflation": {
+      "get": {
+        "operationId": "getPersonalInflation",
+        "tags": [
+          "prices"
+        ],
+        "summary": "Inflația personală: variația prețului mediu pe unitate între două perioade.",
+        "description": "Calculat din liniile de produs ale bonurilor CONFIRMATE vizibile utilizatorului: liniile bonurilor legate de un cont personal al altui membru nu intră. Estimare din bonurile tale, nu un indice oficial. Doar articolele (produs × comerciant) cumpărate în AMBELE perioade, fiecare cu cel puțin 2 observații pe perioadă; agregatul gospodăriei e ponderat cu cheltuiala din perioada de bază și afișat doar peste prag (implicit 5 articole), în puncte de bază (`changeBps`). Fereastra curentă = ultimele `months` luni (inclusiv luna curentă); baza = `year_ago` (același interval cu un an în urmă, implicit) sau `previous` (lunile imediat dinainte). Formula: docs/adr/0023-prices-reports.md.",
+        "parameters": [
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "description": "Lungimea ferestrei în luni (1–12; implicit 3).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "baseline",
+            "in": "query",
+            "required": false,
+            "description": "`year_ago` (implicit) sau `previous`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "previous",
+                "year_ago"
+              ]
+            }
+          },
+          {
+            "name": "minObservations",
+            "in": "query",
+            "required": false,
+            "description": "Observații minime pe perioadă și articol (1–20; implicit 2).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "minItems",
+            "in": "query",
+            "required": false,
+            "description": "Articole minime pentru agregat (1–50; implicit 5).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inflația.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "months": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "baseline": {
+                          "type": "string",
+                          "enum": [
+                            "previous",
+                            "year_ago"
+                          ]
+                        },
+                        "base": {
+                          "type": "object",
+                          "properties": {
+                            "from": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            },
+                            "to": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "current": {
+                          "type": "object",
+                          "properties": {
+                            "from": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            },
+                            "to": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "thresholds": {
+                          "type": "object",
+                          "properties": {
+                            "minObsPerPeriod": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "minItems": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "minMerchantItems": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "minObsPerPeriod",
+                            "minItems",
+                            "minMerchantItems"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "excludedLines": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "currencies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "enum": [
+                                  "RON",
+                                  "EUR",
+                                  "USD"
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "ok",
+                                  "insufficient"
+                                ]
+                              },
+                              "itemsUsed": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "coverageBps": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Ponderea cheltuielii de bază acoperite de articolele folosite."
+                              },
+                              "changeBps": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Puncte de bază (1 pb = 0,01 %), întreg; 1250 = 12,50 %."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Variația gospodăriei (ponderată cu cheltuiala de bază); `null` sub pragul de articole. Estimare din bonurile tale."
+                              },
+                              "byMerchant": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "merchantKey": {
+                                      "type": "string"
+                                    },
+                                    "merchantName": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "items": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "changeBps": {
+                                      "anyOf": [
+                                        {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991,
+                                          "description": "Puncte de bază (1 pb = 0,01 %), întreg; 1250 = 12,50 %."
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "merchantKey",
+                                    "merchantName",
+                                    "items",
+                                    "changeBps"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "productKey": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "unit": {
+                                      "type": "string",
+                                      "enum": [
+                                        "kg",
+                                        "l",
+                                        "buc",
+                                        "unit"
+                                      ],
+                                      "description": "Unitatea de comparație: kg, l, bucată sau `unit` (unitatea de pe bon)."
+                                    },
+                                    "merchantKey": {
+                                      "type": "string"
+                                    },
+                                    "merchantName": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "baseObservations": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "currentObservations": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "basePriceMinor": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                    },
+                                    "currentPriceMinor": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                    },
+                                    "baseSpendMinor": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                    },
+                                    "changeBps": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Puncte de bază (1 pb = 0,01 %), întreg; 1250 = 12,50 %."
+                                    }
+                                  },
+                                  "required": [
+                                    "productKey",
+                                    "name",
+                                    "unit",
+                                    "merchantKey",
+                                    "merchantName",
+                                    "baseObservations",
+                                    "currentObservations",
+                                    "basePriceMinor",
+                                    "currentPriceMinor",
+                                    "baseSpendMinor",
+                                    "changeBps"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "currency",
+                              "status",
+                              "itemsUsed",
+                              "coverageBps",
+                              "changeBps",
+                              "byMerchant",
+                              "items"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "months",
+                        "baseline",
+                        "base",
+                        "current",
+                        "thresholds",
+                        "excludedLines",
+                        "currencies"
+                      ],
+                      "additionalProperties": false,
+                      "title": "PersonalInflation"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/invites/accept": {
       "post": {
         "operationId": "acceptInvite",
@@ -8080,6 +8462,719 @@
           },
           "404": {
             "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/prices/products": {
+      "get": {
+        "operationId": "listProductPrices",
+        "tags": [
+          "prices"
+        ],
+        "summary": "Produsele cumpărate, cu prețul mediu pe unitate și cel mai ieftin comerciant (doar peste pragul de date).",
+        "description": "Calculat din liniile de produs ale bonurilor CONFIRMATE vizibile utilizatorului: liniile bonurilor legate de un cont personal al altui membru nu intră. Estimare din bonurile tale, nu un indice oficial. Prețul = media ponderată cu cantitatea, în unități minore pe kg / l / bucată (ambalajele aceluiași produs se compară pe unitate standard) sau pe unitatea de pe bon când numele nu are mărime. Monedele nu se amestecă (un rând pe produs și monedă). Sub pragul de date (`enough: false`) toate prețurile sunt `null`. Cel mai ieftin comerciant: doar între comercianți cu cel puțin 2 observații, minim doi. Linia cu mărime ambiguă e exclusă (`excludedLines`). Peste 100000 de linii în fereastră → 409 `too_many_lines`.",
+        "parameters": [
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "description": "Fereastra: ultimele N luni calendaristice, inclusiv luna curentă (1–60; implicit 12), în fusul orar al gospodăriei.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Numele conține textul.",
+            "schema": {
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          {
+            "name": "currency",
+            "in": "query",
+            "required": false,
+            "description": "Doar o monedă.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RON",
+                "EUR",
+                "USD"
+              ]
+            }
+          },
+          {
+            "name": "onlyEnough",
+            "in": "query",
+            "required": false,
+            "description": "Doar produsele cu date suficiente.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Produse în răspuns (1–200; implicit 100).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "minObservations",
+            "in": "query",
+            "required": false,
+            "description": "Numărul minim de linii (observații) pentru ca un produs să aibă rezultate (1–50; implicit 3).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "minMonths",
+            "in": "query",
+            "required": false,
+            "description": "Numărul minim de luni distincte (1–24; implicit 2).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Produsele.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                          "description": "Dată calendaristică `YYYY-MM-DD`."
+                        },
+                        "to": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                          "description": "Dată calendaristică `YYYY-MM-DD`."
+                        },
+                        "thresholds": {
+                          "type": "object",
+                          "properties": {
+                            "minObservations": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "minMonths": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "minObservations",
+                            "minMonths"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "excludedLines": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Linii ignorate (mărime ambiguă sau sumă nulă)."
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "products": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "productKey": {
+                                "type": "string",
+                                "description": "`<unitate>|<nume fără mărime>`."
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "unit": {
+                                "type": "string",
+                                "enum": [
+                                  "kg",
+                                  "l",
+                                  "buc",
+                                  "unit"
+                                ],
+                                "description": "Unitatea de comparație: kg, l, bucată sau `unit` (unitatea de pe bon)."
+                              },
+                              "currency": {
+                                "type": "string",
+                                "enum": [
+                                  "RON",
+                                  "EUR",
+                                  "USD"
+                                ]
+                              },
+                              "observations": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "months": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "firstOn": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                "description": "Dată calendaristică `YYYY-MM-DD`."
+                              },
+                              "lastOn": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                "description": "Dată calendaristică `YYYY-MM-DD`."
+                              },
+                              "enough": {
+                                "type": "boolean",
+                                "description": "`false` sub pragul de date: prețurile sunt `null`, UI-ul spune că lipsesc date."
+                              },
+                              "priceMinor": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Media ponderată cu cantitatea, în unități minore pe unitatea de comparație."
+                              },
+                              "merchants": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "merchantKey": {
+                                      "type": "string"
+                                    },
+                                    "merchantName": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "observations": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "priceMinor": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                    },
+                                    "lastOn": {
+                                      "type": "string",
+                                      "format": "date",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                      "description": "Dată calendaristică `YYYY-MM-DD`."
+                                    }
+                                  },
+                                  "required": [
+                                    "merchantKey",
+                                    "merchantName",
+                                    "observations",
+                                    "priceMinor",
+                                    "lastOn"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "cheapest": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "cheapest": {
+                                        "type": "object",
+                                        "properties": {
+                                          "merchantKey": {
+                                            "type": "string"
+                                          },
+                                          "merchantName": {
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "observations": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "priceMinor": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991,
+                                            "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                          },
+                                          "lastOn": {
+                                            "type": "string",
+                                            "format": "date",
+                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                            "description": "Dată calendaristică `YYYY-MM-DD`."
+                                          }
+                                        },
+                                        "required": [
+                                          "merchantKey",
+                                          "merchantName",
+                                          "observations",
+                                          "priceMinor",
+                                          "lastOn"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "mostUsed": {
+                                        "type": "object",
+                                        "properties": {
+                                          "merchantKey": {
+                                            "type": "string"
+                                          },
+                                          "merchantName": {
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "observations": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "priceMinor": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991,
+                                            "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                          },
+                                          "lastOn": {
+                                            "type": "string",
+                                            "format": "date",
+                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                            "description": "Dată calendaristică `YYYY-MM-DD`."
+                                          }
+                                        },
+                                        "required": [
+                                          "merchantKey",
+                                          "merchantName",
+                                          "observations",
+                                          "priceMinor",
+                                          "lastOn"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "diffMinor": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991,
+                                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                      },
+                                      "diffBps": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991,
+                                        "description": "Puncte de bază (1 pb = 0,01 %), întreg; 1250 = 12,50 %."
+                                      }
+                                    },
+                                    "required": [
+                                      "cheapest",
+                                      "mostUsed",
+                                      "diffMinor",
+                                      "diffBps"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "productKey",
+                              "name",
+                              "unit",
+                              "currency",
+                              "observations",
+                              "months",
+                              "firstOn",
+                              "lastOn",
+                              "enough",
+                              "priceMinor",
+                              "merchants",
+                              "cheapest"
+                            ],
+                            "additionalProperties": false,
+                            "title": "ProductPrice"
+                          }
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to",
+                        "thresholds",
+                        "excludedLines",
+                        "total",
+                        "products"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ProductPrices"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/prices/series": {
+      "get": {
+        "operationId": "getPriceSeries",
+        "tags": [
+          "prices"
+        ],
+        "summary": "Evoluția prețului unui produs în timp, generală și pe comerciant.",
+        "description": "Calculat din liniile de produs ale bonurilor CONFIRMATE vizibile utilizatorului: liniile bonurilor legate de un cont personal al altui membru nu intră. Estimare din bonurile tale, nu un indice oficial. Punctele sunt medii ponderate pe lună (`YYYY-MM`) sau pe săptămână (data de luni). Sub pragul de date seriile sunt goale (`enough: false`). Produs inexistent în fereastră → 404.",
+        "parameters": [
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "`productKey` din lista produselor (`<unitate>|<nume>`).",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 320
+            }
+          },
+          {
+            "name": "currency",
+            "in": "query",
+            "required": false,
+            "description": "Moneda (implicit RON).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RON",
+                "EUR",
+                "USD"
+              ]
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": false,
+            "description": "`month` (implicit) sau `week`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "month",
+                "week"
+              ]
+            }
+          },
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "description": "Fereastra: ultimele N luni calendaristice, inclusiv luna curentă (1–60; implicit 12), în fusul orar al gospodăriei.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "minObservations",
+            "in": "query",
+            "required": false,
+            "description": "Numărul minim de linii (observații) pentru ca un produs să aibă rezultate (1–50; implicit 3).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "name": "minMonths",
+            "in": "query",
+            "required": false,
+            "description": "Numărul minim de luni distincte (1–24; implicit 2).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seria.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                          "description": "Dată calendaristică `YYYY-MM-DD`."
+                        },
+                        "to": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                          "description": "Dată calendaristică `YYYY-MM-DD`."
+                        },
+                        "thresholds": {
+                          "type": "object",
+                          "properties": {
+                            "minObservations": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "minMonths": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "minObservations",
+                            "minMonths"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "productKey": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "unit": {
+                          "type": "string",
+                          "enum": [
+                            "kg",
+                            "l",
+                            "buc",
+                            "unit"
+                          ],
+                          "description": "Unitatea de comparație: kg, l, bucată sau `unit` (unitatea de pe bon)."
+                        },
+                        "currency": {
+                          "type": "string",
+                          "enum": [
+                            "RON",
+                            "EUR",
+                            "USD"
+                          ]
+                        },
+                        "granularity": {
+                          "type": "string",
+                          "enum": [
+                            "month",
+                            "week"
+                          ]
+                        },
+                        "enough": {
+                          "type": "boolean"
+                        },
+                        "overall": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "bucket": {
+                                "type": "string"
+                              },
+                              "priceMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "observations": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "bucket",
+                              "priceMinor",
+                              "observations"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "byMerchant": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "merchantKey": {
+                                "type": "string"
+                              },
+                              "merchantName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "points": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "bucket": {
+                                      "type": "string"
+                                    },
+                                    "priceMinor": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                    },
+                                    "observations": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": [
+                                    "bucket",
+                                    "priceMinor",
+                                    "observations"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "merchantKey",
+                              "merchantName",
+                              "points"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to",
+                        "thresholds",
+                        "productKey",
+                        "name",
+                        "unit",
+                        "currency",
+                        "granularity",
+                        "enough",
+                        "overall",
+                        "byMerchant"
+                      ],
+                      "additionalProperties": false,
+                      "title": "PriceSeries"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -13380,6 +14475,2648 @@
           },
           "415": {
             "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/report-definitions": {
+      "get": {
+        "operationId": "listReportDefinitions",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Rapoartele de micro-cheltuieli: cele de sistem (primele) și cele ale gospodăriei.",
+        "parameters": [
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "required": false,
+            "description": "Include rapoartele arhivate.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Definițiile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "advice": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "rules": {
+                            "type": "object",
+                            "properties": {
+                              "v": {
+                                "type": "number",
+                                "const": 1
+                              },
+                              "combine": {
+                                "type": "string",
+                                "enum": [
+                                  "all",
+                                  "any"
+                                ]
+                              },
+                              "include": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "exact",
+                                        "prefix",
+                                        "contains",
+                                        "token"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "exclude": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "exact",
+                                        "prefix",
+                                        "contains",
+                                        "token"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "kinds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "product",
+                                    "discount",
+                                    "deposit_sgr",
+                                    "bag",
+                                    "other"
+                                  ]
+                                }
+                              },
+                              "categoryIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "tagIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              }
+                            },
+                            "required": [
+                              "v",
+                              "combine",
+                              "include",
+                              "exclude",
+                              "kinds",
+                              "categoryIds",
+                              "tagIds"
+                            ],
+                            "additionalProperties": false,
+                            "title": "ReportRules"
+                          },
+                          "isSystem": {
+                            "type": "boolean"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                            "description": "Moment ISO 8601 în UTC."
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                            "description": "Moment ISO 8601 în UTC."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "advice",
+                          "rules",
+                          "isSystem",
+                          "archived",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ReportDefinition"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createReportDefinition",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Creează un raport propriu: reguli de potrivire pe numele normalizat al produselor (include/exclude, `exact`/`prefix`/`contains`/`token`, ȘI/SAU plat).",
+        "description": "Valorile regulilor se normalizează (litere mici, fără diacritice). Cel mult 20 de termeni pe listă; numele unic (fără majuscule) printre rapoartele active (409 `report_name_taken`); cel mult 100 de rapoarte proprii (409 `report_limit`). Categoriile și etichetele din reguli trebuie să existe. Rapoartele de sistem nu se pot crea sau modifica.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "advice": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rules": {
+                    "type": "object",
+                    "properties": {
+                      "v": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "combine": {
+                        "type": "string",
+                        "enum": [
+                          "all",
+                          "any"
+                        ]
+                      },
+                      "include": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "exact",
+                                "prefix",
+                                "contains",
+                                "token"
+                              ]
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "exclude": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "exact",
+                                "prefix",
+                                "contains",
+                                "token"
+                              ]
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "kinds": {
+                        "minItems": 1,
+                        "maxItems": 5,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "product",
+                            "discount",
+                            "deposit_sgr",
+                            "bag",
+                            "other"
+                          ]
+                        }
+                      },
+                      "categoryIds": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "tagIds": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "combine",
+                      "include",
+                      "exclude",
+                      "kinds",
+                      "categoryIds",
+                      "tagIds"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "rules"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Raportul creat.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "advice": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "rules": {
+                          "type": "object",
+                          "properties": {
+                            "v": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "combine": {
+                              "type": "string",
+                              "enum": [
+                                "all",
+                                "any"
+                              ]
+                            },
+                            "include": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "exact",
+                                      "prefix",
+                                      "contains",
+                                      "token"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "exclude": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "exact",
+                                      "prefix",
+                                      "contains",
+                                      "token"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "kinds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "product",
+                                  "discount",
+                                  "deposit_sgr",
+                                  "bag",
+                                  "other"
+                                ]
+                              }
+                            },
+                            "categoryIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "tagIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "v",
+                            "combine",
+                            "include",
+                            "exclude",
+                            "kinds",
+                            "categoryIds",
+                            "tagIds"
+                          ],
+                          "additionalProperties": false,
+                          "title": "ReportRules"
+                        },
+                        "isSystem": {
+                          "type": "boolean"
+                        },
+                        "archived": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "description",
+                        "advice",
+                        "rules",
+                        "isSystem",
+                        "archived",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReportDefinition"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replay": {
+                "$ref": "#/components/headers/IdempotentReplay"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/report-definitions/preview": {
+      "post": {
+        "operationId": "previewReportRules",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Previzualizare: rulează regulile din corp pe o perioadă, fără să salveze nimic.",
+        "description": "Același rezultat ca la rulare, cu `definition: null`. Rate limit propriu: 30/min per utilizator. Calculat din liniile de produs ale bonurilor CONFIRMATE vizibile utilizatorului: liniile bonurilor legate de un cont personal al altui membru nu intră. Estimare din bonurile tale, nu un indice oficial.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rules": {
+                    "type": "object",
+                    "properties": {
+                      "v": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "combine": {
+                        "type": "string",
+                        "enum": [
+                          "all",
+                          "any"
+                        ]
+                      },
+                      "include": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "exact",
+                                "prefix",
+                                "contains",
+                                "token"
+                              ]
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "exclude": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "exact",
+                                "prefix",
+                                "contains",
+                                "token"
+                              ]
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "kinds": {
+                        "minItems": 1,
+                        "maxItems": 5,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "product",
+                            "discount",
+                            "deposit_sgr",
+                            "bag",
+                            "other"
+                          ]
+                        }
+                      },
+                      "categoryIds": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "tagIds": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "combine",
+                      "include",
+                      "exclude",
+                      "kinds",
+                      "categoryIds",
+                      "tagIds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "period": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "this_month",
+                      "last_month",
+                      "last_3_months",
+                      "this_year"
+                    ]
+                  }
+                },
+                "required": [
+                  "rules"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rezultatul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "definition": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "description": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "advice": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "rules": {
+                                  "type": "object",
+                                  "properties": {
+                                    "v": {
+                                      "type": "number",
+                                      "const": 1
+                                    },
+                                    "combine": {
+                                      "type": "string",
+                                      "enum": [
+                                        "all",
+                                        "any"
+                                      ]
+                                    },
+                                    "include": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "exact",
+                                              "prefix",
+                                              "contains",
+                                              "token"
+                                            ]
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "exclude": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "exact",
+                                              "prefix",
+                                              "contains",
+                                              "token"
+                                            ]
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "kinds": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": [
+                                          "product",
+                                          "discount",
+                                          "deposit_sgr",
+                                          "bag",
+                                          "other"
+                                        ]
+                                      }
+                                    },
+                                    "categoryIds": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      }
+                                    },
+                                    "tagIds": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "v",
+                                    "combine",
+                                    "include",
+                                    "exclude",
+                                    "kinds",
+                                    "categoryIds",
+                                    "tagIds"
+                                  ],
+                                  "additionalProperties": false,
+                                  "title": "ReportRules"
+                                },
+                                "isSystem": {
+                                  "type": "boolean"
+                                },
+                                "archived": {
+                                  "type": "boolean"
+                                },
+                                "createdAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "description": "Moment ISO 8601 în UTC."
+                                },
+                                "updatedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "description": "Moment ISO 8601 în UTC."
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "description",
+                                "advice",
+                                "rules",
+                                "isSystem",
+                                "archived",
+                                "createdAt",
+                                "updatedAt"
+                              ],
+                              "additionalProperties": false,
+                              "title": "ReportDefinition"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "period": {
+                          "type": "string",
+                          "enum": [
+                            "all",
+                            "this_month",
+                            "last_month",
+                            "last_3_months",
+                            "this_year"
+                          ]
+                        },
+                        "from": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "to": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "coverage": {
+                          "type": "object",
+                          "properties": {
+                            "firstOn": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "lastOn": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "receipts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "firstOn",
+                            "lastOn",
+                            "receipts"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "currencies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "enum": [
+                                  "RON",
+                                  "EUR",
+                                  "USD"
+                                ]
+                              },
+                              "mode": {
+                                "type": "string",
+                                "enum": [
+                                  "standard",
+                                  "savings"
+                                ]
+                              },
+                              "chargedMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "creditMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "netMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "totalMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "piecesMilli": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Cantitatea în miimi (1000 = o bucată)."
+                              },
+                              "avgUnitMinor": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "lineCount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "receiptCount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "projection": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ok",
+                                      "insufficient"
+                                    ]
+                                  },
+                                  "yearlyMinor": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991,
+                                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "coverageDays": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "receipts": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "yearlyMinor",
+                                  "coverageDays",
+                                  "receipts"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "byMonth": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "month": {
+                                      "type": "string"
+                                    },
+                                    "totalMinor": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                    }
+                                  },
+                                  "required": [
+                                    "month",
+                                    "totalMinor"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "currency",
+                              "mode",
+                              "chargedMinor",
+                              "creditMinor",
+                              "netMinor",
+                              "totalMinor",
+                              "piecesMilli",
+                              "avgUnitMinor",
+                              "lineCount",
+                              "receiptCount",
+                              "projection",
+                              "byMonth"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "receiptId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "occurredOn": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                "description": "Dată calendaristică `YYYY-MM-DD`."
+                              },
+                              "merchantName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "product",
+                                  "discount",
+                                  "deposit_sgr",
+                                  "bag",
+                                  "other"
+                                ]
+                              },
+                              "quantity": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "currency": {
+                                "type": "string",
+                                "enum": [
+                                  "RON",
+                                  "EUR",
+                                  "USD"
+                                ]
+                              },
+                              "lineTotalMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "receiptId",
+                              "occurredOn",
+                              "merchantName",
+                              "name",
+                              "kind",
+                              "quantity",
+                              "currency",
+                              "lineTotalMinor"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "linesTruncated": {
+                          "type": "boolean"
+                        },
+                        "matchedLines": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "definition",
+                        "period",
+                        "from",
+                        "to",
+                        "coverage",
+                        "currencies",
+                        "lines",
+                        "linesTruncated",
+                        "matchedLines"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReportRun"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/report-definitions/{id}": {
+      "get": {
+        "operationId": "getReportDefinition",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Un raport (de sistem sau al gospodăriei).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Raportul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "advice": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "rules": {
+                          "type": "object",
+                          "properties": {
+                            "v": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "combine": {
+                              "type": "string",
+                              "enum": [
+                                "all",
+                                "any"
+                              ]
+                            },
+                            "include": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "exact",
+                                      "prefix",
+                                      "contains",
+                                      "token"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "exclude": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "exact",
+                                      "prefix",
+                                      "contains",
+                                      "token"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "kinds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "product",
+                                  "discount",
+                                  "deposit_sgr",
+                                  "bag",
+                                  "other"
+                                ]
+                              }
+                            },
+                            "categoryIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "tagIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "v",
+                            "combine",
+                            "include",
+                            "exclude",
+                            "kinds",
+                            "categoryIds",
+                            "tagIds"
+                          ],
+                          "additionalProperties": false,
+                          "title": "ReportRules"
+                        },
+                        "isSystem": {
+                          "type": "boolean"
+                        },
+                        "archived": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "description",
+                        "advice",
+                        "rules",
+                        "isSystem",
+                        "archived",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReportDefinition"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchReportDefinition",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Modifică sau arhivează un raport propriu (cele de sistem: 403).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "advice": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rules": {
+                    "type": "object",
+                    "properties": {
+                      "v": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "combine": {
+                        "type": "string",
+                        "enum": [
+                          "all",
+                          "any"
+                        ]
+                      },
+                      "include": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "exact",
+                                "prefix",
+                                "contains",
+                                "token"
+                              ]
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "exclude": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "exact",
+                                "prefix",
+                                "contains",
+                                "token"
+                              ]
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "kinds": {
+                        "minItems": 1,
+                        "maxItems": 5,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "product",
+                            "discount",
+                            "deposit_sgr",
+                            "bag",
+                            "other"
+                          ]
+                        }
+                      },
+                      "categoryIds": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "tagIds": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "combine",
+                      "include",
+                      "exclude",
+                      "kinds",
+                      "categoryIds",
+                      "tagIds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "archived": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Raportul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "advice": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "rules": {
+                          "type": "object",
+                          "properties": {
+                            "v": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "combine": {
+                              "type": "string",
+                              "enum": [
+                                "all",
+                                "any"
+                              ]
+                            },
+                            "include": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "exact",
+                                      "prefix",
+                                      "contains",
+                                      "token"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "exclude": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "exact",
+                                      "prefix",
+                                      "contains",
+                                      "token"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "kinds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "product",
+                                  "discount",
+                                  "deposit_sgr",
+                                  "bag",
+                                  "other"
+                                ]
+                              }
+                            },
+                            "categoryIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "tagIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "v",
+                            "combine",
+                            "include",
+                            "exclude",
+                            "kinds",
+                            "categoryIds",
+                            "tagIds"
+                          ],
+                          "additionalProperties": false,
+                          "title": "ReportRules"
+                        },
+                        "isSystem": {
+                          "type": "boolean"
+                        },
+                        "archived": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "description": "Moment ISO 8601 în UTC."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "description",
+                        "advice",
+                        "rules",
+                        "isSystem",
+                        "archived",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReportDefinition"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteReportDefinition",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Șterge un raport propriu (cele de sistem: 403).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Șters."
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/report-definitions/{id}/export.csv": {
+      "get": {
+        "operationId": "exportReportDefinitionCsv",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exportul CSV al liniilor potrivite de raport (toate, nu doar istoricul din ecran).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "`all` (implicit, toată arhiva), `this_month`, `last_month`, `last_3_months` (luna curentă și cele două dinainte) sau `this_year`; în fusul orar al gospodăriei.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "this_month",
+                "last_month",
+                "last_3_months",
+                "this_year"
+              ]
+            }
+          },
+          {
+            "name": "dialect",
+            "in": "query",
+            "required": false,
+            "description": "`rfc4180` (implicit: virgulă, punct zecimal) sau `ro` (`;`, virgulă zecimală, pentru Excel în română).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "rfc4180",
+                "ro"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fișierul `finet-raport.csv`. UTF-8 cu BOM, CRLF, ghilimele RFC 4180; celulele de text liber care încep cu = + - @ TAB CR primesc un apostrof. Antete: `Content-Disposition: attachment` (nume fix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Rate limit propriu: 10/min per utilizator.",
+            "content": {
+              "text/csv; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"…\"` cu un nume fix (fără date ale utilizatorului).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/report-definitions/{id}/run": {
+      "get": {
+        "operationId": "runReportDefinition",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Rulează raportul pe o perioadă: total, bucăți, preț mediu pe unitate, proiecție anuală (estimare), istoricul liniilor.",
+        "description": "Calculat din liniile de produs ale bonurilor CONFIRMATE vizibile utilizatorului: liniile bonurilor legate de un cont personal al altui membru nu intră. Estimare din bonurile tale, nu un indice oficial. Totalul = plătit − reduceri (la rapoartele doar de reduceri: suma reducerilor). Proiecția anuală = total · 365 / zilele dintre primul și ultimul bon confirmat vizibil din perioadă; sub 60 de zile sau 10 bonuri: `status: insufficient`. Istoricul: cele mai noi 200 de linii (`linesTruncated`), cu `receiptId` pentru legătura la bon. Rate limit propriu: 30/min per utilizator. Peste 100000 de linii în perioadă → 409 `too_many_lines`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "`all` (implicit, toată arhiva), `this_month`, `last_month`, `last_3_months` (luna curentă și cele două dinainte) sau `this_year`; în fusul orar al gospodăriei.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "this_month",
+                "last_month",
+                "last_3_months",
+                "this_year"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rezultatul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "definition": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "description": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "advice": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "rules": {
+                                  "type": "object",
+                                  "properties": {
+                                    "v": {
+                                      "type": "number",
+                                      "const": 1
+                                    },
+                                    "combine": {
+                                      "type": "string",
+                                      "enum": [
+                                        "all",
+                                        "any"
+                                      ]
+                                    },
+                                    "include": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "exact",
+                                              "prefix",
+                                              "contains",
+                                              "token"
+                                            ]
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "exclude": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "exact",
+                                              "prefix",
+                                              "contains",
+                                              "token"
+                                            ]
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "kinds": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": [
+                                          "product",
+                                          "discount",
+                                          "deposit_sgr",
+                                          "bag",
+                                          "other"
+                                        ]
+                                      }
+                                    },
+                                    "categoryIds": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      }
+                                    },
+                                    "tagIds": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "v",
+                                    "combine",
+                                    "include",
+                                    "exclude",
+                                    "kinds",
+                                    "categoryIds",
+                                    "tagIds"
+                                  ],
+                                  "additionalProperties": false,
+                                  "title": "ReportRules"
+                                },
+                                "isSystem": {
+                                  "type": "boolean"
+                                },
+                                "archived": {
+                                  "type": "boolean"
+                                },
+                                "createdAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "description": "Moment ISO 8601 în UTC."
+                                },
+                                "updatedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "description": "Moment ISO 8601 în UTC."
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "description",
+                                "advice",
+                                "rules",
+                                "isSystem",
+                                "archived",
+                                "createdAt",
+                                "updatedAt"
+                              ],
+                              "additionalProperties": false,
+                              "title": "ReportDefinition"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "period": {
+                          "type": "string",
+                          "enum": [
+                            "all",
+                            "this_month",
+                            "last_month",
+                            "last_3_months",
+                            "this_year"
+                          ]
+                        },
+                        "from": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "to": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "description": "Dată calendaristică `YYYY-MM-DD`."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "coverage": {
+                          "type": "object",
+                          "properties": {
+                            "firstOn": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "lastOn": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "receipts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "firstOn",
+                            "lastOn",
+                            "receipts"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "currencies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "enum": [
+                                  "RON",
+                                  "EUR",
+                                  "USD"
+                                ]
+                              },
+                              "mode": {
+                                "type": "string",
+                                "enum": [
+                                  "standard",
+                                  "savings"
+                                ]
+                              },
+                              "chargedMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "creditMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "netMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "totalMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              },
+                              "piecesMilli": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Cantitatea în miimi (1000 = o bucată)."
+                              },
+                              "avgUnitMinor": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "lineCount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "receiptCount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "projection": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ok",
+                                      "insufficient"
+                                    ]
+                                  },
+                                  "yearlyMinor": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991,
+                                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "coverageDays": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "receipts": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "yearlyMinor",
+                                  "coverageDays",
+                                  "receipts"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "byMonth": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "month": {
+                                      "type": "string"
+                                    },
+                                    "totalMinor": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                                    }
+                                  },
+                                  "required": [
+                                    "month",
+                                    "totalMinor"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "currency",
+                              "mode",
+                              "chargedMinor",
+                              "creditMinor",
+                              "netMinor",
+                              "totalMinor",
+                              "piecesMilli",
+                              "avgUnitMinor",
+                              "lineCount",
+                              "receiptCount",
+                              "projection",
+                              "byMonth"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "receiptId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "occurredOn": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                "description": "Dată calendaristică `YYYY-MM-DD`."
+                              },
+                              "merchantName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "product",
+                                  "discount",
+                                  "deposit_sgr",
+                                  "bag",
+                                  "other"
+                                ]
+                              },
+                              "quantity": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "currency": {
+                                "type": "string",
+                                "enum": [
+                                  "RON",
+                                  "EUR",
+                                  "USD"
+                                ]
+                              },
+                              "lineTotalMinor": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "receiptId",
+                              "occurredOn",
+                              "merchantName",
+                              "name",
+                              "kind",
+                              "quantity",
+                              "currency",
+                              "lineTotalMinor"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "linesTruncated": {
+                          "type": "boolean"
+                        },
+                        "matchedLines": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "definition",
+                        "period",
+                        "from",
+                        "to",
+                        "coverage",
+                        "currencies",
+                        "lines",
+                        "linesTruncated",
+                        "matchedLines"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ReportRun"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
           },
           "422": {
             "$ref": "#/components/responses/E422"

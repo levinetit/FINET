@@ -198,6 +198,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
       expect(names).toContain("gospodarii/1/tranzactii.csv");
       // Faza 7: importurile de extras (fără fișiere).
       expect(names).toContain("gospodarii/1/extrase.json");
+      expect(names).toContain("gospodarii/1/rapoarte-micro-cheltuieli.json");
       expect(names).toContain(`gospodarii/1/fisiere/${docId}.png`);
       expect(names.filter((n) => n.endsWith("liste-cumparaturi.json"))).toHaveLength(2);
       expect(names.filter((n) => n.endsWith("gospodarie.json"))).toHaveLength(2);

@@ -99,6 +99,13 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Export și ștergere:** exportul (`/me/export`) include listele vizibile utilizatorului. La ștergerea contului se șterg listele lui PERSONALE din toate gospodăriile; listele comune rămân gospodăriei.
 - **Loguri:** nume de produse nu intră în loguri, `pgboss.job` sau mesaje de eroare (coduri fixe).
 
+## Prețuri, inflație, rapoarte de micro-cheltuieli (Faza 10, F10-B; ADR 0023)
+- **Ce se calculează:** prețuri pe produs și comerciant, inflație personală și rapoarte pe nume de produse, toate din liniile bonurilor tale confirmate. Sunt date derivate din bonuri: aceleași reguli de acces ca bonurile. Nu se folosește LLM și nu pleacă nimic la furnizori externi.
+- **Conturi personale:** liniile bonurilor legate de contul PERSONAL al altui membru nu intră în agregatele tale (nici în totaluri, nici în acoperirea proiecției). Un bon fără tranzacție legată se tratează ca bon comun, cum era deja vizibil în `/receipts`.
+- **Definițiile de rapoarte** (`report_definitions`) conțin reguli de nume (text liber, ≤ 60 de caractere) create de utilizator; cele ale gospodăriei sunt vizibile membrilor, cele de sistem tuturor. Exportul GDPR include rapoartele create de utilizator (`rapoarte-micro-cheltuieli.json`), nu pe cele de sistem.
+- **Exportul CSV al unui raport** conține liniile potrivite (nume de produse, sume, date): același regim ca exporturile CSV existente. Fără statistici între gospodării.
+- **Loguri:** fără nume de produse sau reguli în loguri, audit sau mesaje de eroare (coduri fixe).
+
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); extrasele PDF cel mult 24 h (F7-B); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 — implementate (Fazele 2–9; ștergerea contului în F9-B). Rămâne de decis expirarea datelor șterse din backup-uri (mai sus).

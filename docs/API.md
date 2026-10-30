@@ -203,6 +203,15 @@ O listă e COMUNĂ (implicit) sau PERSONALĂ (`personal: true`, doar a creatorul
 - `POST /shopping-lists/{id}/items/{itemId}/match` → confirmă, respinge, șterge sau corectează potrivirea unui articol. Nicio potrivire nu modifică tranzacții sau bonuri.
 - Actualizări live: entitatea `shopping_list` în fluxul SSE existent (tip + id, fără conținut).
 
+## Prețuri, inflație, rapoarte de micro-cheltuieli (F10-B, ADR 0023)
+Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor legate de contul personal al altui membru nu intră). Sume întregi `…Minor`, preț pe unitate în bani pe kg / l / bucată; monedele nu se amestecă. Sub pragul de date rezultatele sunt `null` / `enough: false`. Parametri strict validați (necunoscuți sau repetați → 400).
+- `GET /prices/products?months=&minObservations=&minMonths=` → produsele cumpărate, prețul mediu pe unitate și cel mai ieftin comerciant. `GET /prices/series?product=&months=` → evoluția lunară, generală și pe comerciant (`404` produs necunoscut).
+- `GET /inflation?months=&baseline=year_ago|previous&minObservations=&minItems=` → indicele gospodăriei în puncte de bază (estimare din bonurile tale), pe comerciant, cu acoperirea.
+- `GET /report-definitions` (cele de sistem primele) · `POST /report-definitions` (`Idempotency-Key`, `{ name, description?, rules, advice? }`; reguli plate include/exclude, ≤ 20 de termeni; `409 report_limit` la 100 de rapoarte proprii) · `GET|PATCH|DELETE /report-definitions/{id}` (cele de sistem: `403` la modificare/ștergere).
+- `POST /report-definitions/preview` `{ rules, period }` → rulează regulile primite fără să salveze nimic.
+- `GET /report-definitions/{id}/run?period=all|this_month|last_month|last_3_months|this_year` → total, bucăți, preț mediu pe unitate, proiecție anuală (estimare; `insufficient` sub 60 de zile / 10 bonuri) și istoricul liniilor cu legătură la bon. `409 too_many_lines` peste 100.000 de linii. Limită proprie: 30 / min per utilizator (rulare și previzualizare).
+- `GET /report-definitions/{id}/export.csv` → toate liniile potrivite (BOM, protecție contra formulelor CSV, `Sec-Fetch-Site` same-origin|none).
+
 ## Aplicația Android (F9-A, ADR 0020)
 
 `GET /api/v1/app/android/latest` (sesiune cookie sau bearer) → `200 { data: { versionName, versionCode, minSupportedVersionCode, url, sha256, sizeBytes, notes, publishedAt } }` sau `404 android_release_unavailable` (nicio versiune publicată). Datele vin din `<STORAGE_DIR>/app/android-latest.json` (operatorul; `docs/INFRA.md` 4l). Aplicația îl cheamă cel mult o dată pe zi (promptul Android 12.1).

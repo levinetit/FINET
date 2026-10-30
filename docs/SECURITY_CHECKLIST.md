@@ -547,3 +547,22 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | E2E (creare listă din interfață, bifare la raft cu persistență, izolarea listei personale între gospodării, comparație cu un bon sintetic confirmat, zero încălcări CSP); actualizarea live între doi membri e acoperită doar de testul de integrare `shopping-api.test.ts` | SCRIS, NOT RUN local (CI) | `e2e/shopping.spec.ts` | — |
 | Axe pe paginile `/shopping-lists` | NEFĂCUT (nu e în `e2e/a11y.spec.ts`) | — | — |
 | Revizuirea `security` a F10-A | TODO | agentul `security` | — |
+
+## 26. Prețuri, inflație, rapoarte de micro-cheltuieli (F10-B, 2026-10-30; ADR 0023)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| `report_definitions`: RLS ENABLE + FORCE; PUBLIC/anon fără drepturi; UPDATE doar pe coloanele permise; câmpurile fixe nu se schimbă (42501) | DONE (PG17) | `report-definitions-rls.test.ts` („RLS ENABLE + FORCE…”, „câmpurile fixe…”) | 2026-10-30 · programmer (F10-B) |
+| Rapoartele de sistem: citibile de orice utilizator autentificat, invizibile fără utilizator, nescriibile; cele ale gospodăriei izolate, scrierea cere gospodăria curentă și autorul = utilizatorul | DONE (PG17) | `report-definitions-rls.test.ts` („sistem: citibil…”, „rândurile gospodăriei: izolate…”), `report-definitions.test.ts` („citibile de toți membrii…”) | 2026-10-30 · programmer (F10-B) |
+| CHECK-uri plate pe forma regulilor, mărime, nume; plafon de 100 de rapoarte proprii (`report_limit`); numele unic fără diferență de litere | DONE (PG17) | `report-definitions-rls.test.ts` („CHECK-uri…”, „nume unic…”), `report-definitions.test.ts` | 2026-10-30 · programmer (F10-B) |
+| Conturile personale: agregatele (prețuri, inflație, rulare, previzualizare, export) exclud liniile bonurilor legate de contul personal al altui membru; filtrul este `EXISTS` pe tranzacție sub RLS, nu `LEFT JOIN … IS NULL`; bonurile neconfirmate nu intră | DONE (PG17) | `report-definitions.test.ts` („pungi: totalul exclude…”, „acoperirea proiecției…”), `prices-api.test.ts` („rulare: pungi — conturile personale…”) | 2026-10-30 · programmer (F10-B) |
+| Regulile se evaluează în cod (funcții pure), niciodată ca SQL/LIKE/regex construit din date de utilizator; Zod strict, limite de reguli, lungimi și linii citite (409 `too_many_lines`) | DONE (unitar + PG17) | `rules.ts`, `report-definitions.test.ts` („validare strictă…”), `prices-api.test.ts` | 2026-10-30 · programmer (F10-B) |
+| API: 401 pe fiecare endpoint nou, parametri strict validați, 404 uniform, `Idempotency-Key` la creare, rate limit pe rulare/previzualizare (429 + `Retry-After`) și export | DONE (PG17) | `prices-api.test.ts` („fără sesiune…”, „definiții…”, „rate limit…”) | 2026-10-30 · programmer (F10-B) |
+| Export CSV: BOM, escape, protecție contra formulelor, garda `Sec-Fetch-Site`, izolare; auditat fără conținut | DONE (PG17) | `prices-api.test.ts` („export CSV…”), `report-definitions.test.ts` („export CSV…”) | 2026-10-30 · programmer (F10-B) |
+| Sume pe `bigint` (fără float); medie ponderată; conversii doar între unități compatibile; monede separate; inflația cu exemplu numeric (421 pb) | DONE (unitar) | `units.test.ts`, `inflation.test.ts`, `prices.test.ts` | 2026-10-30 · programmer (F10-B) |
+| Rapoartele de sistem din bază = constanta din cod (șase rapoarte) | DONE (PG17) | `report-definitions.test.ts` („rândurile din bază sunt identice cu constanta din cod”) | 2026-10-30 · programmer (F10-B) |
+| pg_dump → restore: politicile, constrângerile și triggerele identice după 0018 | DONE (PG17, test de amprentă) | `migrate.test.ts` | 2026-10-30 · programmer (F10-B) |
+| Exportul GDPR include rapoartele create de utilizator (nu cele de sistem) | DONE (PG17) | `gdpr-api.test.ts`, `data-export.ts` | 2026-10-30 · programmer (F10-B) |
+| Performanță pe ~50.000 de linii | MĂSURAT, NU sub o secundă: 0,1–6,7 s (mediana) pe PG17 cu 256 MB; de reluat pe Supabase | `perf-prices.test.ts` (`FINET_PERF=1`), INFRA 4p | 2026-10-29 · programmer (F10-B) |
+| E2E (raport predefinit pe bonuri sintetice confirmate, raport propriu, export CSV, „date insuficiente”, izolare) și axe pe `/insights` | NOT RUN local (CI) | `e2e/insights.spec.ts`, `e2e/a11y.spec.ts` | — |
+| Revizuirea `security` a F10-B | TODO | agentul `security` | — |

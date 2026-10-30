@@ -14,6 +14,7 @@ import * as R from "./recurring-handlers";
 import * as S from "./statements-handlers";
 import * as MT from "./matching-handlers";
 import * as SH from "./shopping-handlers";
+import * as PR from "./prices-handlers";
 
 /**
  * Doar pentru testele de integrare ale API-ului `/api/v1`: construirea cererilor și sesiunile de
@@ -209,6 +210,17 @@ const OPERATION_OF = new Map<unknown, string>([
   [SH.matchShoppingItemHandler, "matchShoppingItem"],
   [SH.runShoppingComparisonHandler, "runShoppingComparison"],
   [SH.getShoppingComparisonHandler, "getShoppingComparison"],
+  [PR.productsHandler, "listProductPrices"],
+  [PR.seriesHandler, "getPriceSeries"],
+  [PR.inflationHandler, "getPersonalInflation"],
+  [PR.listReportDefinitionsHandler, "listReportDefinitions"],
+  [PR.createReportDefinitionHandler, "createReportDefinition"],
+  [PR.previewReportHandler, "previewReportRules"],
+  [PR.getReportDefinitionHandler, "getReportDefinition"],
+  [PR.patchReportDefinitionHandler, "patchReportDefinition"],
+  [PR.deleteReportDefinitionHandler, "deleteReportDefinition"],
+  [PR.runReportHandler, "runReportDefinition"],
+  [PR.exportReportHandler, "exportReportDefinitionCsv"],
 ]);
 
 /** Antetele obligatorii ale unui export CSV (F3-B). */

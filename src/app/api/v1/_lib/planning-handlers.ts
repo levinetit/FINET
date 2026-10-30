@@ -398,7 +398,7 @@ const DIALECT_QUERY = { dialect: "string" } as const;
  *   (adresa scrisă de utilizator); `same-site`, `cross-site` și antetul LIPSĂ → 403. Browserele
  *   actuale trimit antetul mereu; un client fără el folosește bearer.
  */
-function assertExportFetchSite(ctx: ApiContext): void {
+export function assertExportFetchSite(ctx: ApiContext): void {
   if (ctx.session.viaBearer) return;
   const site = ctx.request.headers.get("sec-fetch-site");
   if (site !== "same-origin" && site !== "none") {

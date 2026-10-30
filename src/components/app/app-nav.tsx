@@ -57,6 +57,8 @@ const ITEMS = [
   // Faza 8: familia (membri, invitații, solduri, decontări); pe telefon în „Mai mult”.
   { href: "/family", label: ro.nav.family, icon: UsersIcon, mobile: false },
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
+  // Faza 10: prețuri, inflație personală și rapoarte de micro-cheltuieli; pe telefon în „Mai mult”.
+  { href: "/insights", label: ro.nav.insights, icon: ChartIcon, mobile: false },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
   // Faza 9: setările aplicației (instalare PWA, aplicația Android) și ghidul.
   { href: "/settings", label: ro.nav.settings, icon: SettingsIcon, mobile: false },

@@ -77,6 +77,10 @@ export type AuditAction =
   | "receipt.matched"
   | "receipt.match_rejected"
   | "recurring.suggestion_dismissed"
+  // Rapoartele de micro-cheltuieli (F10-B): doar CINE și id-ul definiției, fără nume sau reguli.
+  | "report.created"
+  | "report.updated"
+  | "report.deleted"
   | "consent.granted"
   | "consent.revoked"
   // GDPR (F9-B): doar numărul de gospodării exportate, fără conținut.
@@ -103,7 +107,8 @@ export type AuditEvent = Readonly<{
     | "document"
     | "receipt"
     | "statement_import"
-    | "statement_upload";
+    | "statement_upload"
+    | "report_definition";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;

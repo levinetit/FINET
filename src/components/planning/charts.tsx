@@ -23,7 +23,7 @@ import { ro } from "@/messages/ro";
  * pentru cititoarele de ecran și pentru cine preferă cifrele.
  */
 
-function DataTable({
+export function DataTable({
   caption,
   head,
   rows,

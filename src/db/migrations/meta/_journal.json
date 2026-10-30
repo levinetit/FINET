@@ -120,6 +120,13 @@
       "when": 1794900000000,
       "tag": "0017_shopping_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0018_report_definitions",
+      "breakpoints": true
     }
   ]
 }
