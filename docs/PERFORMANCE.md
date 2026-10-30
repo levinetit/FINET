@@ -12,7 +12,7 @@ Creat în Faza 4 (ADR 0010). Două măsurători: mărimea JavaScript-ului trimis
 
 ```json bundle-budget
 {
-  "defaultKiB": 190,
+  "defaultKiB": 200,
   "routes": {
     "/login": 180,
     "/register": 180
@@ -30,6 +30,8 @@ Creat în Faza 4 (ADR 0010). Două măsurători: mărimea JavaScript-ului trimis
 | rute autentificate (`/accounts`, `/budgets`, `/categories`, `/dashboard`, `/goals`, `/profile`, `/reports`, `/tags`, `/transactions`, `/transfers/new`) | 158,9 – 165,4 | 190 |
 
 Pragurile inițiale din brief (250 KiB autentificat, 150 KiB pentru `/login`) erau provizorii: `/login` și `/register` măsoară deja 155,7 și 152,9 KiB, deci 150 nu era realist. Pragurile au fost fixate la valoarea măsurată + ~15 % (rotunjit la 10 KiB): 190 KiB implicit (cea mai mare rută: 165,4 KiB) și 180 KiB pentru `/login` și `/register`. Ele sunt un plafon împotriva regresiilor, nu un obiectiv: baza comună (React, Next, runtime) e ≈ 150 KiB.
+
+**Recalibrare în Faza 10 (2026-10-30):** pe `main` (ad4d2c2) rutele autentificate măsoară 168,8 – 189,7 KiB (`/import` 189,7), adică la marginea pragului de 190. F10-A (navigare, pictograme, mesaje, actualizări live) adaugă ≈ 2 KiB la baza comună (`/import` 191,8; `/receipts/[id]` 191,1 în CI), iar F10-B adaugă alte intrări de navigare și mesaje. Pragul implicit trece la 200 KiB (≈ + 4 % peste cea mai mare rută măsurată în CI), `/login` și `/register` rămân la 180. Rămâne un plafon împotriva regresiilor; după merge-ul A + B se re-măsoară în CI și, dacă baza comună crește în continuare, se caută reducerea încărcării (cauza exactă a celor ≈ 2 KiB nu a fost analizată) în loc să se mai ridice pragul.
 
 ## 2. Baza de date: 50.000 de tranzacții pe 12 luni
 
