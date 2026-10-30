@@ -99,13 +99,14 @@ test.describe(`administrare (${MODE})`, () => {
     await admin.getByTestId("ann-title").fill(title);
     await admin.getByTestId("ann-body").fill("Mentenanță programată.");
     await admin.getByTestId("ann-submit").click();
-    await expect(admin.getByText(title)).toBeVisible();
+    // Administratorul vede și bannerul (titlul apare de două ori): verificăm rândul din panou.
+    const row = admin.getByRole("listitem").filter({ hasText: title });
+    await expect(row).toBeVisible();
 
     const user = await pageAs(browser, baseURL!, "ask");
     await user.goto("/dashboard");
     await expect(user.getByTestId("announcements")).toContainText(title);
 
-    const row = admin.getByRole("listitem").filter({ hasText: title });
     await row.getByRole("button", { name: "Arhivează" }).click();
     await expect(row).toContainText("arhivat");
     await user.reload();
