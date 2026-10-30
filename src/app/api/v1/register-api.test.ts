@@ -322,6 +322,32 @@ describe.skipIf(!TEST_ADMIN_URL)("11-C: înregistrarea publică", () => {
     expect(verifier).not.toHaveBeenCalled();
   });
 
+  it("plafon pe adresă, indiferent de IP: peste 5 cereri/oră nu se mai trimite nimic, dar răspunsul rămâne 202", async () => {
+    // Plafonul per IP+email dezactivat practic, ca să rămână doar plafonul pe adresă.
+    const wide = {
+      ...authEnv(fx.db, {
+        config: testConfig({
+          APP_MODE: "saas",
+          SIGNUP_ENABLED: "1",
+          AUTH_EMAIL_MAX_REQUESTS: "100",
+        }),
+        mailer,
+      }),
+      mailer,
+      limits,
+    };
+    const email = fresh();
+    const before = mailer.sent.length;
+    for (let i = 0; i < 7; i++) {
+      const res = await register(wide, email);
+      expect(res.status).toBe(202);
+      expect(res.body).toEqual({ data: { status: "pending" } });
+    }
+    await waitForBackgroundMail();
+    expect(mailer.sent.filter((m) => m.to === email).length).toBe(5);
+    expect(mailer.sent.length - before).toBe(5);
+  });
+
   it("rate limiting pe email: a patra cerere în aceeași oră → 429 cu Retry-After", async () => {
     const email = fresh();
     for (let i = 0; i < 3; i++) expect((await register(open, email)).status).toBe(202);

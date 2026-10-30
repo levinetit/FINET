@@ -660,18 +660,6 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Curățarea conturilor neconfirmate | TODO (înainte de expunerea publică) | ADR 0029, limite | — |
 | Revizuirea `security` a Fazei 11-C1 | TODO | agentul `security` | — |
 
-## 34. Engleza pe paginile publice `saas` și expunerea publică (Faza 11-C3, 2026-10-31; ADR 0031)
-
-| Punct | Stare | Dovadă | Data · revizor |
-|---|---|---|---|
-| Limba din cookie explicit, niciodată din `Accept-Language`; valori alterate → română | DONE | `site-locale.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
-| `<html lang>` dinamic doar prin antet intern pus de proxy (suprascris la fiecare cerere); `en` doar în `saas`, pe cale publică | DONE | `site-locale.test.ts`, `a11y-rules.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
-| Paritate chei/liste între `ro.site` și `enSite`; fără valori goale sau diacritice românești în engleză | DONE | `site-locale.test.ts` | 2026-10-31 · agent |
-| Textele juridice englezești: aceleași secțiuni, datele firmei inserate, „to be completed” când lipsesc, ciornă sub `SITE_LEGAL_REVIEWED` | DONE (textul NU e revizuit juridic) | `site-locale.test.ts` | 2026-10-31 · agent |
-| Cookie-ul `finet_lang` nu conține date personale; politica (ciornă) îl menționează | DONE | `legal.ts` | 2026-10-31 · agent |
-| `proxy.ts` nealterat în privința Access: nicio cale nu devine publică | DONE | `proxy.test.ts` (neschimbat, verde) | 2026-10-31 · agent |
-| Expunerea publică: politica Access, excepția de cod, sursa IP, WAF, SMTP, juridic, marcă | TODO (decizii ale operatorului) | `docs/EXPOSURE.md` | — |
-| Revizuirea `security` a Fazei 11-C3 | TODO | agentul `security` | — |
 ## 33. Turnstile pe înregistrarea publică (Faza 11-C2, 2026-10-31; ADR 0030)
 
 | Punct | Stare | Dovadă | Data · revizor |
@@ -684,6 +672,18 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Widgetul real în browser (CI fără chei; regula „resurse doar de pe propriul domeniu”) | NEVERIFICAT în CI; de verificat manual cu cheile reale (INFRA 4v) | ADR 0030, limite | — |
 | Revizuirea `security` a Fazei 11-C2 | TODO | agentul `security` | — |
 
+## 34. Engleza pe paginile publice `saas` și expunerea publică (Faza 11-C3, 2026-10-31; ADR 0031)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Limba din cookie explicit, niciodată din `Accept-Language`; valori alterate → română | DONE | `site-locale.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
+| `<html lang>` dinamic doar prin antet intern pus de proxy (suprascris la fiecare cerere); `en` doar în `saas`, pe cale publică | DONE | `site-locale.test.ts`, `a11y-rules.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
+| Paritate chei/liste între `ro.site` și `enSite`; fără valori goale sau diacritice românești în engleză | DONE | `site-locale.test.ts` | 2026-10-31 · agent |
+| Textele juridice englezești: aceleași secțiuni, datele firmei inserate, „to be completed” când lipsesc, ciornă sub `SITE_LEGAL_REVIEWED` | DONE (textul NU e revizuit juridic) | `site-locale.test.ts` | 2026-10-31 · agent |
+| Cookie-ul `finet_lang` nu conține date personale; politica (ciornă) îl menționează | DONE | `legal.ts` | 2026-10-31 · agent |
+| `proxy.ts` nealterat în privința Access: nicio cale nu devine publică | DONE | `proxy.test.ts` (neschimbat, verde) | 2026-10-31 · agent |
+| Expunerea publică: politica Access, excepția de cod, sursa IP, WAF, SMTP, juridic, marcă | TODO (decizii ale operatorului) | `docs/EXPOSURE.md` | — |
+| Revizuirea `security` a Fazei 11-C3 | TODO | agentul `security` | — |
 ## 35. Autentificarea cu Google, doar conturi existente (Faza 11-C2, 2026-10-31; ADR 0032)
 
 | Punct | Stare | Dovadă | Data · revizor |
@@ -699,3 +699,12 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Testat cu Google REAL | NEVERIFICAT (fără credențiale); INFRA 4w | ADR 0032, limite | — |
 | Facebook | NEIMPLEMENTAT intenționat (ADR 0032 §5) | — | — |
 | Revizuirea `security` a Fazei 11-C2 (OAuth) | TODO | agentul `security` | — |
+
+## 36. Revizia de securitate a Fazei 11 (2026-10-30)
+
+Revizie manuală a înregistrării (ADR 0029), a panoului de administrare (ADR 0028), a Turnstile (0030) și a autentificării cu Google (0032).
+
+- [x] **Plafon pe adresă, indiferent de IP** (înregistrare): limitele existente sunt pe IP + email, deci o rețea de IP-uri putea inunda căsuța unei victime cu linkuri. Acum, după Turnstile, o adresă primește cel mult 5 cereri pe oră la nivel global (`MAILBOX_RULE`); peste plafon nu se scrie și nu se trimite nimic, iar răspunsul rămâne același 202 (fără semnal despre adresă). Test: `register-api.test.ts`.
+- [x] Verificat fără modificări: tokenul de înregistrare e legat de utilizator și email, expiră, se consumă o singură dată (`email_verified = false`), iar parola o alege proprietarul adresei; rutele `/admin/*` verifică administratorul în tranzacție și răspund 404; `admin_set_user_status` refuză propriul cont; schemele sunt stricte și nu primesc `userId`/`householdId`; rapoartele de erori au câmpuri restrânse prin regex.
+- [ ] **Risc rezidual: conturi neverificate neșterse.** Un cont creat la pasul 1 și neconfirmat rămâne în bază (utilizator + gospodărie, fără parolă, deci inutilizabil). Fără Turnstile și plafoane, un atacator cu multe IP-uri poate umfla tabelele. Atenuare actuală: Turnstile, plafon pe IP (10/oră; 60/oră comun fără IP de încredere) și pe adresă. Decizie pentru faza de expunere publică: job periodic de curățare (de ex. conturi neverificate mai vechi de 7 zile), cu ștergere în cascadă și test; nu s-a implementat aici fiindcă șterge date și cere o decizie explicită.
+- [ ] **Risc rezidual: un administrator poate dezactiva alt administrator.** `admin_set_user_status` blochează doar propriul cont. Cu un singur administrator (cazul curent) nu are efect; la mai mulți, de decis dacă o țintă administrator se refuză (cere migrație nouă).
