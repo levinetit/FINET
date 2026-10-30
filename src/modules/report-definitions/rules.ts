@@ -2,6 +2,34 @@ import { z } from "zod";
 
 import { normalizeProductName } from "@/modules/receipts/normalize";
 
+import {
+  DEFAULT_KINDS,
+  LINE_KINDS,
+  MAX_FILTER_IDS,
+  MAX_TERMS,
+  MAX_TERM_LENGTH,
+  MIN_TERM_LENGTH,
+  RULE_COMBINES,
+  RULE_TYPES,
+  RULE_VERSION,
+  type LineKindFilter,
+  type RuleType,
+} from "./rule-constants";
+
+export {
+  DEFAULT_KINDS,
+  LINE_KINDS,
+  MAX_FILTER_IDS,
+  MAX_TERMS,
+  MAX_TERM_LENGTH,
+  MIN_TERM_LENGTH,
+  RULE_COMBINES,
+  RULE_TYPES,
+  RULE_VERSION,
+  type LineKindFilter,
+  type RuleType,
+};
+
 /**
  * Regulile de potrivire ale rapoartelor de micro-cheltuieli (Faza 10, F10-B; ADR 0023). Funcții
  * PURE, fără acces la bază: textul regulilor nu ajunge niciodată în SQL (interogarea aduce
@@ -20,25 +48,7 @@ import { normalizeProductName } from "@/modules/receipts/normalize";
  * (numele se desparte după spații).
  */
 
-/**
- * Fără import din `@/db/schema` (modulul se folosește și în componentele de client): copiile
- * lui `LINE_KINDS` și `RULE_VERSION` sunt verificate de teste.
- */
-export const RULE_VERSION = 1;
-export const LINE_KINDS = ["product", "discount", "deposit_sgr", "bag", "other"] as const;
-
-export const RULE_TYPES = ["exact", "prefix", "contains", "token"] as const;
-export type RuleType = (typeof RULE_TYPES)[number];
-export const RULE_COMBINES = ["all", "any"] as const;
-
-/** Plafoanele (decizia mea, ADR 0023). */
-export const MAX_TERMS = 20;
-export const MAX_TERM_LENGTH = 60;
-export const MIN_TERM_LENGTH = 2;
-export const MAX_FILTER_IDS = 10;
-
 export type RuleTerm = Readonly<{ type: RuleType; value: string }>;
-export type LineKindFilter = (typeof LINE_KINDS)[number];
 
 export type ReportRules = Readonly<{
   v: typeof RULE_VERSION;
@@ -106,12 +116,6 @@ const idsSchema = z
   .array(z.uuid().transform((v) => v.toLowerCase()))
   .max(MAX_FILTER_IDS)
   .refine((l) => uniqueBy(l, (x) => x), { message: "Valori repetate." });
-
-/**
- * Tipurile de linii implicite ale unui raport nou: produsele, pungile și „altele”. Reducerile și
- * garanțiile SGR se aleg explicit (scad din total, respectiv sunt altceva decât o cumpărătură).
- */
-export const DEFAULT_KINDS: readonly LineKindFilter[] = ["product", "bag", "other"];
 
 export const reportRulesSchema = z.strictObject({
   v: z.literal(RULE_VERSION),

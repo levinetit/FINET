@@ -23,7 +23,7 @@ import {
   RULE_TYPES,
   type LineKindFilter,
   type RuleType,
-} from "@/modules/report-definitions/rules";
+} from "@/modules/report-definitions/rule-constants";
 
 import { goToLogin } from "../../_lib/api-client";
 import { type FormErrors, NO_ERRORS, apiErrors } from "../../_lib/ledger-ui";
