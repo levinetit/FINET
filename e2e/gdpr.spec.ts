@@ -1,6 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 
-import { MODE, login, loginOk, password, userEmail } from "./fixtures";
+import { MODE, login, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * GDPR și statistici (Faza 9, F9-B, ADR 0021; proiectul `gdpr`). Același server de dezvoltare și

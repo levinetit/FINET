@@ -1,4 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+
+import { test } from "./fixtures";
 
 test("pagina principală duce la login, care afișează logo-ul FINET", async ({ page }) => {
   const response = await page.goto("/");
