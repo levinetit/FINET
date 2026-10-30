@@ -81,3 +81,7 @@ export function excelSerial(date: string): number {
   const days = Math.round((ms - Date.UTC(1899, 11, 30)) / 86_400_000);
   return days;
 }
+
+export const XLSX_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export const PDF_CONTENT_TYPE = "application/pdf";

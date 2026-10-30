@@ -11,6 +11,7 @@ import {
 import { accountCreateSchema, accountUpdateSchema } from "@/modules/accounts/accounts.schema";
 import { budgetCreateSchema, budgetUpdateSchema } from "@/modules/budgets/budgets.schema";
 import { MAX_TOP_CATEGORIES } from "@/modules/dashboard/dashboard.schema";
+import { PDF_CONTENT_TYPE, XLSX_CONTENT_TYPE } from "@/lib/export-table";
 import { CSV_DIALECTS } from "@/modules/exports/csv";
 import {
   goalContributionSchema,
@@ -246,6 +247,14 @@ const csvSuccess = (description: string) =>
     schema: null,
     csv: true,
     description: `${description} UTF-8 cu BOM, CRLF, ghilimele RFC 4180; celulele de text liber care încep cu = + - @ TAB CR primesc un apostrof. Antete: \`Content-Disposition: attachment\` (nume fix), \`Cache-Control: no-store\`, \`X-Content-Type-Options: nosniff\`. Rate limit propriu: 10/min per utilizator.`,
+  }) as const;
+
+const fileSuccess = (format: "xlsx" | "pdf", file: string, rows: string) =>
+  ({
+    status: 200,
+    schema: null,
+    binary: [format === "xlsx" ? XLSX_CONTENT_TYPE : PDF_CONTENT_TYPE],
+    description: `Fișierul \`${file}\`: ${rows} Sume exacte, monedele nu se însumează. Antete: \`Content-Disposition: attachment\` (nume fix), \`Cache-Control: no-store\`, \`X-Content-Type-Options: nosniff\`. Rate limit propriu: 10/min per utilizator.`,
   }) as const;
 
 const pathOf = (base: string, suffix = "") => `${base}/{id}${suffix}`;
@@ -1948,6 +1957,69 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Exportul CSV al bugetelor active vizibile, cu starea într-o lună.",
     query: [MONTH_PARAM, DIALECT_PARAM],
     success: csvSuccess("Fișierul `finet-bugete.csv`."),
+    errors: [VALIDATION, FORBIDDEN, REUSED],
+  },
+  // --- Exporturile Excel și PDF (Faza 10, F10-C; ADR 0024) -------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/exports/transactions.xlsx",
+    operationId: "exportTransactionsXlsx",
+    tag: "exports",
+    summary: "Exportul Excel al tranzacțiilor (filtrele listei).",
+    description:
+      "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 50.000 de rânduri. Peste plafon → 409 `export_too_large`. Suma are semn: cheltuielile și transferurile de ieșire sunt negative.",
+    query: [...TRANSACTION_FILTERS],
+    success: fileSuccess("xlsx", "finet-tranzactii.xlsx", "una pe rând."),
+    errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/goals.xlsx",
+    operationId: "exportGoalsXlsx",
+    tag: "exports",
+    summary: "Exportul Excel al obiectivelor (toate stările).",
+    success: fileSuccess("xlsx", "finet-obiective.xlsx", "un obiectiv pe rând."),
+    errors: [VALIDATION, FORBIDDEN, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/budgets.xlsx",
+    operationId: "exportBudgetsXlsx",
+    tag: "exports",
+    summary: "Exportul Excel al bugetelor active vizibile, cu starea într-o lună.",
+    query: [MONTH_PARAM],
+    success: fileSuccess("xlsx", "finet-bugete.xlsx", "un buget pe rând."),
+    errors: [VALIDATION, FORBIDDEN, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/transactions.pdf",
+    operationId: "exportTransactionsPdf",
+    tag: "exports",
+    summary: "Exportul PDF al tranzacțiilor (filtrele listei).",
+    description:
+      "Aceleași filtre ca `GET /transactions`, fără `sort`, `cursor`, `limit` (ordine cronologică). Cel mult 3.000 de rânduri (pentru mai multe, Excel sau CSV). Peste plafon → 409 `export_too_large`. Suma are semn: cheltuielile și transferurile de ieșire sunt negative.",
+    query: [...TRANSACTION_FILTERS],
+    success: fileSuccess("pdf", "finet-tranzactii.pdf", "una pe rând."),
+    errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/goals.pdf",
+    operationId: "exportGoalsPdf",
+    tag: "exports",
+    summary: "Exportul PDF al obiectivelor (toate stările).",
+    success: fileSuccess("pdf", "finet-obiective.pdf", "un obiectiv pe rând."),
+    errors: [VALIDATION, FORBIDDEN, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/budgets.pdf",
+    operationId: "exportBudgetsPdf",
+    tag: "exports",
+    summary: "Exportul PDF al bugetelor active vizibile, cu starea într-o lună.",
+    query: [MONTH_PARAM],
+    success: fileSuccess("pdf", "finet-bugete.pdf", "un buget pe rând."),
     errors: [VALIDATION, FORBIDDEN, REUSED],
   },
   // --- Prețuri, inflație, rapoarte de micro-cheltuieli (Faza 10, F10-B; ADR 0023) -----------

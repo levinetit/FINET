@@ -166,7 +166,8 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
     );
     success.headers = {
       "Content-Disposition": {
-        description: '`attachment; filename="bon-<id>.<ext>"` (nume generat de server).',
+        description:
+          '`attachment; filename="…"` (nume generat de server, fără date ale utilizatorului).',
         schema: { type: "string" },
       },
       "X-Content-Type-Options": { description: "`nosniff`.", schema: { type: "string" } },

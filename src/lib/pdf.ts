@@ -4,6 +4,8 @@ import { deflateSync } from "node:zlib";
 
 import { type ExportTable, type TableKind, assertTable } from "./export-table";
 
+export { PDF_CONTENT_TYPE } from "./export-table";
+
 /**
  * Scriitorul de PDF pentru exporturile din Faza 10 (F10-C; ADR 0024), FĂRĂ dependențe externe: un
  * tabel pe pagini A4, cu antetul repetat, text care se rupe pe rânduri și numerotarea paginilor.
@@ -419,5 +421,3 @@ function assemble(
   parts.push(Buffer.from(xref, "latin1"));
   return Buffer.concat(parts);
 }
-
-export const PDF_CONTENT_TYPE = "application/pdf";

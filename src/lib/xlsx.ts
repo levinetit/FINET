@@ -4,6 +4,8 @@ import { deflateRawSync } from "node:zlib";
 
 import { type ExportTable, assertTable, excelSerial } from "./export-table";
 
+export { XLSX_CONTENT_TYPE } from "./export-table";
+
 /**
  * Scriitorul de fișiere Excel (.xlsx, Office Open XML) pentru exporturile din Faza 10 (F10-C;
  * ADR 0024), FĂRĂ dependențe externe: un arhiv ZIP cu `node:zlib` și câteva fișiere XML.
@@ -284,6 +286,3 @@ export function tableToXlsx(table: ExportTable): Uint8Array {
     { name: "xl/worksheets/sheet1.xml", data: utf8(sheetXml(table)) },
   ]);
 }
-
-export const XLSX_CONTENT_TYPE =
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

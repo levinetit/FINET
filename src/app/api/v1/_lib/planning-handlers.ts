@@ -21,7 +21,15 @@ import {
   exportBudgetsCsv,
   exportGoalsCsv,
   exportTransactionsCsv,
+  MAX_EXPORT_ROWS,
 } from "@/modules/exports/exports.service";
+import {
+  exportBudgetsTable,
+  exportGoalsTable,
+  exportTransactionsTable,
+} from "@/modules/exports/tables.service";
+import { PDF_CONTENT_TYPE, PDF_MAX_ROWS, tableToPdf } from "@/lib/pdf";
+import { XLSX_CONTENT_TYPE, tableToXlsx } from "@/lib/xlsx";
 import { goalToJson } from "@/modules/goals/goals.schema";
 import {
   contributeToGoal,
@@ -462,3 +470,90 @@ export function exportBudgetsHandler(request: Request, d: ApiDeps): Promise<Resp
     return csvText("budgets", text);
   });
 }
+
+// --- Exporturile Excel și PDF (Faza 10, F10-C; ADR 0024) -----------------------------------
+
+/** Numele fișierelor Excel/PDF: fixe, fără date ale utilizatorului. */
+export const TABLE_EXPORT_FILENAMES = {
+  transactions: "finet-tranzactii",
+  goals: "finet-obiective",
+  budgets: "finet-bugete",
+} as const;
+
+export type TableExportFormat = "xlsx" | "pdf";
+type TableExportKind = keyof typeof TABLE_EXPORT_FILENAMES;
+
+/** Răspunsul binar al unui export: nume fix, `no-store`, `nosniff`. */
+function fileResponse(name: string, format: TableExportFormat, bytes: Uint8Array): Response {
+  return new Response(new Uint8Array(bytes), {
+    status: 200,
+    headers: {
+      "Content-Type": format === "xlsx" ? XLSX_CONTENT_TYPE : PDF_CONTENT_TYPE,
+      "Content-Disposition": `attachment; filename="${name}.${format}"`,
+      "Content-Length": String(bytes.byteLength),
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+/** Plafonul rândurilor: Excel ca CSV-ul, PDF mult mai mic (un document de citit, nu de prelucrat). */
+function tableRowCap(d: ApiDeps, format: TableExportFormat): number {
+  const csvCap = d.exportMaxRows ?? MAX_EXPORT_ROWS;
+  return format === "pdf" ? Math.min(csvCap, PDF_MAX_ROWS) : csvCap;
+}
+
+function tableOf(format: TableExportFormat, table: Parameters<typeof tableToXlsx>[0]): Uint8Array {
+  return format === "xlsx" ? tableToXlsx(table) : tableToPdf(table);
+}
+
+export function exportTableHandler(
+  request: Request,
+  d: ApiDeps,
+  kind: TableExportKind,
+  format: TableExportFormat,
+): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const options = {
+      format,
+      maxRows: tableRowCap(d, format),
+      ...(d.exportPageSize === undefined ? {} : { pageSize: d.exportPageSize }),
+    };
+    if (kind === "transactions") {
+      const rawQuery = transactionQueryOf(readQuery(request, TRANSACTION_FILTER_QUERY));
+      const hh = await exportGuard(ctx);
+      const table = await exportTransactionsTable(
+        planning(d.db, ctx),
+        ctx.actor,
+        hh,
+        rawQuery,
+        options,
+      );
+      return fileResponse(TABLE_EXPORT_FILENAMES[kind], format, tableOf(format, table));
+    }
+    if (kind === "goals") {
+      readQuery(request, {});
+      const hh = await exportGuard(ctx);
+      const table = await exportGoalsTable(planning(d.db, ctx), ctx.actor, hh, options);
+      return fileResponse(TABLE_EXPORT_FILENAMES[kind], format, tableOf(format, table));
+    }
+    const query = readQuery(request, { month: "string" });
+    const hh = await exportGuard(ctx);
+    const month = await monthOf(ctx, hh, query.month);
+    const table = await exportBudgetsTable(planning(d.db, ctx), ctx.actor, hh, { month }, options);
+    return fileResponse(TABLE_EXPORT_FILENAMES[kind], format, tableOf(format, table));
+  });
+}
+
+export const exportTransactionsXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "transactions", "xlsx");
+export const exportTransactionsPdfHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "transactions", "pdf");
+export const exportGoalsXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "goals", "xlsx");
+export const exportGoalsPdfHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "goals", "pdf");
+export const exportBudgetsXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "budgets", "xlsx");
+export const exportBudgetsPdfHandler = (request: Request, d: ApiDeps) =>
+  exportTableHandler(request, d, "budgets", "pdf");
