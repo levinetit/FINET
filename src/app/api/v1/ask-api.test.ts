@@ -20,6 +20,10 @@ import {
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
 
+// Forma răspunsului e verificată prin contract (`assertContract`); în aserțiuni se citește liber.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Loose = Record<string, any>;
+
 /**
  * „Întreabă FINET” (F10-C; ADR 0025) prin API: handler real, PostgreSQL real, aplicația ca
  * `finet_app`. Cifrele vin din baza de date sub RLS (conturile personale ale altor membri nu
@@ -43,7 +47,7 @@ describe.skipIf(!TEST_ADMIN_URL)("POST /api/v1/ask pe PostgreSQL real", () => {
     const res = await AH.askHandler(apiRequest("/api/v1/ask", init), deps);
     await assertContract(AH.askHandler as never, res);
     const body = await readJson(res);
-    return { status: res.status, body, data: (body as { data?: Record<string, any> }).data };
+    return { status: res.status, body, data: (body as { data?: Loose }).data };
   }
 
   beforeAll(async () => {
@@ -288,10 +292,9 @@ describe.skipIf(!TEST_ADMIN_URL)("POST /api/v1/ask pe PostgreSQL real", () => {
       );
       await assertContract(SM.monthlySummaryHandler as never, res);
       const body = await readJson(res);
-      return { status: res.status, data: (body as { data?: Record<string, any> }).data };
+      return { status: res.status, data: (body as { data?: Loose }).data };
     }
-    const textOf = (d: Record<string, any>) =>
-      (d.lines as { text: string }[]).map((l) => l.text).join("\n");
+    const textOf = (d: Loose) => (d.lines as { text: string }[]).map((l) => l.text).join("\n");
 
     it("martie: totaluri, categorii, comerciant, eticheta fixă", async () => {
       const r = await summary("?month=2026-03");
