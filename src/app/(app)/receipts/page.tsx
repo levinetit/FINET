@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AccountingExport } from "@/components/planning/accounting-export";
 import { Alert } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { addMonths, currentMonth, monthBounds } from "@/lib/calendar";
 import { cn } from "@/lib/utils";
 import { ro } from "@/messages/ro";
 import { type ReceiptJson, receiptToJson } from "@/modules/receipts/receipts.schema";
@@ -98,6 +100,8 @@ export default async function ReceiptsPage({
   // „Istoricul” fără filtre nu repetă bonurile de verificat (sunt deja sus).
   const rows = filtered ? history : history.filter((r) => r.status !== "needs_review");
 
+  // Perioada implicită a exportului pentru contabil: luna calendaristică anterioară.
+  const lastMonth = monthBounds(addMonths(currentMonth(new Date()), -1));
   return (
     <>
       {header}
@@ -191,6 +195,13 @@ export default async function ReceiptsPage({
             <ReceiptTable rows={rows} categoryName={categoryName} testId="receipts-list" />
           )}
           {more ? <p className="mt-3 text-sm text-muted-foreground">{t.searchHint}</p> : null}
+        </Card>
+
+        <Card aria-labelledby="accounting-title">
+          <CardHeader>
+            <CardTitle id="accounting-title">{ro.exports.accounting.title}</CardTitle>
+          </CardHeader>
+          <AccountingExport defaultFrom={lastMonth.from} defaultTo={lastMonth.to} />
         </Card>
       </div>
     </>

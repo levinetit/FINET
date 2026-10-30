@@ -273,6 +273,24 @@ describe.skipIf(!TEST_ADMIN_URL)("export contabil pe PostgreSQL real", () => {
     }
   });
 
+  it("dialect necunoscut → 400 (înainte de orice citire); cele valide trec", async () => {
+    const bad = await call(
+      P.exportAccountingCsvHandler,
+      `/api/v1/exports/accounting.csv?${RANGE}&dialect=xx`,
+      { bearer: A.bearer },
+    );
+    expect(bad.status).toBe(400);
+    expect(JSON.parse(bad.text).error.fields.dialect).toBeTruthy();
+    for (const dialect of ["rfc4180", "ro"]) {
+      const ok = await call(
+        P.exportAccountingCsvHandler,
+        `/api/v1/exports/accounting.csv?${RANGE}&dialect=${dialect}`,
+        { bearer: A.bearer },
+      );
+      expect(ok.status, dialect).toBe(200);
+    }
+  });
+
   it("plafon: peste maxRows → 409 export_too_large (fără conținut)", async () => {
     const small: ApiDeps = { ...env, exportMaxRows: 1 };
     const r = await call(

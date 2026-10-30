@@ -24,6 +24,7 @@ import {
   MAX_EXPORT_ROWS,
 } from "@/modules/exports/exports.service";
 import { exportAccountingTable } from "@/modules/exports/accounting.service";
+import { dialectOf } from "@/modules/exports/exports.service";
 import { tableToCsv } from "@/modules/exports/table-csv";
 import {
   exportBudgetsTable,
@@ -574,6 +575,11 @@ export function exportAccountingHandler(
       to: "string",
       ...(format === "csv" ? DIALECT_QUERY : {}),
     });
+    // Dialect necunoscut → 400 (ca la celelalte exporturi CSV), înainte de orice citire.
+    const dialect =
+      format === "csv"
+        ? dialectOf({ dialect: query.dialect as CsvDialect | undefined })
+        : undefined;
     const hh = await exportGuard(ctx);
     const table = await exportAccountingTable(
       planning(d.db, ctx),
@@ -587,10 +593,7 @@ export function exportAccountingHandler(
       },
     );
     if (format === "csv") {
-      return csvText(
-        "accounting",
-        tableToCsv(table, (query.dialect as CsvDialect | undefined) ?? "rfc4180"),
-      );
+      return csvText("accounting", tableToCsv(table, dialect));
     }
     const name = kind === "accounting" ? "finet-contabilitate" : "finet-bonuri";
     return fileResponse(name, format, tableOf(format, table));
