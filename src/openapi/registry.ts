@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   CATEGORY_KINDS,
   GOAL_STATUSES,
+  SHOPPING_LIST_STATUSES,
   RECURRING_STATUSES,
   TRANSACTION_SOURCES,
   TRANSACTION_TYPES,
@@ -17,6 +18,16 @@ import {
   goalUpdateSchema,
 } from "@/modules/goals/goals.schema";
 import { tagCreateSchema, tagUpdateSchema } from "@/modules/tags/tags.schema";
+import {
+  comparisonRunSchema,
+  itemCreateSchema,
+  itemUpdateSchema,
+  listCopySchema,
+  listCreateSchema,
+  listUpdateSchema,
+  matchActionSchema,
+  reorderSchema,
+} from "@/modules/shopping/shopping.schema";
 import { changePasswordSchema } from "@/modules/auth/password.schema";
 import { categoryCreateSchema, categoryUpdateSchema } from "@/modules/categories/categories.schema";
 import { profilePatchSchema } from "@/modules/profile/profile.schema";
@@ -48,6 +59,7 @@ import {
   splitSetSchema,
 } from "@/modules/family/family.schema";
 
+import { PRICES_OPERATIONS } from "./prices-operations";
 import {
   coverageRowSchema,
   matchDecisionResultSchema,
@@ -64,6 +76,12 @@ import {
   inviteSchema,
   memberExitResultSchema,
   settlementSchema,
+  shoppingComparisonSchema,
+  shoppingItemSchema,
+  shoppingListDetailSchema,
+  shoppingListSchema,
+  shoppingReceiptChoiceSchema,
+  shoppingSuggestionSchema,
   splitSchema,
   accountSchema,
   aiUsageSchema,
@@ -900,6 +918,188 @@ export const OPERATIONS: readonly Operation[] = [
     body: { schema: z.strictObject({}), optional: true },
     success: { status: 200, schema: dataOf(goalSchema), description: "Obiectivul." },
     errors: [FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE],
+  },
+  // --- Listele de cumpărături (Faza 10, F10-A; ADR 0022) ---------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/shopping-lists",
+    operationId: "listShoppingLists",
+    tag: "shopping",
+    summary: "Listele vizibile (comune + personale ale tale), cu numărătorile.",
+    description:
+      "Lista personală a altui membru nu apare niciodată (nici ca id): vizibilitatea o impune RLS în bază.",
+    query: [
+      { name: "status", schema: z.enum(SHOPPING_LIST_STATUSES), description: "Doar o stare." },
+    ],
+    success: { status: 200, schema: dataOf(z.array(shoppingListSchema)), description: "Listele." },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/shopping-lists",
+    operationId: "createShoppingList",
+    tag: "shopping",
+    summary: "Creează o listă (`personal: true` = doar a ta), opțional cu articole.",
+    description:
+      "Plafoane: 100 de liste vizibile și 300 de articole pe listă (409 `shopping_list_limit`). Corpul cererii are cel mult 16 KB.",
+    body: { schema: listCreateSchema },
+    success: {
+      status: 201,
+      schema: dataOf(shoppingListDetailSchema),
+      description: "Lista creată, cu articolele.",
+    },
+    errors: [...IDEMPOTENT_ERRORS],
+    idempotent: true,
+  },
+  {
+    method: "GET",
+    path: "/api/v1/shopping-lists/suggestions",
+    operationId: "getShoppingSuggestions",
+    tag: "shopping",
+    summary: "Produsele cumpărate des de gospodărie (nume normalizate), opțional după prefix.",
+    description:
+      "Calculate în SQL din liniile `product` ale bonurilor confirmate din ultimul an; fără LLM, fără sume sau comercianți. Rate limit: 60/min per utilizator.",
+    query: [{ name: "q", schema: z.string().max(60), description: "Prefixul unui cuvânt." }],
+    success: {
+      status: 200,
+      schema: dataOf(z.array(shoppingSuggestionSchema)),
+      description: "Cel mult 12 produse.",
+    },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/shopping-lists/receipts",
+    operationId: "listShoppingReceipts",
+    tag: "shopping",
+    summary: "Bonurile confirmate recente, pentru comparația cu o listă.",
+    success: {
+      status: 200,
+      schema: dataOf(z.array(shoppingReceiptChoiceSchema)),
+      description: "Cel mult 20 de bonuri.",
+    },
+    errors: [VALIDATION, REUSED],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/shopping-lists"),
+    operationId: "getShoppingList",
+    tag: "shopping",
+    summary: "O listă cu articolele ei.",
+    success: { status: 200, schema: dataOf(shoppingListDetailSchema), description: "Lista." },
+    errors: [NOT_FOUND, REUSED],
+  },
+  {
+    method: "PATCH",
+    path: pathOf("/api/v1/shopping-lists"),
+    operationId: "patchShoppingList",
+    tag: "shopping",
+    summary: "Redenumește, arhivează/reactivează sau face comună o listă personală.",
+    description:
+      "Singura schimbare de vizibilitate permisă: personală → comună (`shared: true`, idempotent). O listă comună nu devine personală.",
+    body: { schema: listUpdateSchema },
+    success: { status: 200, schema: dataOf(shoppingListSchema), description: "Lista." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "DELETE",
+    path: pathOf("/api/v1/shopping-lists"),
+    operationId: "deleteShoppingList",
+    tag: "shopping",
+    summary: "Șterge definitiv lista cu articolele ei (auditat doar pentru listele comune).",
+    success: { status: 204, schema: null, description: "Ștearsă." },
+    errors: [FORBIDDEN, NOT_FOUND, MEDIA],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/shopping-lists", "/copy"),
+    operationId: "copyShoppingList",
+    tag: "shopping",
+    summary: "Copiază lista: aceleași articole, nebifate, fără potriviri.",
+    description: "Vizibilitatea implicită e a sursei (`personal` o poate schimba).",
+    body: { schema: listCopySchema, optional: true },
+    success: { status: 201, schema: dataOf(shoppingListDetailSchema), description: "Copia." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "PUT",
+    path: pathOf("/api/v1/shopping-lists", "/order"),
+    operationId: "reorderShoppingItems",
+    tag: "shopping",
+    summary: "Ordinea articolelor: o permutare exactă a celor din listă.",
+    description:
+      "Dacă mulțimea diferă (altcineva a adăugat/șters între timp) → 409 `order_mismatch`.",
+    body: { schema: reorderSchema },
+    success: { status: 200, schema: dataOf(shoppingListDetailSchema), description: "Lista." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/shopping-lists", "/items"),
+    operationId: "addShoppingItem",
+    tag: "shopping",
+    summary: "Adaugă un articol la sfârșitul listei.",
+    description:
+      "`quantity` e text zecimal (sau număr JSON exact), > 0, cel mult 3 zecimale. Plafon: 300 de articole (409 `shopping_item_limit`).",
+    body: { schema: itemCreateSchema },
+    success: { status: 201, schema: dataOf(shoppingItemSchema), description: "Articolul." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "PATCH",
+    path: `/api/v1/shopping-lists/${PATH_ID}/items/{itemId}`,
+    operationId: "patchShoppingItem",
+    tag: "shopping",
+    summary: "Modifică un articol; `checked: true|false` este starea bifării.",
+    description:
+      "Bifarea e o stare explicită, nu un comutator: a doua cerere identică nu schimbă nimic (rămân `checkedAt` și autorul primei bifări). O redenumire șterge o propunere sau o respingere, dar nu o confirmare.",
+    body: { schema: itemUpdateSchema },
+    success: { status: 200, schema: dataOf(shoppingItemSchema), description: "Articolul." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "DELETE",
+    path: `/api/v1/shopping-lists/${PATH_ID}/items/{itemId}`,
+    operationId: "deleteShoppingItem",
+    tag: "shopping",
+    summary: "Șterge un articol.",
+    success: { status: 204, schema: null, description: "Șters." },
+    errors: [FORBIDDEN, NOT_FOUND, MEDIA],
+  },
+  {
+    method: "POST",
+    path: `/api/v1/shopping-lists/${PATH_ID}/items/{itemId}/match`,
+    operationId: "matchShoppingItem",
+    tag: "shopping",
+    summary: "Confirmă, respinge, șterge sau corectează potrivirea unui articol cu o linie de bon.",
+    description:
+      "`confirm`/`reject` cer o propunere (409 `no_suggestion`); `set` leagă manual de o linie `product` a unui bon confirmat (409 `line_already_matched` dacă e confirmată pentru alt articol). Nu modifică niciodată bonul sau tranzacția; confirmările și respingerile alimentează propunerile viitoare.",
+    body: { schema: matchActionSchema },
+    success: { status: 200, schema: dataOf(shoppingItemSchema), description: "Articolul." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "POST",
+    path: `/api/v1/shopping-lists/${PATH_ID}/comparisons`,
+    operationId: "runShoppingComparison",
+    tag: "shopping",
+    summary: "Compară lista cu un bon confirmat: propune potrivirile și întoarce rezultatul.",
+    description:
+      "Potrivirea o face codul (nume normalizate, token overlap, trigrame, istoricul confirmărilor). Idempotentă; nu atinge deciziile tale (articole confirmate sau respinse pentru acest bon). Perechile ambigue pot fi trimise, DOAR cu consimțământul `external_ai`, la pasul opțional cu LLM din worker (`ai.status`). Bon neconfirmat → 409 `receipt_not_confirmed`. Rate limit: 20 / 10 min per utilizator.",
+    body: { schema: comparisonRunSchema },
+    success: { status: 200, schema: dataOf(shoppingComparisonSchema), description: "Comparația." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND, CONFLICT],
+  },
+  {
+    method: "GET",
+    path: `/api/v1/shopping-lists/${PATH_ID}/comparisons/{receiptId}`,
+    operationId: "getShoppingComparison",
+    tag: "shopping",
+    summary: "Comparația persistată a listei cu bonul (fără scrieri).",
+    success: { status: 200, schema: dataOf(shoppingComparisonSchema), description: "Comparația." },
+    errors: [VALIDATION, NOT_FOUND, CONFLICT, REUSED],
   },
   // --- Documentele și bonurile (Faza 6) ------------------------------------------------------
   {
@@ -1750,6 +1950,8 @@ export const OPERATIONS: readonly Operation[] = [
     success: csvSuccess("Fișierul `finet-bugete.csv`."),
     errors: [VALIDATION, FORBIDDEN, REUSED],
   },
+  // --- Prețuri, inflație, rapoarte de micro-cheltuieli (Faza 10, F10-B; ADR 0023) -----------
+  ...PRICES_OPERATIONS,
 ];
 
 /** Operația după metodă și cale (pentru testele de contract). */

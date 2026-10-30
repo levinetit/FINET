@@ -747,6 +747,11 @@ describe("furnizorul AI (F6-B, ADR 0014)", () => {
     ]);
     // Implicit json_object (Gemini prin LiteLLM refuză schema FINET în json_schema).
     expect(parseConfig(DEV).ai.responseFormat).toBe("json_object");
+    // Faza 10: pasul cu LLM al comparației listă ↔ bon e oprit implicit; doar „1” îl pornește.
+    expect(parseConfig(DEV).ai.listMatch).toBe(false);
+    expect(parseConfig({ ...DEV, AI_LIST_MATCH: "0" }).ai.listMatch).toBe(false);
+    expect(parseConfig({ ...DEV, AI_LIST_MATCH: "1" }).ai.listMatch).toBe(true);
+    expect(issuesOf({ ...DEV, AI_LIST_MATCH: "da" })).toEqual(["AI_LIST_MATCH"]);
     expect(parseConfig({ ...DEV, AI_RESPONSE_FORMAT: "json_schema" }).ai.responseFormat).toBe(
       "json_schema",
     );

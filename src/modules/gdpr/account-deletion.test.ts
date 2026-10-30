@@ -15,6 +15,7 @@ import { setTransactionSplit } from "@/modules/family/splits.service";
 import { type FamilyFixture, createFamilyFixture } from "@/modules/family/testing";
 import { sqlState } from "@/modules/ledger/testing";
 import { createTransaction } from "@/modules/transactions/transactions.service";
+import { createList } from "@/modules/shopping/shopping.service";
 import { createTransfer } from "@/modules/transfers/transfers.service";
 
 import {
@@ -398,5 +399,40 @@ describe.skipIf(!TEST_ADMIN_URL)("ștergerea contului (Postgres real, finet_app)
     } finally {
       info.mockRestore();
     }
+  });
+  it("listele de cumpărături: cele personale (și din gospodării părăsite) se șterg, cele comune rămân celorlalți", async () => {
+    const owner = await user("ListOwner");
+    const a = await user("ListA");
+    const hh = await household(owner, "Familia Liste");
+    await f.addMember(owner, hh, a);
+    const own = await createList(deps(), a, hh, {
+      name: "Personală A",
+      personal: true,
+      items: [{ name: "ceva" }],
+    });
+    const common = await createList(deps(), a, hh, { name: "Comună", items: [{ name: "pâine" }] });
+    // O a doua gospodărie, unde A are tot o listă personală, apoi o părăsește înainte de ștergere.
+    const other = await household(owner, "Altă casă");
+    await f.addMember(owner, other, a);
+    const left = await createList(deps(), a, other, { name: "Din casa părăsită", personal: true });
+    await leaveHousehold(deps(), a, other);
+    expect(
+      await f.admin`select id from finet.shopping_lists where id = ${left.list.id}`,
+    ).toHaveLength(1);
+    const r = await del(new MemoryStorage(), a);
+    expect(r.deletedHouseholds).toBe(0);
+    for (const id of [own.list.id, left.list.id]) {
+      expect(await f.admin`select id from finet.shopping_lists where id = ${id}`).toHaveLength(0);
+    }
+    expect(
+      await f.admin`select id from finet.shopping_list_items where list_id = ${own.list.id}`,
+    ).toHaveLength(0);
+    // Lista comună rămâne (autorul devine NULL sau utilizatorul anonimizat), cu articolele ei.
+    expect(
+      await f.admin`select id from finet.shopping_lists where id = ${common.list.id}`,
+    ).toHaveLength(1);
+    expect(
+      await f.admin`select id from finet.shopping_list_items where list_id = ${common.list.id}`,
+    ).toHaveLength(1);
   });
 });

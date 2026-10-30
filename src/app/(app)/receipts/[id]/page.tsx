@@ -12,12 +12,14 @@ import { getReceiptMatches } from "@/modules/matching/matching.service";
 import { receiptDetailToJson } from "@/modules/receipts/receipts.schema";
 import { getTransaction } from "@/modules/transactions/transactions.service";
 import { getReceipt } from "@/modules/receipts/receipts.service";
+import { listLists } from "@/modules/shopping/shopping.service";
 
 import { formOptions } from "../../../_lib/ledger-options";
 import { load, requireLedgerPage } from "../../../_lib/ledger-page";
 import { PageHeader } from "../../page-header";
 
 import { MatchPanel } from "../match-panel";
+import { CompareChooser } from "../../shopping-lists/compare-chooser";
 
 import { ReceiptReview, type ReviewDocument } from "./receipt-review";
 
@@ -84,7 +86,14 @@ export default async function ReceiptPage({ params }: Readonly<{ params: Params 
           () => null,
         )
       : null;
+    // F10-A: bonul confirmat se poate compara cu o listă activă.
+    const lists =
+      receipt.status === "saved"
+        ? await listLists({ db }, page.actor, householdId, { status: "active" }).catch(() => [])
+        : [];
     return {
+      lists: lists.map((l) => ({ id: l.id, label: l.name })),
+      matchedStatus: receipt.status,
       matchedStatement: linked?.source === "statement",
       matches: matches ? matchesToJson(matches) : null,
       receipt: receiptDetailToJson(receipt),
@@ -103,7 +112,7 @@ export default async function ReceiptPage({ params }: Readonly<{ params: Params 
       </>
     );
   }
-  const { matches, matchedStatement, ...review } = result.value;
+  const { matches, matchedStatement, lists, matchedStatus, ...review } = result.value;
   return (
     <>
       {header}
@@ -122,6 +131,15 @@ export default async function ReceiptPage({ params }: Readonly<{ params: Params 
         </Card>
       ) : null}
       <ReceiptReview {...review} />
+      {matchedStatus === "saved" ? (
+        <Card className="mt-4" aria-labelledby="compare-list-title" data-testid="compare-with-list">
+          <h2 id="compare-list-title" className="mb-2 text-lg font-bold">
+            {ro.shopping.compareWithList}
+          </h2>
+          <p className="mb-3 text-sm text-muted-foreground">{ro.shopping.compareIntro}</p>
+          <CompareChooser mode="list" fixedId={id} options={lists} />
+        </Card>
+      ) : null}
     </>
   );
 }

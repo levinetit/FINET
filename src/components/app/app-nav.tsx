@@ -11,6 +11,7 @@ import { useHydrated } from "@/app/_lib/use-hydrated";
 import { ro } from "@/messages/ro";
 
 import {
+  CartIcon,
   ChartIcon,
   FolderIcon,
   HelpIcon,
@@ -50,10 +51,14 @@ const ITEMS = [
   { href: "/tags", label: ro.nav.tags, icon: TagIcon, mobile: false },
   { href: "/budgets", label: ro.nav.budgets, icon: PieIcon, mobile: false },
   { href: "/goals", label: ro.nav.goals, icon: TargetIcon, mobile: false },
+  // Faza 10: listele de cumpărături (bifare la raft, comparație cu bonul); pe telefon în „Mai mult”.
+  { href: "/shopping-lists", label: ro.nav.shopping, icon: CartIcon, mobile: false },
   { href: "/recurring", label: ro.nav.recurring, icon: RepeatIcon, mobile: false },
   // Faza 8: familia (membri, invitații, solduri, decontări); pe telefon în „Mai mult”.
   { href: "/family", label: ro.nav.family, icon: UsersIcon, mobile: false },
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
+  // Faza 10: prețuri, inflație personală și rapoarte de micro-cheltuieli; pe telefon în „Mai mult”.
+  { href: "/insights", label: ro.nav.insights, icon: ChartIcon, mobile: false },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
   // Faza 9: setările aplicației (instalare PWA, aplicația Android) și ghidul.
   { href: "/settings", label: ro.nav.settings, icon: SettingsIcon, mobile: false },

@@ -351,9 +351,9 @@ export default async function DashboardPage({
 type StepKey = "import" | "budget" | "goal";
 
 /**
- * Onboarding-ul în 3 pași (6.4), cât timp nu sunt făcuți: (1) tranzacții — importul vine în Faza
- * 7, deci pasul trimite la „Adaugă manual” (sau întâi la „Adaugă cont”, dacă nu există conturi),
- * cu mențiunea „Import: în curând”; (2) un buget; (3) un obiectiv (ADR 0008).
+ * Onboarding-ul în 3 pași (6.4), cât timp nu sunt făcuți: (1) tranzacții — pasul trimite la
+ * „Adaugă manual” (sau întâi la „Adaugă cont”, dacă nu există conturi); bonurile și extrasele se
+ * pot importa din Scanează/Import; (2) un buget; (3) un obiectiv (ADR 0008).
  */
 function Onboarding({
   hasAccount,
@@ -411,9 +411,6 @@ function Onboarding({
               </span>
               <span className="font-semibold">{step.title}</span>
               <span className="text-sm text-muted-foreground">{step.body}</span>
-              {s.key === "import" ? (
-                <span className="text-xs text-muted-foreground">{t.steps.import.soon}</span>
-              ) : null}
               {s.done ? null : (
                 <Link href={step.href} className={buttonClasses("outline", "sm", "self-start")}>
                   {step.text}

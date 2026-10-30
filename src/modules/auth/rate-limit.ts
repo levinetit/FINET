@@ -40,13 +40,18 @@ export type RateLimitKind =
   | "api_statement_upload"
   // F6-C: reprocesarea unui bon (un nou apel AI plătit).
   | "api_receipt_reprocess"
+  // F10-B: rularea/previzualizarea rapoartelor de micro-cheltuieli (citesc liniile bonurilor).
+  | "api_report_run"
   // F8-A: acceptarea unei invitații în gospodărie (contra ghicirii tokenurilor), pe utilizator.
   | "invite_accept"
   // F9-B (GDPR): ștergerea contului (reautentificare cu parola) și exportul complet, pe utilizator.
   | "account_delete"
   // Revizuirea F9: și o limită DOAR pe utilizator (independentă de IP), la ștergerea contului.
   | "account_delete_user"
-  | "gdpr_export";
+  | "gdpr_export"
+  // F10-A: rularea comparației listă ↔ bon și sugestiile de produse, pe utilizator.
+  | "api_shopping_compare"
+  | "api_shopping_suggest";
 
 export type RateLimitResult = Readonly<{
   allowed: boolean;

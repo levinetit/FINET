@@ -405,6 +405,8 @@ export const receiptLines = finet.table(
       foreignColumns: [categories.id],
     }).onDelete("set null"),
     unique("receipt_lines_receipt_position_key").on(t.receiptId, t.position),
+    // Ținta cheii compuse din `shopping_list_items` (F10-A, 0017): linia și gospodăria ei.
+    unique("receipt_lines_id_household_key").on(t.id, t.householdId),
     index("receipt_lines_household_id_idx").on(t.householdId),
     index("receipt_lines_category_id_idx").on(t.categoryId),
     check("receipt_lines_position_range", sql`${t.position} between 1 and 500`),

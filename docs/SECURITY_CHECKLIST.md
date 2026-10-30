@@ -527,3 +527,42 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | E2E (extrase sintetice: import, duplicat, anulare, acoperire, fișier invalid/ZIP, izolare gospodărie/membru, propunere, potrivire) | NOT RUN local (CI) | `e2e/statements.spec.ts` | — |
 | Revizuirea `security` a F7-B | TODO | agentul `security` | — |
 
+
+## 25. Liste de cumpărături și comparația cu bonul (F10-A, 2026-10-30; ADR 0022)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| RLS ENABLE + FORCE pe `shopping_lists`, `shopping_list_items`, `shopping_list_ai_requests`; drepturi minime pe coloane pentru `finet_app`; nimic pentru PUBLIC/anon/authenticated | DONE (PG17) | `shopping-rls.test.ts` („RLS ENABLE + FORCE; drepturi minime…”) | 2026-10-30 · programmer (F10-A) |
+| Lista comună: toți membrii; PERSONALĂ: doar proprietarul (citire, scriere, ștergere); altă gospodărie: nimic; nici id-ul nu scapă (404 uniform) | DONE (PG17) | `shopping-rls.test.ts` („lista comună…”), `shopping.test.ts` („lista personală e invizibilă…”), `shopping-api.test.ts` | 2026-10-30 · programmer (F10-A) |
+| Chei străine compuse cu gospodăria (articol → listă, articol → linie de bon); o linie de bon propusă/confirmată pentru cel mult UN articol al listei | DONE (PG17) | `shopping-rls.test.ts` („cheia compusă…”, „o linie de bon e propusă…”) | 2026-10-30 · programmer (F10-A) |
+| CHECK-uri și plafoane (nume, cantitate `numeric(9,3)`, unitate, notă, poziție, scor; 100 de liste, 300 de articole) pe baza de date și în Zod strict | DONE (PG17) | `shopping-rls.test.ts` („CHECK-uri…”), `shopping.test.ts` („plafoanele…”) | 2026-10-30 · programmer (F10-A) |
+| Coada AI: doar pentru liste vizibile, în numele celui care cere; funcțiile SECURITY DEFINER (`queued_list_matches`, `queued_list_match`, `erase_user_shopping_lists`) cu `search_path = pg_catalog`, doar identificatori | DONE (PG17) | `shopping-rls.test.ts` („coada AI: doar pentru liste vizibile…”) | 2026-10-30 · programmer (F10-A) |
+| Reîncercarea unui al doilea membru nu dă eroare de politică: cererea activă a altuia rămâne neatinsă, cea terminată e preluată (testul pică fără garda `setWhere` din `upsertAiRequest`) | DONE (PG17) | `shopping-rls.test.ts` („coada AI: al doilea membru…”) | 2026-10-30 · programmer (F10-A) |
+| Pasul LLM: oprit implicit (`AI_LIST_MATCH=0`); cere consimțământul `external_ai` (la coadă, la revendicare, la fiecare încercare); buget AI rezervat înainte de încercare; pleacă doar nume normalizate; ieșire constrânsă la id-urile candidate (Zod); nimic din conținut în `pgboss.job`, loguri, erori | DONE (PG17, server AI fals) | `list-match-job.test.ts`, `ai-match.test.ts`, `shopping.test.ts` („pasul AI…”) | 2026-10-30 · programmer (F10-A) |
+| Comparația nu modifică tranzacții sau bonuri; deciziile utilizatorului (confirmat/respins) nu se rescriu la reluare sau de AI; bon neconfirmat → 409; bon/listă străine → 404 | DONE (PG17) | `shopping.test.ts` („comparația listă ↔ bon…”) | 2026-10-30 · programmer (F10-A) |
+| Ștergerea contului șterge listele PERSONALE din toate gospodăriile | DONE (PG17) | `shopping-rls.test.ts` („ștergerea contului…”), `account-deletion.test.ts` | 2026-10-30 · programmer (F10-A) |
+| Exportul GDPR (`/me/export`) include listele și articolele vizibile utilizatorului (sub RLS) | IMPLEMENTAT, fără test dedicat | `src/modules/gdpr/data-export.ts` | — |
+| API: 401 fără sesiune pe toate rutele, `Idempotency-Key` la creare (replay, reutilizare cu alt corp), validare strictă, limită de rată pe comparație și sugestii, evenimente live doar tip + id (lista personală doar la proprietar), contract OpenAPI la zi (`openapi --check`) | DONE (PG17) | `shopping-api.test.ts`, `node scripts/openapi.mjs --check` | 2026-10-30 · programmer (F10-A) |
+| CSRF pe mutațiile cu cookie ale listelor | NEVERIFICAT în teste dedicate (mecanismul comun al `/api/v1`) | — | — |
+| E2E (creare listă din interfață, bifare la raft cu persistență, izolarea listei personale între gospodării, comparație cu un bon sintetic confirmat, zero încălcări CSP); actualizarea live între doi membri e acoperită doar de testul de integrare `shopping-api.test.ts` | SCRIS, NOT RUN local (CI) | `e2e/shopping.spec.ts` | — |
+| Axe pe paginile `/shopping-lists` | NEFĂCUT (nu e în `e2e/a11y.spec.ts`) | — | — |
+| Revizuirea `security` a F10-A | TODO | agentul `security` | — |
+
+## 26. Prețuri, inflație, rapoarte de micro-cheltuieli (F10-B, 2026-10-30; ADR 0023)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| `report_definitions`: RLS ENABLE + FORCE; PUBLIC/anon fără drepturi; UPDATE doar pe coloanele permise; câmpurile fixe nu se schimbă (42501) | DONE (PG17) | `report-definitions-rls.test.ts` („RLS ENABLE + FORCE…”, „câmpurile fixe…”) | 2026-10-30 · programmer (F10-B) |
+| Rapoartele de sistem: citibile de orice utilizator autentificat, invizibile fără utilizator, nescriibile; cele ale gospodăriei izolate, scrierea cere gospodăria curentă și autorul = utilizatorul | DONE (PG17) | `report-definitions-rls.test.ts` („sistem: citibil…”, „rândurile gospodăriei: izolate…”), `report-definitions.test.ts` („citibile de toți membrii…”) | 2026-10-30 · programmer (F10-B) |
+| CHECK-uri plate pe forma regulilor, mărime, nume; plafon de 100 de rapoarte proprii (`report_limit`); numele unic fără diferență de litere | DONE (PG17) | `report-definitions-rls.test.ts` („CHECK-uri…”, „nume unic…”), `report-definitions.test.ts` | 2026-10-30 · programmer (F10-B) |
+| Conturile personale: agregatele (prețuri, inflație, rulare, previzualizare, export) exclud liniile bonurilor legate de contul personal al altui membru; filtrul este `EXISTS` pe tranzacție sub RLS, nu `LEFT JOIN … IS NULL`; bonurile neconfirmate nu intră | DONE (PG17) | `report-definitions.test.ts` („pungi: totalul exclude…”, „acoperirea proiecției…”), `prices-api.test.ts` („rulare: pungi — conturile personale…”) | 2026-10-30 · programmer (F10-B) |
+| Regulile se evaluează în cod (funcții pure), niciodată ca SQL/LIKE/regex construit din date de utilizator; Zod strict, limite de reguli, lungimi și linii citite (409 `too_many_lines`) | DONE (unitar + PG17) | `rules.ts`, `report-definitions.test.ts` („validare strictă…”), `prices-api.test.ts` | 2026-10-30 · programmer (F10-B) |
+| API: 401 pe fiecare endpoint nou, parametri strict validați, 404 uniform, `Idempotency-Key` la creare, rate limit pe rulare/previzualizare (429 + `Retry-After`) și export | DONE (PG17) | `prices-api.test.ts` („fără sesiune…”, „definiții…”, „rate limit…”) | 2026-10-30 · programmer (F10-B) |
+| Export CSV: BOM, escape, protecție contra formulelor, garda `Sec-Fetch-Site`, izolare; auditat fără conținut | DONE (PG17) | `prices-api.test.ts` („export CSV…”), `report-definitions.test.ts` („export CSV…”) | 2026-10-30 · programmer (F10-B) |
+| Sume pe `bigint` (fără float); medie ponderată; conversii doar între unități compatibile; monede separate; inflația cu exemplu numeric (421 pb) | DONE (unitar) | `units.test.ts`, `inflation.test.ts`, `prices.test.ts` | 2026-10-30 · programmer (F10-B) |
+| Rapoartele de sistem din bază = constanta din cod (șase rapoarte) | DONE (PG17) | `report-definitions.test.ts` („rândurile din bază sunt identice cu constanta din cod”) | 2026-10-30 · programmer (F10-B) |
+| pg_dump → restore: politicile, constrângerile și triggerele identice după 0018 | DONE (PG17, test de amprentă) | `migrate.test.ts` | 2026-10-30 · programmer (F10-B) |
+| Exportul GDPR include rapoartele create de utilizator (nu cele de sistem) | DONE (PG17) | `gdpr-api.test.ts`, `data-export.ts` | 2026-10-30 · programmer (F10-B) |
+| Performanță pe ~50.000 de linii | MĂSURAT, NU sub o secundă: 0,1–6,7 s (mediana) pe PG17 cu 256 MB; de reluat pe Supabase | `perf-prices.test.ts` (`FINET_PERF=1`), INFRA 4p | 2026-10-29 · programmer (F10-B) |
+| E2E (raport predefinit pe bonuri sintetice confirmate, raport propriu, export CSV, „date insuficiente”, izolare) și axe pe `/insights` | NOT RUN local (CI) | `e2e/insights.spec.ts`, `e2e/a11y.spec.ts` | — |
+| Revizuirea `security` a F10-B | TODO | agentul `security` | — |

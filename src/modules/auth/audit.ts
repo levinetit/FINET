@@ -47,6 +47,8 @@ export type AuditAction =
   | "tag.deleted"
   | "budget.deleted"
   | "goal.deleted"
+  // Listele de cumpărături (Faza 10): doar id-ul și numărul de articole, fără nume sau conținut.
+  | "shopping_list.deleted"
   // Recurențele (Faza 5): fără sume sau descrieri.
   | "recurring_rule.deleted"
   // Generarea la cerere (F5-B): doar contoare în `metadata`, fără sume sau reguli.
@@ -75,6 +77,10 @@ export type AuditAction =
   | "receipt.matched"
   | "receipt.match_rejected"
   | "recurring.suggestion_dismissed"
+  // Rapoartele de micro-cheltuieli (F10-B): doar CINE și id-ul definiției, fără nume sau reguli.
+  | "report.created"
+  | "report.updated"
+  | "report.deleted"
   | "consent.granted"
   | "consent.revoked"
   // GDPR (F9-B): doar numărul de gospodării exportate, fără conținut.
@@ -96,11 +102,13 @@ export type AuditEvent = Readonly<{
     | "tag"
     | "budget"
     | "goal"
+    | "shopping_list"
     | "recurring_rule"
     | "document"
     | "receipt"
     | "statement_import"
-    | "statement_upload";
+    | "statement_upload"
+    | "report_definition";
   targetId?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }>;

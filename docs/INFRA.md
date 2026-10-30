@@ -546,6 +546,29 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 7. **Redeploy** `finet-web` și `finet-worker`. Jurnalul workerului la pornire: `{"event":"receipts",…,"statements":true}`.
 8. **Verificare după deploy:** pe un cont de test, un CSV mic → alegerea coloanelor → previzualizare → confirmare → reîncărcare („deja importat”, 0 tranzacții noi) → anulare; un PDF de extras propriu → „în coadă” → previzualizare în ≤ 2 minute; `select count(*) from finet.statement_uploads where storage_key is not null` revine la 0 după confirmare/renunțare; jurnalele (`docker logs finet-worker`) conțin doar coduri și contoare.
 
+## 4o. Faza 10 (F10-A): liste de cumpărături — pe producție (după revizuiri, după 4n)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0022. Se aplică împreună cu F10-B (4p) sau separat; ordinea migrațiilor la merge: `0017`, apoi `0018`.
+
+1. **Ordinea:** după 4n (Faza 7, `0013`/`0014`) și 4m (`0016`). Jurnalul are `0017_shopping_lists` cu `when` 1794900000000, mai mare decât ultima intrare aplicată (1794800000000, `0014`); runner-ul refuză o migrație nouă mai veche decât una aplicată. Imaginile `finet` și `finet:tools` pentru commit-ul aprobat (construite în CI, nu local).
+2. **Backup** al schemei `finet`, apoi **migrația `0017_shopping_lists`** (rolul `migrate`; „aplicate acum 1”). Adaugă trei tabele (`shopping_lists`, `shopping_list_items`, `shopping_list_ai_requests`) cu RLS ENABLE + FORCE, 7 funcții/triggere SECURITY DEFINER sau de plafon și, pe `receipt_lines`, doar cheia unică `receipt_lines_id_household_key (id, household_id)` (nu rescrie date). Rollback: antetul fișierului, doar manual, cu backup (distruge listele și coada AI).
+3. **Variabile:** `AI_LIST_MATCH` (doar `finet-worker`, `0` implicit; vezi `finet.worker.env.example`). Cu `0` sau lipsă, pasul LLM e oprit și comparația rulează numai din cod. Pentru `1` sunt necesare AI configurat (Faza 6) și consimțământul `external_ai` al utilizatorului; consumă din bugetul AI lunar existent (`task = list_match` în `ai_calls`). Nicio variabilă pe `finet-web`, niciun secret nou.
+4. **Redeploy** `finet-web` și `finet-worker`. Jurnalul workerului la pornire conține job-urile `list-match.sweep`/`list-match.process` (doar nume de joburi, fără conținut).
+5. **Verificare după deploy:** pe un cont de test: creează o listă comună cu 3 articole, bifează unul (apare live la un al doilea membru), creează o listă PERSONALĂ (al doilea membru NU o vede, nici ca id), arhivează, copiază; confirmă un bon sintetic și rulează „Comparație cu bonul” (potrivite/neplanificate/uitate); `select count(*) from finet.shopping_list_ai_requests` rămâne 0 cu `AI_LIST_MATCH=0`; jurnalele (`docker logs finet-worker`) nu conțin nume de produse.
+6. **Backup/GDPR:** listele intră în backup-ul restic existent (schema `finet`); nu e nevoie de modificări. Ștergerea contului elimină listele personale ale utilizatorului (ADR 0022 §6).
+
+## 4p. Faza 10 (F10-B): prețuri, inflație, rapoarte de micro-cheltuieli — pe producție (după revizuiri)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0023. Se aplică după 4o (F10-A) sau separat; ordinea migrațiilor la merge: `0017`, apoi `0018`.
+
+1. **Ordinea:** după 4n; jurnalul are `0018_report_definitions` cu `when` 1795000000000, mai mare decât `0017` (1794900000000) și decât ultima intrare aplicată. Imaginile `finet` și `finet:tools` pentru commit-ul aprobat (construite în CI).
+2. **Backup** al schemei `finet`, apoi **migrația `0018_report_definitions`** (rolul `migrate`; „aplicate acum 1” dacă 0017 e deja aplicată). Tabel nou cu RLS ENABLE + FORCE, un trigger de plafon și șase rapoarte de sistem inserate de migrație (`is_system`, fără gospodărie). **Nu modifică tabelele existente.** Rollback: antetul fișierului, doar manual, cu backup (distruge rapoartele proprii ale gospodăriilor).
+3. **Nicio variabilă și niciun secret nou; fără LLM și fără apeluri externe.** Utilizatorii E2E `insights`/`insights2` sunt doar pentru CI (nu se creează pe producție).
+4. **Redeploy** `finet-web` (calculele rulează în procesul web; workerul nu se schimbă).
+5. **Verificare după deploy:** pe un cont cu bonuri confirmate: `/insights` arată cele șase rapoarte de sistem; „Pungi și sacoșe” rulat pe „toată arhiva” include «PUNGA RAFIE» și NU «PUNGI MENAJ»; un raport propriu cu previzualizare, salvare, export CSV; sub pragul de date (3 observații / 2 luni) prețurile arată „Nu sunt suficiente date”; cu un al doilea membru, un bon legat de contul PERSONAL al primului nu apare în totalurile celui de-al doilea; `select count(*) from finet.report_definitions where is_system` = 6.
+6. **Performanță (măsurată, nu estimată):** `FINET_PERF=1 DATABASE_URL=<superuser> pnpm exec vitest run src/db/perf-prices.test.ts`, ~50.000 de linii (4.200 de bonuri, 3 ani), ca `finet_app` cu RLS, PG17 cu 256 MB pe gazda de dezvoltare (mediana din 5 / minim): prețuri 12 luni 6,7 s / 4,4 s; prețuri 3 ani 1,9 s / 1,7 s; inflație 0,9 s / 0,8 s; rapoarte pe toată arhiva 0,13–2,0 s. Planul (auto_explain, `EXPLAIN ANALYZE, BUFFERS`): `Index Scan using receipts_id_household_key` / `receipts_household_status_idx` pe `receipts` (3.780 de bonuri vizibile din 4.200), `Seq Scan` pe `receipt_lines` filtrat pe gospodărie (~50.000 de rânduri, ~25 ms), hash join și sortare externă (~200 ms, 5 MB pe disc la memoria mică); acoperirea proiecției ~138 ms. Nu s-a adăugat niciun index. Cifrele NU sunt sub o secundă pe acest volum; de reluat pe Supabase (mai multă memorie) înainte de a decide un index sau o materializare. Peste 100.000 de linii în fereastră: `409 too_many_lines`.
+7. **Backup/GDPR:** `report_definitions` intră în backup-ul restic existent; exportul GDPR include rapoartele create de utilizator.
+
 ## 5. Supabase: conexiuni și limite
 | Ce | Valoare |
 |---|---|

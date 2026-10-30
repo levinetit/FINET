@@ -364,8 +364,8 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/offline` | — (la finpulse dă 404) | 9 | branch (F9-A): HTML static, servit din cache de service worker |
 | `/help` (ghid în aplicație) | `/help` | 9 | branch (F9-A) |
 | `/settings/statistics` | — | 9 | branch (F9-B): statistici de utilizare, doar administratorul platformei (`saas`: panoul de administrare, Faza 11) |
-| `/shopping-lists` | `/shopping-lists` | 10 | planificat |
-| `/prices` (nume provizoriu) | prețuri pe magazin, inflație | 10 | planificat |
+| `/shopping-lists`, `/shopping-lists/[id]`, `/shopping-lists/[id]/compare` | `/shopping-lists` | 10 | branch (F10-A, ADR 0022): liste comune/personale, mod „la raft”, comparație cu bonul confirmat |
+| `/insights` | prețuri pe magazin, inflație, rapoarte de micro-cheltuieli | 10 | branch (F10-B, ADR 0023): rapoarte predefinite și proprii, generator cu previzualizare, evoluția prețurilor, inflație personală, export CSV |
 | `/ask` (nume provizoriu) | „raport AI în limbaj natural” | 10 | planificat |
 
 ### Zona publică și `saas` (Faza 11 și 12)

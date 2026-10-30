@@ -18,7 +18,15 @@ import { ro } from "@/messages/ro";
  * fluxului) redeschid conexiunea.
  */
 
-const TYPES = new Set(["transaction", "transfer", "receipt", "split", "settlement", "member"]);
+const TYPES = new Set([
+  "transaction",
+  "transfer",
+  "receipt",
+  "split",
+  "settlement",
+  "member",
+  "shopping_list",
+]);
 const FALLBACK_POLL_MS = 60_000;
 const FALLBACK_RETRY_MS = 5 * 60_000;
 

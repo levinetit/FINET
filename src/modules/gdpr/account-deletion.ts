@@ -52,6 +52,8 @@ import type {
  *   comună a unui transfer devine o tranzacție obișnuită, soldul contului comun rămâne), bugetele
  *   personale se șterg, iar rândul `users` se șterge sau, dacă e referit de împărțiri/decontări
  *   din istoricul altora, se anonimizează („Cont șters”). Conturile personale NU devin comune;
+ * - listele de cumpărături PERSONALE ale lui, din toate gospodăriile, se șterg înainte
+ *   (`finet.erase_user_shopping_lists()`, 0017); cele comune rămân celorlalți;
  * - sesiunile, conturile de autentificare (hash-ul parolei), preferințele, instalările și
  *   evenimentele de utilizare se șterg; consimțămintele se revocă (și dispar odată cu rândul);
  * - administratorul platformei NU își poate șterge contul din aplicație (409 `platform_admin`):
@@ -302,6 +304,9 @@ export async function deleteAccount(
     }
     const outcome = await withRlsOn(outer, { userId }, async (tx) => {
       await deletePersonalRows(tx, userId);
+      // Faza 10 (0017): listele PERSONALE de cumpărături din toate gospodăriile (inclusiv cele
+      // părăsite), înaintea ștergerii utilizatorului (rândul poate fi doar anonimizat).
+      await tx.execute(sql`select finet.erase_user_shopping_lists()`);
       const rows = await tx.execute<{ r: string }>(sql`select finet.erase_current_user() as r`);
       return rows[0]?.r;
     });

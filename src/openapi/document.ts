@@ -293,6 +293,11 @@ export function buildOpenApiDocument(): Json {
       { name: "tags", description: "Etichetele (Faza 3)." },
       { name: "budgets", description: "Bugetele lunare și semaforul (Faza 3)." },
       { name: "goals", description: "Obiectivele de economisire (Faza 3)." },
+      {
+        name: "shopping",
+        description:
+          "Listele de cumpărături (comune sau personale) și comparația listă ↔ bon (Faza 10, ADR 0022).",
+      },
       { name: "recurring", description: "Plățile recurente (Faza 5)." },
       { name: "documents", description: "Documentele încărcate (bonuri; Faza 6)." },
       { name: "receipts", description: "Bonurile extrase, verificarea și confirmarea (Faza 6)." },
@@ -305,7 +310,15 @@ export function buildOpenApiDocument(): Json {
         name: "matching",
         description: "Potrivirea bon ↔ tranzacție din extras și propunerile de recurențe (Faza 7).",
       },
-      { name: "reports", description: "Dashboard-ul și raportul lunar (Faza 3)." },
+      {
+        name: "reports",
+        description:
+          "Dashboard-ul, raportul lunar (Faza 3) și rapoartele de micro-cheltuieli (Faza 10).",
+      },
+      {
+        name: "prices",
+        description: "Prețurile pe produs și comerciant, inflația personală (Faza 10).",
+      },
       { name: "exports", description: "Exporturile CSV (Faza 3)." },
     ],
     paths,
