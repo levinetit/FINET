@@ -1,5 +1,6 @@
 import "server-only";
 
+import { NotImplementedError } from "@/lib/errors";
 import { askFinet } from "@/modules/ask/ask.service";
 import { can } from "@/modules/entitlements";
 
@@ -19,12 +20,26 @@ import {
  * acces. Limită proprie (`ask`), funcția trece prin `entitlements` (în `saas`, legată de plan),
  * gospodăria vine din sesiune. Textul întrebării nu se păstrează nicăieri.
  */
+/**
+ * Funcția `ask.finet` după plan. În `personal` e mereu permisă. În `saas` implementarea
+ * `entitlements` vine în Faza 12 (până atunci aruncă `NotImplementedError`): până atunci funcția
+ * rămâne permisă (nu există planuri de refuzat), iar o implementare reală poate răspunde `false`.
+ */
+async function allowed(householdId: string): Promise<boolean> {
+  try {
+    return await can(householdId, "ask.finet");
+  } catch (error) {
+    if (error instanceof NotImplementedError) return true;
+    throw error;
+  }
+}
+
 export function askHandler(request: Request, d: ApiDeps): Promise<Response> {
   return handle(request, d, async (ctx) => {
     const body = await readJsonBody(request);
     await enforceRateLimit(ctx, "api_ask", ctx.limits.ask);
     const hh = await currentHousehold(ctx);
-    if (!(await can(hh, "ask.finet"))) {
+    if (!(await allowed(hh))) {
       throw new ApiError(403, "forbidden", "Funcția nu e disponibilă în planul curent.");
     }
     const result = await askFinet({ db: d.db, now: () => new Date(ctx.now) }, ctx.actor, hh, body);

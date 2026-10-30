@@ -29,7 +29,7 @@ Forma interogării e exact cea pe care ar produce-o un model, deci un traducăto
 
 - **Întrebarea nu se păstrează:** nu intră în baza de date (testul parcurge TOATE tabelele schemei `finet` după o întrebare cu un marcaj unic), în audit, în chei de limită, în loguri sau în mesaje de eroare. Se trimite în corpul unui `POST` (nu în adresă), ca să nu ajungă în jurnalele de acces.
 - Fără audit pe întrebări (nu există conținut de păstrat); limită proprie: 30 de cereri pe minut per utilizator (`api_ask`).
-- Funcția trece prin `entitlements` (`ask.finet`): în `personal` e permisă, în `saas` se leagă de plan (Faza 12).
+- Funcția trece prin `entitlements` (`ask.finet`): în `personal` e permisă; în `saas`, până la implementarea din Faza 12 (`NotImplementedError`), rămâne permisă, iar un răspuns `false` al unei implementări reale o refuză (403).
 
 ### 4. Interfață
 
