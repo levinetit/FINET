@@ -29,3 +29,31 @@ Faza 11 se livrează pe părți: **11-A** (site-ul public: prezentare, prețuri,
 ### 4. Pe producție
 
 Nimic: modul `saas` nu rulează pe producție. Fără migrație în 11-A.
+
+## 11-B — Feedback, anunțuri, monitorizarea erorilor, panou de administrare
+
+ADR 0028; branch `phase/11-admin`; migrația `0020_admin_feedback`.
+
+### 1. Ce s-a implementat
+
+- Trei tabele (`feedback`, `announcements`, `app_errors`) cu RLS ENABLE + FORCE și șase funcții SECURITY DEFINER (`is_platform_admin`, `record_app_error`, `admin_users`, `admin_households`, `admin_jobs`, `admin_set_user_status`); nicio dată financiară.
+- API (13 rute, doar `saas`): feedback, anunțuri active, raportarea erorilor, liste și acțiuni de administrare; 404 în `personal` și pentru non-administratori; acțiuni auditate.
+- Interfață: `/feedback`, bannerul de anunțuri, `/admin`, raportarea erorilor din `error.tsx`/`global-error.tsx`.
+
+### 2. Teste rulate local (2026-10-31)
+
+| Comandă | Rezultat |
+|---|---|
+| `vitest run src/db/migrate.test.ts src/app/api/v1/admin-api.test.ts src/openapi src/modules/auth` (cu PG17) | PASS (107 teste) |
+| `vitest run src/app/ui-rules.test.ts src/app/a11y-rules.test.ts src/app/smoke.test.ts src/app/_lib` | PASS |
+| `eslint` și `tsc` pe fișierele noi | PASS |
+| E2E (`e2e/admin.spec.ts`: 404 în `personal`, 404 pentru utilizator obișnuit, feedback → panou, anunț creat → văzut → arhivat) | SCRIS; NOT RUN local; în CI (`personal` + `saas`) |
+
+### 3. Puncte deschise
+
+- Aplicarea migrației `0020` pe Supabase (opțională până la un deploy `saas`) și revizuirea `security`.
+- `GET /api/v1/admin/stats` rămâne 403 pentru non-administratori (de aliniat la 404).
+- Erorile serverului nu se raportează automat; erorile paginilor publice nu se raportează; limită de cereri dedicată pe feedback/erori: nu (doar cea generală).
+- Auditul administratorului apare în gospodăria lui (ADR 0028 §4).
+- Rămân în Faza 11: Turnstile, OAuth Google/Facebook, `/help` public, traducerea în engleză, expunerea publică (11-C).
+

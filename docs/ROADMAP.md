@@ -377,8 +377,8 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 | `/help` (public) | `/help` | 11 | planificat, doar `saas` |
 | `/terms`, `/privacy` | `/terms`, `/privacy` | 11 | branch (11-A): ciorne marcate vizibil; doar `saas`; revizuirea de către un om și datele firmei rămân de făcut (`SITE_LEGAL_REVIEWED`) |
 | `/register` | înregistrare | 11 | există ca pagină, dezactivată (înregistrarea publică e oprită); se activează doar în `saas` |
-| `/admin` | `/admin` | 11 | planificat, doar `saas`; 404 pentru non-administratori și în `personal` |
-| `/feedback`, `/bug-report` (nume provizorii) | feedback și bug-uri (`/api/feedback`, `/api/bug-reports`) | 11 | planificat, doar `saas`; fără date financiare |
+| `/admin` | `/admin` | 11 | branch (11-B, ADR 0028): doar `saas`; 404 pentru non-administratori și în `personal` |
+| `/feedback` | feedback și bug-uri (`/api/feedback`, `/api/bug-reports`) | 11 | branch (11-B): un singur formular cu tip feedback/bug, doar `saas`, fără date financiare |
 | `/ref/[code]` | `/ref/FIN-XXXXXX` | 12 | planificat, doar `saas` |
 | selector de limbă (es, fr, de, it, pl, tr) | limbi multiple | 13 | planificat, doar `saas` |
 

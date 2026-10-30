@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { isChunkLoadError } from "@/app/_lib/chunk-recovery";
+import { reportClientError } from "@/lib/error-report";
 import { recoverFromChunkError } from "@/components/app/chunk-recovery";
 import { ro } from "@/messages/ro";
 
@@ -16,6 +17,7 @@ import "./globals.css";
 export default function GlobalError({ error }: Readonly<{ error: Error & { digest?: string } }>) {
   useEffect(() => {
     if (isChunkLoadError(error)) recoverFromChunkError();
+    else reportClientError(error, window.location.pathname);
   }, [error]);
 
   return (

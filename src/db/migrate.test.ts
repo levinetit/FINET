@@ -59,7 +59,7 @@ function copyMigrations(): string {
 }
 
 describe("readMigrations (fără bază)", () => {
-  it("citește jurnalul repo-ului: 0000_core … 0012_family, 0016_gdpr_stats, 0013_statements, 0014_statement_uploads, 0017_shopping_lists, 0018_report_definitions, 0019_ask_finet_task, fără CREATE SCHEMA", () => {
+  it("citește jurnalul repo-ului: 0000_core … 0012_family, 0016_gdpr_stats, 0013_statements, 0014_statement_uploads, 0017_shopping_lists, 0018_report_definitions, 0019_ask_finet_task, 0020_admin_feedback, fără CREATE SCHEMA", () => {
     const migrations = readMigrations(MIGRATIONS_DIR);
     expect(migrations.map((m) => m.tag)).toEqual([
       "0000_core",
@@ -83,6 +83,7 @@ describe("readMigrations (fără bază)", () => {
       "0017_shopping_lists",
       "0018_report_definitions",
       "0019_ask_finet_task",
+      "0020_admin_feedback",
     ]);
     for (const m of migrations) {
       expect(m.hash).toMatch(/^[0-9a-f]{64}$/);
@@ -720,6 +721,54 @@ describe("readMigrations (fără bază)", () => {
     );
   });
 
+  it("0020_admin_feedback: 3 tabele noi cu RLS ENABLE + FORCE; funcții SECURITY DEFINER doar cu identificatori; CHECK-uri plate; drepturi pe coloane", () => {
+    const m = readMigrations(MIGRATIONS_DIR).find((x) => x.tag === "0020_admin_feedback")!;
+    const text = m.statements.join("\n");
+    const created = [...text.matchAll(/CREATE TABLE "finet"\."(\w+)"/g)].map((x) => x[1]!);
+    expect(created.sort()).toEqual(["announcements", "app_errors", "feedback"]);
+    for (const table of created) {
+      expect(text).toContain(`alter table finet.${table} enable row level security`);
+      expect(text).toContain(`alter table finet.${table} force row level security`);
+    }
+    const code = text.replace(/--.*$/gm, "");
+    expect(code).not.toMatch(/\bbetween\b/i);
+    expect(code).not.toMatch(/\btruncate\b|alter policy/i);
+    // Nicio modificare a tabelelor existente (în afară de cheile străine ale celor noi).
+    const altered = [...code.matchAll(/alter table "?finet"?\."?(\w+)"?/gi)].map((x) => x[1]!);
+    expect(new Set(altered.filter((t) => !created.includes(t)))).toEqual(new Set());
+    // Funcțiile SECURITY DEFINER: exact acestea, toate cu `search_path = pg_catalog`.
+    const definers = [
+      ...code.matchAll(
+        /create function finet\.(\w+)\([^)]*\)[^$]*?security definer\s+set search_path = pg_catalog/g,
+      ),
+    ].map((x) => x[1]);
+    expect(definers.sort()).toEqual([
+      "admin_households",
+      "admin_jobs",
+      "admin_set_user_status",
+      "admin_users",
+      "is_platform_admin",
+      "record_app_error",
+    ]);
+    expect([...code.matchAll(/security\s+definer/gi)]).toHaveLength(6);
+    // Fiecare funcție de administrare verifică administratorul.
+    for (const fn of ["admin_users", "admin_households", "admin_jobs", "admin_set_user_status"]) {
+      const body = code
+        .slice(code.indexOf(`create function finet.${fn}(`))
+        .split("--> statement-breakpoint")[0]!;
+      expect(body, fn).toContain("finet.is_platform_admin()");
+    }
+    // Feedback: INSERT cu politica `status = 'new'`, UPDATE doar `status`.
+    expect(code).toContain(
+      "with check (user_id = (select finet.current_user_id()) and status = 'new')",
+    );
+    expect(code).toContain("grant update (status, updated_at) on finet.feedback to finet_app");
+    expect(code).not.toMatch(/grant[^;]*\bupdate\b(?!\s*\()[^;]*on finet\./i);
+    // app_errors: scris doar de funcție (politicile finet_migrator, cu variabila de domeniu).
+    expect(code).not.toMatch(/grant[^;]*(insert|update|delete)[^;]*on finet\.app_errors/i);
+    expect(code).toContain("finet.definer_scope', true) = 'app_error'");
+  });
+
   it("0009_receipt_pipeline: RLS ENABLE + FORCE pe tabelele noi; 3 funcții SECURITY DEFINER; bugetul fără drepturi directe", () => {
     const m = readMigrations(MIGRATIONS_DIR).find((x) => x.tag === "0009_receipt_pipeline")!;
     const text = m.statements.join("\n");
@@ -862,6 +911,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 0,
       });
@@ -885,9 +935,10 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
         "aplicată: 0017_shopping_lists",
         "aplicată: 0018_report_definitions",
         "aplicată: 0019_ask_finet_task",
+        "aplicată: 0020_admin_feedback",
       ]);
       const second = await runMigrations(sql, { folder: MIGRATIONS_DIR });
-      expect(second).toEqual({ applied: [], alreadyApplied: 19 });
+      expect(second).toEqual({ applied: [], alreadyApplied: 20 });
     } finally {
       await sql.end({ timeout: 5 });
     }
@@ -923,12 +974,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 4,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 19,
+        alreadyApplied: 20,
       });
     } finally {
       await sql.end({ timeout: 5 });
@@ -966,6 +1018,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 5,
       });
@@ -1013,12 +1066,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 6,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 19,
+        alreadyApplied: 20,
       });
       const [fk] = await fresh.admin<{ convalidated: boolean }[]>`
         select convalidated from pg_constraint where conname = 'transactions_recurring_rule_fk'`;
@@ -1062,12 +1116,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 8,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 19,
+        alreadyApplied: 20,
       });
       const [fk] = await fresh.admin<{ convalidated: boolean }[]>`
         select convalidated from pg_constraint where conname = 'transactions_document_fk'`;
@@ -1112,12 +1167,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 9,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 19,
+        alreadyApplied: 20,
       });
       const [r] = await fresh.admin<{ issues: unknown; fallback_reason: string }[]>`
         select issues, fallback_reason from finet.receipts`;
@@ -1165,12 +1221,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 11,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 19,
+        alreadyApplied: 20,
       });
       const app = testClient(fresh.appUrl, 1);
       try {
@@ -1232,12 +1289,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 12,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 19,
+        alreadyApplied: 20,
       });
       // Datele existente rămân neatinse; preferința nouă e NULL.
       const [pref] = await fresh.admin<{ active_household_id: string | null }[]>`
@@ -1296,12 +1354,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0017_shopping_lists",
           "0018_report_definitions",
           "0019_ask_finet_task",
+          "0020_admin_feedback",
         ],
         alreadyApplied: 14,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 19,
+        alreadyApplied: 20,
       });
       const after =
         await fresh.admin`select md5(string_agg(t::text, '|' order by t::text)) as h from finet.transactions t`;
@@ -1329,7 +1388,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     }
   }, 60_000);
 
-  it("0017 + 0018 + 0019 peste o bază cu 0000–0014 + 0016 aplicate și date (producția după Faza 7): se aplică doar ele, datele rămân, schema identică cu cea de la zero, apoi nimic", async () => {
+  it("0017–0020 peste o bază cu 0000–0014 + 0016 aplicate și date (producția după Faza 7): se aplică doar ele, datele rămân, schema identică cu cea de la zero, apoi nimic", async () => {
     const fresh = await createScratchDatabase("finet_it_mig18");
     const dir = copyMigrations();
     const sql = testClient(fresh.migratorUrl, 1);
@@ -1350,12 +1409,17 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
         await fresh.admin`select md5(string_agg(t::text, '|' order by t::text)) as h from finet.households t`;
       writeFileSync(journalPath, full);
       expect(await runMigrations(sql, { folder: dir })).toEqual({
-        applied: ["0017_shopping_lists", "0018_report_definitions", "0019_ask_finet_task"],
+        applied: [
+          "0017_shopping_lists",
+          "0018_report_definitions",
+          "0019_ask_finet_task",
+          "0020_admin_feedback",
+        ],
         alreadyApplied: 16,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 19,
+        alreadyApplied: 20,
       });
       const after =
         await fresh.admin`select md5(string_agg(t::text, '|' order by t::text)) as h from finet.households t`;
@@ -1417,7 +1481,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     ]);
     const [counted] = await db.admin<{ n: number }[]>`
       select count(*)::int as n from finet.__drizzle_migrations`;
-    expect(counted?.n).toBe(19);
+    expect(counted?.n).toBe(20);
     const schemas = await db.admin<{ nspname: string }[]>`
       select nspname from pg_namespace where nspname = 'drizzle'`;
     expect(schemas).toEqual([]);
@@ -1431,7 +1495,9 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       "accounts",
       "ai_budget_usage",
       "ai_calls",
+      "announcements",
       "app_downloads",
+      "app_errors",
       "app_event_daily",
       "app_events",
       "audit_events",
@@ -1447,6 +1513,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       "consents",
       "document_usage_daily",
       "documents",
+      "feedback",
       "goals",
       "household_invites",
       "household_members",
@@ -1538,7 +1605,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       expect(rows.length).toBe(0);
       const [counted] = await db.admin<{ n: number }[]>`
         select count(*)::int as n from finet.__drizzle_migrations`;
-      expect(counted?.n).toBe(19);
+      expect(counted?.n).toBe(20);
     } finally {
       await sql.end({ timeout: 5 });
       rmSync(dir, { recursive: true, force: true });
@@ -1556,7 +1623,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     });
     expect(err).toEqual([]);
     expect(code).toBe(0);
-    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 19"]);
+    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 20"]);
     expect(out.join("\n")).not.toContain("finet_migrator_ci");
   });
 });

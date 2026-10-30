@@ -195,6 +195,12 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], baseURL: devURL },
     },
     {
+      // Feedback, anunțuri și panoul de administrare (Faza 11-B): `main` (administrator) și `ask`.
+      name: "admin",
+      testMatch: /admin\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], baseURL: devURL },
+    },
+    {
       // Site-ul public al modului `saas` (Faza 11): fără autentificare, fără utilizatori proprii.
       name: "site",
       testMatch: /site\.spec\.ts$/,
