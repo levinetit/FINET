@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { ReactNode } from "react";
 
 import { ChunkRecovery } from "@/components/app/chunk-recovery";
 import { ServiceWorkerRegistration } from "@/components/app/pwa";
+import { LANG_HEADER } from "@/lib/site-locale";
 
 import { THEME_COOKIE, forcedTheme } from "./_lib/theme";
 import { fontDisplay, fontMono, fontSans } from "./fonts";
@@ -37,9 +38,12 @@ export const viewport: Viewport = {
  */
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const theme = forcedTheme((await cookies()).get(THEME_COOKIE)?.value);
+  // Limba documentului: `en` doar pe paginile publice ale `saas` cu cookie explicit (decis în
+  // `src/proxy.ts`, antet intern suprascris la fiecare cerere); în rest, `ro`.
+  const lang = (await headers()).get(LANG_HEADER) === "en" ? "en" : "ro";
   return (
     <html
-      lang="ro"
+      lang={lang}
       data-theme={theme}
       className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}
     >

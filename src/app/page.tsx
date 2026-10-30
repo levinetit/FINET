@@ -6,7 +6,7 @@ import { SiteShell } from "@/components/site/site-shell";
 import { buttonClasses } from "@/components/ui/button";
 import { getConfig } from "@/lib/config";
 import { isSaasMode } from "@/lib/site";
-import { ro } from "@/messages/ro";
+import { getSiteI18n } from "@/lib/site-i18n";
 
 import { DEFAULT_AFTER_LOGIN } from "./_lib/next-path";
 import { getPageSession } from "./_lib/session";
@@ -14,7 +14,8 @@ import { getPageSession } from "./_lib/session";
 export async function generateMetadata(): Promise<Metadata> {
   if (!isSaasMode()) return {};
   const ready = getConfig().site.ready;
-  return { title: ro.site.landing.title, robots: { index: ready, follow: ready } };
+  const { t } = await getSiteI18n();
+  return { title: t.landing.title, robots: { index: ready, follow: ready } };
 }
 
 /**
@@ -25,7 +26,8 @@ export default async function HomePage() {
   const session = await getPageSession();
   if (session) redirect(DEFAULT_AFTER_LOGIN);
   if (!isSaasMode()) redirect("/login");
-  const t = ro.site.landing;
+  const { t: all } = await getSiteI18n();
+  const t = all.landing;
   return (
     <SiteShell site={getConfig().site}>
       <h1 className="mb-3 text-4xl font-bold">{t.title}</h1>

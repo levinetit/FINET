@@ -83,6 +83,15 @@ ADR 0029; branch `phase/11-public`; fără migrație.
 - Turnstile, OAuth, traducerea în engleză și expunerea publică: 11-C2/C3 (cer chei și decizii).
 - Curățarea conturilor neconfirmate și sursa de IP de încredere: înainte de `SIGNUP_ENABLED=1` public (INFRA 4u).
 
+## 11-C3 — Engleza pe paginile publice și documentul de expunere
+
+ADR 0031; branch `phase/11-english`; fără migrație.
+
+### 1. Ce s-a implementat
+
+- Textele publice în engleză (`src/messages/en-site.ts`, tipul derivat din `ro.site`), textele juridice traduse (ciorne, sub `SITE_LEGAL_REVIEWED`), comutator RO/EN, limba din cookie explicit `finet_lang` (NICIODATĂ din `Accept-Language`), `<html lang>` prin antet intern de proxy.
+- Doar `/`, `/pricing`, `/terms`, `/privacy`, `/support`; aplicația, `/login` și `/register*` rămân în română (`/login` are 0,5 KiB rezervă în buget).
+- `docs/EXPOSURE.md`: ce trebuie decis și schimbat înainte de expunerea publică. `proxy.ts` nu a fost relaxat.
 ## 11-C2 — Turnstile pe înregistrare
 
 ADR 0030; branch `phase/11-turnstile-oauth`; fără migrație.
@@ -96,6 +105,14 @@ ADR 0030; branch `phase/11-turnstile-oauth`; fără migrație.
 
 | Comandă | Rezultat |
 |---|---|
+| `vitest run site-locale.test.ts a11y-rules.test.ts ui-rules.test.ts smoke.test.ts consent.test.ts` | PASS (22 teste) |
+| `eslint`, `tsc`, `prettier` pe fișierele modificate | PASS |
+| E2E (`e2e/site.spec.ts`: română implicită cu `en-US`, comutare, `<html lang>`, titlu, subsol, pagini juridice, login rămâne `ro`) | SCRIS; NOT RUN local; în CI |
+
+### 3. Puncte deschise
+
+- Revizuirea umană a traducerilor juridice; fără URL-uri pe limbă/hreflang (SEO în engleză); aplicația nu e tradusă (decizie a operatorului).
+- Expunerea publică: toate punctele din `docs/EXPOSURE.md` (politica Access, excepția de cod, sursa IP, WAF, SMTP, marcă).
 | `vitest run turnstile.test.ts register-api.test.ts config.test.ts consent.test.ts secret-files.test.ts` (PG17) | PASS (104 teste) |
 | E2E cu widget real | NU există (CI fără chei; regula „resurse doar de pe propriul domeniu” din `regressions (a)`) |
 

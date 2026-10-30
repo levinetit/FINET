@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { type ConsentChoice, consentCookie, consentSignals, parseConsent } from "@/lib/consent";
-import { ro } from "@/messages/ro";
+import type { SiteMessages } from "@/messages/en-site";
 
 type GtagWindow = Window & { dataLayer?: unknown[]; gtag?: (...args: unknown[]) => void };
 
@@ -44,8 +44,10 @@ const serverSnapshot = (): "unknown" => "unknown";
  * scriptul; „Refuz” păstrează totul oprit. Alegerea stă într-un cookie propriu (`finet_consent`).
  * Fără identificator Google configurat, bannerul nu se afișează (nu există nimic de consimțit).
  */
-export function CookieConsent({ analyticsId }: Readonly<{ analyticsId: string | null }>) {
-  const t = ro.site.consent;
+export function CookieConsent({
+  analyticsId,
+  t,
+}: Readonly<{ analyticsId: string | null; t: SiteMessages["consent"] }>) {
   const choice = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 
   useEffect(() => {

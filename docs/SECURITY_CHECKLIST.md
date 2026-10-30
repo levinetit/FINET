@@ -660,6 +660,18 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Curățarea conturilor neconfirmate | TODO (înainte de expunerea publică) | ADR 0029, limite | — |
 | Revizuirea `security` a Fazei 11-C1 | TODO | agentul `security` | — |
 
+## 34. Engleza pe paginile publice `saas` și expunerea publică (Faza 11-C3, 2026-10-31; ADR 0031)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Limba din cookie explicit, niciodată din `Accept-Language`; valori alterate → română | DONE | `site-locale.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
+| `<html lang>` dinamic doar prin antet intern pus de proxy (suprascris la fiecare cerere); `en` doar în `saas`, pe cale publică | DONE | `site-locale.test.ts`, `a11y-rules.test.ts`, `e2e/site.spec.ts` | 2026-10-31 · agent |
+| Paritate chei/liste între `ro.site` și `enSite`; fără valori goale sau diacritice românești în engleză | DONE | `site-locale.test.ts` | 2026-10-31 · agent |
+| Textele juridice englezești: aceleași secțiuni, datele firmei inserate, „to be completed” când lipsesc, ciornă sub `SITE_LEGAL_REVIEWED` | DONE (textul NU e revizuit juridic) | `site-locale.test.ts` | 2026-10-31 · agent |
+| Cookie-ul `finet_lang` nu conține date personale; politica (ciornă) îl menționează | DONE | `legal.ts` | 2026-10-31 · agent |
+| `proxy.ts` nealterat în privința Access: nicio cale nu devine publică | DONE | `proxy.test.ts` (neschimbat, verde) | 2026-10-31 · agent |
+| Expunerea publică: politica Access, excepția de cod, sursa IP, WAF, SMTP, juridic, marcă | TODO (decizii ale operatorului) | `docs/EXPOSURE.md` | — |
+| Revizuirea `security` a Fazei 11-C3 | TODO | agentul `security` | — |
 ## 33. Turnstile pe înregistrarea publică (Faza 11-C2, 2026-10-31; ADR 0030)
 
 | Punct | Stare | Dovadă | Data · revizor |

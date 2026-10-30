@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isRequestAllowed } from "@/lib/access";
 import { verifierFor } from "@/lib/access-guard";
 import { getConfig } from "@/lib/config";
+import { LANG_COOKIE, LANG_HEADER, type SiteLocale, documentLocale } from "@/lib/site-locale";
 import { isPublicSitePath, isTurnstilePath } from "@/lib/site-paths";
 import {
   NONCE_HEADER,
@@ -49,9 +50,16 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const nonce = createNonce();
   // Analytics (Faza 11): domeniile Google în CSP doar pe paginile publice ale `saas`, cu ID setat.
   let analytics = false;
+  // Limba documentului (F11-C3): `en` doar pe paginile publice ale `saas`, cu cookie explicit.
+  let lang: SiteLocale = "ro";
   let turnstile = false;
   try {
     const config = getConfig();
+    lang = documentLocale({
+      saas: config.appMode === "saas",
+      publicPath: isPublicSitePath(request.nextUrl.pathname),
+      cookie: request.cookies.get(LANG_COOKIE)?.value,
+    });
     analytics =
       config.appMode === "saas" &&
       config.site.analyticsId !== null &&
@@ -64,6 +72,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       isTurnstilePath(request.nextUrl.pathname);
   } catch {
     analytics = false;
+    lang = "ro";
     turnstile = false;
   }
   const csp = buildCsp(nonce, {
@@ -81,6 +90,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   // Valorile venite de la client pentru aceste antete interne se înlocuiesc, nu se păstrează.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(NONCE_HEADER, nonce);
+  requestHeaders.set(LANG_HEADER, lang);
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   applySecurityHeaders(response.headers, csp);
