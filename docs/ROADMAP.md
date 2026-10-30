@@ -374,9 +374,9 @@ Starea la 2026-10-28: Fazele 0–2 sunt pe producție; paginile Fazei 3 sunt imp
 |---|---|---|---|
 | `/` (prezentare randată pe server) | `/` | 11 | branch (11-A, ADR 0027): doar `saas`; în `personal` redirecționează la login sau dashboard |
 | `/pricing` | `/pricing` | 11 (pagină), 12 (plăți) | branch (11-A): pagină fără sume, doar `saas`; planurile vin în Faza 12 |
-| `/help` (public) | `/help` | 11 | planificat, doar `saas` |
+| `/support` (public) | `/support` | 11 | branch (11-C1, ADR 0029): șase răspunsuri + contact, doar `saas`; ghidul autentificat rămâne `/help` |
 | `/terms`, `/privacy` | `/terms`, `/privacy` | 11 | branch (11-A): ciorne marcate vizibil; doar `saas`; revizuirea de către un om și datele firmei rămân de făcut (`SITE_LEGAL_REVIEWED`) |
-| `/register` | înregistrare | 11 | există ca pagină, dezactivată (înregistrarea publică e oprită); se activează doar în `saas` |
+| `/register` | înregistrare | 11 | branch (11-C1, ADR 0029): doi pași (email → link → parolă), doar `saas` cu `SIGNUP_ENABLED=1` și SMTP; închisă implicit; Turnstile în 11-C2 |
 | `/admin` | `/admin` | 11 | branch (11-B, ADR 0028): doar `saas`; 404 pentru non-administratori și în `personal` |
 | `/feedback` | feedback și bug-uri (`/api/feedback`, `/api/bug-reports`) | 11 | branch (11-B): un singur formular cu tip feedback/bug, doar `saas`, fără date financiare |
 | `/ref/[code]` | `/ref/FIN-XXXXXX` | 12 | planificat, doar `saas` |

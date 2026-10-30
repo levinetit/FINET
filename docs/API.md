@@ -226,6 +226,9 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 - `POST /feedback` `{ kind: feedback|bug, message (3–2000), page?, appVersion? }` → 201; `GET /announcements` (cele active, cel mult 5); `POST /errors` `{ kind, route, code, digest?, appVersion? }` → 204 (valorile invalide se ignoră; fără mesaje sau stive).
 - `GET /admin/users|households|jobs|feedback|errors|announcements` (paginat: `limit` ≤ 200, `offset`), `PATCH /admin/users/{id}` `{ status: active|disabled }`, `PATCH /admin/feedback/{id}` `{ status }`, `POST /admin/announcements`, `PATCH /admin/announcements/{id}`: doar administratorul platformei; ORICE alt utilizator primește 404. Nicio dată financiară; acțiunile de schimbare se auditează.
 
+## Înregistrarea publică (F11-C, ADR 0029; doar `saas` cu `SIGNUP_ENABLED=1` și SMTP: altfel 404)
+- Rute FĂRĂ sesiune, cu verificare `Origin` și rate limiting pe IP/email. `POST /register` `{ email, name, acceptTerms: true }` → 202 `{ data: { status: "pending" } }` (același răspuns pentru orice adresă; parola NU se trimite aici). `POST /register/complete` `{ token, password }` → 200 `{ data: { status: "verified" } }`; 400 `password` (politica; linkul nu se consumă), 410 `invalid_token` (modificat, expirat sau deja folosit). Linkul din email: `/register/complete?token=…`.
+
 ## Aplicația Android (F9-A, ADR 0020)
 
 `GET /api/v1/app/android/latest` (sesiune cookie sau bearer) → `200 { data: { versionName, versionCode, minSupportedVersionCode, url, sha256, sizeBytes, notes, publishedAt } }` sau `404 android_release_unavailable` (nicio versiune publicată). Datele vin din `<STORAGE_DIR>/app/android-latest.json` (operatorul; `docs/INFRA.md` 4l). Aplicația îl cheamă cel mult o dată pe zi (promptul Android 12.1).

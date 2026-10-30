@@ -9,17 +9,22 @@ import { ro } from "@/messages/ro";
 
 import { Logo } from "../_components/logo";
 
+import { RegisterForm } from "./register-form";
+
 export const metadata: Metadata = { title: ro.register.title };
 
 /**
- * `/register`: în `personal` nu există (404; conturile le creează CLI-ul). În `saas`,
- * înregistrarea publică cu verificarea emailului vine în Faza 11: până atunci, un mesaj onest
- * (și `/api/auth/sign-up/email` rămâne închis).
+ * `/register`: în `personal` nu există (404; conturile le creează CLI-ul). În `saas`, formularul
+ * apare doar cu `SIGNUP_ENABLED=1` ȘI SMTP configurat (ADR 0029); altfel, un mesaj onest
+ * („încă nu e deschisă”). `/api/auth/sign-up/email` rămâne închis în ambele cazuri.
  */
 export default function RegisterPage() {
   let mode: string | null = null;
+  let open = false;
   try {
-    mode = getConfig().appMode;
+    const config = getConfig();
+    mode = config.appMode;
+    open = config.auth.signupEnabled && config.notify.smtp !== null;
   } catch {
     mode = null;
   }
@@ -32,10 +37,24 @@ export default function RegisterPage() {
       </div>
       <Card>
         <h1 className="mb-2 text-2xl font-bold">{ro.register.title}</h1>
-        <p className="mb-5 text-muted-foreground">{ro.register.unavailable}</p>
-        <Link href="/login" className={buttonClasses("outline")}>
-          {ro.register.backToLogin}
-        </Link>
+        {open ? (
+          <>
+            <p className="mb-5 text-muted-foreground">{ro.register.intro}</p>
+            <RegisterForm />
+            <p className="mt-5 text-center text-sm">
+              <Link href="/login">{ro.register.backToLogin}</Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mb-5 text-muted-foreground" data-testid="register-unavailable">
+              {ro.register.unavailable}
+            </p>
+            <Link href="/login" className={buttonClasses("outline")}>
+              {ro.register.backToLogin}
+            </Link>
+          </>
+        )}
       </Card>
     </main>
   );

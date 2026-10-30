@@ -143,6 +143,11 @@ export type AuthConfig = Readonly<{
   secret: string | null;
   /** Verificarea parolelor compromise prin HIBP (k-anonymity). Implicit oprită. */
   hibpEnabled: boolean;
+  /**
+   * Înregistrarea publică (Faza 11-C, ADR 0029), doar `saas`: oprită implicit (`SIGNUP_ENABLED=1` o
+   * pornește). Chiar pornită, ruta există doar dacă SMTP e configurat (verificarea emailului).
+   */
+  signupEnabled: boolean;
   rateLimits: Readonly<{
     /** Login-ul web (parolă), pe IP + email normalizat. */
     login: RateLimitRule;
@@ -376,6 +381,7 @@ const envSchema = z.object({
   SITE_COMPANY_ADDRESS: z.string().trim().min(5).max(300).optional(),
   SITE_CONTACT_EMAIL: z.string().trim().email().max(200).optional(),
   SITE_LEGAL_REVIEWED: z.enum(["0", "1"]).optional(),
+  SIGNUP_ENABLED: z.enum(["0", "1"]).optional(),
   SITE_ANALYTICS_ID: z
     .string()
     .trim()
@@ -852,6 +858,7 @@ export function parseConfig(
     auth: Object.freeze({
       secret: e.BETTER_AUTH_SECRET ?? null,
       hibpEnabled: e.AUTH_HIBP_ENABLED === "true",
+      signupEnabled: e.SIGNUP_ENABLED === "1",
       rateLimits: Object.freeze({
         login: Object.freeze({
           max: int(e.AUTH_LOGIN_MAX_ATTEMPTS, DEFAULTS.loginMax),

@@ -54,6 +54,19 @@ export async function insertUser(tx: Tx, row: NewUserRow): Promise<void> {
     values (${row.id}, ${row.email}, ${row.name}, ${row.emailVerified})`);
 }
 
+/**
+ * Marchează emailul ca verificat (F11-C) DOAR dacă încă nu era (`true` = tocmai acum). Condiția face
+ * linkul de confirmare de unică folosință: după prima folosire, același link nu mai face nimic.
+ * `finet_app` are UPDATE pe coloană, în contextul propriu.
+ */
+export async function markEmailVerified(tx: Tx, userId: string): Promise<boolean> {
+  const rows = await tx.execute<{ id: string }>(sql`
+    update finet.users set email_verified = true, updated_at = now()
+    where id = ${userId}::uuid and email_verified = false
+    returning id`);
+  return rows.length === 1;
+}
+
 /** Promovează utilizatorul din context ca prim administrator (dacă nu există niciunul). */
 export async function promoteFirstAdmin(tx: Tx, userId: string): Promise<boolean> {
   const rows = await tx.execute<{ promoted: boolean }>(

@@ -1,10 +1,17 @@
 /**
  * Paginile PUBLICE ale site-ului (Faza 11, ADR 0027), existente doar în modul `saas`: prezentarea
- * (`/`), prețurile, termenii și confidențialitatea. Singurele pe care se încarcă (după consimțământ)
+ * (`/`), prețurile, termenii, confidențialitatea și suportul (`/support`; ghidul din aplicație rămâne `/help`, în zona autentificată). Paginile care colectează
+ * parole (`/register`, `/register/complete`) NU sunt aici: fără analytics și fără CSP relaxat. Singurele pe care se încarcă (după consimțământ)
  * analytics-ul și pe care CSP-ul permite domeniile lui. Aplicația autentificată nu le conține
  * niciodată.
  */
-const PUBLIC_SITE_PATHS: ReadonlySet<string> = new Set(["/", "/pricing", "/terms", "/privacy"]);
+const PUBLIC_SITE_PATHS: ReadonlySet<string> = new Set([
+  "/",
+  "/pricing",
+  "/terms",
+  "/privacy",
+  "/support",
+]);
 
 export function isPublicSitePath(pathname: string): boolean {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;

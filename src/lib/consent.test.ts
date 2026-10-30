@@ -35,11 +35,13 @@ describe("consimțământul pentru analytics (Consent Mode v2)", () => {
 });
 
 describe("paginile publice și CSP", () => {
-  it("doar cele patru pagini publice, cu sau fără slash final", () => {
-    for (const p of ["/", "/pricing", "/terms", "/privacy", "/terms/"]) {
+  it("doar cele cinci pagini publice, cu sau fără slash final", () => {
+    for (const p of ["/", "/pricing", "/terms", "/privacy", "/support", "/terms/"]) {
       expect(isPublicSitePath(p), p).toBe(true);
     }
-    for (const p of ["/dashboard", "/login", "/api/v1/me", "/pricing/x", "/terms.html", ""]) {
+    // `/register*` colectează parole: NICIODATĂ pagină cu analytics; `/help` e ghidul autentificat.
+    const privateOnes = ["/dashboard", "/login", "/register", "/register/complete", "/help"];
+    for (const p of [...privateOnes, "/api/v1/me", "/pricing/x", "/terms.html", ""]) {
       expect(isPublicSitePath(p), p).toBe(false);
     }
   });

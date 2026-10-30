@@ -138,3 +138,33 @@ export function resetPasswordMessage(appName: string, to: string, url: string, m
     ),
   } satisfies MailMessage;
 }
+
+/** Șablonul de verificare a emailului la înregistrare (română, scurt). */
+export function verifyEmailMessage(appName: string, to: string, url: string, hours: number) {
+  return {
+    to,
+    subject: `Confirmă adresa de email pentru ${appName}`,
+    ...render(
+      appName,
+      `Ai creat un cont ${appName}. Confirmă adresa de email ca să te poți conecta.`,
+      "Confirmă emailul",
+      url,
+      `Linkul expiră în ${hours} de ore. Dacă nu ai creat tu contul, ignoră acest mesaj; contul nu se activează.`,
+    ),
+  } satisfies MailMessage;
+}
+
+/** Răspunsul la o înregistrare cu un email deja folosit: fără a dezvălui nimic în aplicație. */
+export function existingAccountMessage(appName: string, to: string, url: string) {
+  return {
+    to,
+    subject: `Ai deja un cont ${appName}`,
+    ...render(
+      appName,
+      `Cineva a încercat să creeze un cont ${appName} cu această adresă, dar ai deja unul.`,
+      "Mergi la autentificare",
+      url,
+      "Dacă ai uitat parola, folosește „Ai uitat parola?” din pagina de autentificare. Dacă nu ai fost tu, ignoră acest mesaj.",
+    ),
+  } satisfies MailMessage;
+}

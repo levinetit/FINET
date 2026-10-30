@@ -15,6 +15,7 @@ import * as S from "./statements-handlers";
 import * as MT from "./matching-handlers";
 import * as SH from "./shopping-handlers";
 import * as AD from "./admin-handlers";
+import * as RG from "./register-handlers";
 import * as AH from "./ask-handlers";
 import * as SM from "./summary-handlers";
 import * as PR from "./prices-handlers";
@@ -230,6 +231,8 @@ const OPERATION_OF = new Map<unknown, string>([
   [PR.createReportDefinitionHandler, "createReportDefinition"],
   [PR.previewReportHandler, "previewReportRules"],
   [AH.askHandler, "askFinet"],
+  [RG.registerHandler, "registerAccount"],
+  [RG.completeRegisterHandler, "completeRegistration"],
   [AD.createFeedbackHandler, "createFeedback"],
   [AD.listAnnouncementsHandler, "listAnnouncements"],
   [AD.reportErrorHandler, "reportError"],

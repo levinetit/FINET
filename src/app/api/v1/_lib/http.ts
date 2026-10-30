@@ -15,6 +15,7 @@ import {
 } from "@/modules/family/invites.service";
 import { currentHouseholdIdOf } from "@/modules/auth/audit";
 import type { FinetAuth } from "@/modules/auth/auth";
+import type { Mailer } from "@/modules/auth/mailer";
 import { hitRateLimit, rateLimitKey } from "@/modules/auth/rate-limit";
 import {
   CsrfError,
@@ -124,6 +125,8 @@ export type ApiDeps = Readonly<{
   /** Doar pentru teste: plafonul de rânduri și pagina exportului de tranzacții. */
   exportMaxRows?: number;
   exportPageSize?: number;
+  /** Doar pentru teste: expeditorul emailurilor de înregistrare (implicit din SMTP, F11-C). */
+  mailer?: Mailer | null;
   /** Doar pentru teste: furnizorul AI al „Întreabă FINET” (implicit din configurație, ADR 0026). */
   ask?: Readonly<{ ai: AskAi | null }>;
   /** Doar pentru teste: ritmul fluxului SSE (`GET /api/v1/events`, ADR 0017). */
