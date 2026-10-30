@@ -1042,7 +1042,8 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1 planificare pe PostgreSQL real", (
     const lines = r.text.slice(1).split("\r\n");
     expect(lines[0]).toBe(TRANSACTION_COLUMNS.join(","));
     expect(r.text).not.toContain("B-ul");
-    expect(r.text).not.toContain("777");
+    // Celula de sumă exactă a tranzacției lui B (nu "777" liber: un UUID sau o oră o pot conține).
+    expect(r.text).not.toContain(",777,RON,7.77,");
     expect(r.text).toContain(`,'=cmd|' /C calc'!A0,`);
     expect(r.text).toContain(`"Spune ""da"", apoi; virgulă, linie\r\nnouă"`);
     expect(r.text).toContain("'@SUM(A1)");
