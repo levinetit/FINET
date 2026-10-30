@@ -1,0 +1,19 @@
+# „Întreabă FINET” cu LLM (Faza 10, F10-C, ADR 0026): fișier compose SUPLIMENTAR, opțional.
+# Dă serverului web o cheie LiteLLM DEDICATĂ (NU cea a workerului) ca secret Docker, în
+# `/run/secrets/finet_ask_litellm_key`. Fără acest fișier, `finet-web` nu are nicio cheie AI
+# (și `AI_ASK` trebuie să rămână 0). Folosire:
+#   docker compose -f ops/docker/docker-compose.yml -f ops/docker/docker-compose.ask.yml \
+#     --env-file /srv/finet/compose/compose.env up -d finet-web
+# Fișierul secretului (`${FINET_SECRETS_DIR}/finet_ask_litellm_key`, uid 1000, mod 400) conține o
+# cheie virtuală LiteLLM creată doar pentru acest scop: doar modelul text, cu plafon de cheltuieli
+# propriu în LiteLLM (docs/INFRA.md, „4s”).
+secrets:
+  finet_ask_litellm_key:
+    file: ${FINET_SECRETS_DIR:-/srv/finet/secrets}/finet_ask_litellm_key
+
+services:
+  finet-web:
+    secrets:
+      - finet_ask_litellm_key
+    environment:
+      AI_ASK_API_KEY_FILE: /run/secrets/finet_ask_litellm_key

@@ -74,7 +74,7 @@ curl -s https://finet.example/api/v1/transactions \
 | `GET /api/v1/me`, `PATCH /api/v1/me` | profilul, preferințele, gospodăria curentă |
 | `POST /api/v1/me/password` | schimbarea parolei |
 | `GET /api/v1/me/sessions`, `DELETE /api/v1/me/sessions/{id}`, `POST /api/v1/me/sessions/revoke-others` | sesiunile |
-| `GET /api/v1/me/consents`, `PUT /api/v1/me/consents` | consimțămintele (`usageStats`, `externalAi`, `externalAiStatements`) |
+| `GET /api/v1/me/consents`, `PUT /api/v1/me/consents` | consimțămintele (`usageStats`, `externalAi`, `externalAiStatements`, `externalAiAsk`) |
 | `POST /api/v1/app/events` | evenimentele de utilizare |
 | `GET /api/v1/households`, `GET /api/v1/households/{id}` | gospodăriile mele; membrii (fără emailuri) |
 | `GET/POST /api/v1/accounts`, `GET/PATCH/DELETE /api/v1/accounts/{id}`, `POST …/{id}/archive`, `POST …/{id}/unarchive` | conturile, cu sold calculat și totaluri pe monedă (`?includeArchived=true`) |
@@ -219,7 +219,7 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 - Antete: `Content-Disposition: attachment` cu nume fix (`finet-tranzactii.xlsx`, `finet-contabilitate.csv`, …), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.
 
 ## „Întreabă FINET” și rezumatul lunii (F10-C, ADR 0025)
-- `POST /ask` `{ question }` (3–300 de caractere) → `{ understood: true, query, queryText, period, notes, answer, text }`: întrebarea devine în cod o interogare dintr-un set închis (metrici `expense_total`, `income_total`, `top_categories`, `top_merchants`; perioadă; filtre opționale pe categorie sau comerciant), cifrele se calculează din baza de date sub RLS (fără conturile personale ale altor membri), iar răspunsul arată MEREU interogarea folosită. O întrebare care nu se poate transforma primește **200** cu `understood: false`, `reason` (`empty|metric|period`) și un mesaj; nu se ghicește. Fără AI; textul întrebării nu se păstrează nicăieri. Limită proprie 30/min per utilizator; `entitlements`: `ask.finet`.
+- `POST /ask` `{ question }` (3–300 de caractere) → `{ understood: true, query, queryText, period, notes, answer, text }`: întrebarea devine în cod o interogare dintr-un set închis (metrici `expense_total`, `income_total`, `top_categories`, `top_merchants`; perioadă; filtre opționale pe categorie sau comerciant), cifrele se calculează din baza de date sub RLS (fără conturile personale ale altor membri), iar răspunsul arată MEREU interogarea folosită. O întrebare care nu se poate transforma primește **200** cu `understood: false`, `reason` (`empty|metric|period`) și un mesaj; nu se ghicește. Implicit fără AI. Cu `AI_ASK=1` (ADR 0026), o întrebare neînțeleasă de parser poate fi tradusă de un model extern, DOAR cu consimțământul separat `externalAiAsk` și în bugetul AI (`source: "ai"`; la refuz, `aiHint`: `consent`|`budget`|`error`; `reason: "name"` dacă numele propus de model nu există). Textul întrebării nu se păstrează nicăieri. Limită proprie 30/min per utilizator; `entitlements`: `ask.finet`.
 - `GET /summary/monthly?month=` → `{ month, label, lines: [{ code, currency, text }] }`: propoziții construite în cod din cifrele raportului lunar și ale lunii precedente; `label` e mereu „Rezumat automat, nu sfat financiar.”.
 
 ## Aplicația Android (F9-A, ADR 0020)

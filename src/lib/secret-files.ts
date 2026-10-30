@@ -36,6 +36,8 @@ export const SECRET_VARIABLES = [
   "STORAGE_S3_SECRET_ACCESS_KEY",
   // Cheia virtuală LiteLLM (F6-B): config.ts o acceptă DOAR ca `AI_API_KEY_FILE`, în rolul worker.
   "AI_API_KEY",
+  // Cheia DEDICATĂ a „Întreabă FINET” (F10-C, ADR 0026): doar rolul web, doar cu `AI_ASK=1`.
+  "AI_ASK_API_KEY",
 ] as const;
 
 export type SecretVariable = (typeof SECRET_VARIABLES)[number];

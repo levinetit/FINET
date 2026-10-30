@@ -80,6 +80,7 @@ export const AI_TASKS = [
   "statement_extract",
   "list_match",
   "monthly_summary",
+  "ask_finet",
 ] as const;
 export const AI_PROVIDERS = ["local", "external"] as const;
 export const AI_UNIT_KINDS = ["tokens", "pages"] as const;
@@ -505,7 +506,7 @@ export const aiCalls = finet.table(
       .where(sql`${t.provider} = 'external'`),
     check(
       "ai_calls_task_valid",
-      sql`${t.task} in ('receipt_extract', 'categorize', 'statement_extract', 'list_match', 'monthly_summary')`,
+      sql`${t.task} in ('receipt_extract', 'categorize', 'statement_extract', 'list_match', 'monthly_summary', 'ask_finet')`,
     ),
     check("ai_calls_model_alias_format", sql`${t.modelAlias} ~ '^[a-z0-9][a-z0-9._:/-]{0,99}$'`),
     check("ai_calls_provider_valid", sql`${t.provider} in ('local', 'external')`),

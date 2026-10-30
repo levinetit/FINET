@@ -601,3 +601,19 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Performanța agregatelor pe volume mari | NEMĂSURAT (interogări agregate pe fereastra cerută; aceleași ca la rapoarte) | — | — |
 | Revizuirea `security` a F10-C partea 2 | TODO | agentul `security` | — |
 
+## 29. „Întreabă FINET”: pasul cu LLM din serverul web (F10-C, 2026-10-31; ADR 0026)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Modelul se apelează doar când parserul din cod nu înțelege, doar cu consimțământul SEPARAT `external_ai_ask`, înainte de fiecare încercare; fără acord → zero cereri | DONE (PG17) | `ask-llm-api.test.ts` | 2026-10-31 · agent |
+| Ce pleacă: doar întrebarea, data și numele categoriilor; fără sume, comercianți, id-uri, emailuri | DONE (PG17) | `ask-llm-api.test.ts` („ce pleacă”), `ask-llm.test.ts` | 2026-10-31 · agent |
+| Cheie dedicată: doar `AI_ASK_API_KEY_FILE`, doar rolul web, doar cu `AI_ASK=1`; cheia workerului interzisă pe web; `AI_ASK=1` fără URL/cheie → eroare la pornire; cheia în clar refuzată | DONE | `config.test.ts` | 2026-10-31 · agent |
+| Ieșirea modelului: Zod strict, perioadă ca specificație (modelul nu scrie date), nume potrivite în cod, nume necunoscut → refuz, câmpuri în plus/metrici inventate → `failed_validation` | DONE (PG17) | `ask-llm.test.ts`, `ask-llm-api.test.ts` | 2026-10-31 · agent |
+| Buget rezervat înainte de fiecare încercare; buget epuizat → nimic nu pleacă | DONE (PG17) | `ask-llm-api.test.ts` | 2026-10-31 · agent |
+| `ai_calls`: rând `ask_finet` fără conținut; întrebarea nu rămâne în nicio tabelă a schemei `finet` | DONE (PG17) | `ask-llm-api.test.ts` (marcaj unic în toate tabelele) | 2026-10-31 · agent |
+| Erori ale furnizorului (5xx, timeout): răspuns curat, fără cheie sau detalii în răspuns | DONE (PG17: 5xx); timeout NEVERIFICAT end-to-end | `ask-llm-api.test.ts` | 2026-10-31 · agent |
+| Migrația `0019` (două CHECK înlocuite, nimic altceva) și amprenta pg_dump → restore | DONE (PG17) | `migrate.test.ts` | 2026-10-31 · agent |
+| Secretul se montează doar prin `docker-compose.ask.yml` (deploy-urile fără pas LLM nu se schimbă) | DONE (config); aplicarea pe gazdă: NEFĂCUTĂ | `ops/docker/docker-compose.ask.yml`, `test-env-examples.sh` | 2026-10-31 · agent |
+| Accesul rețea web → LiteLLM (firewall, rețea Docker) și cheia virtuală dedicată cu plafon | NEFĂCUT (pas de operator, INFRA 4s) | — | — |
+| Revizuirea `security` a pasului LLM | TODO | agentul `security` | — |
+

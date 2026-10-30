@@ -41,6 +41,9 @@ const answerSchema = z.discriminatedUnion("kind", [
 export const askResultSchema = z.discriminatedUnion("understood", [
   z.strictObject({
     understood: z.literal(true),
+    source: z.enum(["rules", "ai"]).meta({
+      description: "`rules` = parserul din cod; `ai` = tradusă de un model extern (ADR 0026).",
+    }),
     query: askQuerySchema,
     queryText: z.string(),
     period: z.strictObject({ from: date, to: date, label: z.string() }),
@@ -50,8 +53,12 @@ export const askResultSchema = z.discriminatedUnion("understood", [
   }),
   z.strictObject({
     understood: z.literal(false),
-    reason: z.enum(["empty", "metric", "period"]),
+    reason: z.enum(["empty", "metric", "period", "name"]),
     message: z.string(),
+    aiHint: z
+      .enum(["consent", "budget", "error"])
+      .nullable()
+      .meta({ description: "De ce n-a ajutat pasul cu AI (când e pornit)." }),
   }),
 ]);
 
@@ -75,7 +82,7 @@ export const ASK_OPERATIONS: readonly Operation[] = [
     tag: "reports",
     summary: "„Întreabă FINET”: o întrebare în română despre cheltuielile sau veniturile tale.",
     description:
-      "Întrebarea (3–300 de caractere) se transformă în cod într-o interogare dintr-un set ÎNCHIS (total de cheltuieli sau venituri pe o perioadă, opțional pe o categorie sau la un comerciant; clasamentul categoriilor sau al comercianților), validată strict; cifrele se calculează din baza de date, sub aceleași reguli de vizibilitate ca restul aplicației (fără conturile personale ale altor membri). Răspunsul conține MEREU interogarea folosită (`query`, `queryText`) și perioada. O întrebare care nu poate fi transformată primește 200 cu `understood: false` și un motiv fix (`empty`, `metric`, `period`), nu o presupunere. Nu se folosește niciun model AI și nimic nu pleacă din aplicație; textul întrebării nu se păstrează (nici în baza de date, nici în audit sau loguri). Rate limit propriu: 30/min per utilizator.",
+      "Întrebarea (3–300 de caractere) se transformă în cod într-o interogare dintr-un set ÎNCHIS (total de cheltuieli sau venituri pe o perioadă, opțional pe o categorie sau la un comerciant; clasamentul categoriilor sau al comercianților), validată strict; cifrele se calculează din baza de date, sub aceleași reguli de vizibilitate ca restul aplicației (fără conturile personale ale altor membri). Răspunsul conține MEREU interogarea folosită (`query`, `queryText`) și perioada. O întrebare care nu poate fi transformată primește 200 cu `understood: false` și un motiv fix (`empty`, `metric`, `period`), nu o presupunere. Implicit nu se folosește niciun model AI și nimic nu pleacă din aplicație. Cu `AI_ASK=1` (ADR 0026), o întrebare pe care parserul din cod n-a înțeles-o se poate traduce cu un model extern, DOAR cu consimțământul `external_ai` și în bugetul AI: pleacă textul întrebării și numele categoriilor (nu sume, comercianți sau tranzacții); răspunsul are `source` = `ai`, iar un nume necunoscut sau o ieșire invalidă se refuză. Textul întrebării nu se păstrează (nici în baza de date, nici în audit sau loguri); `ai_calls` păstrează doar metadate. Rate limit propriu: 30/min per utilizator.",
     body: { schema: askBodySchema },
     success: { status: 200, schema: dataOf(askResultSchema), description: "Răspunsul." },
     errors: [400, 403, 415, 413],

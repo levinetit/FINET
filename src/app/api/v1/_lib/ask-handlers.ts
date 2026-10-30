@@ -1,7 +1,9 @@
 import "server-only";
 
 import { NotImplementedError } from "@/lib/errors";
+import { getConfig } from "@/lib/config";
 import { askFinet } from "@/modules/ask/ask.service";
+import { type AskAi, askAiFromConfig } from "@/modules/ask/ask-runtime";
 import { can } from "@/modules/entitlements";
 
 import {
@@ -34,6 +36,16 @@ async function allowed(householdId: string): Promise<boolean> {
   }
 }
 
+let configured: { key: unknown; ai: AskAi | null } | null = null;
+
+/** Furnizorul AI al web-ului: injectat în teste, altfel din configurație (memorat; `null` dacă e oprit). */
+function askAiOf(d: ApiDeps): AskAi | null {
+  if (d.ask !== undefined) return d.ask.ai;
+  const config = getConfig();
+  if (configured?.key !== config) configured = { key: config, ai: askAiFromConfig(config) };
+  return configured.ai;
+}
+
 export function askHandler(request: Request, d: ApiDeps): Promise<Response> {
   return handle(request, d, async (ctx) => {
     const body = await readJsonBody(request);
@@ -42,7 +54,9 @@ export function askHandler(request: Request, d: ApiDeps): Promise<Response> {
     if (!(await allowed(hh))) {
       throw new ApiError(403, "forbidden", "Funcția nu e disponibilă în planul curent.");
     }
-    const result = await askFinet({ db: d.db, now: () => new Date(ctx.now) }, ctx.actor, hh, body);
+    const result = await askFinet({ db: d.db, now: () => new Date(ctx.now) }, ctx.actor, hh, body, {
+      ai: askAiOf(d),
+    });
     return json({ data: result });
   });
 }

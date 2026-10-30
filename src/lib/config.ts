@@ -122,6 +122,13 @@ export type AiConfig = Readonly<{
    * `skipped`.
    */
   listMatch: boolean;
+  /**
+   * „Întreabă FINET” cu LLM (Faza 10, F10-C, ADR 0026): `AI_ASK=1` (implicit `0`) permite
+   * serverului WEB să traducă întrebările pe care parserul din cod nu le înțelege, printr-un model
+   * extern (LiteLLM). Web-ul NU primește cheia workerului: are o cheie DEDICATĂ, doar din
+   * `AI_ASK_API_KEY_FILE` (rolul web, cu `AI_ASK=1`); fără ea, pasul LLM nu rulează.
+   */
+  ask: Readonly<{ enabled: boolean; apiKey: string | null }>;
   /** Tarifele pentru estimarea costului, în unități minore ale monedei bugetului per 1M tokeni. */
   pricing: Readonly<{ inputPerMTokMinor: bigint; outputPerMTokMinor: bigint }>;
 }>;
@@ -334,6 +341,13 @@ const envSchema = z.object({
     .optional(),
   AI_RESPONSE_FORMAT: z.enum(["json_schema", "json_object", "none"]).optional(),
   AI_LIST_MATCH: z.enum(["0", "1"]).optional(),
+  AI_ASK: z.enum(["0", "1"]).optional(),
+  AI_ASK_API_KEY: z
+    .string()
+    .min(8)
+    .max(512)
+    .regex(/^[\x21-\x7e]+$/)
+    .optional(),
   AI_PRICE_INPUT_PER_MTOK: z.string().max(40).optional(),
   AI_PRICE_OUTPUT_PER_MTOK: z.string().max(40).optional(),
 
@@ -470,6 +484,10 @@ export function parseConfig(
     // Cheia AI (F6-B): doar workerul apelează furnizorul; celelalte roluri nu deschid fișierul.
     if (knownRole !== "worker") {
       forbidden.set("AI_API_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
+    }
+    // Cheia „Întreabă FINET” (F10-C): doar serverul web (workerul are propria cheie).
+    if (knownRole !== "web") {
+      forbidden.set("AI_ASK_API_KEY", `nu e permisă când FINET_ROLE=${knownRole}`);
     }
   }
   const secrets = knownRole
@@ -644,6 +662,26 @@ export function parseConfig(
       issues.push({ variable: "AI_API_KEY_FILE", problem: `nu e permisă când FINET_ROLE=${role}` });
     }
   }
+  // „Întreabă FINET” cu LLM (F10-C): cheia dedicată doar din fișier, doar rolul web; `AI_ASK=1`
+  // cere URL-ul furnizorului și cheia (altfel pasul ar fi tăcut nefuncțional).
+  if (e.AI_ASK_API_KEY !== undefined) {
+    if (!secrets.fromFile.has("AI_ASK_API_KEY")) {
+      issues.push({ variable: "AI_ASK_API_KEY", problem: "se dă doar prin AI_ASK_API_KEY_FILE" });
+    } else if (role !== "web") {
+      issues.push({
+        variable: "AI_ASK_API_KEY_FILE",
+        problem: `nu e permisă când FINET_ROLE=${role}`,
+      });
+    }
+  }
+  if (role === "web" && e.AI_ASK === "1") {
+    if (e.AI_BASE_URL === undefined) {
+      issues.push({ variable: "AI_BASE_URL", problem: "e necesară când AI_ASK=1" });
+    }
+    if (e.AI_ASK_API_KEY === undefined) {
+      issues.push({ variable: "AI_ASK_API_KEY_FILE", problem: "e necesară când AI_ASK=1" });
+    }
+  }
   const aiAllowedHosts = (e.AI_ALLOWED_HOSTS ?? DEFAULTS.aiAllowedHosts).split(",");
   if (e.AI_BASE_URL !== undefined) {
     let host: string | null = null;
@@ -798,6 +836,10 @@ export function parseConfig(
       confidenceThreshold: int(e.AI_CONFIDENCE_THRESHOLD, DEFAULTS.aiConfidenceThreshold),
       responseFormat: e.AI_RESPONSE_FORMAT ?? "json_object",
       listMatch: e.AI_LIST_MATCH === "1",
+      ask: Object.freeze({
+        enabled: role === "web" && e.AI_ASK === "1",
+        apiKey: role === "web" ? (e.AI_ASK_API_KEY ?? null) : null,
+      }),
       pricing: Object.freeze(pricing),
     }),
     notify: Object.freeze({

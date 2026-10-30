@@ -185,3 +185,34 @@ Master prompt-ul cere un **LLM local** pentru ambele funcții. Nu există LLM lo
 
 `docs/INFRA.md`, secțiunea **4r**. Fără migrație; doar redeploy `finet-web`. Nimic nu s-a aplicat.
 
+### Pasul LLM al „Întreabă FINET” (ADR 0026)
+
+#### 1. Ce s-a implementat
+
+- **Traducere cu model extern din `finet-web`**, doar când parserul din cod nu înțelege (`ask-llm.ts`, `period.ts`, `ask.service.ts`): cererea (doar întrebare, dată, nume de categorii), schema ieșirii (perioadă ca specificație, nume potrivite în cod, refuz la nume necunoscut), consimțământ separat `external_ai_ask`, buget rezervat, rând `ask_finet` în `ai_calls`, `source: "ai"` în răspuns.
+- **Config:** `AI_ASK` (implicit 0) și cheie DEDICATĂ `AI_ASK_API_KEY_FILE` (doar web, doar cu `AI_ASK=1`); fișier compose suplimentar `docker-compose.ask.yml` pentru secret.
+- **Migrația `0019_ask_finet_task`:** înlocuiește `ai_calls_task_valid` (+ `ask_finet`) și `consents_kind_valid` (+ `external_ai_ask`).
+- **UI:** cardul „Întreabă FINET cu AI” în Profil; textele de pe `/ask`.
+- **Documentație:** ADR 0026, ADR 0025 actualizat, INFRA 4s, SECURITY_CHECKLIST §29, PRIVACY_NOTES.
+
+#### 2. Teste rulate local (2026-10-31)
+
+| Comandă | Rezultat |
+|---|---|
+| `vitest run src/modules/ask src/app/api/v1/ask-llm-api.test.ts src/app/api/v1/ask-api.test.ts` (cu PG + server AI fals) | PASS |
+| `vitest run src/db/migrate.test.ts src/modules/usage src/app/api/v1/usage.test.ts src/lib/config.test.ts` | PASS |
+| `node scripts/openapi.mjs --check`, `sh ops/docker/test-env-examples.sh` | PASS |
+| `tsc --noEmit` pe serviciile, handlerul, runtime-ul și paginile atinse (loturi) | PASS |
+| E2E: pasul LLM nu are E2E (cere server AI fals în `webServer`); `ask.spec.ts` rulează cu pasul oprit | NOT RUN local; în CI |
+| Apel real către LiteLLM/Gemini | NU s-a făcut (doar server AI fals) |
+
+#### 3. Puncte deschise
+
+- **Neaplicat pe producție:** migrația `0019`, cheia virtuală dedicată din LiteLLM (plafon propriu), secretul, variabilele pe `finet-web`, accesul de rețea web → LiteLLM, redeploy cu fișierul suplimentar: toate pași de operator (INFRA 4s), fiecare cu acordul explicit.
+- Calitatea traducerilor modelului pe întrebări reale: neevaluată; costul real pe întrebare: nemăsurat.
+- Revizuirea `security` a pasului LLM; fără E2E cu server AI fals.
+
+#### 4. Pe producție
+
+`docs/INFRA.md`, secțiunea **4s**. Nimic nu s-a aplicat.
+

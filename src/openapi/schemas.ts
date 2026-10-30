@@ -180,7 +180,7 @@ export const householdDetailSchema = householdSummarySchema
 
 export const consentStateSchema = z
   .strictObject({
-    kind: z.enum(["usageStats", "externalAi", "externalAiStatements"]),
+    kind: z.enum(["usageStats", "externalAi", "externalAiStatements", "externalAiAsk"]),
     granted: z.boolean(),
     grantedAt: instant.nullable(),
     revokedAt: instant.nullable(),

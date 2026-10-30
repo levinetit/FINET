@@ -8,7 +8,12 @@ import { DB_CURRENCIES, households } from "./households";
 /** Preferințe, consimțăminte și jurnalul de audit (master prompt 6.1, 6.3). */
 
 export const THEMES = ["system", "light", "dark"] as const;
-export const CONSENT_KINDS = ["external_ai", "external_ai_statements", "usage_stats"] as const;
+export const CONSENT_KINDS = [
+  "external_ai",
+  "external_ai_statements",
+  "usage_stats",
+  "external_ai_ask",
+] as const;
 
 export const userPreferences = finet.table(
   "user_preferences",
@@ -58,7 +63,7 @@ export const consents = finet.table(
       .where(sql`${t.revokedAt} is null`),
     check(
       "consents_kind_valid",
-      sql`${t.kind} in ('external_ai', 'external_ai_statements', 'usage_stats')`,
+      sql`${t.kind} in ('external_ai', 'external_ai_statements', 'usage_stats', 'external_ai_ask')`,
     ),
     check(
       "consents_revoked_after_granted",
