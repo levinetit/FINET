@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
 
 import { siteConfigOrNotFound } from "@/lib/site";
-import { ro } from "@/messages/ro";
+import { getSiteI18n } from "@/lib/site-i18n";
 
-export const metadata: Metadata = { title: ro.site.support.title };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getSiteI18n();
+  return { title: t.support.title };
+}
 
 /** Pagina publică de suport (Faza 11-C, ADR 0029; ghidul din aplicație rămâne `/help`): răspunsuri scurte; contactul vine din datele firmei. */
-export default function SupportPage() {
+export default async function SupportPage() {
   const site = siteConfigOrNotFound();
-  const t = ro.site.support;
+  const { t: all } = await getSiteI18n();
+  const t = all.support;
   const email = site.company.email;
   return (
     <>
@@ -32,7 +36,7 @@ export default function SupportPage() {
             {email ? (
               <a href={`mailto:${email}`}>{email}</a>
             ) : (
-              <span className="text-muted-foreground">[{ro.site.footer.missing}]</span>
+              <span className="text-muted-foreground">[{all.footer.missing}]</span>
             )}
             .
           </p>

@@ -1970,6 +1970,8 @@ export const ro = {
       support: "Suport",
       login: "Intră în cont",
       register: "Creează cont",
+      language: "Limba",
+      skip: "Sari la conținut",
     },
     landing: {
       title: "FINET: finanțele tale și ale familiei, într-un singur loc",

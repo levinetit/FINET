@@ -7,7 +7,9 @@ import { ro } from "@/messages/ro";
 
 /**
  * Reguli statice de accesibilitate (Faza 4), verificabile fără browser:
- * - `lang="ro"` pe `<html>` (layout-ul rădăcină și `global-error`);
+ * - `lang` pe `<html>`: `global-error` are `lang="ro"` literal; layout-ul rădăcină îl ia din antetul
+ *   intern pus de proxy, cu `ro` ca singură alternativă implicită (F11-C3: `en` doar pe paginile
+ *   publice ale `saas`, cu cookie explicit; vezi `site-locale.test.ts`);
  * - legătura „Sari la conținut” spre `<main id="continut">` în layout-ul autentificat;
  * - fiecare pagină are un titlu propriu (`metadata.title` din `ro.ts`), iar titlurile sunt unice.
  * E2E (`e2e/regressions.spec.ts`) verifică aceleași lucruri în pagina randată.
@@ -38,8 +40,11 @@ function resolve(path: string): unknown {
 }
 
 describe("accesibilitate (reguli statice)", () => {
-  it('lang="ro" pe <html>', () => {
-    expect(read("layout.tsx")).toMatch(/<html\s[^>]*lang="ro"/);
+  it('lang pe <html>: ro implicit (layout dinamic doar spre "en" pe site-ul public), "ro" fix în global-error', () => {
+    const layout = read("layout.tsx");
+    expect(layout).toMatch(/<html\s[^>]*lang=\{lang\}/);
+    // Singura valoare alternativă a lui `lang` e "ro": orice altceva decât "en" cade pe română.
+    expect(layout).toMatch(/=== "en" \? "en" : "ro"/);
     expect(read("global-error.tsx")).toMatch(/<html\s[^>]*lang="ro"/);
   });
 
@@ -57,8 +62,17 @@ describe("accesibilitate (reguli statice)", () => {
       const rel = relative(APP, file);
       // `/` doar redirecționează (`src/app/page.tsx`).
       if (rel === "page.tsx") continue;
-      const m = /\btitle:\s*(ro(?:\.\w+)+)/.exec(readFileSync(file, "utf8"));
-      const value = m ? resolve(m[1]!) : undefined;
+      const source = readFileSync(file, "utf8");
+      // Titlul vine din `ro.ts`; paginile publice (F11-C3) îl iau din `t.<secțiune>.title`, cu `t` =
+      // textele limbii alese: se verifică versiunea română (referința), iar `site-locale.test.ts`
+      // verifică paritatea cu engleza.
+      const m = /\btitle:\s*(ro(?:\.\w+)+)/.exec(source);
+      const generated = /\btitle:\s*t\.(\w+)\.title/.exec(source);
+      const value = m
+        ? resolve(m[1]!)
+        : generated
+          ? resolve(`ro.site.${generated[1]}.title`)
+          : undefined;
       if (typeof value !== "string" || value.trim() === "") {
         missing.push(rel);
         continue;

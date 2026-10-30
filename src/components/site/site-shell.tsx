@@ -5,24 +5,26 @@ import { Logo } from "@/app/_components/logo";
 import { buttonClasses } from "@/components/ui/button";
 import type { Config } from "@/lib/config";
 import { CONSUMER_LINKS } from "@/lib/site-paths";
-import { ro } from "@/messages/ro";
+import { getSiteI18n } from "@/lib/site-i18n";
+import type { SiteMessages } from "@/messages/en-site";
 
 import { CookieConsent } from "./cookie-consent";
+import { LanguageSwitcher } from "./language-switcher";
 
 /**
  * Structura paginilor publice ale site-ului `saas` (Faza 11, ADR 0027): antet cu navigarea,
  * conținut, subsolul cu datele firmei și legăturile ANPC SAL / SOL (obligatorii pe fiecare pagină)
  * și bannerul de cookie-uri. Datele lipsă se afișează explicit ca „de completat”, niciodată inventate.
  */
-export function SiteShell({
+export async function SiteShell({
   site,
   children,
 }: Readonly<{ site: Config["site"]; children: ReactNode }>) {
-  const t = ro.site;
+  const { locale, t } = await getSiteI18n();
   return (
     <div className="flex min-h-dvh flex-col">
       <a href="#continut" className="skip-link">
-        {ro.common.skipToContent}
+        {t.nav.skip}
       </a>
       <header className="border-b">
         <nav
@@ -36,6 +38,7 @@ export function SiteShell({
           <Link href="/terms">{t.nav.terms}</Link>
           <Link href="/privacy">{t.nav.privacy}</Link>
           <Link href="/support">{t.nav.support}</Link>
+          <LanguageSwitcher current={locale} label={t.nav.language} />
           <Link href="/login" className={buttonClasses("outline")}>
             {t.nav.login}
           </Link>
@@ -44,14 +47,13 @@ export function SiteShell({
       <main id="continut" tabIndex={-1} className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
         {children}
       </main>
-      <LegalFooter site={site} />
-      <CookieConsent analyticsId={site.analyticsId} />
+      <LegalFooter site={site} t={t.footer} />
+      <CookieConsent analyticsId={site.analyticsId} t={t.consent} />
     </div>
   );
 }
 
-function LegalFooter({ site }: Readonly<{ site: Config["site"] }>) {
-  const t = ro.site.footer;
+function LegalFooter({ site, t }: Readonly<{ site: Config["site"]; t: SiteMessages["footer"] }>) {
   const c = site.company;
   const value = (v: string | null) =>
     v ?? <span className="text-muted-foreground">[{t.missing}]</span>;
@@ -91,8 +93,10 @@ function LegalFooter({ site }: Readonly<{ site: Config["site"] }>) {
 }
 
 /** Banner vizibil cât textele juridice sunt ciorne sau datele firmei lipsesc. */
-export function DraftBanner({ site }: Readonly<{ site: Config["site"] }>) {
-  const t = ro.site.draft;
+export function DraftBanner({
+  site,
+  t,
+}: Readonly<{ site: Config["site"]; t: SiteMessages["draft"] }>) {
   if (site.legalReviewed) return null;
   const incomplete = Object.values(site.company).some((v) => v === null);
   return (

@@ -85,6 +85,47 @@ test.describe(`site public (${MODE})`, () => {
     expect(api.status()).toBe(404);
   });
 
+  test("limba: româna e implicită oricare ar fi Accept-Language; engleza doar prin cookie explicit", async ({
+    browser,
+    baseURL,
+  }) => {
+    // Chromium trimite `en-US` implicit: tot ce se afirmă în română trebuie să rămână în română.
+    const ctx = await browser.newContext({ baseURL, locale: "en-US" });
+    const page = await ctx.newPage();
+    await page.goto("/support");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ro");
+    await expect(page.getByRole("heading", { level: 1, name: "Suport" })).toBeVisible();
+    // Comutatorul scrie cookie-ul; pagina devine engleză, inclusiv `<html lang>`, titlul și subsolul.
+    await page.getByTestId("lang-en").click();
+    await expect(page.getByRole("heading", { level: 1, name: "Support" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page).toHaveTitle(/Support/);
+    await expect(page.getByTestId("support-sections").locator("section")).toHaveCount(7);
+    await expect(page.getByTestId("legal-footer")).toContainText("to be completed");
+    for (const [path, heading] of [
+      ["/", "FINET: your finances and your family's, in one place"],
+      ["/pricing", "Pricing"],
+      ["/terms", "Terms and conditions"],
+      ["/privacy", "Privacy policy"],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { level: 1, name: heading }), path).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    }
+    // Textul juridic englez e tot ciornă, cu bannerul vizibil.
+    await page.goto("/terms");
+    await expect(page.getByTestId("draft-banner")).toContainText("Text under review");
+    // Pagina de login rămâne în română, cu lang="ro" (aplicația nu e tradusă).
+    await page.goto("/login");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ro");
+    // Înapoi la română.
+    await page.goto("/support");
+    await page.getByTestId("lang-ro").click();
+    await expect(page.getByRole("heading", { level: 1, name: "Suport" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "ro");
+    await ctx.close();
+  });
+
   test("prețuri: fără sume inventate", async ({ page }) => {
     await page.goto("/pricing");
     await expect(page.getByTestId("pricing-body")).toContainText("nu are încă planuri plătite");
