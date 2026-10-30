@@ -143,7 +143,7 @@ function operationObject(op: Operation, refs: ReadonlyMap<string, string>): Json
     ...(op.query ?? []).map((q) => ({
       name: q.name,
       in: "query",
-      required: false,
+      required: q.required ?? false,
       description: q.description,
       schema: strip(requestSchema(q.schema)),
     })),

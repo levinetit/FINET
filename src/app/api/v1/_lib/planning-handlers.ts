@@ -23,6 +23,8 @@ import {
   exportTransactionsCsv,
   MAX_EXPORT_ROWS,
 } from "@/modules/exports/exports.service";
+import { exportAccountingTable } from "@/modules/exports/accounting.service";
+import { tableToCsv } from "@/modules/exports/table-csv";
 import {
   exportBudgetsTable,
   exportGoalsTable,
@@ -341,6 +343,7 @@ export const EXPORT_FILENAMES = {
   transactions: "finet-tranzactii.csv",
   goals: "finet-obiective.csv",
   budgets: "finet-bugete.csv",
+  accounting: "finet-contabilitate.csv",
 } as const;
 
 type ExportKind = keyof typeof EXPORT_FILENAMES;
@@ -557,3 +560,48 @@ export const exportBudgetsXlsxHandler = (request: Request, d: ApiDeps) =>
   exportTableHandler(request, d, "budgets", "xlsx");
 export const exportBudgetsPdfHandler = (request: Request, d: ApiDeps) =>
   exportTableHandler(request, d, "budgets", "pdf");
+
+/** Exportul pentru contabil (CSV/Excel) și lista bonurilor (Excel/PDF), pe o perioadă aleasă. */
+export function exportAccountingHandler(
+  request: Request,
+  d: ApiDeps,
+  kind: "accounting" | "receipts",
+  format: "csv" | "xlsx" | "pdf",
+): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const query = readQuery(request, {
+      from: "string",
+      to: "string",
+      ...(format === "csv" ? DIALECT_QUERY : {}),
+    });
+    const hh = await exportGuard(ctx);
+    const table = await exportAccountingTable(
+      planning(d.db, ctx),
+      ctx.actor,
+      hh,
+      kind,
+      { from: query.from, to: query.to },
+      {
+        format,
+        maxRows: format === "pdf" ? tableRowCap(d, "pdf") : (d.exportMaxRows ?? MAX_EXPORT_ROWS),
+      },
+    );
+    if (format === "csv") {
+      return csvText(
+        "accounting",
+        tableToCsv(table, (query.dialect as CsvDialect | undefined) ?? "rfc4180"),
+      );
+    }
+    const name = kind === "accounting" ? "finet-contabilitate" : "finet-bonuri";
+    return fileResponse(name, format, tableOf(format, table));
+  });
+}
+
+export const exportAccountingCsvHandler = (request: Request, d: ApiDeps) =>
+  exportAccountingHandler(request, d, "accounting", "csv");
+export const exportAccountingXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportAccountingHandler(request, d, "accounting", "xlsx");
+export const exportReceiptsXlsxHandler = (request: Request, d: ApiDeps) =>
+  exportAccountingHandler(request, d, "receipts", "xlsx");
+export const exportReceiptsPdfHandler = (request: Request, d: ApiDeps) =>
+  exportAccountingHandler(request, d, "receipts", "pdf");

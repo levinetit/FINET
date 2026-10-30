@@ -127,6 +127,8 @@ export type QueryParam = Readonly<{
   name: string;
   schema: z.ZodType;
   description: string;
+  /** Parametru obligatoriu (implicit opțional). */
+  required?: boolean;
 }>;
 
 export type Operation = Readonly<{
@@ -232,6 +234,20 @@ const MONTH_PARAM: QueryParam = {
   schema: z.string().regex(/^[0-9]{4}-[0-9]{2}$/),
   description:
     "Luna `YYYY-MM` (implicit luna curentă în fusul gospodăriei, `Europe/Bucharest`). Acceptat: de la aceeași lună de acum 5 ani (60 de luni în urmă) până la luna curentă; în afara intervalului → 400.",
+};
+
+const FROM_PARAM: QueryParam = {
+  name: "from",
+  schema: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/),
+  required: true,
+  description: "Prima zi a perioadei, `YYYY-MM-DD` (obligatoriu).",
+};
+
+const TO_PARAM: QueryParam = {
+  name: "to",
+  schema: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/),
+  description:
+    "Ultima zi a perioadei, `YYYY-MM-DD` (obligatoriu; cel mult 1.100 de zile de la `from`).",
 };
 
 const DIALECT_PARAM: QueryParam = {
@@ -2021,6 +2037,48 @@ export const OPERATIONS: readonly Operation[] = [
     query: [MONTH_PARAM],
     success: fileSuccess("pdf", "finet-bugete.pdf", "un buget pe rând."),
     errors: [VALIDATION, FORBIDDEN, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/accounting.csv",
+    operationId: "exportAccountingCsv",
+    tag: "exports",
+    summary: "Exportul pentru contabil (CSV): o linie per bon confirmat, pe o perioadă.",
+    description:
+      "Format fix (docs/API.md): data, numărul bonului, comerciantul, CUI, baza și TVA pe cotele 0/5/9/11/19/21 %, altă cotă, brut fără cotă, TVA calculat și de pe bon, total linii și total bon (cu diferențele), contul și categoria. TVA se calculează pe grup de cotă, rotunjit o dată. Doar bonurile confirmate și vizibile (fără conturile personale ale altor membri). Perioada: `from` și `to`, cel mult 1.100 de zile; cel mult 50.000 de bonuri (peste: 409 `export_too_large`).",
+    query: [FROM_PARAM, TO_PARAM, DIALECT_PARAM],
+    success: csvSuccess("Fișierul `finet-contabilitate.csv`."),
+    errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/accounting.xlsx",
+    operationId: "exportAccountingXlsx",
+    tag: "exports",
+    summary: "Exportul pentru contabil (Excel), același format ca CSV, cu rând de totaluri.",
+    query: [FROM_PARAM, TO_PARAM],
+    success: fileSuccess("xlsx", "finet-contabilitate.xlsx", "un bon pe rând."),
+    errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/receipts.xlsx",
+    operationId: "exportReceiptsXlsx",
+    tag: "exports",
+    summary: "Lista bonurilor confirmate pe o perioadă (Excel).",
+    query: [FROM_PARAM, TO_PARAM],
+    success: fileSuccess("xlsx", "finet-bonuri.xlsx", "un bon pe rând."),
+    errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/exports/receipts.pdf",
+    operationId: "exportReceiptsPdf",
+    tag: "exports",
+    summary: "Lista bonurilor confirmate pe o perioadă (PDF, cel mult 3.000 de bonuri).",
+    query: [FROM_PARAM, TO_PARAM],
+    success: fileSuccess("pdf", "finet-bonuri.pdf", "un bon pe rând."),
+    errors: [VALIDATION, FORBIDDEN, CONFLICT, REUSED],
   },
   // --- Prețuri, inflație, rapoarte de micro-cheltuieli (Faza 10, F10-B; ADR 0023) -----------
   ...PRICES_OPERATIONS,
