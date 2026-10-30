@@ -627,3 +627,13 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 3. **Redeploy** `finet-web`.
 4. **Verificare după deploy:** pe `/transactions` cu un filtru, „Export Excel” și „Export PDF” descarcă `finet-tranzactii.xlsx`/`.pdf` (Excel deschide fișierul fără avertisment, PDF-ul arată diacriticele); pe `/receipts`, cardul „Export pentru contabil” pe luna trecută: rândurile sunt cele ale bonurilor confirmate, iar „Diferență TVA”/„Diferență total” sunt 0 sau explicabile. Un membru al gospodăriei NU vede bonurile din contul personal al altui membru. `select metadata from finet.audit_events where action = 'export.downloaded' order by created_at desc limit 5` conține doar `kind`, `rows` și (pentru Excel/PDF) `format`.
 5. **Memorie (măsurată pe 10 coloane):** Excel cu 20.000 de rânduri ≈ 133 MB RSS peste cel de repaus (~1 s), PDF cu 3.000 ≈ 57 MB; `finet-web` are 512 MB (repaus ~86 MB). Două exporturi mari simultane pot apropia limita; plafonul Excel e `XLSX_MAX_ROWS` (`src/lib/xlsx.ts`). Dacă apar OOM-uri, cere exportul în CSV (flux, memorie mică).
+
+## 4r. Faza 10 (F10-C, partea 2): „Întreabă FINET” și rezumatul lunii — pe producție (după revizuiri, după 4q)
+
+Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0025. **Fără migrație, fără variabile, fără secrete noi, fără apeluri AI**: se aplică doar prin redeploy.
+
+1. **Imaginea `finet` (web)** pentru commit-ul aprobat, construită în CI (`pull-images.sh <sha> web`). Workerul nu se schimbă.
+2. **Backup** înainte de deploy, ca de obicei (nu există modificări de schemă).
+3. **Redeploy** `finet-web`.
+4. **Verificare după deploy:** pe `/ask`, „Cât am cheltuit luna trecută?” întoarce o sumă egală cu totalul de pe `/reports` pentru aceeași lună și arată interogarea folosită; „Ce vreme e mâine?” întoarce „Nu am înțeles”; pe `/reports`, cardul „Rezumatul lunii” are eticheta „Rezumat automat, nu sfat financiar.”. Un membru NU vede în răspunsuri cheltuielile din contul personal al altui membru. `docker logs finet-web` nu conține textul întrebărilor.
+5. **Pasul cu LLM (neimplementat):** necesită o decizie (acces al web-ului la LiteLLM sau coadă către worker) și migrația `0019` (sarcina `ask_finet`); vezi ADR 0025 §2. Până atunci `AI_*` rămân doar pe worker.

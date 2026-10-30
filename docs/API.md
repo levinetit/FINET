@@ -218,6 +218,10 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 - `GET /exports/receipts.xlsx|.pdf?from=&to=`: lista bonurilor din perioadă (fără defalcarea pe cote).
 - Antete: `Content-Disposition: attachment` cu nume fix (`finet-tranzactii.xlsx`, `finet-contabilitate.csv`, …), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.
 
+## „Întreabă FINET” și rezumatul lunii (F10-C, ADR 0025)
+- `POST /ask` `{ question }` (3–300 de caractere) → `{ understood: true, query, queryText, period, notes, answer, text }`: întrebarea devine în cod o interogare dintr-un set închis (metrici `expense_total`, `income_total`, `top_categories`, `top_merchants`; perioadă; filtre opționale pe categorie sau comerciant), cifrele se calculează din baza de date sub RLS (fără conturile personale ale altor membri), iar răspunsul arată MEREU interogarea folosită. O întrebare care nu se poate transforma primește **200** cu `understood: false`, `reason` (`empty|metric|period`) și un mesaj; nu se ghicește. Fără AI; textul întrebării nu se păstrează nicăieri. Limită proprie 30/min per utilizator; `entitlements`: `ask.finet`.
+- `GET /summary/monthly?month=` → `{ month, label, lines: [{ code, currency, text }] }`: propoziții construite în cod din cifrele raportului lunar și ale lunii precedente; `label` e mereu „Rezumat automat, nu sfat financiar.”.
+
 ## Aplicația Android (F9-A, ADR 0020)
 
 `GET /api/v1/app/android/latest` (sesiune cookie sau bearer) → `200 { data: { versionName, versionCode, minSupportedVersionCode, url, sha256, sizeBytes, notes, publishedAt } }` sau `404 android_release_unavailable` (nicio versiune publicată). Datele vin din `<STORAGE_DIR>/app/android-latest.json` (operatorul; `docs/INFRA.md` 4l). Aplicația îl cheamă cel mult o dată pe zi (promptul Android 12.1).

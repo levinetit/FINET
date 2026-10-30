@@ -103,7 +103,7 @@ Mediu: `node:24` în container (`--memory` 400–900 MB), PostgreSQL 17 efemer `
 
 ## F10-C — Exporturi, „Întreabă FINET”, rezumatul lunii
 
-F10-C se livrează în două părți: **partea 1** (exporturi Excel/PDF și export pentru contabil; ADR 0024; branch `phase/10-exports`, fără migrație) și **partea 2** („Întreabă FINET” și rezumatul lunii; ADR propriu; neîncepută).
+F10-C se livrează în două părți: **partea 1** (exporturi Excel/PDF și export pentru contabil; ADR 0024; branch `phase/10-exports`, fără migrație) și **partea 2** („Întreabă FINET” și rezumatul lunii; ADR 0025; branch `phase/10-ask`, fără migrație).
 
 ### Partea 1 — exporturi Excel/PDF și export pentru contabil
 
@@ -150,4 +150,38 @@ Mediu: `node:24` în container (`--memory` 600–1100 MB), PostgreSQL 17 efemer.
 #### 5. Pe producție
 
 `docs/INFRA.md`, secțiunea **4q**. Fără migrație; doar redeploy `finet-web`. Nimic nu s-a aplicat.
+
+### Partea 2 — „Întreabă FINET” și rezumatul lunii
+
+#### 1. Ce s-a implementat
+
+- **„Întreabă FINET”** (`src/modules/ask`): set închis de interogări (Zod strict), parser determinist pentru română (perioade, metrică, categorie, comerciant), executor sub RLS, `POST /api/v1/ask`; răspunsul arată interogarea folosită, iar o întrebare neînțeleasă primește un motiv fix (nu se ghicește). Pagina `/ask` cu exemple.
+- **Rezumatul lunii** (`src/modules/summary`): propoziții construite în cod din raportul lunar și cel al lunii precedente; `GET /api/v1/summary/monthly`; card pe `/reports`; eticheta fixă „Rezumat automat, nu sfat financiar.”.
+- **Documentație:** ADR 0025, API.md, INFRA 4r, ROADMAP, SECURITY_CHECKLIST §28, PRIVACY_NOTES.
+
+#### 2. Decizia mea — și diferența față de master prompt
+
+Master prompt-ul cere un **LLM local** pentru ambele funcții. Nu există LLM local, iar `finet-web` nu are acces la LiteLLM (configurația AI e doar pe worker). Am livrat nucleul determinist și **am amânat pasul cu LLM** (ADR 0025 §2): interogarea are exact forma pe care ar produce-o un model, deci un traducător se adaugă fără să schimbe executorul sau interfața. Costul: întrebări doar în formulările recunoscute; rezumatul e mai sec. Avantajul: nimic nu pleacă din aplicație, întrebările nu se păstrează, fără migrație.
+
+#### 3. Teste rulate local (2026-10-30)
+
+| Comandă | Rezultat |
+|---|---|
+| `vitest run src/modules/ask src/modules/summary src/app/api/v1/ask-api.test.ts` (cu PG) | PASS (10 + 5 + 13 teste) |
+| `vitest run src/app/ui-rules.test.ts src/app/a11y-rules.test.ts src/app/_lib src/app/smoke.test.ts` | PASS |
+| `node scripts/openapi.mjs --check` | PASS |
+| `tsc --noEmit` pe modulele, handlerele, pagina `/ask`, `/reports` și spec-ul E2E | PASS |
+| E2E (`e2e/ask.spec.ts`: întrebare înțeleasă, neînțeleasă, exemplu, rezumat, CSP) | SCRIS; NOT RUN local; în CI |
+| `eslint`, `pnpm test` complet, `next build` | NOT RUN local (memorie); în CI |
+
+#### 4. Puncte deschise
+
+- Pasul cu LLM (variantele din ADR 0025 §2) și migrația `0019`: decizia operatorului.
+- Parserul acoperă formulări apropiate de exemple; ce nu recunoaște primește „nu am înțeles”. Calitatea pe întrebări reale: neevaluată.
+- Revizuirea `security`; CSRF pe `POST /ask` fără test dedicat; performanța pe volume mari: nemăsurată.
+- Fără axe pe `/ask` în `e2e/a11y.spec.ts`.
+
+#### 5. Pe producție
+
+`docs/INFRA.md`, secțiunea **4r**. Fără migrație; doar redeploy `finet-web`. Nimic nu s-a aplicat.
 

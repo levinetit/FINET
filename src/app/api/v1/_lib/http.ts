@@ -78,6 +78,8 @@ export type ApiLimits = Readonly<{
    * cerere citește liniile bonurilor din perioadă (în plus față de `mutations` pe previzualizare).
    */
   reportRun: RateLimitRule;
+  /** „Întreabă FINET” (F10-C), pe utilizator: fiecare întrebare citește tranzacțiile din perioadă. */
+  ask: RateLimitRule;
 }>;
 
 /** Limitele implicite (decizia mea): generoase pentru un client real, mici pentru un abuz. */
@@ -107,6 +109,8 @@ export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
   shoppingSuggest: Object.freeze({ max: 60, windowSeconds: 60 }),
   // F10-B (decizia mea): 30 de rulări/previzualizări de raport pe minut per utilizator.
   reportRun: Object.freeze({ max: 30, windowSeconds: 60 }),
+  // F10-C (decizia mea): 30 de întrebări pe minut per utilizator.
+  ask: Object.freeze({ max: 30, windowSeconds: 60 }),
 });
 
 export type ApiDeps = Readonly<{
@@ -383,7 +387,8 @@ export async function enforceRateLimit(
     | "api_report_run"
     | "gdpr_export"
     | "api_shopping_compare"
-    | "api_shopping_suggest",
+    | "api_shopping_suggest"
+    | "api_ask",
   rule: RateLimitRule,
 ): Promise<void> {
   const result = await hitRateLimit(

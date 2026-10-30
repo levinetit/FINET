@@ -59,6 +59,8 @@ const ITEMS = [
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
   // Faza 10: prețuri, inflație personală și rapoarte de micro-cheltuieli; pe telefon în „Mai mult”.
   { href: "/insights", label: ro.nav.insights, icon: ChartIcon, mobile: false },
+  // Faza 10 (F10-C): întrebări în limbaj natural despre cheltuieli; pe telefon în „Mai mult”.
+  { href: "/ask", label: ro.nav.ask, icon: HelpIcon, mobile: false },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
   // Faza 9: setările aplicației (instalare PWA, aplicația Android) și ghidul.
   { href: "/settings", label: ro.nav.settings, icon: SettingsIcon, mobile: false },

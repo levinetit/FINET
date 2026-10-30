@@ -584,3 +584,20 @@ Fiecare rând din secțiunile 1–21 are o dovadă (fișier, test sau comandă) 
 | Deschiderea în Excel/LibreOffice desktop | NEVERIFICAT (doar `openpyxl`) | — | — |
 | Revizuirea `security` a F10-C | TODO | agentul `security` | — |
 
+## 28. „Întreabă FINET” și rezumatul lunii (F10-C, partea 2, 2026-10-30; ADR 0025)
+
+| Punct | Stare | Dovadă | Data · revizor |
+|---|---|---|---|
+| Set închis de interogări: Zod strict, valori libere doar `categoryId` (uuid din categoriile vizibile) și `merchant` (comparat exact, parametru legat); text ostil din întrebare nu ajunge în SQL | DONE | `parse.test.ts` (text ostil), `ask-api.test.ts` | 2026-10-30 · agent |
+| Interogarea e validată a doua oară în executor; clasamentele nu acceptă filtre | DONE | `ask.service.ts`, `query.ts`, `parse.test.ts` | 2026-10-30 · agent |
+| 401 fără sesiune; corp invalid/câmp necunoscut/întrebare prea lungă sau scurtă → 400; `householdId` din corp respins | DONE (PG17) | `ask-api.test.ts` | 2026-10-30 · agent |
+| Rate limit propriu (429 la depășire) | DONE (PG17) | `ask-api.test.ts` | 2026-10-30 · agent |
+| Vizibilitate: conturile personale ale altor membri nu intră în cifre, clasamente sau rezumat; altă gospodărie nu vede nimic | DONE (PG17) | `ask-api.test.ts` (inclusiv rezumatul) | 2026-10-30 · agent |
+| Textul întrebării nu se păstrează (nicio tabelă din schema `finet`, audit, chei de limită) | DONE (PG17) | `ask-api.test.ts` (marcaj unic căutat în toate tabelele) | 2026-10-30 · agent |
+| Textul întrebării nu apare în loguri și mesaje de eroare | NEVERIFICAT automat (nu există logare a corpului în handler; verificare manuală la deploy, INFRA 4r) | `ask-handlers.ts` | — |
+| Fără AI și fără trafic în afara aplicației | DONE (cod: niciun apel de rețea în `ask`/`summary`) | ADR 0025 §1–2 | 2026-10-30 · agent |
+| Rezumatul: fiecare cifră din text vine din raport (șabloane), variația pe `bigint`; eticheta fixă | DONE | `summary.test.ts`, `ask-api.test.ts` | 2026-10-30 · agent |
+| CSRF: `POST /ask` nu modifică nimic (citire) și nu are efecte secundare; protecția cookie cross-site = cea comună a `/api/v1` pentru `POST` | NEVERIFICAT în teste dedicate | mecanismul comun | — |
+| Performanța agregatelor pe volume mari | NEMĂSURAT (interogări agregate pe fereastra cerută; aceleași ca la rapoarte) | — | — |
+| Revizuirea `security` a F10-C partea 2 | TODO | agentul `security` | — |
+
