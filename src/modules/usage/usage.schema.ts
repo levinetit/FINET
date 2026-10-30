@@ -12,6 +12,8 @@ export const CONSENT_API_NAMES = {
   usageStats: "usage_stats",
   externalAi: "external_ai",
   externalAiStatements: "external_ai_statements",
+  // F10-C (ADR 0026): textul întrebărilor „Întreabă FINET” către un model extern.
+  externalAiAsk: "external_ai_ask",
 } as const satisfies Record<string, (typeof CONSENT_KINDS)[number]>;
 
 export const consentsPutSchema = z
@@ -19,6 +21,7 @@ export const consentsPutSchema = z
     usageStats: z.boolean().optional(),
     externalAi: z.boolean().optional(),
     externalAiStatements: z.boolean().optional(),
+    externalAiAsk: z.boolean().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: "Nimic de modificat.",

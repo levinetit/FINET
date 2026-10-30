@@ -814,6 +814,14 @@ export const ro = {
     on: "Citirea bonurilor cu AI e activată. Bonurile care așteptau intră acum la procesare.",
     off: "Citirea bonurilor cu AI e dezactivată.",
   },
+  // F10-C (ADR 0026): consimțământul separat pentru textul întrebărilor „Întreabă FINET”.
+  askAiConsent: {
+    title: "Întreabă FINET cu AI",
+    toggle: "Permite trimiterea întrebărilor la serviciul AI extern",
+    info: "Doar când aplicația nu înțelege o întrebare, textul ei, data de azi și NUMELE categoriilor tale pot fi trimise, prin serverul FINET, unui model AI extern, ca să o transforme într-o interogare. Nu se trimit sume, tranzacții sau comercianți, iar cifrele răspunsului se calculează tot în aplicație. Întrebările nu se păstrează. Fără acest acord, nimic nu pleacă.",
+    on: "Întrebările neînțelese de aplicație pot fi traduse cu AI extern.",
+    off: "Întrebările rămân în aplicație; nimic nu se trimite la un model AI.",
+  },
   imports: {
     title: "Import",
     eyebrow: "Bonuri fiscale",
@@ -1886,7 +1894,7 @@ export const ro = {
     eyebrow: "Întreabă FINET",
     title: "Întreabă FINET",
     intro:
-      "Scrie o întrebare despre cheltuielile sau veniturile tale. Întrebarea se transformă într-o interogare simplă, iar cifrele se calculează din datele tale; mereu vezi ce interogare s-a folosit. Nu se trimite nimic în afara aplicației.",
+      "Scrie o întrebare despre cheltuielile sau veniturile tale. Întrebarea se transformă într-o interogare simplă, iar cifrele se calculează din datele tale; mereu vezi ce interogare s-a folosit. Implicit nu se trimite nimic în afara aplicației; doar dacă activezi „Întreabă FINET cu AI” în Profil, o întrebare pe care aplicația nu o înțelege poate fi tradusă de un model AI extern (se trimite doar textul ei și numele categoriilor).",
     noHousehold: "Alege sau creează o gospodărie ca să pui întrebări.",
     label: "Întrebarea ta",
     placeholder: "De exemplu: cât am cheltuit la Lidl luna trecută?",
@@ -1907,7 +1915,7 @@ export const ro = {
     answerTitle: "Răspuns",
     queryTitle: "Interogarea folosită",
     notUnderstoodTitle: "Nu am înțeles",
-    note: "Calculat în aplicație din tranzacțiile pe care le poți vedea; nu e sfat financiar.",
+    note: "Cifrele sunt calculate în aplicație din tranzacțiile pe care le poți vedea; nu e sfat financiar.",
     noRows: "Nicio tranzacție în această perioadă.",
   },
   summary: {

@@ -718,6 +718,41 @@ describe("furnizorul AI (F6-B, ADR 0014)", () => {
     }
   });
 
+  it("„Întreabă FINET” cu LLM (F10-C): oprit implicit; cheie dedicată, doar în rolul web, doar din fișier", () => {
+    expect(parseConfig(DEV).ai.ask).toEqual({ enabled: false, apiKey: null });
+    const WEB_ASK = {
+      ...DEV,
+      AI_ASK: "1",
+      AI_BASE_URL: "http://172.88.88.4:4000/v1",
+      AI_ASK_API_KEY_FILE: KEY_FILE,
+    } as const;
+    const c = parseConfig(WEB_ASK);
+    expect(c.ai.ask).toEqual({ enabled: true, apiKey: "sk-cheie-virtuala-fictiva-0123" });
+    // Cheia workerului nu ajunge niciodată în web.
+    expect(c.ai.apiKey).toBeNull();
+    expect(issuesOf({ ...WEB_ASK, AI_API_KEY_FILE: KEY_FILE })).toEqual(["AI_API_KEY_FILE"]);
+    // AI_ASK=1 fără URL sau fără cheie: eroare la pornire, nu un pas tăcut nefuncțional.
+    expect(issuesOf({ ...DEV, AI_ASK: "1" }).sort()).toEqual([
+      "AI_ASK_API_KEY_FILE",
+      "AI_BASE_URL",
+    ]);
+    expect(issuesOf({ ...DEV, AI_ASK: "da" })).toEqual(["AI_ASK"]);
+    // Doar din fișier; în clar e refuzată (și valoarea nu apare în mesaj).
+    expect(
+      issuesOf({
+        ...WEB_ASK,
+        AI_ASK_API_KEY_FILE: undefined,
+        AI_ASK_API_KEY: "sk-in-clar-0123456",
+      }),
+    ).toEqual(["AI_ASK_API_KEY"]);
+    // Alte roluri nu primesc cheia web.
+    expect(issuesOf({ ...WORKER, AI_ASK_API_KEY_FILE: KEY_FILE })).toEqual(["AI_ASK_API_KEY_FILE"]);
+    expect(parseConfig({ ...WORKER, AI_ASK: "1" }).ai.ask).toEqual({
+      enabled: false,
+      apiKey: null,
+    });
+  });
+
   it("AI_BASE_URL doar către o gazdă permisă (anti-SSRF); limitele numerice", () => {
     expect(issuesOf({ ...DEV, AI_BASE_URL: "http://169.254.169.254/latest" })).toEqual([
       "AI_BASE_URL",

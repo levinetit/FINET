@@ -21,7 +21,9 @@ Constatări la implementare:
 - **Executorul** (`ask.service.ts`): a doua validare strictă a interogării, apoi agregate sub RLS (`finet_app`), deci conturile personale ale altor membri nu intră. Răspunsul conține întotdeauna interogarea (`query`, `queryText`) și perioada. Cifrele vin din baza de date; textul răspunsului e un șablon.
 - **Rezumatul lunii** (`summary.ts`, pur): propoziții din cifrele raportului lunar (totaluri, variația cheltuielilor față de luna precedentă, primele categorii, primul comerciant, starea bugetelor), formatate în cod. Eticheta fixă „Rezumat automat, nu sfat financiar.”. Variația procentuală se calculează pe `bigint` (jumătăți în sus).
 
-### 2. Pasul cu LLM NU e implementat (decizia mea, de revăzut)
+### 2. Pasul cu LLM NU e implementat aici (se face în ADR 0026)
+
+> **Actualizare:** operatorul a ales varianta (a), acces al `finet-web` la LiteLLM; pasul e descris în `docs/adr/0026-ask-finet-llm-step.md` (oprit implicit, consimțământ separat, cheie dedicată, migrația `0019`). Textul de mai jos rămâne ca motivare a deciziei inițiale.
 
 Forma interogării e exact cea pe care ar produce-o un model, deci un traducător LLM se poate adăuga fără să schimbe executorul, răspunsul sau interfața. Se amână până când operatorul alege una dintre variante: (a) un LiteLLM accesibil din `finet-web` (cheie în plus pe web, `AI_*` pe web, consimțământ `external_ai`, buget AI, `task = ask_finet` în `ai_calls_task_valid`, deci migrația `0019`); (b) coadă către worker (ca la liste). **Consecință:** funcția nu înțelege formulări libere; acoperă formulările din exemple și cele apropiate. Rezumatul e mai sec decât unul scris de model, dar cifrele sunt garantat corecte. Nu s-a trimis și nu se trimite nimic în afara aplicației.
 

@@ -125,6 +125,7 @@ describe.skipIf(!TEST_ADMIN_URL)("statistici de utilizare pe PostgreSQL real", (
       { kind: "usageStats", granted: false, grantedAt: null, revokedAt: null },
       { kind: "externalAi", granted: false, grantedAt: null, revokedAt: null },
       { kind: "externalAiStatements", granted: false, grantedAt: null, revokedAt: null },
+      { kind: "externalAiAsk", granted: false, grantedAt: null, revokedAt: null },
     ]);
     const put = (body: unknown) =>
       M.putConsentsHandler(

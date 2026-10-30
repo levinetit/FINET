@@ -118,6 +118,12 @@ Notă internă, nu politică de confidențialitate publică (aceea vine în `saa
 - **Cine vede ce:** cifrele provin din tranzacțiile pe care utilizatorul le vede (conturile personale ale altor membri nu intră).
 - **Rezumatul lunii:** text construit în aplicație din cifrele raportului lunar; eticheta „Rezumat automat, nu sfat financiar.”.
 
+## „Întreabă FINET” cu AI extern (Faza 10, F10-C; ADR 0026)
+- **Implicit nu pleacă nimic.** Pasul e oprit (`AI_ASK=0`) și cere un acord SEPARAT al utilizatorului („Întreabă FINET cu AI”, în Profil; `external_ai_ask`), distinct de acordul pentru pozele bonurilor.
+- **Ce pleacă, doar dacă aplicația nu înțelege o întrebare și există acord:** textul întrebării, data de azi și numele categoriilor (nu sume, tranzacții, comercianți, conturi sau emailuri), prin serverul FINET, către modelul extern prin LiteLLM. Cifrele răspunsului se calculează în aplicație.
+- **Ce se păstrează:** un rând de metadate în `ai_calls` (sarcină, model, tokeni, cost, durată, rezultat), fără conținut; întrebarea nu se păstrează.
+- **Buget și oprire:** consumă din bugetul AI lunar global; acordul se poate revoca oricând, iar `AI_ASK=0` oprește funcția pentru toți.
+
 ## TODO (operator / faze viitoare)
 - **Retenția:** pozele bonurilor au `RECEIPT_IMAGE_RETENTION_DAYS` (implicit 180, F6-A; jobul de ștergere `cleanup-documents`, F6-C); extrasele PDF cel mult 24 h (F7-B); rămân de decis: extrasele, pentru loguri (`json-file` 3×10 MB pe container acum) și pentru backup-uri (Faza 3) — **TODO**.
 - **Ștergerea:** regulile din master prompt 5.6 — implementate (Fazele 2–9; ștergerea contului în F9-B). Rămâne de decis expirarea datelor șterse din backup-uri (mai sus).

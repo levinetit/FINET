@@ -127,6 +127,13 @@
       "when": 1795000000000,
       "tag": "0018_report_definitions",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795100000000,
+      "tag": "0019_ask_finet_task",
+      "breakpoints": true
     }
   ]
 }

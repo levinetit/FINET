@@ -7,6 +7,7 @@ import { type Actor, ForbiddenError, NotFoundError } from "@/lib/authz";
 import type { Config, RateLimitRule } from "@/lib/config";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { MoneyOverflowError } from "@/lib/money";
+import type { AskAi } from "@/modules/ask/ask-runtime";
 import {
   DEFAULT_ACCEPT_LIMIT,
   InviteRateLimitedError,
@@ -123,6 +124,8 @@ export type ApiDeps = Readonly<{
   /** Doar pentru teste: plafonul de rânduri și pagina exportului de tranzacții. */
   exportMaxRows?: number;
   exportPageSize?: number;
+  /** Doar pentru teste: furnizorul AI al „Întreabă FINET” (implicit din configurație, ADR 0026). */
+  ask?: Readonly<{ ai: AskAi | null }>;
   /** Doar pentru teste: ritmul fluxului SSE (`GET /api/v1/events`, ADR 0017). */
   live?: Readonly<{ heartbeatMs?: number; lifetimeMs?: number }>;
 }>;

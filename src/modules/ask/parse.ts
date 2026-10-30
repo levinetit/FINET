@@ -1,6 +1,9 @@
-import { addDays, addMonths, monthBounds } from "@/lib/calendar";
+import { monthBounds } from "@/lib/calendar";
 
+import { type PeriodSpec, monthLabel, resolvePeriod } from "./period";
 import type { AskQuery } from "./query";
+
+export { monthLabel };
 
 /**
  * Parserul determinist al întrebărilor în română (F10-C; ADR 0025). Funcție PURĂ: primește
@@ -38,22 +41,9 @@ export type ParseResult =
   | Readonly<{ ok: true; query: AskQuery; periodLabel: string; notes: readonly string[] }>
   | Readonly<{ ok: false; reason: ParseFailure }>;
 
-const MONTHS = [
-  "ianuarie",
-  "februarie",
-  "martie",
-  "aprilie",
-  "mai",
-  "iunie",
-  "iulie",
-  "august",
-  "septembrie",
-  "octombrie",
-  "noiembrie",
-  "decembrie",
-] as const;
+type Period = Readonly<{ from: string; to: string; label: string; defaulted?: boolean }>;
 
-const MONTH_NAMES_RO = [
+const MONTHS = [
   "ianuarie",
   "februarie",
   "martie",
@@ -70,73 +60,30 @@ const MONTH_NAMES_RO = [
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Luni de la începutul săptămânii (luni) pentru o dată. */
-function weekStart(date: string): string {
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0 = duminică
-  return addDays(date, -((dow + 6) % 7));
-}
-
-export function monthLabel(month: string): string {
-  return `${MONTH_NAMES_RO[Number(month.slice(5)) - 1]} ${month.slice(0, 4)}`;
-}
-
-type Period = Readonly<{ from: string; to: string; label: string; defaulted?: boolean }>;
-
-function detectPeriod(n: string, today: string): Period | null {
+/** Perioada din text, ca specificație (rezolvată apoi de `resolvePeriod`); `null` = nerecunoscută. */
+function detectPeriodSpec(n: string, today: string): PeriodSpec | null {
   const thisMonth = today.slice(0, 7);
   let m: RegExpExecArray | null;
 
   if ((m = /\bultimele (\d{1,2}) luni\b/.exec(n))) {
     const count = Number(m[1]);
-    if (count >= 1 && count <= 24) {
-      return {
-        from: monthBounds(addMonths(thisMonth, -(count - 1))).from,
-        to: today,
-        label: count === 1 ? "luna curentă" : `ultimele ${count} luni`,
-      };
-    }
+    if (count >= 1 && count <= 24) return { kind: "last_n_months", n: count };
   }
   if ((m = /\bultimele (\d{1,3}) (?:de )?zile\b/.exec(n))) {
     const count = Number(m[1]);
-    if (count >= 1 && count <= 366) {
-      return { from: addDays(today, -(count - 1)), to: today, label: `ultimele ${count} zile` };
-    }
+    if (count >= 1 && count <= 366) return { kind: "last_n_days", n: count };
   }
-  if (/\b(?:ultimul an|ultimele 12 luni)\b/.test(n)) {
-    return {
-      from: monthBounds(addMonths(thisMonth, -11)).from,
-      to: today,
-      label: "ultimele 12 luni",
-    };
-  }
-  if (/\b(?:astazi|azi)\b/.test(n)) return { from: today, to: today, label: "azi" };
-  if (/\bieri\b/.test(n)) {
-    const y = addDays(today, -1);
-    return { from: y, to: y, label: "ieri" };
-  }
-  if (/\bsaptamana (?:trecuta|anterioara)\b/.test(n)) {
-    const start = addDays(weekStart(today), -7);
-    return { from: start, to: addDays(start, 6), label: "săptămâna trecută" };
-  }
-  if (/\bsaptamana (?:aceasta|asta|curenta)\b/.test(n)) {
-    return { from: weekStart(today), to: today, label: "săptămâna aceasta" };
-  }
-  if (/\b(?:luna|lunii) (?:trecuta|anterioara|precedenta)\b/.test(n)) {
-    const month = addMonths(thisMonth, -1);
-    const { from, to } = monthBounds(month);
-    return { from, to, label: monthLabel(month) };
-  }
+  if (/\b(?:ultimul an|ultimele 12 luni)\b/.test(n)) return { kind: "last_n_months", n: 12 };
+  if (/\b(?:astazi|azi)\b/.test(n)) return { kind: "today" };
+  if (/\bieri\b/.test(n)) return { kind: "yesterday" };
+  if (/\bsaptamana (?:trecuta|anterioara)\b/.test(n)) return { kind: "last_week" };
+  if (/\bsaptamana (?:aceasta|asta|curenta)\b/.test(n)) return { kind: "this_week" };
+  if (/\b(?:luna|lunii) (?:trecuta|anterioara|precedenta)\b/.test(n)) return { kind: "last_month" };
   if (/\b(?:luna (?:aceasta|asta|curenta|in curs)|in aceasta luna)\b/.test(n)) {
-    return { from: monthBounds(thisMonth).from, to: today, label: "luna curentă" };
+    return { kind: "this_month" };
   }
-  if (/\banul (?:trecut|anterior)\b/.test(n)) {
-    const year = Number(today.slice(0, 4)) - 1;
-    return { from: `${year}-01-01`, to: `${year}-12-31`, label: String(year) };
-  }
-  if (/\b(?:anul (?:acesta|asta|curent)|in acest an)\b/.test(n)) {
-    return { from: `${today.slice(0, 4)}-01-01`, to: today, label: `anul ${today.slice(0, 4)}` };
-  }
+  if (/\banul (?:trecut|anterior)\b/.test(n)) return { kind: "last_year" };
+  if (/\b(?:anul (?:acesta|asta|curent)|in acest an)\b/.test(n)) return { kind: "this_year" };
   // Luni pe nume, cu an opțional. „mai” cere „luna mai”, „in mai” sau un an după el, ca să nu se
   // confunde cu „cel mai mult”.
   for (let i = 0; i < MONTHS.length; i += 1) {
@@ -150,23 +97,18 @@ function detectPeriod(n: string, today: string): Period | null {
       const monthNo = i + 1;
       let year = explicit ? Number(explicit) : Number(today.slice(0, 4));
       if (!explicit && `${year}-${pad(monthNo)}` > thisMonth) year -= 1;
-      const month = `${year}-${pad(monthNo)}`;
-      if (year < 2000 || month > thisMonth) return null;
-      const { from, to } = monthBounds(month);
-      return { from, to: month === thisMonth ? today : to, label: monthLabel(month) };
+      return { kind: "month", month: `${year}-${pad(monthNo)}` };
     }
   }
   if ((m = /\b(?:in|pe) (20\d{2})\b/.exec(n)) || (m = /\banul (20\d{2})\b/.exec(n))) {
-    const year = Number(m[1]);
-    if (year >= 2000 && year <= Number(today.slice(0, 4))) {
-      return {
-        from: `${year}-01-01`,
-        to: year === Number(today.slice(0, 4)) ? today : `${year}-12-31`,
-        label: String(year),
-      };
-    }
+    return { kind: "year", year: Number(m[1]) };
   }
   return null;
+}
+
+function detectPeriod(n: string, today: string): Period | null {
+  const spec = detectPeriodSpec(n, today);
+  return spec ? resolvePeriod(spec, today) : null;
 }
 
 function detectMetric(n: string): AskQuery["metric"] | null {
