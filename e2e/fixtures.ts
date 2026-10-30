@@ -102,7 +102,8 @@ export async function loginOk(page: Page, email: string, pass: string): Promise<
  * aplicației (producția doar închide conexiunea), dar arată ca una în jurnalul CI.
  *
  * Reparația e în SINCRONIZAREA testelor, nu în filtrarea jurnalului: înainte să se închidă
- * contextele unui test, se așteaptă (cel mult `SETTLE_TIMEOUT_MS`) terminarea cererilor RSC pornite.
+ * contextele unui test și înainte de orice navigare, se așteaptă (cel mult `SETTLE_TIMEOUT_MS`)
+ * terminarea cererilor RSC pornite.
  * Fluxul SSE `/api/v1/events` nu e RSC și rămâne ca atare.
  */
 const RSC_REQUEST = /[?&]_rsc=/;
@@ -116,9 +117,25 @@ export function trackRsc(context: BrowserContext, pending: Set<Request>): void {
     const done = (request: Request) => void pending.delete(request);
     page.on("requestfinished", done);
     page.on("requestfailed", done);
+    settleBeforeNavigation(page, pending);
   };
   for (const page of context.pages()) watch(page);
   context.on("page", watch);
+}
+
+/**
+ * O navigare (`goto`, `reload`, `goBack`, `goForward`) abandonează și ea cererile RSC ale paginii
+ * curente: același efect ca închiderea contextului, în mijlocul testului (de exemplu `reload()` imediat
+ * după „Salvează” pe /profile). Înainte de navigare se așteaptă terminarea cererilor RSC în zbor.
+ */
+function settleBeforeNavigation(page: Page, pending: ReadonlySet<Request>): void {
+  for (const method of ["goto", "reload", "goBack", "goForward"] as const) {
+    const original = page[method].bind(page) as (...args: unknown[]) => Promise<unknown>;
+    (page as unknown as Record<string, unknown>)[method] = async (...args: unknown[]) => {
+      await settleRsc(pending);
+      return original(...args);
+    };
+  }
 }
 
 /** Așteaptă (fără să pice testul) terminarea cererilor RSC urmărite. */
