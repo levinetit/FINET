@@ -4,22 +4,26 @@ import { MODE, type UserKind, loginOk, password, test, userEmail } from "./fixtu
 
 /**
  * Feedback, anunțuri și panoul de administrare (Faza 11-B, ADR 0028; proiectul `admin`). Doar `saas`:
- * în `personal` rutele nu există (404). În `saas`, `main` e primul utilizator creat deci
- * administratorul platformei (CLI-ul `create-user`); `ask` e un utilizator obișnuit. Scenarii:
+ * în `personal` rutele nu există (404). Primul utilizator creat cu CLI-ul `create-user` devine
+ * administratorul platformei; CI creează utilizatorii întâi pentru `personal`, deci administratorul e
+ * `e2e-main-personal` (baza e comună celor două moduri); `ask` e un utilizator obișnuit. Scenarii:
  * (a) un utilizator obișnuit primește 404 pe `/admin` și pe rutele API de administrare;
  * (b) trimite feedback, iar administratorul îl vede în panou;
  * (c) administratorul creează un anunț, utilizatorul îl vede, apoi administratorul îl arhivează.
  */
 
 type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
-const states = new Map<UserKind, StorageState>();
+const states = new Map<UserKind | "admin", StorageState>();
 
-async function pageAs(browser: Browser, baseURL: string, kind: UserKind): Promise<Page> {
+/** Primul utilizator creat de CI (modul `personal`) = administratorul platformei, în ambele moduri. */
+const ADMIN_EMAIL = "e2e-main-personal@finet.test";
+
+async function pageAs(browser: Browser, baseURL: string, kind: UserKind | "admin"): Promise<Page> {
   let state = states.get(kind);
   if (!state) {
     const ctx = await browser.newContext({ baseURL });
     const p = await ctx.newPage();
-    await loginOk(p, userEmail(kind), password());
+    await loginOk(p, kind === "admin" ? ADMIN_EMAIL : userEmail(kind), password());
     state = await ctx.storageState();
     states.set(kind, state);
     await ctx.close();
@@ -76,7 +80,7 @@ test.describe(`administrare (${MODE})`, () => {
     await user.getByTestId("feedback-submit").click();
     await expect(user.getByText("Mesajul a fost trimis.")).toBeVisible();
 
-    const admin = await pageAs(browser, baseURL!, "main");
+    const admin = await pageAs(browser, baseURL!, "admin");
     await admin.goto("/admin");
     await expect(
       admin.getByRole("heading", { level: 1, name: "Panou de administrare" }),
@@ -90,7 +94,7 @@ test.describe(`administrare (${MODE})`, () => {
     baseURL,
   }) => {
     const title = unique("Anunț");
-    const admin = await pageAs(browser, baseURL!, "main");
+    const admin = await pageAs(browser, baseURL!, "admin");
     await admin.goto("/admin");
     await admin.getByTestId("ann-title").fill(title);
     await admin.getByTestId("ann-body").fill("Mentenanță programată.");
