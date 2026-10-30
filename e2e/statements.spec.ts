@@ -4,14 +4,13 @@ import {
   type BrowserContext,
   type Page,
   expect,
-  test,
 } from "@playwright/test";
 import sharp from "sharp";
 
 import { buildStatementFixtures } from "../scripts/make-statement-fixtures.mjs";
 import { buildZip, itemsToPdf } from "../src/modules/statements/testing";
 
-import { MODE, type UserKind, loginOk, password, userEmail } from "./fixtures";
+import { MODE, type UserKind, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * Extrasele bancare în browser (F7-B, proiectul `statements`), DOAR cu date SINTETICE (nicio

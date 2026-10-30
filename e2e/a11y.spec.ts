@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
-import { type Page, expect, test } from "@playwright/test";
+import { type Page, expect } from "@playwright/test";
 
-import { loginOk, password, userEmail } from "./fixtures";
+import { loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * Auditul de accesibilitate (Faza 9, F9-B; master prompt Faza 9 „Lighthouse ≥ 90”), proiectul

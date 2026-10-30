@@ -4,10 +4,9 @@ import {
   type BrowserContext,
   type Page,
   expect,
-  test,
 } from "@playwright/test";
 
-import { MODE, type UserKind, loginOk, password, userEmail } from "./fixtures";
+import { MODE, type UserKind, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * Familia în browser (F8-B, proiectul `family`, modul `personal`): invitație → acceptare cu al doilea

@@ -1,6 +1,6 @@
-import { type Page, expect, test } from "@playwright/test";
+import { type Page, expect } from "@playwright/test";
 
-import { MODE, login, loginOk, password, userEmail } from "./fixtures";
+import { MODE, login, loginOk, password, userEmail, test } from "./fixtures";
 
 // Serverul `next dev` cu Access dezactivat doar pentru test (proiectul `auth` din
 // playwright.config.ts), pe un Postgres de test, în modul `E2E_APP_MODE` (personal | saas).

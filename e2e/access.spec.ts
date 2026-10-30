@@ -1,4 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+
+import { test } from "./fixtures";
 
 // Serverul de producție pornit cu CF_ACCESS_REQUIRED=true (proiectul `access` din
 // playwright.config.ts). Fără JWT Cloudflare Access valid, totul e refuzat (fail closed).

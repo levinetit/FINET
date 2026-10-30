@@ -1,4 +1,10 @@
-import { type Page, expect } from "@playwright/test";
+import {
+  type BrowserContext,
+  type Page,
+  type Request,
+  expect,
+  test as base,
+} from "@playwright/test";
 
 /**
  * Datele testelor E2E de autentificare. Utilizatorii se creează ÎNAINTE de rulare, cu CLI-ul
@@ -86,3 +92,76 @@ export async function loginOk(page: Page, email: string, pass: string): Promise<
   await login(page, email, pass);
   await expect(page).toHaveURL(/\/dashboard$/);
 }
+
+/**
+ * Cererile RSC în zbor la sfârșitul unui test (`router.refresh()`, navigări client; adresa are
+ * `_rsc=`). Un test care se termină imediat după o acțiune (de exemplu „Salvează” pe /profile, care
+ * face `router.refresh()`) lasă o astfel de cerere neterminată: la închiderea contextului browserul o
+ * ABANDONEAZĂ în timp ce serverul încă scrie răspunsul, iar `next dev` loghează o eroare React
+ * Flight („The destination stream errored while writing data.”, digest 2268694629). Nu e o eroare a
+ * aplicației (producția doar închide conexiunea), dar arată ca una în jurnalul CI.
+ *
+ * Reparația e în SINCRONIZAREA testelor, nu în filtrarea jurnalului: înainte să se închidă
+ * contextele unui test, se așteaptă (cel mult `SETTLE_TIMEOUT_MS`) terminarea cererilor RSC pornite.
+ * Fluxul SSE `/api/v1/events` nu e RSC și rămâne ca atare.
+ */
+const RSC_REQUEST = /[?&]_rsc=/;
+const SETTLE_TIMEOUT_MS = 10_000;
+
+export function trackRsc(context: BrowserContext, pending: Set<Request>): void {
+  const watch = (page: Page) => {
+    page.on("request", (request) => {
+      if (RSC_REQUEST.test(request.url())) pending.add(request);
+    });
+    const done = (request: Request) => void pending.delete(request);
+    page.on("requestfinished", done);
+    page.on("requestfailed", done);
+  };
+  for (const page of context.pages()) watch(page);
+  context.on("page", watch);
+}
+
+/** Așteaptă (fără să pice testul) terminarea cererilor RSC urmărite. */
+export async function settleRsc(
+  pending: ReadonlySet<Request>,
+  timeoutMs = SETTLE_TIMEOUT_MS,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (pending.size > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/**
+ * `test` al suitei: ca cel din Playwright, plus așteptarea cererilor RSC în zbor, pe TOATE
+ * contextele testului, înainte de închidere:
+ * - contextul implicit (fixture-ul `page`/`context`), prin suprascrierea lui `context`: se
+ *   instanțiază doar când testul îl cere (testele doar cu `request` nu pornesc niciun context);
+ * - contextele create în test cu `browser.newContext(...)`, urmărite cât durează testul.
+ */
+// Al doilea parametru se numește `provide`, nu `use`: regula react-hooks confundă `use` cu un hook React.
+export const test = base.extend<{ rscPending: Set<Request>; settleRscAtEnd: void }>({
+  rscPending: async ({}, provide) => {
+    await provide(new Set<Request>());
+  },
+  context: async ({ context, rscPending }, provide) => {
+    trackRsc(context, rscPending);
+    await provide(context);
+    await settleRsc(rscPending);
+  },
+  settleRscAtEnd: [
+    async ({ browser, rscPending }, provide) => {
+      const original = browser.newContext.bind(browser);
+      browser.newContext = (async (...args: Parameters<typeof original>) => {
+        const created = await original(...args);
+        trackRsc(created, rscPending);
+        return created;
+      }) as typeof browser.newContext;
+      // `provide` (callback-ul fixture-ului) nu aruncă la un test eșuat: teardown-ul de mai jos rulează oricum.
+      await provide();
+      browser.newContext = original;
+      await settleRsc(rscPending);
+    },
+    { auto: true },
+  ],
+});

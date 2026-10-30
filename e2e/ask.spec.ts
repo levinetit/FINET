@@ -1,6 +1,6 @@
-import { type Browser, type BrowserContext, type Page, expect, test } from "@playwright/test";
+import { type Browser, type BrowserContext, type Page, expect } from "@playwright/test";
 
-import { MODE, type UserKind, loginOk, password, userEmail } from "./fixtures";
+import { MODE, type UserKind, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * „Întreabă FINET” și rezumatul lunii în browser (F10-C, proiectul `ask`; ADR 0025). Datele se

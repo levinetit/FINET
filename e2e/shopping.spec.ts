@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { type Browser, type BrowserContext, type Page, expect, test } from "@playwright/test";
+import { type Browser, type BrowserContext, type Page, expect } from "@playwright/test";
 import postgres from "postgres";
 
-import { MODE, type UserKind, loginOk, password, userEmail } from "./fixtures";
+import { MODE, type UserKind, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * Listele de cumpărături în browser (F10-A, proiectul `shopping`; ADR 0022). Bonul CONFIRMAT este

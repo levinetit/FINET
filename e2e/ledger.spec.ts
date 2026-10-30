@@ -4,12 +4,11 @@ import {
   type BrowserContext,
   type Page,
   expect,
-  test,
 } from "@playwright/test";
 
 import { formatMoney, money } from "../src/lib/money";
 
-import { MODE, type UserKind, loginOk, password, userEmail } from "./fixtures";
+import { MODE, type UserKind, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * Registrul în browser (F2-C, proiectul `ledger`): conturi, tranzacții, transferuri, categorii,

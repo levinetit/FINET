@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
-import { type Browser, type Page, expect, test } from "@playwright/test";
+import { type Browser, type Page, expect } from "@playwright/test";
 
-import { MODE, loginOk, password, userEmail } from "./fixtures";
+import { MODE, loginOk, password, userEmail, test } from "./fixtures";
 
 /**
  * Regresii din analiza finpulse.day (Faza 4, proiectul `regressions`, server `next dev` pe
