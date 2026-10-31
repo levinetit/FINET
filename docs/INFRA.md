@@ -711,4 +711,5 @@ Agentul nu a rulat nimic din această secțiune. ADR 0035, SECURITY_CHECKLIST §
 3. **Abonament manual** (de exemplu fondator): `insert into finet.subscriptions (household_id, plan_id, status, provider) values ('<gospodărie>', '<plan>', 'active', 'founder');` (fără `current_period_end` nu expiră). Pentru probă: `status = 'trialing'` și `trial_end`.
 4. **Verificare:** `select * from finet.household_plan('<gospodărie>');` → `plan_code`, `limits`, `features`, `state` (`ok`, `read_only` sau `none`).
 5. **Efect:** abonament expirat sau anulat → scrierile primesc 402, citirea și exportul merg (API.md). Reînnoirea (status `active` cu perioadă viitoare) redeschide scrierile imediat.
-6. Rezerva: ștergerea planului implicit (`delete`) face `saas` doar-citire; migrația se anulează cu comenzile din antet, doar cu backup și decizia explicită a operatorului.
+6. **Trecerea `personal` → `saas` și planul fondator** (12-D): `docs/MIGRARE_PERSONAL_SAAS.md` (scripturile `ops/saas/founder-plan*.sql`).
+7. Rezerva: ștergerea planului implicit (`delete`) face `saas` doar-citire; migrația se anulează cu comenzile din antet, doar cu backup și decizia explicită a operatorului.

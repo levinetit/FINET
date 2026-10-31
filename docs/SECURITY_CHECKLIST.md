@@ -732,3 +732,12 @@ Cod în branch `phase/12a-plans`; **migrația 0023 neaplicată, nedeployat**.
 - [x] **12-A.2** (branch `phase/12a2-plan-limits`, migrația 0024 neaplicată): dimensiunea maximă a fișierului pe plan (aplicată la primire, fără plan = 0; fișierul nu rămâne pe disc), tipurile de fișier pe plan (`403 plan_restricted`, fișierele scrise se șterg), istoricul de bonuri (lista și detaliul; expirat sau fără plan = date vizibile), prioritatea cozii (echitatea din 0010 rămâne prima; `personal` neschimbat). `plan-limits.test.ts`, `migrate.test.ts`.
 - [ ] De decis/făcut: valorile planurilor (operator); furnizorul de plată (operatorul nu folosește Stripe; până atunci doar abonamente `manual`/`founder`); revizuirea de securitate a Fazei 12. Istoricul de bonuri nu filtrează exporturile și agregatele (prețuri, rapoarte).
 - [ ] Risc rezidual de acceptat: `household_plan` primește orice UUID de gospodărie și răspunde fără verificarea apartenenței (planul unei gospodării neghicibile); datele nu sunt financiare.
+
+## 39. Trecerea `personal` → `saas`: planul fondator (Faza 12-D, 2026-10-31; ADR 0036)
+
+Cod în branch `phase/12d-personal-to-saas`; **nicio migrație, nimic rulat pe producție**.
+
+- [x] Scrierea planurilor rămâne a operatorului (`finet_migrator`); aplicația nu primește nicio cale nouă de scriere (script SQL, nu cod de aplicație). `founder-plan.test.ts`.
+- [x] Scriptul e idempotent și nu rescrie un plan editat sau abonamente existente (`on conflict do nothing`); verificarea (`founder-plan-check.sql`) nu scrie nimic.
+- [x] Gospodăria creată după rulare rămâne fail closed (`none`) până la planul implicit al operatorului.
+- [ ] De făcut de operator, cu frază explicită: backup, rularea scriptului pe Supabase, planul implicit, comutarea `APP_MODE`, redeploy (`docs/MIGRARE_PERSONAL_SAAS.md`).
