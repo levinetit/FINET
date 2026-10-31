@@ -20,6 +20,7 @@ import {
   revokeInviteRow,
   selectInvite,
   selectInvites,
+  selectMembers,
   setActiveHouseholdRow,
 } from "./family.repo";
 import {
@@ -96,6 +97,17 @@ export async function createInvite(
   return inFamily(deps, actor, householdId, "owner", async (tx, m) => {
     const now = nowOf(deps);
     await lockHouseholdInvites(tx, m.householdId);
+    // Plafonul planului (Faza 12-A): membrii de acum + invitațiile încă valabile.
+    if (deps.entitlements) {
+      const max = await deps.entitlements.limit(m.householdId, "household.maxMembers");
+      const members = (await selectMembers(tx, m.householdId)).length;
+      const pending = (await selectInvites(tx, m.householdId)).filter(
+        (r) => inviteStatus(r, now) === "active",
+      ).length;
+      if (members + pending >= max) {
+        throw new ConflictError("household_full", "Planul curent nu mai permite alți membri.");
+      }
+    }
     const since = new Date(now.getTime() - 24 * 3600 * 1000);
     if ((await countInvitesSince(tx, m.householdId, since)) >= INVITES_PER_DAY) {
       throw new ConflictError("invite_limit", "Ai creat prea multe invitații azi.");
@@ -201,6 +213,14 @@ export async function acceptInvite(
         });
       }
       await setActiveHouseholdRow(tx, actor.userId, result.householdId);
+      // Plafonul planului gospodăriei țintă (Faza 12-A): depășirea anulează intrarea (rollback).
+      // După setarea gospodăriei active, membrul vede lista completă (RLS).
+      if (result.joined && deps.entitlements) {
+        const max = await deps.entitlements.limit(result.householdId, "household.maxMembers");
+        if ((await selectMembers(tx, result.householdId)).length > max) {
+          throw new ConflictError("household_full", "Planul gospodăriei nu mai permite membri.");
+        }
+      }
       return result;
     });
   } catch (error) {

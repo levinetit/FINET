@@ -27,11 +27,11 @@ import {
   ApiError,
   type ApiDeps,
   enforceRateLimit,
-  handle,
   json,
   parseWith,
   readJsonBody,
   readQuery,
+  handleAlways,
 } from "./http";
 
 /**
@@ -55,7 +55,7 @@ export type GdprApiDeps = ApiDeps &
 const storageOf = (d: GdprApiDeps): Storage => d.storage ?? getStorage();
 
 export function deletionPreviewHandler(request: Request, d: GdprApiDeps): Promise<Response> {
-  return handle(request, d, async (ctx) => {
+  return handleAlways(request, d, async (ctx) => {
     readQuery(request, {});
     return json({ data: await previewAccountDeletion(d.db, ctx.actor.userId) });
   });
@@ -70,7 +70,7 @@ const DELETION_STATUS: Readonly<Record<AccountDeletionError["code"], number>> = 
 };
 
 export function deleteAccountHandler(request: Request, d: GdprApiDeps): Promise<Response> {
-  return handle(request, d, async (ctx) => {
+  return handleAlways(request, d, async (ctx) => {
     const ip = trustedClientIp(request.headers, {
       accessVerified: d.config.access.clientIpTrusted,
     });
@@ -124,7 +124,7 @@ function assertDownloadFetchSite(ctx: ApiContext): void {
 export const EXPORT_ARCHIVE_NAME = "finet-export.zip";
 
 export function dataExportHandler(request: Request, d: GdprApiDeps): Promise<Response> {
-  return handle(request, d, async (ctx) => {
+  return handleAlways(request, d, async (ctx) => {
     readQuery(request, {});
     assertDownloadFetchSite(ctx);
     await enforceRateLimit(ctx, "gdpr_export", ctx.limits.gdprExport);
@@ -177,7 +177,7 @@ export function dataExportHandler(request: Request, d: GdprApiDeps): Promise<Res
 }
 
 export function usageStatsHandler(request: Request, d: GdprApiDeps): Promise<Response> {
-  return handle(request, d, async (ctx) => {
+  return handleAlways(request, d, async (ctx) => {
     readQuery(request, {});
     const latestAndroid = await readAndroidRelease(d.config.storage.dir).catch(() => null);
     return json({

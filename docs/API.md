@@ -35,12 +35,14 @@ Format unic: `{ "error": { "code", "message", "fields"?, "reason"? } }`.
 | 404 | `not_found` | resursă inexistentă sau a altei gospodării |
 | 409 | `conflict` | starea curentă nu permite operația; `reason` stabil (`account_not_empty`, `account_archived`, `category_in_use`, `system_category_readonly`, `account_name_taken`, `tag_name_taken`, `system_tag`, `budget_exists`, `goal_abandoned`, `goal_saved_negative`, `export_too_large`, …) |
 | 409 | `request_in_progress` | o cerere cu aceeași `Idempotency-Key` e în desfășurare |
+| 402 | `subscription_required` | doar `saas`: abonamentul gospodăriei a expirat sau a fost anulat; scrierile sunt blocate, citirea și exportul rămân (ADR 0035) |
 | 413 | `payload_too_large` | corp peste 16 KiB |
 | 415 | `unsupported_media_type` | corp care nu e `application/json` |
 | 422 | `idempotency_key_reused` | aceeași `Idempotency-Key` pentru altă cerere |
 | 422 | `amount_out_of_range` | un sold sau un total calculat (inclusiv dashboard/raport) depășește 2^53 − 1 și nu poate fi transmis exact |
 | 429 | `rate_limited` | prea multe cereri (antet `Retry-After`) |
 | 500 | `internal_error` | eroare neașteptată, fără detalii |
+| 503 | `plans_not_configured` | doar `saas`: nu există niciun plan implicit configurat; scrierile sunt refuzate (ADR 0035) |
 
 Limite: mutațiile 120/min per utilizator; evenimentele 30/min per utilizator; exporturile CSV 10/min per utilizator.
 

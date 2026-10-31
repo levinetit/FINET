@@ -33,6 +33,7 @@ import {
   requestHash,
   runIdempotent,
 } from "@/modules/idempotency/idempotency";
+import { householdPlan } from "@/modules/entitlements";
 import { zodFields } from "@/modules/ledger/input";
 import { recordClientInstallation } from "@/modules/usage/installations";
 
@@ -414,10 +415,45 @@ export async function enforceRateLimit(
 }
 
 /** Rulează handlerul cu sesiune, CSRF, instalare, rate limiting și maparea erorilor. */
+export type HandleOptions = Readonly<{
+  /**
+   * Rutele care rămân deschise când abonamentul a expirat (`saas`, ADR 0035): cont, GDPR,
+   * administrare, ieșirea din gospodărie. Implicit scrierile sunt BLOCATE; o rută uitată rămâne
+   * deci blocată, nu deschisă.
+   */
+  allowReadOnly?: boolean;
+}>;
+
+/**
+ * Abonament expirat sau anulat (`read_only`): datele rămân accesibile pentru citire și export
+ * (GET), dar nicio scriere nu trece (402). Fără plan configurat (`none`): scrierile sunt refuzate
+ * (503), FAIL CLOSED. În `personal` nu se verifică nimic. Gospodăria e cea activă a utilizatorului.
+ */
+async function assertWritable(ctx: ApiContext): Promise<void> {
+  const { db, config } = ctx.deps;
+  if (config.appMode !== "saas") return;
+  const hh = await withRlsOn(db, { userId: ctx.actor.userId }, (tx) =>
+    currentHouseholdIdOf(tx, ctx.actor.userId),
+  );
+  if (!hh) return;
+  const plan = await householdPlan(db, hh);
+  if (plan.state === "read_only") {
+    throw new ApiError(
+      402,
+      "subscription_required",
+      "Abonamentul a expirat: datele rămân accesibile pentru citire și export.",
+    );
+  }
+  if (plan.state === "none") {
+    throw new ApiError(503, "plans_not_configured", "Planurile nu sunt configurate.");
+  }
+}
+
 export async function handle(
   request: Request,
   deps: ApiDeps,
   fn: (ctx: ApiContext) => Promise<Response>,
+  options: HandleOptions = {},
 ): Promise<Response> {
   try {
     const session = await requireSession(request, deps);
@@ -434,11 +470,21 @@ export async function handle(
     await recordClientInstallation(deps.db, ctx.actor.userId, request.headers, ctx.now);
     if (MUTATING.has(request.method.toUpperCase())) {
       await enforceRateLimit(ctx, "api_mutation", ctx.limits.mutations);
+      if (options.allowReadOnly !== true) await assertWritable(ctx);
     }
     return await fn(ctx);
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+/** `handle` pentru rutele care merg și cu abonament expirat (vezi `HandleOptions`). */
+export function handleAlways(
+  request: Request,
+  deps: ApiDeps,
+  fn: (ctx: ApiContext) => Promise<Response>,
+): Promise<Response> {
+  return handle(request, deps, fn, { allowReadOnly: true });
 }
 
 // ---------------------------------------------------------------------------------------------

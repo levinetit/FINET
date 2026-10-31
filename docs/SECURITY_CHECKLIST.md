@@ -719,3 +719,15 @@ Cod în branch `phase/11-public-edge`; **nedeployat, implicit oprit**. Nu s-a sc
 - [x] `cf-connecting-ip` nu mai e crezut doar fiindcă Access e „obligatoriu”: noul `access.clientIpTrusted` e `false` cu `publicSaas` fără `TRUST_CF_CONNECTING_IP`; antet falsificat → ignorat. `request.test.ts`.
 - [ ] **Operator, înainte de activare:** originea accesibilă DOAR prin tunel (fără port publicat; verificat pe producție: `docker port finet-web` e gol), politica Access „Bypass” pe căile publice cu excepția `/admin`, WAF/rate limiting, SMTP, juridic (`docs/EXPOSURE.md` secțiunile 3–5).
 - [ ] Risc rezidual de acceptat: cu `publicSaas`, rutele `/api/v1/documents` și `/api/v1/statements/uploads` (excluse din proxy) sunt protejate doar de sesiune, care se verifică înainte de a citi corpul (ADR 0015/0018).
+
+## 38. Planuri, abonamente și `entitlements` în `saas` (Faza 12-A, 2026-10-31; ADR 0035)
+
+Cod în branch `phase/12a-plans`; **migrația 0023 neaplicată, nedeployat**.
+
+- [x] `saas` nu mai aruncă `NotImplementedError`: planul vine din `finet.household_plan`. FAIL CLOSED: fără plan (`none`), abonament expirat/anulat (`read_only`), cheie lipsă, negativă, ne-întreagă sau de alt tip în plan → `can` false, `limit` 0. `plans.test.ts`.
+- [x] `personal` nu citește tabelele de planuri (test cu client care aruncă); `saas` fără client de bază aruncă `TypeError`. `plans.test.ts`.
+- [x] Aplicația (`finet_app`) nu poate scrie `plans`/`subscriptions` (nici INSERT, UPDATE, DELETE): doar `SELECT`, cu RLS (abonament doar pentru membri, planuri doar pentru utilizatori autentificați); scrierea o face operatorul ca `finet_migrator`. Funcția `household_plan` nu e executabilă de `PUBLIC`. `plans.test.ts`, `migrate.test.ts`.
+- [x] Abonament expirat: orice `POST/PUT/PATCH/DELETE` → 402 în `handle`, citirea și exportul merg, excepțiile sunt explicite (`handleAlways`); fără plan configurat → 503. `plans-api.test.ts`.
+- [x] Plafonul de membri la invitație (membri + invitații active) și la acceptare (depășirea anulează intrarea); `ask.finet` și `reports.custom` cer funcția în plan (403). `plans-api.test.ts`.
+- [ ] De decis/făcut: valorile planurilor (operator), 12-A.2 (dimensiunea fișierului, tipurile de fișier, prioritatea cozii, istoricul de bonuri pe plan), 12-B Stripe (webhook-uri idempotente, funcție de scriere dedicată), revizuirea de securitate a Fazei 12.
+- [ ] Risc rezidual de acceptat: `household_plan` primește orice UUID de gospodărie și răspunde fără verificarea apartenenței (planul unei gospodării neghicibile); datele nu sunt financiare.
