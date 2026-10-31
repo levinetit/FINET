@@ -19,7 +19,7 @@ export type CompanyView = Readonly<{
 }>;
 
 const MISSING = { ro: "[de completat]", en: "[to be completed]" } as const;
-const orIn = (locale: SiteLocale) => (v: string | null) => v ?? MISSING[locale];
+const orIn = (locale: keyof typeof MISSING) => (v: string | null) => v ?? MISSING[locale];
 
 /** Termenii în limba cerută (implicit româna). */
 export function termsSections(c: CompanyView, locale: SiteLocale = "ro"): readonly LegalSection[] {
