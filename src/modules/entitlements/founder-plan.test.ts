@@ -14,7 +14,13 @@ import { UNLIMITED, createEntitlements, householdPlan, receiptHistoryMonths } fr
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
 
 const config = parseConfig({ APP_MODE: "saas", NODE_ENV: "test" });
-const script = (name: string) => readFileSync(join(process.cwd(), "ops/saas", name), "utf8");
+/** Scriptul se rulează cu psql; aici fără metacomenzi (`\\...`), cu `:'cutoff'` înlocuit literal. */
+const script = (name: string, cutoff = "infinity") =>
+  readFileSync(join(process.cwd(), "ops/saas", name), "utf8")
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("\\"))
+    .join("\n")
+    .replaceAll(":'cutoff'", `'${cutoff}'`);
 
 /**
  * Planul „fondator” (12-D; ADR 0036): `ops/saas/founder-plan.sql` rulat ca `finet_migrator` pe
@@ -52,7 +58,7 @@ describe.skipIf(!TEST_ADMIN_URL)("12-D: planul fondator (Postgres real)", () => 
     const [row] = await migrator.unsafe(script("founder-plan-check.sql"));
     return row as Record<string, string>;
   };
-  const apply = () => migrator.unsafe(script("founder-plan.sql"));
+  const apply = (cutoff?: string) => migrator.unsafe(script("founder-plan.sql", cutoff));
   const ent = () => createEntitlements("saas", config, fx.db);
 
   it("acordă fondatorul doar gospodăriilor fără abonament; cele cu abonament rămân neatinse", async () => {
@@ -124,6 +130,24 @@ describe.skipIf(!TEST_ADMIN_URL)("12-D: planul fondator (Postgres real)", () => 
     expect(plan.code).toBeNull();
     expect(await ent().can(late, "ask.finet")).toBe(false);
     expect(await ent().limit(late, "household.maxMembers")).toBe(0);
+  });
+
+  it("pragul `cutoff`: o gospodărie creată după prag nu primește fondator nici la o rerulare", async () => {
+    const early = await household();
+    const cutoff = new Date(Date.now() + 1000).toISOString();
+    await new Promise((r) => setTimeout(r, 1500));
+    const late = await household();
+    await apply(cutoff);
+    await apply(cutoff);
+    expect((await householdPlan(fx.db, early)).code).toBe("founder");
+    expect((await householdPlan(fx.db, late)).state).toBe("none");
+  });
+
+  it("scriptul cere `cutoff` (altfel psql se oprește înainte de orice scriere)", () => {
+    const raw = readFileSync(join(process.cwd(), "ops/saas/founder-plan.sql"), "utf8");
+    expect(raw).toContain("\\if :{?cutoff}");
+    expect(raw).toContain("\\quit 3");
+    expect(raw).toContain("h.created_at <= :'cutoff'::timestamptz");
   });
 
   it("verificarea nu scrie nimic", async () => {

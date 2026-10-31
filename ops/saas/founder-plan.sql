@@ -1,13 +1,18 @@
 -- FINET 12-D (ADR 0036): planul „fondator” pentru gospodăriile EXISTENTE, la trecerea
 -- `personal` → `saas`. Master prompt, 3.3 și Faza 12: gospodăriile existente primesc un plan
--- „fondator” fără limite. Se rulează O SINGURĂ DATĂ, ca `finet_migrator`, ÎNAINTE de a schimba
+-- „fondator” fără limite. Se rulează o dată, ca `finet_migrator`, ÎNAINTE de a schimba
 -- `APP_MODE=saas` (altfel gospodăriile fără abonament și fără plan implicit primesc 503
 -- `plans_not_configured`), după backup și după `founder-plan-check.sql`:
 --   psql "<url-migrator>?sslmode=verify-full&sslrootcert=<ca.crt>" -X -v ON_ERROR_STOP=1 \
---        --single-transaction -f ops/saas/founder-plan.sql
+--        -v cutoff="'2026-11-01 12:00:00+00'" --single-transaction -f ops/saas/founder-plan.sql
 -- (`--single-transaction`: ori se aplică tot, ori nimic.)
 --
--- Idempotent și neagresiv:
+-- `cutoff` este OBLIGATORIU: doar gospodăriile create până la acel moment (`created_at <= cutoff`)
+-- primesc fondator. Alege momentul pregătirii comutării, înainte ca vreo înregistrare publică să se
+-- deschidă. Fără prag, o rulare ulterioară (după deschiderea înregistrării) ar acorda „fără limite”
+-- oricărui cont nou fără abonament. Fără `cutoff` scriptul se oprește fără să scrie nimic.
+--
+-- Neagresiv:
 --   - planul `founder` se creează doar dacă lipsește (`on conflict do nothing`): dacă l-ai
 --     modificat, scriptul NU îl rescrie;
 --   - abonamentele se adaugă doar gospodăriilor FĂRĂ abonament (`on conflict do nothing`): un
@@ -25,6 +30,12 @@
 --   delete from finet.subscriptions where provider = 'founder';
 --   delete from finet.plans where code = 'founder';
 
+\if :{?cutoff}
+\else
+  \echo 'Lipseste -v cutoff (vezi antetul). Nu s-a scris nimic.'
+  \quit 3
+\endif
+
 insert into finet.plans (code, name, is_default, limits, features)
 values (
   'founder', 'Fondator', false,
@@ -41,9 +52,11 @@ insert into finet.subscriptions (household_id, plan_id, status, provider)
 select h.id, p.id, 'active', 'founder'
   from finet.households h
   cross join (select id from finet.plans where code = 'founder' and active) p
+ where h.created_at <= :'cutoff'::timestamptz
 on conflict (household_id) do nothing;
 
--- Raport: câte gospodării au acum abonament „fondator” și câte au rămas fără abonament.
+-- Raport: câte gospodării au acum abonament „fondator” și câte au rămas fără abonament (cele create
+-- după prag rămân fără abonament, intenționat).
 select
   (select count(*) from finet.subscriptions where provider = 'founder') as abonamente_fondator,
   (select count(*) from finet.households h

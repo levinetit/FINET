@@ -26,15 +26,19 @@ Rezultat: `gospodarii`, `cu_abonament`, `fara_abonament`, `plan_fondator_exista`
 
 ```
 psql "<url-migrator>?sslmode=verify-full&sslrootcert=<ca.crt>" -X -v ON_ERROR_STOP=1 \
-     --single-transaction -f ops/saas/founder-plan.sql
+     -v cutoff="'2026-11-01 12:00:00+00'" --single-transaction -f ops/saas/founder-plan.sql
 ```
+
+`cutoff` e obligatoriu: doar gospodăriile create până la acel moment primesc fondator. Alege momentul pregătirii comutării, înainte să se deschidă vreo înregistrare publică (în `personal` gospodării noi apar doar din CLI, rar). Fără el, scriptul se oprește fără să scrie.
 
 - Creează planul `founder` („fără limite”: valoarea maximă întreagă sigură la `ai.dailyDocuments`, `storage.quotaMb`, `household.maxMembers`, `documents.maxFileMb`; toate funcțiile cunoscute, inclusiv `receipts.archive`) doar dacă lipsește.
 - Adaugă un abonament `founder`, fără sfârșit de perioadă (nu expiră singur), fiecărei gospodării FĂRĂ abonament. Un abonament existent nu se atinge.
-- Idempotent: o a doua rulare nu schimbă nimic și nu rescrie un plan pe care l-ai editat.
+- O a doua rulare cu ACELAȘI prag nu schimbă nimic și nu rescrie un plan pe care l-ai editat; gospodăriile create după prag nu primesc fondator.
 - Limitele tehnice globale rămân (`AI_MONTHLY_BUDGET`, dimensiunea tehnică maximă a fișierului). `queue.priority` lipsește (0): coada rămâne echitabilă.
 
 Rerulează pasul 1: `fara_abonament` trebuie să fie 0 și `plan_fondator_exista` 1.
+
+**Rerulează `founder-plan.sql` imediat înainte de pasul 4**, cu un prag nou (momentul de acum), dar numai cât înregistrarea publică e încă oprită: un cont creat între acest pas și comutare altfel ar primi 503 în `saas`, fiindcă nu are abonament. Nu rula scriptul după deschiderea înregistrării.
 
 ## 3. Planul implicit (gospodăriile noi)
 
