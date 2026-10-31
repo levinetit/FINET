@@ -15,6 +15,19 @@ export class NotImplementedError extends Error {
 }
 
 /**
+ * Operația nu e disponibilă în planul curent al gospodăriei (HTTP 403, `plan_restricted`), de
+ * exemplu un tip de fișier sau o dimensiune peste ce permite planul (Faza 12-A.2, ADR 0035).
+ */
+export class PlanRestrictedError extends Error {
+  readonly code = "plan_restricted";
+  readonly status = 403;
+  constructor(message = "Funcția nu e disponibilă în planul curent.") {
+    super(message);
+    this.name = "PlanRestrictedError";
+  }
+}
+
+/**
  * Date de intrare invalide (HTTP 400, `invalid_request`). `fields` are mesaje fixe pe câmp (fără
  * a repeta valoarea primită), ca formatul `{ error: { code, message, fields? } }` din 6.4.
  */

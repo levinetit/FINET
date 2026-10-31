@@ -304,8 +304,8 @@ jobs:
           psql -U finet -d finet_test -v ON_ERROR_STOP=1 -q -c
           "insert into finet.plans (code, name, is_default, limits, features)
           values ('e2e', 'E2E', true,
-          '{\"ai.dailyDocuments\": 1000, \"storage.quotaMb\": 10000, \"household.maxMembers\": 100}'::jsonb,
-          array['ask.finet', 'reports.custom'])"
+          '{\"ai.dailyDocuments\": 1000, \"storage.quotaMb\": 10000, \"household.maxMembers\": 100, \"documents.maxFileMb\": 50}'::jsonb,
+          array['ask.finet', 'reports.custom', 'documents.jpeg', 'documents.png', 'documents.webp', 'documents.pdf'])"
 
       # Câte douăzeci și șapte de utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth`, `ledger`, `planning`, `regressions`, `recurring`, `receipts`, `family`, `pwa`, `gdpr`, `a11y`, `statements`, `shopping`, `insights`, `ask`); parola din
       # stdin, niciodată ca argument.
