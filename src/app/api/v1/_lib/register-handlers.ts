@@ -77,6 +77,8 @@ function assertBrowserOrigin(request: Request, config: Config): void {
 const IP_RULE: RateLimitRule = Object.freeze({ max: 10, windowSeconds: 60 * 60 });
 // Fără IP de încredere (fără Access), grupul „necunoscut” e comun: plafon global, nu pe client.
 const SHARED_RULE: RateLimitRule = Object.freeze({ max: 60, windowSeconds: 60 * 60 });
+// Plafon pe ADRESĂ, indiferent de IP: oprește inundarea căsuței unei victime de pe mai multe IP-uri.
+export const MAILBOX_RULE: RateLimitRule = Object.freeze({ max: 5, windowSeconds: 60 * 60 });
 
 async function limit(
   deps: ApiDeps,
@@ -127,10 +129,21 @@ export async function registerHandler(request: Request, deps: ApiDeps): Promise<
         throw new ApiError(400, "turnstile", "Verificarea anti-robot a eșuat. Încearcă din nou.");
       }
     }
-    await registerAccount(
-      { db: deps.db, config: deps.config, mailer, ...(deps.now ? { now: deps.now } : {}) },
-      input,
+    // Plafonul pe adresă vine DUPĂ Turnstile (un robot fără token nu poate epuiza plafonul unei
+    // victime) și nu schimbă răspunsul: peste plafon nu se mai scrie și nu se mai trimite nimic,
+    // dar cererea primește același 202 (nu dezvăluie nimic despre adresă).
+    const mailbox = await hitRateLimit(
+      deps.db,
+      rateLimitKey("register", null, `mailbox:${input.email}`),
+      MAILBOX_RULE,
+      now,
     );
+    if (mailbox.allowed) {
+      await registerAccount(
+        { db: deps.db, config: deps.config, mailer, ...(deps.now ? { now: deps.now } : {}) },
+        input,
+      );
+    }
     return json({ data: { status: "pending" } }, 202);
   } catch (error) {
     return failure(error);
