@@ -752,3 +752,24 @@ Cod în branch `phase/12c-referrals`; **migrația 0025 neaplicată, nedeployat**
 - [x] Felia 2 (branch `phase/12c2-referral-routes`, fără migrație): `/ref/<cod>` și `/api/v1/referrals/me` doar `saas` (404 în `personal`); cookie HttpOnly cu cod validat ca formă; același răspuns pentru orice cod; codul călătorește în tokenul semnat, nu se citește din cookie la pasul 2; o eroare la aplicare nu strică înregistrarea. `referral-api.test.ts`, `ref-route.test.ts`.
 - [x] Felia 3 (branch `phase/12c3-feedback-reward`, **migrația 0026 neaplicată, nedeployat**): acțiune explicită a administratorului, regulile în `finet.admin_reward_feedback` (doar admin, 42501 altfel; o dată pe utilizator; plafon global; fără auto-recompensă; abonamentele manual/founder/stripe neatinse); oprită implicit; non-administratorul 404. `feedback-reward-api.test.ts`, `migrate.test.ts`.
 - [ ] Risc de acceptat: fermă de conturi (confirmarea emailului, Turnstile, limitele de rate ale înregistrării și fereastra de folosire limitează, nu elimină); verificarea de existență a codului se face abia la confirmare, deci `/ref` nu e un oracol.
+
+## 41. Revizuirea de securitate a Fazelor 12 și 13 (2026-11-01)
+
+Revizuire manuală a codului din PR #49–#56 (migrațiile 0023–0026, `entitlements`, punctul de control al scrierilor, recomandări, recompensa pentru feedback, scripturile `ops/saas`, limbile paginilor publice). Metodă: citirea funcțiilor SQL, a handlerelor și a rutelor; inventarul tuturor rutelor de scriere; verificări punctuale pe cod.
+
+**Verificat, fără constatare**
+- [x] **Fiecare rută de scriere trece prin `handle`/`handleAlways`** (77 de fișiere `route.ts` cu POST/PUT/PATCH/DELETE; singurele în afară: `/api/auth/*` și cele două rute publice de înregistrare, care au propriile controale). Excepțiile `handleAlways` sunt explicite (GDPR, `/me/*`, admin, ieșirea din gospodărie, acceptarea invitației, previzualizarea raportului, ask).
+- [x] **Funcțiile SECURITY DEFINER** (`household_plan`, `grant_reward`, `my_referral_code`, `redeem_referral`, `admin_reward_feedback`): `search_path = pg_catalog`, nume calificate, `revoke ... from public`, execute explicit; `grant_reward` nu e executabilă de aplicație (testat cu încercare reală). Toate valorile intră ca parametri, niciun SQL construit din text.
+- [x] **Aplicația nu scrie planuri, setări, coduri, recomandări, recompense** (nici INSERT, nici UPDATE; verificat în teste).
+- [x] **`/ref/<cod>`**: redirecționare fixă spre `/register` (fără redirect deschis), cookie HttpOnly, același răspuns pentru orice cod, `decodeURIComponent` protejat. **Codul din tokenul de înregistrare** e semnat și validat ca formă la citire.
+- [x] **Faza 13**: `x-finet-lang` se înlocuiește mereu în proxy (nu poate fi falsificat), limba vine doar din cookie și dintr-o listă exactă, `Accept-Language` nu se folosește, nu există `dangerouslySetInnerHTML`, textele legale în engleză sunt statice.
+- [x] Abuzul recomandărilor e limitat în baza de date: o singură folosire pe invitat, cont confirmat și recent, fără auto-recomandare (nici prin gospodărie comună), plafon pe invitator (cu lock).
+
+**Constatări**
+- [x] **M1 (medie, REPARAT în PR-ul acestui punct): exportul GDPR (Art. 15) omitea datele noi** ale utilizatorului: mesajele de feedback (text liber), codul de recomandare, contoarele și folosirea unui cod, recompensa. Acum `profil.json` le conține (fără identitatea altor utilizatori); test în `gdpr-api.test.ts`.
+- [ ] **L1 (mică, de acceptat/decis de operator): ștergere + reînregistrare = recompensă nouă pentru invitat.** Cheia „o dată” e `user_id`, deci un cont șters și recreat cu același email poate folosi din nou un cod. Limitat de Turnstile, confirmarea emailului și plafoanele de rate; recompensa invitatorului rămâne plafonată. O deduplicare pe email ar cere păstrarea unui hash după ștergere (tensiune cu ștergerea GDPR): nu s-a făcut.
+- [ ] **L2 (mică): conturi multiple ale aceleiași persoane** nu se pot detecta; plafonul `inviter_max_rewards` le limitează. Recomandare: valoare mică la pornire și urmărirea tabelei `referrals`.
+- [ ] **L3 (mică): recompensele din recomandări nu au eveniment de audit** (doar rândul din `referrals`, care dispare la ștergerea contului); recompensa pentru feedback se auditează.
+- [ ] **L4 (mică): plafonul de membri** (invitații) se verifică fără lock: invitații simultane pot depăși plafonul cu câteva locuri; acceptarea reverifică și anulează intrarea. Acceptat.
+- [ ] **L5 (informativ): `household_plan(uuid)`** răspunde pentru orice UUID (deja acceptat în §38); `plans` e vizibil oricărui utilizator autentificat, inclusiv planul intern „founder”.
+- [ ] **Info:** workerul continuă documentele deja puse în coadă după expirarea abonamentului (cost mic pentru operator); `/api/auth/*` nu e blocat de abonament (acțiuni de cont, intenționat).

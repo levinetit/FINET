@@ -161,6 +161,16 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
       items: [{ name: "Roșii" }],
     });
 
+    // 12-C: datele noi ale lui Bogdan (feedback, cod de recomandare, folosirea unui cod, recompensă).
+    await fx.scratch.admin`insert into finet.feedback (user_id, kind, message)
+      values (${bogdan.id}, 'feedback', 'Mesajul lui Bogdan despre aplicație')`;
+    await fx.scratch.admin`insert into finet.referral_codes (user_id, code)
+      values (${bogdan.id}, 'FIN-BBBBBB')`;
+    await fx.scratch
+      .admin`insert into finet.referrals (invitee_user_id, inviter_user_id, invitee_rewarded)
+      values (${bogdan.id}, ${ana.id}, true)`;
+    await fx.scratch.admin`insert into finet.feedback_rewards (user_id) values (${bogdan.id})`;
+
     const crossSite = await call(G.dataExportHandler, "/api/v1/me/export", {
       cookie: bogdan.S.cookie,
       headers: { "sec-fetch-site": "cross-site" },
@@ -208,6 +218,18 @@ describe.skipIf(!TEST_ADMIN_URL)("API GDPR și statistici (PostgreSQL real)", ()
       }
       const profile = JSON.parse(files["profil.json"]!);
       expect(profile.user.email).toBe("bogdan@exemplu.ro");
+      expect(profile.feedback.map((f: { message: string }) => f.message)).toEqual([
+        "Mesajul lui Bogdan despre aplicație",
+      ]);
+      expect(profile.referral).toMatchObject({
+        code: "FIN-BBBBBB",
+        invited: 0,
+        rewarded: 0,
+        joinedViaReferral: { rewarded: true },
+      });
+      expect(profile.feedbackReward.grantedAt).toBeTruthy();
+      // Fără identitatea invitatorului.
+      expect(JSON.stringify(profile.referral)).not.toContain(ana.id);
       expect(Object.keys(profile.sessions[0]).sort()).toEqual(
         ["createdAt", "expiresAt", "ipAddress", "updatedAt", "userAgent"].sort(),
       );
