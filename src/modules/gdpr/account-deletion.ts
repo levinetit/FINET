@@ -273,7 +273,15 @@ export async function deleteAccount(
   if (await isAdmin(deps.db, userId)) {
     throw new AccountDeletionError("platform_admin", PLATFORM_ADMIN_MESSAGE);
   }
+  return eraseAccount(deps, userId);
+}
 
+/**
+ * Ștergerea propriu-zisă, FĂRĂ reautentificare: o apelează doar `deleteAccount` (după ce a verificat
+ * parola sau sesiunea proaspătă) și curățarea conturilor neconfirmate (`unverified-purge.ts`, care
+ * a ales deja conturile fără parolă, sesiune sau gospodărie comună). Nu o expune în API.
+ */
+export async function eraseAccount(deps: DeletionDeps, userId: string): Promise<DeletionResult> {
   const { result, keys } = await deps.db.transaction(async (outer) => {
     await outer.execute(
       sql`select pg_advisory_xact_lock(hashtext(${`finet.erase_user:${userId}`}))`,

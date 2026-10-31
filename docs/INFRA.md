@@ -684,3 +684,13 @@ Agentul nu a rulat nimic din această secțiune. ADR 0032. **Fără migrație.**
 2. **Configurare:** `GOOGLE_CLIENT_ID=…` în `finet.env`; secretul ca fișier: `printf '%s' '<secret>' | sudo install -o 1000 -g 1000 -m 400 /dev/stdin /srv/finet/secrets/finet_google_client_secret` și, în compose, `GOOGLE_CLIENT_SECRET_FILE: /run/secrets/finet_google_client_secret` + secretul montat în `finet-web` (ca la `finet_turnstile_secret`; lista de fișiere compose trebuie să fie completă la fiecare redeploy). NU pune secretul în `finet.env`.
 3. **Verificare** (browser, cont de test existent, cu email verificat și parolă): „Continuă cu Google” deschide Google; după alegerea contului revii în aplicație autentificat; `select provider_id, account_id, access_token, refresh_token, id_token from finet.auth_accounts where provider_id = 'google'` arată `access_token`, `refresh_token`, `id_token` goale; un cont Google cu alt email → înapoi la `/login` cu mesajul fix, fără utilizator nou (`select count(*) from finet.users` neschimbat); un cont FINET cu email neverificat → același mesaj.
 4. Rezerva: ștergerea variabilelor `GOOGLE_*` și redeploy opresc complet fluxul (căile revin la 404); conturile Google legate rămân inerte în `auth_accounts`.
+
+## 4x. Curățarea conturilor de înregistrare neconfirmate (Faza 11, 0021) — pe producție
+
+Agentul nu a rulat nimic din această secțiune. SECURITY_CHECKLIST §36. **Cere migrația `0021_purge_unverified`** (o singură funcție de citire; fără schimbări de schemă; rollback în antetul fișierului) și o frază explicită pentru Supabase. Are sens doar în `APP_MODE=saas` cu `SIGNUP_ENABLED=1`: în `personal` nu există conturi neconfirmate, deci comanda raportează `found=0`.
+
+1. **Migrația:** `finet-migrate` ca la 0020 (după backup). Verificare: „aplicate acum 1, deja aplicate 20”.
+2. **Dry-run** (nu șterge nimic): `docker compose -f docker-compose.yml -f docker-compose.ask.yml --env-file /srv/finet/compose/compose.env --profile cleanup run --rm -T finet-cleanup cleanup-unverified` → `found=N purged=0 failed=0 dry_run=1`.
+3. **Ștergerea:** aceeași comandă cu `--yes` (opțional `--days 7 --limit 200`). Ieșirea are doar contoare, fără emailuri sau id-uri.
+4. **Programare** (cron root, prin `sudo crontab -e`, nu `crontab -`): zilnic, după `finet-cleanup` (04:25), de exemplu 04:30, cu comanda de la pasul 3. Cod de ieșire 1 dacă un cont n-a putut fi șters (se reîncearcă la rulare următoare).
+5. Un cont șters astfel poate fi reînregistrat de proprietarul adresei oricând (pasul 1 din ADR 0029).
