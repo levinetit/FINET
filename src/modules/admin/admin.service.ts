@@ -228,6 +228,7 @@ export async function adminFeedback(db: Db, userId: string, rawQuery: unknown = 
         status: feedback.status,
         createdAt: feedback.createdAt,
         authorEmail: users.email,
+        rewarded: sql<boolean>`exists (select 1 from finet.feedback_rewards r where r.user_id = ${feedback.userId})`,
       })
       .from(feedback)
       .innerJoin(users, eq(users.id, feedback.userId))
@@ -255,6 +256,47 @@ export async function adminSetFeedbackStatus(db: Db, userId: string, id: string,
       targetId: id,
       metadata: { status },
     });
+    return { id, status };
+  });
+}
+
+export const FEEDBACK_REWARD_STATUSES = [
+  "ok",
+  "disabled",
+  "not_found",
+  "self",
+  "not_eligible",
+  "already",
+  "capped",
+  "not_applicable",
+] as const;
+export type FeedbackRewardStatus = (typeof FEEDBACK_REWARD_STATUSES)[number];
+
+/**
+ * Recompensa pentru un feedback validat (12-C, felia 3; ADR 0037): acțiune explicită a
+ * administratorului. Regulile (o dată pe utilizator, plafonul global, fără auto-recompensă,
+ * abonamentele manual/founder/stripe neatinse) sunt în `finet.admin_reward_feedback`; aici doar
+ * se apelează și se auditează un acord reușit.
+ */
+export async function adminRewardFeedback(
+  db: Db,
+  userId: string,
+  id: string,
+): Promise<{ id: string; status: FeedbackRewardStatus }> {
+  return withRlsOn(db, { userId }, async (tx) => {
+    await requireAdmin(tx);
+    const rows = await tx.execute(sql`select finet.admin_reward_feedback(${id}::uuid) as status`);
+    const raw = (rows[0] as { status?: unknown } | undefined)?.status;
+    const status = FEEDBACK_REWARD_STATUSES.find((s) => s === raw);
+    if (!status) throw new Error("admin_reward_feedback: răspuns neașteptat");
+    if (status === "not_found") throw new NotFoundError();
+    if (status === "ok") {
+      await audit(tx, userId, {
+        action: "admin.feedback_rewarded",
+        targetType: "feedback",
+        targetId: id,
+      });
+    }
     return { id, status };
   });
 }

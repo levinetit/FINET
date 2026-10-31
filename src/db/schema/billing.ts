@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { createdAt, finet, updatedAt } from "./finet";
+import { feedback } from "./admin";
 import { users } from "./auth";
 import { households } from "./households";
 
@@ -142,6 +143,10 @@ export const referralSettings = finet.table(
     inviterMaxRewards: integer("inviter_max_rewards").notNull().default(0),
     /** Cât timp după crearea contului se poate folosi un cod (ore). */
     redeemWindowHours: integer("redeem_window_hours").notNull().default(24),
+    /** Zile acordate pentru un feedback validat de administrator (12-C, felia 3); 0 = nimic. */
+    feedbackDays: integer("feedback_days").notNull().default(0),
+    /** Câte recompense de feedback se acordă în total (plafon global); 0 = niciuna. */
+    feedbackMaxRewards: integer("feedback_max_rewards").notNull().default(0),
   },
   (t) => [
     check("referral_settings_single", sql`${t.id}`),
@@ -149,6 +154,8 @@ export const referralSettings = finet.table(
     check("referral_settings_inviter_days", sql`${t.inviterDays} between 0 and 3650`),
     check("referral_settings_inviter_max", sql`${t.inviterMaxRewards} between 0 and 1000`),
     check("referral_settings_window", sql`${t.redeemWindowHours} between 1 and 720`),
+    check("referral_settings_feedback_days", sql`${t.feedbackDays} between 0 and 3650`),
+    check("referral_settings_feedback_max", sql`${t.feedbackMaxRewards} between 0 and 100000`),
   ],
 );
 
@@ -187,3 +194,15 @@ export const referrals = finet.table(
     check("referrals_not_self", sql`${t.inviteeUserId} <> ${t.inviterUserId}`),
   ],
 );
+
+/**
+ * Recompensa pentru feedback (12-C, felia 3): cel mult UNA pe utilizator (cheie primară pe
+ * `user_id`). Scrisă doar de funcția `finet.admin_reward_feedback`.
+ */
+export const feedbackRewards = finet.table("feedback_rewards", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  feedbackId: uuid("feedback_id").references(() => feedback.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+});

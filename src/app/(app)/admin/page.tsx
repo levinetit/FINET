@@ -17,7 +17,13 @@ import {
 import { requirePageSession } from "../../_lib/session";
 import { PageHeader } from "../page-header";
 
-import { AnnouncementForm, ArchiveButton, FeedbackStatus, UserStatusButton } from "./admin-actions";
+import {
+  AnnouncementForm,
+  ArchiveButton,
+  FeedbackReward,
+  FeedbackStatus,
+  UserStatusButton,
+} from "./admin-actions";
 
 export const metadata: Metadata = {
   title: ro.admin.title,
@@ -63,6 +69,7 @@ export default async function AdminPage() {
                 </p>
                 <p>{f.message}</p>
                 <FeedbackStatus id={f.id} status={f.status} />
+                <FeedbackReward id={f.id} rewarded={f.rewarded} />
               </li>
             ))}
           </ul>

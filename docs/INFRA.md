@@ -730,3 +730,10 @@ Agentul nu a rulat nimic din această secțiune. ADR 0037, SECURITY_CHECKLIST §
    Pentru oprire: `reward_plan_code = null` (sau zilele 0).
 3. **Efect:** o recompensă creează/prelungește un abonament cu `provider = 'reward'`. Abonamentele `manual`, `founder`, `stripe` nu sunt atinse. La expirare, gospodăria revine la planul implicit (nu devine doar-citire).
 4. **Verificare:** `select * from finet.referrals;` și `select * from finet.household_plan('<gospodărie>');`.
+5. **Recompensa pentru feedback (felia 3, `0026_feedback_reward`):** cere și ea backup, `finet-migrate` (verificare: „aplicate acum 1, deja aplicate 25”) și o frază explicită pentru Supabase. Oprită implicit; o pornești cu valorile TALE (același `reward_plan_code` ca la recomandări):
+   ```sql
+   update finet.referral_settings set
+     feedback_days = <zile acordate pentru un feedback validat>,
+     feedback_max_rewards = <plafon GLOBAL de recompense>;
+   ```
+   Apoi administratorul apasă „Acordă recompensă” pe un feedback din `/admin`. O dată pe utilizator; un abonament manual/fondator/plătit nu se atinge (`not_applicable`). Oprire: `feedback_days = 0`.

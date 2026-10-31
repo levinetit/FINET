@@ -206,6 +206,7 @@ export const ADMIN_OPERATIONS: readonly Operation[] = [
             status: z.enum(FEEDBACK_STATUSES),
             createdAt: instant,
             authorEmail: z.string(),
+            rewarded: z.boolean(),
           }),
         ),
       ),
@@ -227,6 +228,34 @@ export const ADMIN_OPERATIONS: readonly Operation[] = [
       description: "Schimbat.",
     },
     errors: [400, 403, 404, 413, 415],
+  },
+  {
+    method: "POST",
+    path: `/api/v1/admin/feedback${idPath}/reward`,
+    operationId: "adminRewardFeedback",
+    tag: "admin",
+    summary:
+      "Acordă recompensa pentru un feedback validat (o dată pe utilizator, cu plafon global).",
+    description: `${SAAS}${ADMIN}Fără corp. \`status\`: \`ok\` (acordată), \`disabled\` (recompensele pentru feedback sunt oprite în setările operatorului), \`self\` (feedback-ul administratorului însuși), \`not_eligible\`, \`already\` (utilizatorul a primit deja), \`capped\` (plafonul global atins), \`not_applicable\` (gospodăria are un abonament manual/fondator/plătit, care nu se atinge). Doar \`ok\` se auditează.`,
+    success: {
+      status: 200,
+      schema: dataOf(
+        z.strictObject({
+          id: uuid,
+          status: z.enum([
+            "ok",
+            "disabled",
+            "self",
+            "not_eligible",
+            "already",
+            "capped",
+            "not_applicable",
+          ]),
+        }),
+      ),
+      description: "Rezultatul.",
+    },
+    errors: [400, 403, 404],
   },
   {
     method: "GET",

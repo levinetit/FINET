@@ -89,6 +89,7 @@ export type AuditAction =
   // Panoul de administrare (Faza 11-B): doar id-ul țintei și starea nouă, fără conținut.
   | "admin.user_status_changed"
   | "admin.feedback_status_changed"
+  | "admin.feedback_rewarded"
   | "admin.announcement_created"
   | "admin.announcement_updated";
 

@@ -7,6 +7,7 @@ import {
   adminErrors,
   adminFeedback,
   adminHouseholds,
+  adminRewardFeedback,
   adminJobs,
   adminSetFeedbackStatus,
   adminSetUserStatus,
@@ -109,6 +110,9 @@ export const adminSetFeedbackStatusHandler = guardedById(async (ctx, d, request,
   json({
     data: await adminSetFeedbackStatus(d.db, ctx.actor.userId, id, await readJsonBody(request)),
   }),
+);
+export const adminRewardFeedbackHandler = guardedById(async (ctx, d, _request, id) =>
+  json({ data: await adminRewardFeedback(d.db, ctx.actor.userId, id) }),
 );
 export const adminUpdateAnnouncementHandler = guardedById(async (ctx, d, request, id) =>
   json({

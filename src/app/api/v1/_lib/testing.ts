@@ -244,6 +244,7 @@ const OPERATION_OF = new Map<unknown, string>([
   [AD.adminJobsHandler, "adminListJobs"],
   [AD.adminFeedbackHandler, "adminListFeedback"],
   [AD.adminSetFeedbackStatusHandler, "adminSetFeedbackStatus"],
+  [AD.adminRewardFeedbackHandler, "adminRewardFeedback"],
   [AD.adminAnnouncementsHandler, "adminListAnnouncements"],
   [AD.adminCreateAnnouncementHandler, "adminCreateAnnouncement"],
   [AD.adminUpdateAnnouncementHandler, "adminUpdateAnnouncement"],

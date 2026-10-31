@@ -1,6 +1,6 @@
 # ADR 0037: recomandări — stratul de date și regulile (Faza 12-C, felia 1)
 
-- **Stare:** felia 1 (baza de date, regulile; migrația `0025_referrals`) livrată și aplicată (PR #54). Felia 2 (rute, înregistrare, interfață) propusă în branch `phase/12c2-referral-routes`, **fără migrație**. Recompensa pentru feedback e felia 3.
+- **Stare:** felia 3 (recompensa pentru feedback) propusă în branch `phase/12c3-feedback-reward`, **cere migrația `0026_feedback_reward`** (neaplicată, nedeployată). Felia 1 (baza de date, regulile; migrația `0025_referrals`) livrată și aplicată (PR #54). Felia 2 (rute, înregistrare, interfață) propusă în branch `phase/12c2-referral-routes`, **fără migrație**. Recompensa pentru feedback e felia 3.
 - **Legături:** master prompt Faza 12 (recomandări: cod per utilizator, recompensă aplicată o singură dată, plafon, protecție împotriva auto-recomandării), ADR 0035 (planuri), ADR 0029 (înregistrare), SECURITY_CHECKLIST §40.
 
 ## Decizii
@@ -20,9 +20,17 @@
 - **`GET /api/v1/referrals/me`** (doar `saas`) și pagina `/referrals` (cod, link, copiere/Web Share, „prieteni invitați”, „recompense primite”); legătura apare lângă „Trimite feedback”.
 - **Atenție la fereastra de folosire:** contul se creează la pasul 1, iar linkul de confirmare e valabil 48 h. Dacă `redeem_window_hours` < 48, o confirmare târzie nu mai primește recompensa. Setează-l ≥ 48 (INFRA 4z).
 
+## Felia 3: recompensa pentru feedback (migrația `0026_feedback_reward`)
+
+- **„Validat de administrator” = o acțiune explicită**: `POST /api/v1/admin/feedback/{id}/reward` (butonul „Acordă recompensă” din `/admin`). Nicio schimbare de stare nu acordă nimic singură; nu s-a adăugat o stare nouă pe `feedback`.
+- **Regulile sunt în `finet.admin_reward_feedback`** (SECURITY DEFINER, doar administratorul, altfel 42501): oprit implicit; feedback inexistent; fără auto-recompensă; autor inactiv; **o singură recompensă pe utilizator** (cheie primară pe `feedback_rewards.user_id`); **plafon global** `feedback_max_rewards` (serializat cu un lock). Răspuns: `ok | disabled | self | not_eligible | already | capped | not_applicable` (feedback-ul inexistent → 404).
+- **Date ale operatorului**, în `referral_settings`: `feedback_days` și `feedback_max_rewards` (0 = oprit), cu același `reward_plan_code` ca la recomandări. Nicio valoare inventată; migrația nu inserează nimic.
+- **Aceeași recompensă ca la recomandări**: abonament `reward` prin `grant_reward`; un abonament `manual`/`founder`/`stripe` nu se atinge (`not_applicable`, nimic înregistrat, se poate reîncerca după ce abonamentul dispare).
+- Lista de feedback din admin arată `rewarded`; un acord reușit se auditează (`admin.feedback_rewarded`). Dacă utilizatorul își șterge contul, rândul lui din `feedback_rewards` dispare (se eliberează un loc din plafon).
+
 ## Ce NU face (încă)
 
-Nicio recompensă pentru feedback (felia 3); nicio notificare; nu verifică la `/ref` dacă un cod există. Nimic nu se schimbă pe producție până la aplicarea migrației și configurarea setărilor.
+Nicio notificare către utilizator; nu verifică la `/ref` dacă un cod există. Nimic nu se schimbă pe producție până la aplicarea migrației și configurarea setărilor.
 
 ## Consecințe
 
