@@ -71,7 +71,9 @@ const DELETION_STATUS: Readonly<Record<AccountDeletionError["code"], number>> = 
 
 export function deleteAccountHandler(request: Request, d: GdprApiDeps): Promise<Response> {
   return handle(request, d, async (ctx) => {
-    const ip = trustedClientIp(request.headers, { accessVerified: d.config.access.required });
+    const ip = trustedClientIp(request.headers, {
+      accessVerified: d.config.access.clientIpTrusted,
+    });
     // Două limite (revizuirea F9): pe IP de încredere + utilizator (regula schimbării parolei) și
     // DOAR pe utilizator (5/oră), ca încercările să nu se poată împărți pe mai multe IP-uri.
     for (const [key, rule] of [

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { parseConfig } from "@/lib/config";
+
 import {
   CLIENT_IP_HEADER,
   describeDevice,
@@ -83,5 +85,36 @@ describe("clientul mobil (X-FINET-Client)", () => {
       ),
     ).toBe("Chrome pe Linux");
     expect(describeDevice(null)).toBe("Dispozitiv necunoscut");
+  });
+});
+
+describe("IP-ul clientului și expunerea publică `saas` (ADR 0034)", () => {
+  const SAAS = {
+    APP_MODE: "saas",
+    NODE_ENV: "production",
+    STORAGE_DIR: "/data/storage",
+    CF_ACCESS_TEAM_DOMAIN: "echipa-exemplu.cloudflareaccess.com",
+    CF_ACCESS_AUD: "aud-fictiv-0123456789",
+    APP_URL: "https://finet.exemplu.invalid",
+    BETTER_AUTH_SECRET: "secret-fictiv-de-test-0123456789abcdef",
+  } as const;
+  const spoofed = new Headers({ "cf-connecting-ip": "203.0.113.9" });
+  const ipFor = (extra: Record<string, string>) =>
+    trustedClientIp(spoofed, {
+      accessVerified: parseConfig({ ...SAAS, ...extra }).access.clientIpTrusted,
+    });
+
+  it("cu Access pe tot hostul, cf-connecting-ip e de încredere (ca până acum)", () => {
+    expect(ipFor({})).toBe("203.0.113.9");
+  });
+
+  it("saas public FĂRĂ declarația de tunel: antetul poate fi falsificat, deci e ignorat", () => {
+    expect(ipFor({ SAAS_PUBLIC_ACCESS: "true" })).toBeNull();
+  });
+
+  it("saas public CU declarația explicită că originea e accesibilă doar prin tunel: antetul e crezut", () => {
+    expect(ipFor({ SAAS_PUBLIC_ACCESS: "true", TRUST_CF_CONNECTING_IP: "true" })).toBe(
+      "203.0.113.9",
+    );
   });
 });

@@ -20,6 +20,7 @@ import {
   createAccessVerifier,
   HEALTH_TOKEN_HEADER,
   healthTokenMatches,
+  isAccessProtectedPath,
   isLocalProbe,
   isRequestAllowed,
   type AccessPolicy,
@@ -745,5 +746,170 @@ describe("matcher-ul din src/proxy.ts", () => {
   it("exclude exact /api/v1/statements/uploads (Faza 7; verificarea Access e în rută)", () => {
     expect(matches("/api/v1/statements/uploads")).toBe(false);
     expect(matches("/api/v1/statements/uploads?x=1")).toBe(false);
+  });
+});
+
+describe("saas public (ADR 0034): isAccessProtectedPath și politica", () => {
+  it("rămân sub Access: administrarea și starea, oricum ar fi scrisă adresa", () => {
+    for (const path of [
+      "/admin",
+      "/admin/",
+      "/admin/users",
+      "/Admin",
+      "/ADMIN/x",
+      "//admin",
+      "/\\admin",
+      "/%61dmin",
+      "/%41dmin/users",
+      "/api/v1/admin",
+      "/api/v1/admin/users",
+      "/API/V1/ADMIN/users",
+      "/api/v1//admin/users",
+      "/api/%76%31/admin/users",
+      "/api/health",
+      "/api/health/live",
+      "/api/HEALTH",
+      "/foo/../admin",
+      "/a/%2e%2e/b",
+      "/%E0%A4%A",
+      "relativ",
+    ]) {
+      expect(isAccessProtectedPath(path), path).toBe(true);
+    }
+  });
+
+  it("sunt publice (nu cer Access) căile site-ului și ale aplicației", () => {
+    for (const path of [
+      "/",
+      "/pricing",
+      "/terms",
+      "/privacy",
+      "/support",
+      "/register",
+      "/login",
+      "/dashboard",
+      "/api/auth/sign-in/email",
+      "/api/v1/register",
+      "/api/v1/me",
+      "/api/v1/documents",
+      "/manifest.webmanifest",
+    ]) {
+      expect(isAccessProtectedPath(path), path).toBe(false);
+    }
+  });
+
+  it("fără publicSaas nimic nu se schimbă: fără JWT → refuzat, inclusiv pe căi publice", async () => {
+    expect(await isRequestAllowed(req("/support"), policy())).toBe(false);
+    expect(await isRequestAllowed(req("/support"), policy({ publicSaas: false }))).toBe(false);
+  });
+
+  it("cu publicSaas: căile publice trec fără JWT; /admin și sănătatea cer JWT valid", async () => {
+    const p = policy({ publicSaas: true });
+    expect(await isRequestAllowed(req("/support"), p)).toBe(true);
+    expect(await isRequestAllowed(req("/api/v1/me"), p)).toBe(true);
+    for (const path of ["/admin", "/api/v1/admin/users", "/api/health", "/api/health/live"]) {
+      expect(await isRequestAllowed(req(path), p), path).toBe(false);
+      expect(await isRequestAllowed(req(path, { [ACCESS_JWT_HEADER]: "a.b.c" }), p), path).toBe(
+        false,
+      );
+      expect(
+        await isRequestAllowed(req(path, { [ACCESS_JWT_HEADER]: await token() }), p),
+        path,
+      ).toBe(true);
+    }
+  });
+
+  it("cu publicSaas, JWT cu cheie străină sau audiență greșită tot nu deschide /admin", async () => {
+    const p = policy({ publicSaas: true });
+    const foreign = await token({}, otherPrivateKey);
+    expect(await isRequestAllowed(req("/admin", { [ACCESS_JWT_HEADER]: foreign }), p)).toBe(false);
+    const wrongAud = await token({ aud: "alta" });
+    expect(await isRequestAllowed(req("/admin", { [ACCESS_JWT_HEADER]: wrongAud }), p)).toBe(false);
+  });
+
+  it("tokenul de sănătate deschide doar /api/health (nu /admin), ca înainte", async () => {
+    const p = policy({ publicSaas: true, healthToken: HEALTH_TOKEN });
+    const h = { [HEALTH_TOKEN_HEADER]: HEALTH_TOKEN };
+    expect(await isRequestAllowed(req("/api/health", h), p)).toBe(true);
+    expect(await isRequestAllowed(req("/admin", h), p)).toBe(false);
+  });
+
+  describe("proxy() cu mediul de producție `saas`", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      resetConfigForTests();
+    });
+
+    function saasEnv(extra: Record<string, string> = {}) {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("APP_MODE", "saas");
+      vi.stubEnv("STORAGE_DIR", "/tmp/finet-nu-se-foloseste");
+      vi.stubEnv("APP_URL", "https://finet.exemplu.invalid");
+      vi.stubEnv("BETTER_AUTH_SECRET", "secret-fictiv-de-test-0123456789abcdef");
+      // Domeniu `.invalid`: JWKS-ul nu poate fi obținut niciodată (un JWT nu poate fi verificat).
+      vi.stubEnv("CF_ACCESS_TEAM_DOMAIN", "echipa.invalid");
+      vi.stubEnv("CF_ACCESS_AUD", AUD);
+      vi.stubEnv("CF_ACCESS_REQUIRED", "");
+      vi.stubEnv("HEALTH_TOKEN", "");
+      vi.stubEnv("SAAS_PUBLIC_ACCESS", "");
+      vi.stubEnv("TRUST_CF_CONNECTING_IP", "");
+      vi.stubEnv("FINET_ROLE", "");
+      vi.stubEnv("WORKER_DATABASE_URL", "");
+      vi.stubEnv("MIGRATOR_DATABASE_URL", "");
+      for (const [k, v] of Object.entries(extra)) vi.stubEnv(k, v);
+      resetConfigForTests();
+    }
+
+    const call = (path: string, headers: Record<string, string> = {}) =>
+      proxy(new NextRequest(`https://finet.exemplu.invalid${path}`, { headers }));
+
+    const PRIVATE_PATHS = ["/admin", "/admin/", "/Admin", "//admin", "/%61dmin"];
+
+    it("fără SAAS_PUBLIC_ACCESS: 403 pe orice cale, exact ca până acum", async () => {
+      saasEnv();
+      for (const path of ["/", "/support", "/register", "/login", "/api/v1/me", "/api/auth/x"]) {
+        expect((await call(path)).status, path).toBe(403);
+      }
+      for (const path of [...PRIVATE_PATHS, "/api/v1/admin/users", "/api/health"]) {
+        expect((await call(path)).status, path).toBe(403);
+      }
+    });
+
+    it("cu SAAS_PUBLIC_ACCESS=true: căile publice și aplicația trec; sesiunea rămâne bariera lor", async () => {
+      saasEnv({ SAAS_PUBLIC_ACCESS: "true" });
+      for (const path of ["/", "/support", "/register", "/login", "/api/v1/me", "/api/auth/x"]) {
+        const res = await call(path);
+        expect(res.status, path).toBe(200);
+        expect(res.headers.get("x-middleware-next"), path).toBe("1");
+        expect(res.headers.get("content-security-policy"), path).toContain(
+          "frame-ancestors 'none'",
+        );
+      }
+    });
+
+    it("cu SAAS_PUBLIC_ACCESS=true: /admin, /api/v1/admin/* și sănătatea rămân 403 fără JWT valid", async () => {
+      saasEnv({ SAAS_PUBLIC_ACCESS: "true" });
+      for (const path of [
+        ...PRIVATE_PATHS,
+        "/api/v1/admin/users",
+        "/api/v1/admin",
+        "/API/V1/admin/users",
+        "/api/health",
+        "/api/health/live",
+      ]) {
+        const res = await call(path);
+        expect(res.status, path).toBe(403);
+        expect(res.headers.get("x-middleware-next"), path).toBeNull();
+      }
+      // Un JWT fals sau nesemnat nu deschide nimic.
+      expect((await call("/admin", { [ACCESS_JWT_HEADER]: "a.b.c" })).status).toBe(403);
+    });
+
+    it("FAIL-CLOSED: SAAS_PUBLIC_ACCESS=true în `personal` (configurație invalidă) → 403 pe tot", async () => {
+      saasEnv({ APP_MODE: "personal", SAAS_PUBLIC_ACCESS: "true" });
+      for (const path of ["/", "/support", "/register", "/api/v1/me"]) {
+        expect((await call(path)).status, path).toBe(403);
+      }
+    });
   });
 });

@@ -129,14 +129,41 @@ export type AccessPolicy = Readonly<{
   required: boolean;
   verify: AccessVerifier | null;
   healthToken: string | null;
+  /** `saas` public (ADR 0034): doar căile din `isAccessProtectedPath` mai cer JWT Access. */
+  publicSaas?: boolean;
 }>;
+
+/**
+ * Căile care cer JWT Access chiar și cu `saas` public: administrarea (`/admin`,
+ * `/api/v1/admin/*`) și starea (`/api/health*`). Comparația e conservatoare (FAIL CLOSED): se
+ * decodează o dată, se trece în litere mici, se strâng `//` și `\`, iar orice segment `..` sau o
+ * codificare invalidă înseamnă „protejat”. Prefixele (fără `/` final) acoperă și variante precum
+ * `/admin/`, `/Admin` sau `/admin.x`; protejăm în plus, nu în minus.
+ */
+const ACCESS_PROTECTED_PREFIXES = ["/admin", "/api/v1/admin", "/api/health"] as const;
+
+export function isAccessProtectedPath(pathname: string): boolean {
+  let path: string;
+  try {
+    path = decodeURIComponent(pathname);
+  } catch {
+    return true;
+  }
+  path = path
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .replace(/\/{2,}/g, "/");
+  if (!path.startsWith("/") || path.split("/").includes("..")) return true;
+  return ACCESS_PROTECTED_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
 
 /**
  * Decide dacă cererea trece. Excepții, în ordine:
  * 1. asset-urile statice Next (`isStaticAssetPath`);
  * 2. `GET /api/health/live` venit de pe loopback (`isLocalProbe`), DOAR cu metoda `GET` (exact
  *    calea, fără `/` final sau variante codificate); `HEAD`, `POST` etc. cer Access;
- * 3. `/api/health` cu `X-Finet-Health-Token` corect (doar dacă `HEALTH_TOKEN` e configurat).
+ * 3. `/api/health` cu `X-Finet-Health-Token` corect (doar dacă `HEALTH_TOKEN` e configurat);
+ * 4. cu `publicSaas` (ADR 0034), orice cale în afara `isAccessProtectedPath`.
  * Altfel, cu `required`, e nevoie de un JWT Access valid.
  */
 export async function isRequestAllowed(
@@ -154,6 +181,7 @@ export async function isRequestAllowed(
     return true;
   }
   if (!policy.required) return true;
+  if (policy.publicSaas === true && !isAccessProtectedPath(pathname)) return true;
   if (!policy.verify) return false;
   const token = headers.get(ACCESS_JWT_HEADER);
   if (!token) return false;

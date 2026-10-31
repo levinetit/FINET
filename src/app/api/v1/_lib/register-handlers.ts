@@ -88,7 +88,9 @@ async function limit(
   subject: string,
   rule: RateLimitRule,
 ): Promise<void> {
-  const ip = trustedClientIp(request.headers, { accessVerified: deps.config.access.required });
+  const ip = trustedClientIp(request.headers, {
+    accessVerified: deps.config.access.clientIpTrusted,
+  });
   const result = await hitRateLimit(deps.db, rateLimitKey(kind, ip, subject), rule, now);
   if (!result.allowed) {
     throw new ApiError(429, "rate_limited", "Prea multe cereri. Încearcă din nou mai târziu.", {
@@ -112,7 +114,7 @@ export async function registerHandler(request: Request, deps: ApiDeps): Promise<
     const now = deps.now?.() ?? Date.now();
     const input = parseWith(registerInputSchema, await readJsonBody(request));
     await limit(deps, request, now, "register_ip", "register", {
-      ...(trustedClientIp(request.headers, { accessVerified: deps.config.access.required })
+      ...(trustedClientIp(request.headers, { accessVerified: deps.config.access.clientIpTrusted })
         ? IP_RULE
         : SHARED_RULE),
     });
@@ -122,7 +124,9 @@ export async function registerHandler(request: Request, deps: ApiDeps): Promise<
     // 400 (fail-closed), fără detalii despre motiv.
     const verifier = turnstileOf(deps);
     if (verifier) {
-      const ip = trustedClientIp(request.headers, { accessVerified: deps.config.access.required });
+      const ip = trustedClientIp(request.headers, {
+        accessVerified: deps.config.access.clientIpTrusted,
+      });
       const passed =
         input.turnstileToken !== undefined && (await verifier(input.turnstileToken, ip));
       if (!passed) {
@@ -159,7 +163,7 @@ export async function completeRegisterHandler(request: Request, deps: ApiDeps): 
     const input = parseWith(completeInputSchema, await readJsonBody(request));
     // Contra ghicirii tokenurilor: pe IP, subiect fix (tokenul e prea lung ca subiect util).
     await limit(deps, request, now, "register_ip", "complete", {
-      ...(trustedClientIp(request.headers, { accessVerified: deps.config.access.required })
+      ...(trustedClientIp(request.headers, { accessVerified: deps.config.access.clientIpTrusted })
         ? IP_RULE
         : SHARED_RULE),
     });

@@ -55,6 +55,7 @@ export async function accessAllowed(
         required: config.access.required,
         verify: verifierFor(config.access),
         healthToken: config.healthToken,
+        publicSaas: config.access.publicSaas,
       },
     );
   } catch {

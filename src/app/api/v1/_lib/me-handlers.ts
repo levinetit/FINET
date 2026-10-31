@@ -77,7 +77,9 @@ export function revokeOthersHandler(request: Request, deps: ApiDeps): Promise<Re
 
 export function changePasswordHandler(request: Request, deps: ApiDeps): Promise<Response> {
   return handle(request, deps, async (ctx) => {
-    const ip = trustedClientIp(request.headers, { accessVerified: deps.config.access.required });
+    const ip = trustedClientIp(request.headers, {
+      accessVerified: deps.config.access.clientIpTrusted,
+    });
     const limit = await hitRateLimit(
       deps.db,
       rateLimitKey("password_change", ip, ctx.actor.userId),

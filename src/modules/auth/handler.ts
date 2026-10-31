@@ -181,7 +181,7 @@ export async function handleAuthRequest(
     return notFound();
   }
 
-  const policy = { accessVerified: config.access.required };
+  const policy = { accessVerified: config.access.clientIpTrusted };
   const headers = withTrustedClientIp(request.headers, policy);
   const method = request.method.toUpperCase();
 
