@@ -483,6 +483,14 @@ describe.skipIf(!TEST_ADMIN_URL)("11-B: feedback, anunțuri, erori, administrare
     expect((await set(adminId, "disabled")).status).toBe(400); // nu propriul cont
     expect((await set(otherId, "dezactivat")).status).toBe(400);
     expect((await set(NIL, "disabled")).status).toBe(404);
+    // Starea unui alt administrator nu se schimbă prin API, în niciun sens (0022).
+    await fx.scratch.admin`update finet.users set is_platform_admin = true where id = ${otherId}`;
+    expect((await set(otherId, "disabled")).status).toBe(400);
+    expect((await set(otherId, "active")).status).toBe(400);
+    await fx.scratch.admin`update finet.users set is_platform_admin = false where id = ${otherId}`;
+    const [still] = await fx.scratch.admin<{ status: string }[]>`
+      select status from finet.users where id = ${otherId}`;
+    expect(still?.status).toBe("active");
     const off = await set(otherId, "disabled");
     expect(off.data).toEqual({ changed: true });
     // Contul dezactivat nu mai are sesiune validă.
