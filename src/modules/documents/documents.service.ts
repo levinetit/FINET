@@ -73,8 +73,10 @@ export type DocumentsDeps = LedgerDeps &
 
 const MB = 1024 * 1024;
 
-export function entitlementsOf(deps: Pick<DocumentsDeps, "entitlements" | "config">): Entitlements {
-  return deps.entitlements ?? createEntitlements(deps.config.appMode, deps.config);
+export function entitlementsOf(
+  deps: Pick<DocumentsDeps, "entitlements" | "config" | "db">,
+): Entitlements {
+  return deps.entitlements ?? createEntitlements(deps.config.appMode, deps.config, deps.db);
 }
 
 export function documentView(row: DocumentRow): DocumentView {

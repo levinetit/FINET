@@ -694,3 +694,21 @@ Agentul nu a rulat nimic din această secțiune. SECURITY_CHECKLIST §36. **Cere
 3. **Ștergerea:** aceeași comandă cu `--yes` (opțional `--days 7 --limit 200`). Ieșirea are doar contoare, fără emailuri sau id-uri.
 4. **Programare** (cron root, prin `sudo crontab -e`, nu `crontab -`): zilnic, după `finet-cleanup` (04:25), de exemplu 04:30, cu comanda de la pasul 3. Cod de ieșire 1 dacă un cont n-a putut fi șters (se reîncearcă la rulare următoare).
 5. Un cont șters astfel poate fi reînregistrat de proprietarul adresei oricând (pasul 1 din ADR 0029).
+
+## 4y. Planurile și abonamentele (Faza 12-A, 0023) — pe producție `saas`
+
+Agentul nu a rulat nimic din această secțiune. ADR 0035, SECURITY_CHECKLIST §38. **Cere migrația `0023_plans_subscriptions`** (două tabele și o funcție de citire; rollback în antetul fișierului) și o frază explicită pentru Supabase. Are sens doar în `APP_MODE=saas`; în `personal` tabelele rămân goale și nu se citesc.
+
+1. **Migrația:** `finet-migrate` ca la 0021/0022 (după backup). Verificare: „aplicate acum 1, deja aplicate 22”.
+2. **Planurile se scriu de operator**, ca `finet_migrator` (aplicația nu poate): un plan implicit (gospodăriile fără abonament) și câte unul pe treaptă plătită. **Valorile le stabilești tu** (costul pe document din Faza 6); nimic de mai jos nu e o recomandare. Cheile `limits` recunoscute: `ai.dailyDocuments`, `storage.quotaMb`, `household.maxMembers` (numere întregi ≥ 0; lipsă sau invalid = 0). Funcții recunoscute în `features`: `ask.finet`, `reports.custom`.
+   ```sql
+   insert into finet.plans (code, name, is_default, limits, features)
+   values ('<cod>', '<nume>', true,
+           '{"ai.dailyDocuments": <n>, "storage.quotaMb": <n>, "household.maxMembers": <n>}'::jsonb,
+           array['<funcție>']);
+   ```
+   Cel mult un plan implicit, activ. Fără niciun plan implicit, `saas` refuză toate scrierile (503 `plans_not_configured`).
+3. **Abonament manual** (de exemplu fondator): `insert into finet.subscriptions (household_id, plan_id, status, provider) values ('<gospodărie>', '<plan>', 'active', 'founder');` (fără `current_period_end` nu expiră). Pentru probă: `status = 'trialing'` și `trial_end`.
+4. **Verificare:** `select * from finet.household_plan('<gospodărie>');` → `plan_code`, `limits`, `features`, `state` (`ok`, `read_only` sau `none`).
+5. **Efect:** abonament expirat sau anulat → scrierile primesc 402, citirea și exportul merg (API.md). Reînnoirea (status `active` cu perioadă viitoare) redeschide scrierile imediat.
+6. Rezerva: ștergerea planului implicit (`delete`) face `saas` doar-citire; migrația se anulează cu comenzile din antet, doar cu backup și decizia explicită a operatorului.

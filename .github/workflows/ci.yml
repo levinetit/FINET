@@ -295,6 +295,18 @@ jobs:
           MIGRATOR_DATABASE_URL: postgres://finet_migrator:finet_migrator_ci@localhost:5432/finet_test
         run: node dist/tools/migrate.mjs
 
+      # Faza 12-A (ADR 0035): în `saas` fără plan implicit scrierile sunt refuzate (503). Baza
+      # temporară a job-ului primește un plan implicit cu valori de TEST (nu sunt valorile
+      # produsului, care sunt decizia operatorului) ca testele `saas` să poată scrie.
+      - name: Plan implicit pentru testele E2E `saas` (doar baza temporară)
+        run: >-
+          docker exec -i ${{ job.services.postgres.id }}
+          psql -U finet -d finet_test -v ON_ERROR_STOP=1 -q -c
+          "insert into finet.plans (code, name, is_default, limits, features)
+          values ('e2e', 'E2E', true,
+          '{\"ai.dailyDocuments\": 1000, \"storage.quotaMb\": 10000, \"household.maxMembers\": 100}'::jsonb,
+          array['ask.finet', 'reports.custom'])"
+
       # Câte douăzeci și șapte de utilizatori pentru fiecare mod (e2e/fixtures.ts: `auth`, `ledger`, `planning`, `regressions`, `recurring`, `receipts`, `family`, `pwa`, `gdpr`, `a11y`, `statements`, `shopping`, `insights`, `ask`); parola din
       # stdin, niciodată ca argument.
       - name: Utilizatorii E2E (CLI admin)

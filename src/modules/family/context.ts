@@ -3,6 +3,7 @@ import "server-only";
 import type { Db, DbOrTx, Tx } from "@/db";
 import { type Actor, type HouseholdRole, type Membership, withMember } from "@/lib/authz";
 import type { RateLimitRule } from "@/lib/config";
+import type { Entitlements } from "@/modules/entitlements";
 import { translateDbError } from "@/modules/ledger/context";
 
 /**
@@ -16,12 +17,16 @@ export type FamilyDeps = Readonly<{
   db: DbOrTx;
   /** Ceasul (testele îl fixează). */
   now?: () => Date;
+  /** Drepturile planului (`household.maxMembers`); lipsă = fără plafon pe plan (Faza 12-A). */
+  entitlements?: Entitlements;
 }>;
 
 /** Acceptarea are nevoie de un client (nu de o tranzacție): limita de rată e în afara ei. */
 export type AcceptDeps = Readonly<{
   db: Db;
   now?: () => Date;
+  /** Drepturile planului (`household.maxMembers`); lipsă = fără plafon pe plan (Faza 12-A). */
+  entitlements?: Entitlements;
   /** Limita încercărilor de acceptare per utilizator (implicit 10 / 15 min). */
   acceptLimit?: RateLimitRule;
 }>;

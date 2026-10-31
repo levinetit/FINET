@@ -20,11 +20,11 @@ import {
 import {
   type ApiContext,
   type ApiDeps,
-  handle,
   json,
   readJsonBody,
   readQuery,
   routeId,
+  handleAlways,
 } from "./http";
 
 /**
@@ -42,7 +42,7 @@ function saasOnly(d: ApiDeps): void {
 const guarded =
   (fn: (ctx: ApiContext, d: ApiDeps, request: Request) => Promise<Response>) =>
   (request: Request, d: ApiDeps): Promise<Response> =>
-    handle(request, d, async (ctx) => {
+    handleAlways(request, d, async (ctx) => {
       saasOnly(d);
       return fn(ctx, d, request);
     });
@@ -97,7 +97,7 @@ type WithId = (request: Request, d: ApiDeps, id: string) => Promise<Response>;
 const guardedById =
   (fn: (ctx: ApiContext, d: ApiDeps, request: Request, id: string) => Promise<Response>): WithId =>
   (request, d, id) =>
-    handle(request, d, async (ctx) => {
+    handleAlways(request, d, async (ctx) => {
       saasOnly(d);
       return fn(ctx, d, request, routeId(id));
     });

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseConfig, resetConfigForTests } from "@/lib/config";
-import { NotImplementedError } from "@/lib/errors";
 import {
   can,
   createEntitlements,
@@ -49,12 +48,19 @@ describe("entitlements în modul personal", () => {
   });
 });
 
-describe("entitlements în modul saas", () => {
+describe("entitlements în modul saas (fără bază)", () => {
   const e = createEntitlements("saas", limits);
 
-  it("aruncă NotImplementedError explicit (fără planuri simulate)", async () => {
-    await expect(e.can(HH, "documents.process")).rejects.toBeInstanceOf(NotImplementedError);
-    await expect(e.limit(HH, "storage.quotaMb")).rejects.toBeInstanceOf(NotImplementedError);
+  it("fără client de bază de date aruncă TypeError (nu simulează planuri și nu deschide accesul)", async () => {
+    await expect(e.can(HH, "documents.process")).rejects.toBeInstanceOf(TypeError);
+    await expect(e.limit(HH, "storage.quotaMb")).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("bugetul AI e global: vine din configurație chiar și fără bază", async () => {
+    await expect(e.limit(HH, "ai.monthlyBudget")).resolves.toEqual({
+      amountMinor: 2500n,
+      currency: "EUR",
+    });
   });
 });
 

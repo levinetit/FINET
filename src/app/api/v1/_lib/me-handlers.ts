@@ -21,11 +21,11 @@ import {
   ApiError,
   type ApiDeps,
   enforceRateLimit,
-  handle,
   json,
   parseWith,
   readJsonBody,
   readOptionalJsonBody,
+  handleAlways,
 } from "./http";
 
 /**
@@ -38,20 +38,20 @@ import {
 export type { ApiDeps } from "./http";
 
 export function getMeHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (ctx) =>
+  return handleAlways(request, deps, async (ctx) =>
     json({ data: await getMe(deps.db, ctx.actor.userId) }),
   );
 }
 
 export function patchMeHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (ctx) => {
+  return handleAlways(request, deps, async (ctx) => {
     const patch = parseWith(profilePatchSchema, await readJsonBody(request));
     return json({ data: await updateMe(deps.db, ctx.actor.userId, patch) });
   });
 }
 
 export function listSessionsHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (ctx) =>
+  return handleAlways(request, deps, async (ctx) =>
     json({ data: await listMySessions(deps.db, ctx.session, new Date(ctx.now)) }),
   );
 }
@@ -61,14 +61,14 @@ export function deleteSessionHandler(
   deps: ApiDeps,
   sessionId: string,
 ): Promise<Response> {
-  return handle(request, deps, async (ctx) => {
+  return handleAlways(request, deps, async (ctx) => {
     await revokeMySession(deps.db, ctx.session, sessionId);
     return json(null, 204);
   });
 }
 
 export function revokeOthersHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (ctx) => {
+  return handleAlways(request, deps, async (ctx) => {
     await readOptionalJsonBody(request);
     const revoked = await revokeMyOtherSessions(deps.db, ctx.session);
     return json({ data: { revoked } });
@@ -76,7 +76,7 @@ export function revokeOthersHandler(request: Request, deps: ApiDeps): Promise<Re
 }
 
 export function changePasswordHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (ctx) => {
+  return handleAlways(request, deps, async (ctx) => {
     const ip = trustedClientIp(request.headers, {
       accessVerified: deps.config.access.clientIpTrusted,
     });
@@ -116,13 +116,13 @@ export function changePasswordHandler(request: Request, deps: ApiDeps): Promise<
 // --- Consimțămintele (6.5) -------------------------------------------------------------------
 
 export function getConsentsHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (ctx) =>
+  return handleAlways(request, deps, async (ctx) =>
     json({ data: await getConsents(deps.db, ctx.actor.userId) }),
   );
 }
 
 export function putConsentsHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (ctx) => {
+  return handleAlways(request, deps, async (ctx) => {
     const body = await readJsonBody(request);
     const states = await setConsents(deps.db, ctx.actor.userId, body);
     // Faza 6: după acordul `externalAi`, documentele care îl așteptau intră în coadă (au fost
@@ -141,7 +141,7 @@ export function putConsentsHandler(request: Request, deps: ApiDeps): Promise<Res
 
 /** Mereu 204 (stocat sau nu, după consimțământ); lot invalid → 400 cu mesaj fix. */
 export function appEventsHandler(request: Request, deps: ApiDeps): Promise<Response> {
-  return handle(request, deps, async (ctx) => {
+  return handleAlways(request, deps, async (ctx) => {
     await enforceRateLimit(ctx, "app_events", ctx.limits.events);
     const body = await readJsonBody(request);
     const client = parseClientInfo(request.headers.get(CLIENT_HEADER));

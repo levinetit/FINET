@@ -5,6 +5,7 @@ import { CSV_DIALECTS, type CsvDialect } from "@/modules/exports/csv";
 import { getInflation, getSeries, listProducts } from "@/modules/prices/prices.service";
 import { inflationToJson, productsToJson, seriesToJson } from "@/modules/prices/prices.schema";
 import { NotFoundError } from "@/lib/authz";
+import { createEntitlements } from "@/modules/entitlements";
 import { ValidationError } from "@/lib/errors";
 import {
   definitionToJson,
@@ -22,6 +23,7 @@ import {
 } from "@/modules/report-definitions/report-definitions.service";
 
 import {
+  ApiError,
   type ApiContext,
   type ApiDeps,
   currentHousehold,
@@ -33,6 +35,7 @@ import {
   readOptionalJsonBody,
   readQuery,
   routeId,
+  handleAlways,
 } from "./http";
 import { assertExportFetchSite } from "./planning-handlers";
 
@@ -113,6 +116,10 @@ export function createReportDefinitionHandler(request: Request, d: ApiDeps): Pro
   return handle(request, d, async (ctx) => {
     const body = await readJsonBody(request);
     const hh = await currentHousehold(ctx);
+    // Rapoarte personalizate: funcție legată de plan (Faza 12-A); în `personal` mereu permisă.
+    if (!(await createEntitlements(d.config.appMode, d.config, d.db).can(hh, "reports.custom"))) {
+      throw new ApiError(403, "forbidden", "Funcția nu e disponibilă în planul curent.");
+    }
     return idempotentCreate(ctx, hh, body, async (db) => ({
       status: 201,
       body: {
@@ -179,7 +186,7 @@ export function runReportHandler(request: Request, d: ApiDeps, id: string): Prom
 }
 
 export function previewReportHandler(request: Request, d: ApiDeps): Promise<Response> {
-  return handle(request, d, async (ctx) => {
+  return handleAlways(request, d, async (ctx) => {
     const body = await readJsonBody(request);
     await enforceRateLimit(ctx, "api_report_run", ctx.limits.reportRun);
     const hh = await currentHousehold(ctx);

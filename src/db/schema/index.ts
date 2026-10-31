@@ -8,6 +8,7 @@ import { authAccounts, authRateLimits, authSessions, authVerifications, users } 
  */
 export * from "./admin";
 export * from "./auth";
+export * from "./billing";
 export * from "./documents";
 export * from "./family";
 export * from "./finet";

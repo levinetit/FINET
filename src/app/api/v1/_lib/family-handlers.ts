@@ -5,6 +5,7 @@ import { z } from "zod";
 import { withRlsOn } from "@/db";
 import { ValidationError } from "@/lib/errors";
 import { currentHouseholdIdOf } from "@/modules/auth/audit";
+import { createEntitlements } from "@/modules/entitlements";
 import { requireSession } from "@/modules/auth/session";
 import {
   balancesToJson,
@@ -54,6 +55,7 @@ import {
   readOptionalJsonBody,
   readQuery,
   routeId,
+  handleAlways,
 } from "./http";
 import { householdAudience, notifyLive } from "./live";
 
@@ -74,7 +76,8 @@ import { householdAudience, notifyLive } from "./live";
  */
 
 const noBody = () => json(null, 204);
-const deps = (d: ApiDeps) => ({ db: d.db });
+const entitlementsOf = (d: ApiDeps) => createEntitlements(d.config.appMode, d.config, d.db);
+const deps = (d: ApiDeps) => ({ db: d.db, entitlements: entitlementsOf(d) });
 const emptyBody = z.strictObject({});
 
 /**
@@ -142,7 +145,7 @@ export function transferOwnershipHandler(
 
 /** Utilizatorul pleacă din gospodăria CURENTĂ (cea activă). */
 export function leaveHouseholdHandler(request: Request, d: ApiDeps): Promise<Response> {
-  return handle(request, d, async (ctx) => {
+  return handleAlways(request, d, async (ctx) => {
     parseWith(emptyBody, (await readOptionalJsonBody(request)) ?? {});
     const hh = await currentHousehold(ctx);
     const result: unknown = await leaveHousehold(deps(d), ctx.actor, hh);
@@ -216,10 +219,15 @@ export function revokeInviteHandler(request: Request, d: ApiDeps, id: string): P
  * → 429 cu `Retry-After`. Nu întoarce numele gospodăriei (clientul îl citește după, ca membru).
  */
 export function acceptInviteHandler(request: Request, d: ApiDeps): Promise<Response> {
-  return handle(request, d, async (ctx) => {
+  return handleAlways(request, d, async (ctx) => {
     const body = await readJsonBody(request);
     const result = await acceptInvite(
-      { db: d.db, now: () => new Date(ctx.now), acceptLimit: ctx.limits.inviteAccept },
+      {
+        db: d.db,
+        entitlements: entitlementsOf(d),
+        now: () => new Date(ctx.now),
+        acceptLimit: ctx.limits.inviteAccept,
+      },
       ctx.actor,
       body,
     );
