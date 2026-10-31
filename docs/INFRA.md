@@ -713,3 +713,20 @@ Agentul nu a rulat nimic din această secțiune. ADR 0035, SECURITY_CHECKLIST §
 5. **Efect:** abonament expirat sau anulat → scrierile primesc 402, citirea și exportul merg (API.md). Reînnoirea (status `active` cu perioadă viitoare) redeschide scrierile imediat.
 6. **Trecerea `personal` → `saas` și planul fondator** (12-D): `docs/MIGRARE_PERSONAL_SAAS.md` (scripturile `ops/saas/founder-plan*.sql`).
 7. Rezerva: ștergerea planului implicit (`delete`) face `saas` doar-citire; migrația se anulează cu comenzile din antet, doar cu backup și decizia explicită a operatorului.
+## 4z. Recomandări (Faza 12-C, felia 1, 0025) — pe producție `saas`
+
+Agentul nu a rulat nimic din această secțiune. ADR 0037, SECURITY_CHECKLIST §40. **Cere migrația `0025_referrals`** (trei tabele, patru funcții, `household_plan` redefinită; rollback în antet) și o frază explicită pentru Supabase. Felia 1 e doar stratul de date: fără rute sau interfață încă.
+
+1. **Migrația:** `finet-migrate` ca la 0023/0024 (după backup). Verificare: „aplicate acum 1, deja aplicate 24”.
+2. **Recompensele sunt oprite implicit.** Le pornești tu, ca `finet_migrator`, cu valorile TALE (planul trebuie să existe și să fie activ; nicio valoare de mai jos nu e o recomandare):
+   ```sql
+   update finet.referral_settings set
+     reward_plan_code = '<cod plan existent>',
+     invitee_days = <zile pentru invitat>,
+     inviter_days = <zile pentru invitator>,
+     inviter_max_rewards = <câte recompense primește un invitator>,
+     redeem_window_hours = <ore, 1–720; implicit 24>;
+   ```
+   Pentru oprire: `reward_plan_code = null` (sau zilele 0).
+3. **Efect:** o recompensă creează/prelungește un abonament cu `provider = 'reward'`. Abonamentele `manual`, `founder`, `stripe` nu sunt atinse. La expirare, gospodăria revine la planul implicit (nu devine doar-citire).
+4. **Verificare:** `select * from finet.referrals;` și `select * from finet.household_plan('<gospodărie>');`.

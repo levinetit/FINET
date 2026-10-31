@@ -741,3 +741,13 @@ Cod în branch `phase/12d-personal-to-saas`; **nicio migrație, nimic rulat pe p
 - [x] Scriptul e idempotent și nu rescrie un plan editat sau abonamente existente (`on conflict do nothing`); verificarea (`founder-plan-check.sql`) nu scrie nimic.
 - [x] Gospodăria creată după rulare rămâne fail closed (`none`) până la planul implicit al operatorului.
 - [ ] De făcut de operator, cu frază explicită: backup, rularea scriptului pe Supabase, planul implicit, comutarea `APP_MODE`, redeploy (`docs/MIGRARE_PERSONAL_SAAS.md`).
+
+## 40. Recomandări — stratul de date (Faza 12-C, felia 1, 2026-10-31; ADR 0037)
+
+Cod în branch `phase/12c-referrals`; **migrația 0025 neaplicată, nedeployat**.
+
+- [x] Regulile (o singură folosire pe invitat, fără auto-recomandare nici prin gospodărie comună, cont confirmat și recent, plafonul invitatorului) sunt în funcția SECURITY DEFINER, nu în aplicație. `referrals.test.ts`.
+- [x] Recompensele sunt oprite implicit (rând de setări gol); valorile sunt ale operatorului. Aplicația nu are nicio cale de scriere directă (nici pe tabele, nici pe `grant_reward`, nici pe setări); verificat cu încercări reale. `referrals.test.ts`, `migrate.test.ts`.
+- [x] Abonamentele `manual`/`founder`/`stripe` nu sunt atinse de o recompensă; un abonament `reward` expirat nu blochează scrierile (revine la planul implicit).
+- [ ] Felia 2 (rute, înregistrare, interfață, 404 în `personal`) și felia 3 (feedback validat → recompensă, o dată pe utilizator, cu plafon) nu există încă.
+- [ ] Risc de acceptat/de tratat în felia 2: fermă de conturi (confirmarea emailului + Turnstile + fereastra de 24 h limitează, nu elimină); rate limit pe folosirea unui cod.
