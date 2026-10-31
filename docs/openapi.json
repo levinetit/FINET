@@ -1361,6 +1361,9 @@
                           },
                           "authorEmail": {
                             "type": "string"
+                          },
+                          "rewarded": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -1371,7 +1374,8 @@
                           "appVersion",
                           "status",
                           "createdAt",
-                          "authorEmail"
+                          "authorEmail",
+                          "rewarded"
                         ],
                         "additionalProperties": false
                       }
@@ -1507,6 +1511,94 @@
           },
           "415": {
             "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/feedback/{id}/reward": {
+      "post": {
+        "operationId": "adminRewardFeedback",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Acordă recompensa pentru un feedback validat (o dată pe utilizator, cu plafon global).",
+        "description": "Doar modul `saas`: în `personal` răspunde 404. Doar administratorul platformei: orice alt utilizator primește 404 (nu se dezvăluie panoul); fără date financiare. Fără corp. `status`: `ok` (acordată), `disabled` (recompensele pentru feedback sunt oprite în setările operatorului), `self` (feedback-ul administratorului însuși), `not_eligible`, `already` (utilizatorul a primit deja), `capped` (plafonul global atins), `not_applicable` (gospodăria are un abonament manual/fondator/plătit, care nu se atinge). Doar `ok` se auditează.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rezultatul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "disabled",
+                            "self",
+                            "not_eligible",
+                            "already",
+                            "capped",
+                            "not_applicable"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
           },
           "429": {
             "$ref": "#/components/responses/E429"

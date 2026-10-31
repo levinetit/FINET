@@ -215,6 +215,7 @@ describe.skipIf(!TEST_ADMIN_URL)("11-B: feedback, anunțuri, erori, administrare
       "kind",
       "message",
       "page",
+      "rewarded",
       "status",
     ]);
     const mine = list.data.find((f: Loose) => f.id === id);

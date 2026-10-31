@@ -52,6 +52,44 @@ export function FeedbackStatus({ id, status }: Readonly<{ id: string; status: st
   );
 }
 
+export function FeedbackReward({ id, rewarded }: Readonly<{ id: string; rewarded: boolean }>) {
+  const router = useRouter();
+  const { submit, pending } = useSubmit();
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const t = ro.admin;
+  async function reward() {
+    setError(null);
+    setMessage(null);
+    const result = await submit<{ status: keyof typeof t.rewardResult }>(
+      `/api/v1/admin/feedback/${id}/reward`,
+      "POST",
+    );
+    if (!result) return;
+    if (!result.ok) return setError(t.failed);
+    const status = result.data?.status;
+    setMessage(status ? t.rewardResult[status] : t.failed);
+    router.refresh();
+  }
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      {rewarded ? (
+        <span className="text-sm text-muted-foreground" data-testid="feedback-rewarded">
+          {t.rewardedBadge}
+        </span>
+      ) : (
+        <Button type="button" variant="secondary" disabled={pending} onClick={reward}>
+          {t.reward}
+        </Button>
+      )}
+      <p role="status" className="text-sm" aria-live="polite">
+        {message}
+      </p>
+      <Alert>{error}</Alert>
+    </div>
+  );
+}
+
 export function UserStatusButton({ id, status }: Readonly<{ id: string; status: string }>) {
   const { run, pending, error } = useAction();
   const next = status === "active" ? "disabled" : "active";
