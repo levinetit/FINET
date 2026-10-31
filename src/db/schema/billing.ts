@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   index,
+  integer,
   jsonb,
   text,
   timestamp,
@@ -11,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { createdAt, finet, updatedAt } from "./finet";
+import { users } from "./auth";
 import { households } from "./households";
 
 /**
@@ -32,7 +34,7 @@ export const SUBSCRIPTION_STATUSES = [
   "canceled",
   "expired",
 ] as const;
-export const SUBSCRIPTION_PROVIDERS = ["manual", "stripe", "founder"] as const;
+export const SUBSCRIPTION_PROVIDERS = ["manual", "stripe", "founder", "reward"] as const;
 
 export const plans = finet.table(
   "plans",
@@ -104,7 +106,10 @@ export const subscriptions = finet.table(
       "subscriptions_status_valid",
       sql`${t.status} in ('trialing', 'active', 'past_due', 'canceled', 'expired')`,
     ),
-    check("subscriptions_provider_valid", sql`${t.provider} in ('manual', 'stripe', 'founder')`),
+    check(
+      "subscriptions_provider_valid",
+      sql`${t.provider} in ('manual', 'stripe', 'founder', 'reward')`,
+    ),
     check(
       "subscriptions_provider_sub_length",
       sql`${t.providerSubscriptionId} is null or (char_length(${t.providerSubscriptionId}) >= 1 and char_length(${t.providerSubscriptionId}) <= 100)`,
@@ -113,5 +118,72 @@ export const subscriptions = finet.table(
       "subscriptions_stripe_has_id",
       sql`${t.provider} <> 'stripe' or ${t.providerSubscriptionId} is not null`,
     ),
+  ],
+);
+
+/**
+ * Faza 12-C (ADR 0037): recomandări. Recompensele (planul acordat, zilele, plafoanele) sunt DATE
+ * ale operatorului, într-un singur rând; implicit totul e 0 / lipsă = recompensele sunt oprite
+ * (FAIL CLOSED). Scrise doar de operator (`finet_migrator`); aplicația le citește doar prin
+ * funcțiile SECURITY DEFINER din migrația 0025.
+ */
+export const referralSettings = finet.table(
+  "referral_settings",
+  {
+    /** Singurul rând (`id = true`). */
+    id: boolean("id").primaryKey().default(true),
+    /** Codul planului acordat ca recompensă; lipsă = oprit. */
+    rewardPlanCode: text("reward_plan_code"),
+    /** Zile pentru cel invitat; 0 = nimic. */
+    inviteeDays: integer("invitee_days").notNull().default(0),
+    /** Zile pentru cel care invită, per invitat înregistrat; 0 = nimic. */
+    inviterDays: integer("inviter_days").notNull().default(0),
+    /** Câte recompense primește un utilizator ca invitator; 0 = niciuna. */
+    inviterMaxRewards: integer("inviter_max_rewards").notNull().default(0),
+    /** Cât timp după crearea contului se poate folosi un cod (ore). */
+    redeemWindowHours: integer("redeem_window_hours").notNull().default(24),
+  },
+  (t) => [
+    check("referral_settings_single", sql`${t.id}`),
+    check(
+      "referral_settings_ranges",
+      sql`${t.inviteeDays} between 0 and 3650 and ${t.inviterDays} between 0 and 3650 and ${t.inviterMaxRewards} between 0 and 1000 and ${t.redeemWindowHours} between 1 and 720`,
+    ),
+  ],
+);
+
+/** Codul de recomandare al unui utilizator (`FIN-XXXXXX`), creat la prima cerere. */
+export const referralCodes = finet.table(
+  "referral_codes",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("referral_codes_code_key").on(t.code),
+    check("referral_codes_shape", sql`${t.code} ~ '^FIN-[A-HJ-NP-Z2-9]{6}$'`),
+  ],
+);
+
+/** O recomandare: un invitat poate folosi un singur cod, o singură dată. */
+export const referrals = finet.table(
+  "referrals",
+  {
+    inviteeUserId: uuid("invitee_user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    inviterUserId: uuid("inviter_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    inviteeRewarded: boolean("invitee_rewarded").notNull().default(false),
+    inviterRewarded: boolean("inviter_rewarded").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("referrals_inviter_idx").on(t.inviterUserId),
+    check("referrals_not_self", sql`${t.inviteeUserId} <> ${t.inviterUserId}`),
   ],
 );

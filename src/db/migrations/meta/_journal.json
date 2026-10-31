@@ -169,6 +169,13 @@
       "when": 1795600000000,
       "tag": "0024_queue_priority",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795700000000,
+      "tag": "0025_referrals",
+      "breakpoints": true
     }
   ]
 }

@@ -732,3 +732,13 @@ Cod în branch `phase/12a-plans`; **migrația 0023 neaplicată, nedeployat**.
 - [x] **12-A.2** (branch `phase/12a2-plan-limits`, migrația 0024 neaplicată): dimensiunea maximă a fișierului pe plan (aplicată la primire, fără plan = 0; fișierul nu rămâne pe disc), tipurile de fișier pe plan (`403 plan_restricted`, fișierele scrise se șterg), istoricul de bonuri (lista și detaliul; expirat sau fără plan = date vizibile), prioritatea cozii (echitatea din 0010 rămâne prima; `personal` neschimbat). `plan-limits.test.ts`, `migrate.test.ts`.
 - [ ] De decis/făcut: valorile planurilor (operator); furnizorul de plată (operatorul nu folosește Stripe; până atunci doar abonamente `manual`/`founder`); revizuirea de securitate a Fazei 12. Istoricul de bonuri nu filtrează exporturile și agregatele (prețuri, rapoarte).
 - [ ] Risc rezidual de acceptat: `household_plan` primește orice UUID de gospodărie și răspunde fără verificarea apartenenței (planul unei gospodării neghicibile); datele nu sunt financiare.
+
+## 40. Recomandări — stratul de date (Faza 12-C, felia 1, 2026-10-31; ADR 0037)
+
+Cod în branch `phase/12c-referrals`; **migrația 0025 neaplicată, nedeployat**.
+
+- [x] Regulile (o singură folosire pe invitat, fără auto-recomandare nici prin gospodărie comună, cont confirmat și recent, plafonul invitatorului) sunt în funcția SECURITY DEFINER, nu în aplicație. `referrals.test.ts`.
+- [x] Recompensele sunt oprite implicit (rând de setări gol); valorile sunt ale operatorului. Aplicația nu are nicio cale de scriere directă (nici pe tabele, nici pe `grant_reward`, nici pe setări); verificat cu încercări reale. `referrals.test.ts`, `migrate.test.ts`.
+- [x] Abonamentele `manual`/`founder`/`stripe` nu sunt atinse de o recompensă; un abonament `reward` expirat nu blochează scrierile (revine la planul implicit).
+- [ ] Felia 2 (rute, înregistrare, interfață, 404 în `personal`) și felia 3 (feedback validat → recompensă, o dată pe utilizator, cu plafon) nu există încă.
+- [ ] Risc de acceptat/de tratat în felia 2: fermă de conturi (confirmarea emailului + Turnstile + fereastra de 24 h limitează, nu elimină); rate limit pe folosirea unui cod.
