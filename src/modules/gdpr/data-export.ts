@@ -27,12 +27,16 @@ import {
   clientInstallations,
   consents,
   documents,
+  feedback,
+  feedbackRewards,
   goals,
   householdMembers,
   households,
   receiptLines,
   receipts,
   recurringRules,
+  referralCodes,
+  referrals,
   reportDefinitions,
   settlements,
   shoppingListItems,
@@ -190,7 +194,9 @@ Arhiva conține datele contului tău, în format JSON (și tranzacțiile și în
 originale ale bonurilor încărcate de tine.
 
 - profil.json: profilul, preferințele, consimțămintele, sesiunile (fără tokenuri), metodele de
-  autentificare (fără parolă), instalările și evenimentele de utilizare.
+  autentificare (fără parolă), instalările, mesajele de feedback trimise de tine, datele tale de
+  recomandare (codul, câți prieteni l-au folosit, dacă ai folosit un cod) și evenimentele de
+  utilizare.
 - gospodarii/<n>/: câte un dosar pentru fiecare dintre cele ${n} gospodării din care faci parte:
   gospodăria, conturile, categoriile, etichetele, tranzacțiile (JSON și CSV), bugetele, obiectivele,
   regulile recurente, listele de cumpărături pe care le vezi (comune și personale ale tale, cu
@@ -207,6 +213,29 @@ function inUser<T>(db: Db, userId: string, fn: (tx: Tx) => Promise<T>) {
 }
 function inHh<T>(db: Db, userId: string, householdId: string, fn: (tx: Tx) => Promise<T>) {
   return withRlsOn(db, { userId, householdId }, fn);
+}
+
+/** Codul propriu, câți prieteni l-au folosit și dacă tu ai folosit un cod (fără identități străine). */
+async function referralProfile(tx: Tx, userId: string) {
+  const [own] = await tx
+    .select({ code: referralCodes.code, createdAt: referralCodes.createdAt })
+    .from(referralCodes)
+    .where(eq(referralCodes.userId, userId));
+  const invited = await tx
+    .select({ rewarded: referrals.inviterRewarded, createdAt: referrals.createdAt })
+    .from(referrals)
+    .where(eq(referrals.inviterUserId, userId));
+  const [joined] = await tx
+    .select({ rewarded: referrals.inviteeRewarded, createdAt: referrals.createdAt })
+    .from(referrals)
+    .where(eq(referrals.inviteeUserId, userId));
+  return {
+    code: own?.code ?? null,
+    codeCreatedAt: own?.createdAt ?? null,
+    invited: invited.length,
+    rewarded: invited.filter((r) => r.rewarded).length,
+    joinedViaReferral: joined ?? null,
+  };
 }
 
 async function profile(db: Db, userId: string) {
@@ -257,6 +286,26 @@ async function profile(db: Db, userId: string) {
         .select()
         .from(clientInstallations)
         .where(eq(clientInstallations.userId, userId)),
+      // Faza 11-B și 12-C (Art. 15 GDPR): mesajele trimise de tine, codul tău de recomandare,
+      // contoarele tale și dacă ai folosit un cod. Fără identitatea altor utilizatori.
+      feedback: await tx
+        .select({
+          kind: feedback.kind,
+          message: feedback.message,
+          page: feedback.page,
+          appVersion: feedback.appVersion,
+          status: feedback.status,
+          createdAt: feedback.createdAt,
+        })
+        .from(feedback)
+        .where(eq(feedback.userId, userId))
+        .orderBy(asc(feedback.createdAt), asc(feedback.id)),
+      referral: await referralProfile(tx, userId),
+      feedbackReward: await tx
+        .select({ grantedAt: feedbackRewards.createdAt })
+        .from(feedbackRewards)
+        .where(eq(feedbackRewards.userId, userId))
+        .then((rows) => rows[0] ?? null),
     };
   });
 }
