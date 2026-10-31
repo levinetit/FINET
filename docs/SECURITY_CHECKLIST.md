@@ -733,6 +733,15 @@ Cod în branch `phase/12a-plans`; **migrația 0023 neaplicată, nedeployat**.
 - [ ] De decis/făcut: valorile planurilor (operator); furnizorul de plată (operatorul nu folosește Stripe; până atunci doar abonamente `manual`/`founder`); revizuirea de securitate a Fazei 12. Istoricul de bonuri nu filtrează exporturile și agregatele (prețuri, rapoarte).
 - [ ] Risc rezidual de acceptat: `household_plan` primește orice UUID de gospodărie și răspunde fără verificarea apartenenței (planul unei gospodării neghicibile); datele nu sunt financiare.
 
+## 39. Trecerea `personal` → `saas`: planul fondator (Faza 12-D, 2026-10-31; ADR 0036)
+
+Cod în branch `phase/12d-personal-to-saas`; **nicio migrație, nimic rulat pe producție**.
+
+- [x] Scrierea planurilor rămâne a operatorului (`finet_migrator`); aplicația nu primește nicio cale nouă de scriere (script SQL, nu cod de aplicație). `founder-plan.test.ts`.
+- [x] Scriptul e idempotent și nu rescrie un plan editat sau abonamente existente (`on conflict do nothing`); verificarea (`founder-plan-check.sql`) nu scrie nimic.
+- [x] Gospodăria creată după rulare rămâne fail closed (`none`) până la planul implicit al operatorului.
+- [ ] De făcut de operator, cu frază explicită: backup, rularea scriptului pe Supabase, planul implicit, comutarea `APP_MODE`, redeploy (`docs/MIGRARE_PERSONAL_SAAS.md`).
+
 ## 40. Recomandări — stratul de date (Faza 12-C, felia 1, 2026-10-31; ADR 0037)
 
 Cod în branch `phase/12c-referrals`; **migrația 0025 neaplicată, nedeployat**.

@@ -269,4 +269,28 @@ describe.skipIf(!TEST_ADMIN_URL)("12-A.2: limite de plan (Postgres real)", () =>
       expect(order).toEqual([b1, a1, b2]);
     });
   });
+
+  describe("planul fondator (12-D): limite „fără plafon”", () => {
+    it("o încărcare reală merge cu valoarea maximă întreagă pe toate limitele (comparații în JS, nimic în SQL)", async () => {
+      const MAX = Number.MAX_SAFE_INTEGER;
+      await planFor(f.HA, {
+        limits: {
+          "ai.dailyDocuments": MAX,
+          "storage.quotaMb": MAX,
+          "household.maxMembers": MAX,
+          "documents.maxFileMb": MAX,
+        },
+        features: [...allTypes, "receipts.archive"],
+      });
+      const jpg = await receiptLikeImage();
+      const out = await uploadDocuments(
+        deps(),
+        f.A,
+        f.HA,
+        await multipartRequest([["files", jpg, "bon.jpg", "image/jpeg"]]),
+      );
+      expect(out.created).toBe(1);
+      expect(await files(f.HA)).toHaveLength(1);
+    });
+  });
 });
