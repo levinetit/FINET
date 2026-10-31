@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { ChunkRecovery } from "@/components/app/chunk-recovery";
 import { ServiceWorkerRegistration } from "@/components/app/pwa";
-import { LANG_HEADER } from "@/lib/site-locale";
+import { LANG_HEADER, parseSiteLocale } from "@/lib/site-locale";
 
 import { THEME_COOKIE, forcedTheme } from "./_lib/theme";
 import { fontDisplay, fontMono, fontSans } from "./fonts";
@@ -38,9 +38,9 @@ export const viewport: Viewport = {
  */
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const theme = forcedTheme((await cookies()).get(THEME_COOKIE)?.value);
-  // Limba documentului: `en` doar pe paginile publice ale `saas` cu cookie explicit (decis în
+  // Limba documentului: alta decât `ro` doar pe paginile publice ale `saas` cu cookie explicit (decis în
   // `src/proxy.ts`, antet intern suprascris la fiecare cerere); în rest, `ro`.
-  const lang = (await headers()).get(LANG_HEADER) === "en" ? "en" : "ro";
+  const lang = parseSiteLocale((await headers()).get(LANG_HEADER));
   return (
     <html
       lang={lang}

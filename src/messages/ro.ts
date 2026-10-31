@@ -2041,6 +2041,8 @@ export const ro = {
       title: "Text în curs de revizuire",
       body: "Acesta este un proiect de lucru, nerevizuit juridic. Nu produce efecte până nu e revizuit și publicat de operator.",
       incomplete: "Datele firmei care operează serviciul nu sunt completate încă.",
+      translationNote:
+        "Textul juridic este afișat în engleză (traducere de lucru); versiunea în română este textul de referință.",
     },
     footer: {
       operator: "Operator",
