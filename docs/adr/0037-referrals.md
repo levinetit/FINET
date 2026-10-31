@@ -1,6 +1,6 @@
 # ADR 0037: recomandări — stratul de date și regulile (Faza 12-C, felia 1)
 
-- **Stare:** propus (branch `phase/12c-referrals`). **Cere migrația `0025_referrals`** (neaplicată, nedeployată). Felia 1 conține DOAR baza de date și regulile; ruta `/ref/...`, API-ul, interfața și legarea de înregistrare sunt felia 2. Recompensa pentru feedback e felia 3.
+- **Stare:** felia 1 (baza de date, regulile; migrația `0025_referrals`) livrată și aplicată (PR #54). Felia 2 (rute, înregistrare, interfață) propusă în branch `phase/12c2-referral-routes`, **fără migrație**. Recompensa pentru feedback e felia 3.
 - **Legături:** master prompt Faza 12 (recomandări: cod per utilizator, recompensă aplicată o singură dată, plafon, protecție împotriva auto-recomandării), ADR 0035 (planuri), ADR 0029 (înregistrare), SECURITY_CHECKLIST §40.
 
 ## Decizii
@@ -12,9 +12,17 @@
 5. **Codul propriu** `FIN-XXXXXX` (alfabet de 32 de caractere fără caractere confundabile, generat din `gen_random_uuid()`), creat la prima cerere prin `finet.my_referral_code()`, stabil.
 6. **Aplicația citește doar ce e al ei:** `referral_codes` și `referrals` au SELECT pentru `finet_app` cu RLS (propriul cod, propriile recomandări); `referral_settings` nu are niciun drept pentru aplicație.
 
+## Felia 2: rute, înregistrare, interfață
+
+- **`/ref/<cod>`** (doar `saas`, 404 altfel): dacă forma e a unui cod, pune cookie-ul `finet_ref` (HttpOnly, SameSite=Lax, Secure pe https, 14 zile) și redirecționează 303 la `/register`; pentru orice cod răspunsul e identic (nu e un oracol de existență). `Referrer-Policy: no-referrer`, `Cache-Control: no-store`.
+- **Codul intră în tokenul semnat** al emailului de confirmare (pasul 1 citește cookie-ul), nu se citește la pasul 2: linkul se poate deschide pe alt dispozitiv. Un cod cu formă invalidă în cookie se ignoră.
+- **Aplicarea** are loc după confirmarea contului (`completeRegistration`), prin `finet.redeem_referral`; orice eroare sau refuz al bazei NU strică înregistrarea.
+- **`GET /api/v1/referrals/me`** (doar `saas`) și pagina `/referrals` (cod, link, copiere/Web Share, „prieteni invitați”, „recompense primite”); legătura apare lângă „Trimite feedback”.
+- **Atenție la fereastra de folosire:** contul se creează la pasul 1, iar linkul de confirmare e valabil 48 h. Dacă `redeem_window_hours` < 48, o confirmare târzie nu mai primește recompensa. Setează-l ≥ 48 (INFRA 4z).
+
 ## Ce NU face (încă)
 
-Nicio rută, pagină, cookie sau legătură cu înregistrarea (felia 2); nicio recompensă pentru feedback (felia 3); nicio notificare. Nimic nu se schimbă pe producție până la aplicarea migrației și configurarea setărilor.
+Nicio recompensă pentru feedback (felia 3); nicio notificare; nu verifică la `/ref` dacă un cod există. Nimic nu se schimbă pe producție până la aplicarea migrației și configurarea setărilor.
 
 ## Consecințe
 

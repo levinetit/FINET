@@ -13,6 +13,7 @@ import {
 import { trustedClientIp } from "@/modules/auth/request";
 import { CsrfError } from "@/modules/auth/session";
 import { type TurnstileVerifier, createTurnstileVerifier } from "@/modules/auth/turnstile";
+import { refCodeFromCookieHeader } from "@/modules/referrals/referrals.service";
 
 import { type ApiDeps, ApiError, errorPayload, json, parseWith, readJsonBody } from "./http";
 
@@ -146,6 +147,8 @@ export async function registerHandler(request: Request, deps: ApiDeps): Promise<
       await registerAccount(
         { db: deps.db, config: deps.config, mailer, ...(deps.now ? { now: deps.now } : {}) },
         input,
+        // 12-C: codul din cookie-ul `finet_ref` (setat de `/ref/<cod>`), doar ca formă validă.
+        refCodeFromCookieHeader(request.headers.get("cookie")) ?? undefined,
       );
     }
     return json({ data: { status: "pending" } }, 202);

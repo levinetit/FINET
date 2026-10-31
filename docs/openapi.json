@@ -17309,6 +17309,88 @@
         }
       }
     },
+    "/api/v1/referrals/me": {
+      "get": {
+        "operationId": "getMyReferral",
+        "tags": [
+          "referrals"
+        ],
+        "summary": "Codul propriu de recomandare, linkul de distribuit și contoarele (12-C).",
+        "description": "Doar modul `saas`: în `personal` răspunde 404. Prima cerere creează codul `FIN-XXXXXX`. `invited` = prietenii care au folosit codul; `rewarded` = din ei, câți au adus o recompensă (recompensele sunt configurate de operator și pot fi oprite). Fără `userId` în cerere. Nu e blocată de un abonament expirat.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Codul și contoarele.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "link": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "invited": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "rewarded": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "link",
+                        "invited",
+                        "rewarded"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/register": {
       "post": {
         "operationId": "registerAccount",

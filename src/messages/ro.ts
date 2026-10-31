@@ -1925,6 +1925,22 @@ export const ro = {
     ],
   },
   // Faza 11-B (ADR 0028): feedback, anunțuri și panoul de administrare (doar `saas`).
+  referrals: {
+    eyebrow: "Recomandări",
+    title: "Invită prieteni",
+    intro:
+      "Trimite linkul tău de recomandare. Când un prieten își creează și își confirmă contul prin el, recomandarea se înregistrează. Dacă recompensele sunt active, vedeți amândoi ce ați primit.",
+    codeLabel: "Codul tău",
+    linkLabel: "Linkul tău",
+    copy: "Copiază linkul",
+    copied: "Link copiat.",
+    share: "Distribuie",
+    shareText: "Folosesc FINET pentru finanțele familiei. Creează-ți un cont prin linkul meu:",
+    invited: "Prieteni invitați",
+    rewarded: "Recompense primite",
+    unavailable: "Codul nu este disponibil acum. Încearcă mai târziu.",
+    link: "Invită prieteni",
+  },
   feedback: {
     eyebrow: "Feedback",
     title: "Trimite feedback sau raportează o problemă",
