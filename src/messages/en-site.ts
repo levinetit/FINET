@@ -88,6 +88,8 @@ export const enSite: SiteMessages = {
     title: "Text under review",
     body: "This is a working draft that has not been legally reviewed. It has no effect until it is reviewed and published by the operator. The Romanian version is the reference text.",
     incomplete: "The details of the company operating the service have not been filled in yet.",
+    translationNote:
+      "The legal text is shown in English (working translation); the Romanian version is the reference text.",
   },
   footer: {
     operator: "Operator",

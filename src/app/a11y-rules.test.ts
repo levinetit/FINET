@@ -40,11 +40,11 @@ function resolve(path: string): unknown {
 }
 
 describe("accesibilitate (reguli statice)", () => {
-  it('lang pe <html>: ro implicit (layout dinamic doar spre "en" pe site-ul public), "ro" fix în global-error', () => {
+  it('lang pe <html>: ro implicit (layout dinamic doar spre limbile permise pe site-ul public), "ro" fix în global-error', () => {
     const layout = read("layout.tsx");
     expect(layout).toMatch(/<html\s[^>]*lang=\{lang\}/);
-    // Singura valoare alternativă a lui `lang` e "ro": orice altceva decât "en" cade pe română.
-    expect(layout).toMatch(/=== "en" \? "en" : "ro"/);
+    // `lang` vine din lista exactă de limbi permise (`parseSiteLocale`): orice altceva cade pe română.
+    expect(layout).toMatch(/lang = parseSiteLocale\(/);
     expect(read("global-error.tsx")).toMatch(/<html\s[^>]*lang="ro"/);
   });
 

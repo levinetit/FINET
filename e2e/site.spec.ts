@@ -126,6 +126,38 @@ test.describe(`site public (${MODE})`, () => {
     await ctx.close();
   });
 
+  test("limbi noi (Faza 13): franceza și germana prin cookie explicit; juridicul rămâne englez, cu notă; cookie străin → română", async ({
+    browser,
+    baseURL,
+  }) => {
+    const ctx = await browser.newContext({ baseURL, locale: "de-DE" });
+    const page = await ctx.newPage();
+    await page.goto("/support");
+    // `Accept-Language: de-DE` nu schimbă nimic: româna rămâne implicită.
+    await expect(page.locator("html")).toHaveAttribute("lang", "ro");
+    await page.getByTestId("lang-fr").click();
+    await expect(page.getByRole("heading", { level: 1, name: "Assistance" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+    await expect(page.getByTestId("legal-footer")).toContainText("à compléter");
+    await page.goto("/terms");
+    await expect(page.getByTestId("draft-banner")).toContainText("Texte en cours de révision");
+    await expect(page.getByTestId("legal-translation-note")).toContainText("affiché en anglais");
+    // Textul juridic englez are `lang="en"` propriu, în pagina `fr`.
+    await expect(page.locator('article div[lang="en"]')).toBeVisible();
+    await page.getByTestId("lang-de").click();
+    await page.goto("/pricing");
+    await expect(page.getByRole("heading", { level: 1, name: "Preise" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
+    // Pagina de login rămâne în română, indiferent de limba aleasă.
+    await page.goto("/login");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ro");
+    // Un cookie cu o valoare străină cade pe română.
+    await ctx.addCookies([{ name: "finet_lang", value: "xx", url: baseURL! }]);
+    await page.goto("/pricing");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ro");
+    await ctx.close();
+  });
+
   test("prețuri: fără sume inventate", async ({ page }) => {
     await page.goto("/pricing");
     await expect(page.getByTestId("pricing-body")).toContainText("nu are încă planuri plătite");

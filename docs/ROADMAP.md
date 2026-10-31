@@ -19,7 +19,7 @@ Starea fazelor din `docs/FINET_MASTER_PROMPT.md` (secțiunea 7) și `docs/FINET_
 | 10 — Liste de cumpărături și prețuri | neimplementat | |
 | 11 — Fundația SaaS | neimplementat | |
 | 12 — Planuri, plăți, recomandări | neimplementat | |
-| 13 — Limbi suplimentare (`saas`) | neimplementat | adăugată după analiza finpulse.day |
+| 13 — Limbi suplimentare (`saas`) | parțial: paginile publice în 6 limbi noi (ADR 0033), în așteptarea revizuirii; aplicația și formatele rămân | adăugată după analiza finpulse.day |
 
 ### Faza 0: ce e gata și ce lipsește
 **Gata în repo (verificat local):** proiectul Next.js 16 + TypeScript strict + Tailwind + ESLint + Prettier + Vitest + Playwright; `lib/config.ts`, `lib/money.ts` (cu teste), `lib/storage.ts` (local + schelet S3), `entitlements` pentru `personal`; protecția Access în `src/proxy.ts` și `/api/health`; `Dockerfile` și `ops/docker/docker-compose.yml`; CI; instrucțiunile pentru Cloudflare, Supabase, notificări; documentația și ADR-urile 0001, 0002.

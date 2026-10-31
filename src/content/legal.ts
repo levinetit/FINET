@@ -6,7 +6,7 @@
  * (`SITE_LEGAL_REVIEWED=1`): până atunci pagina afișează un banner vizibil și nu se indexează.
  * Datele firmei nu sunt scrise aici: se inserează din configurație (`config.site.company`).
  */
-import type { SiteLocale } from "@/lib/site-locale";
+import { type SiteLocale, legalLocale } from "@/lib/site-locale";
 
 export type LegalSection = Readonly<{ title: string; paragraphs: readonly string[] }>;
 
@@ -23,7 +23,7 @@ const orIn = (locale: SiteLocale) => (v: string | null) => v ?? MISSING[locale];
 
 /** Termenii în limba cerută (implicit româna). */
 export function termsSections(c: CompanyView, locale: SiteLocale = "ro"): readonly LegalSection[] {
-  return locale === "en" ? termsEn(c) : termsRo(c);
+  return legalLocale(locale) === "en" ? termsEn(c) : termsRo(c);
 }
 
 /** Politica de confidențialitate în limba cerută (implicit româna). */
@@ -31,7 +31,7 @@ export function privacySections(
   c: CompanyView,
   locale: SiteLocale = "ro",
 ): readonly LegalSection[] {
-  return locale === "en" ? privacyEn(c) : privacyRo(c);
+  return legalLocale(locale) === "en" ? privacyEn(c) : privacyRo(c);
 }
 
 function termsRo(c: CompanyView): readonly LegalSection[] {

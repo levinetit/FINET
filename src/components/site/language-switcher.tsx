@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
-import { type SiteLocale, langCookie } from "@/lib/site-locale";
+import { SITE_LOCALES, SITE_LOCALE_NAMES, type SiteLocale, langCookie } from "@/lib/site-locale";
 
 /**
  * Comutatorul de limbă al paginilor publice (Faza 11-C3, ADR 0031): scrie cookie-ul de preferință
@@ -26,12 +26,18 @@ export function LanguageSwitcher({
     router.refresh();
   }
 
-  const options: readonly { locale: SiteLocale; text: string; name: string }[] = [
-    { locale: "ro", text: "RO", name: "Română" },
-    { locale: "en", text: "EN", name: "English" },
-  ];
+  const options = SITE_LOCALES.map((locale) => ({
+    locale,
+    text: locale.toUpperCase(),
+    name: SITE_LOCALE_NAMES[locale],
+  }));
   return (
-    <div role="group" aria-label={label} className="flex gap-1" data-testid="language-switcher">
+    <div
+      role="group"
+      aria-label={label}
+      className="flex flex-wrap gap-1"
+      data-testid="language-switcher"
+    >
       {options.map((o) => (
         <button
           key={o.locale}

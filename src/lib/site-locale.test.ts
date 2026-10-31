@@ -1,18 +1,44 @@
 import { describe, expect, it } from "vitest";
 
 import { privacySections, termsSections } from "@/content/legal";
-import { enSite } from "@/messages/en-site";
+import { deSite } from "@/messages/de-site";
+import { enSite, type SiteMessages } from "@/messages/en-site";
+import { esSite } from "@/messages/es-site";
+import { frSite } from "@/messages/fr-site";
+import { itSite } from "@/messages/it-site";
+import { plSite } from "@/messages/pl-site";
 import { ro } from "@/messages/ro";
+import { trSite } from "@/messages/tr-site";
 
 import {
   DEFAULT_SITE_LOCALE,
   LANG_COOKIE,
+  SITE_LOCALES,
+  SITE_LOCALE_NAMES,
+  type SiteLocale,
   documentLocale,
   langCookie,
+  legalLocale,
   parseSiteLocale,
 } from "./site-locale";
 
+/**
+ * Literele specifice românei: `ă` și `ș`/`ț` cu virgulă dedesubt. `â`/`î` (valide în franceză) și
+ * `ş` cu sedilă (valid în turcă) NU intră aici.
+ */
+const RO_ONLY = /[ăĂșțȘȚ]/;
 const DIACRITICS = /[ăâîșțĂÂÎȘȚşţ]/;
+
+/** Textele fiecărei limbi, în afară de română (referința). */
+const TRANSLATIONS: Readonly<Record<Exclude<SiteLocale, "ro">, SiteMessages>> = {
+  en: enSite,
+  es: esSite,
+  fr: frSite,
+  de: deSite,
+  it: itSite,
+  pl: plSite,
+  tr: trSite,
+};
 
 /** Toate căile frunzelor (șiruri) dintr-un obiect, cu lungimea listelor în cale. */
 function shape(value: unknown, path = ""): string[] {
@@ -43,10 +69,27 @@ const empty = { name: null, taxId: null, registrationNo: null, address: null, em
 describe("limba paginilor publice (F11-C3)", () => {
   it("româna e implicită: lipsă, necunoscut sau alterat → ro; doar `en` exact → en", () => {
     expect(DEFAULT_SITE_LOCALE).toBe("ro");
-    for (const v of [undefined, null, "", "ro", "EN", "en-US", "en ", "fr", "<script>"]) {
+    for (const v of [
+      undefined,
+      null,
+      "",
+      "ro",
+      "EN",
+      "en-US",
+      "en ",
+      "FR",
+      "fr-FR",
+      " de",
+      "xx",
+      "ru",
+      "<script>",
+    ]) {
       expect(parseSiteLocale(v), String(v)).toBe("ro");
     }
-    expect(parseSiteLocale("en")).toBe("en");
+    // Exact lista permisă (ADR 0033): fiecare limbă acceptată doar cu codul ei exact.
+    expect([...SITE_LOCALES]).toEqual(["ro", "en", "es", "fr", "de", "it", "pl", "tr"]);
+    for (const l of SITE_LOCALES) expect(parseSiteLocale(l), l).toBe(l);
+    expect(Object.keys(SITE_LOCALE_NAMES).sort()).toEqual([...SITE_LOCALES].sort());
   });
 
   it("cookie-ul: nume, valoare, 1 an, SameSite=Lax, fără HttpOnly (îl scrie browserul), Secure doar pe https", () => {
@@ -63,16 +106,51 @@ describe("limba paginilor publice (F11-C3)", () => {
     expect(documentLocale({ ...base, publicPath: false })).toBe("ro");
     expect(documentLocale({ ...base, cookie: undefined })).toBe("ro");
     expect(documentLocale({ ...base, cookie: "ro" })).toBe("ro");
+    // Limbile noi (Faza 13) respectă aceleași reguli; o valoare străină cade pe română.
+    for (const l of ["es", "fr", "de", "it", "pl", "tr"] as const) {
+      expect(documentLocale({ ...base, cookie: l }), l).toBe(l);
+      expect(documentLocale({ ...base, cookie: l, saas: false }), l).toBe("ro");
+      expect(documentLocale({ ...base, cookie: l, publicPath: false }), l).toBe("ro");
+    }
+    expect(documentLocale({ ...base, cookie: "ru" })).toBe("ro");
   });
 
-  it("textele englezești au exact aceleași chei și lungimi de liste ca ale românești", () => {
-    expect(shape(enSite).sort()).toEqual(shape(ro.site).sort());
+  it("fiecare limbă are exact aceleași chei și lungimi de liste ca româna (fără texte lipsă)", () => {
+    for (const [locale, messages] of Object.entries(TRANSLATIONS)) {
+      expect(shape(messages).sort(), locale).toEqual(shape(ro.site).sort());
+    }
   });
 
-  it("nicio valoare engleză nu e goală, nu conține diacritice românești și are paranteze/ghilimele echilibrate", () => {
-    for (const text of strings(enSite)) {
-      expect(text.trim().length, text).toBeGreaterThan(0);
-      expect(DIACRITICS.test(text), text).toBe(false);
+  it("nicio valoare tradusă nu e goală; fără litere românești (ă ș ț) în afară de română; engleza fără niciun diacritic românesc", () => {
+    for (const [locale, messages] of Object.entries(TRANSLATIONS)) {
+      for (const text of strings(messages)) {
+        expect(text.trim().length, `${locale}: ${text}`).toBeGreaterThan(0);
+        expect(RO_ONLY.test(text), `${locale}: ${text}`).toBe(false);
+        if (locale === "en") expect(DIACRITICS.test(text), text).toBe(false);
+      }
+    }
+  });
+
+  it("identificatorii secțiunilor de suport sunt aceiași în toate limbile (ancore stabile) și titlurile sunt traduse", () => {
+    const ids = ro.site.support.sections.map((s) => s.id);
+    for (const [locale, messages] of Object.entries(TRANSLATIONS)) {
+      expect(
+        messages.support.sections.map((s) => s.id),
+        locale,
+      ).toEqual(ids);
+      // Titlul paginii nu rămâne cel românesc (un text netradus s-ar vedea imediat).
+      expect(messages.support.title, locale).not.toBe(ro.site.support.title);
+      expect(messages.landing.cta, locale).not.toBe(ro.site.landing.cta);
+    }
+  });
+
+  it("textele juridice: româna rămâne referința, orice altă limbă primește textul englez; marcajul lipsă e în limba textului", () => {
+    expect(legalLocale("ro")).toBe("ro");
+    for (const l of ["en", "es", "fr", "de", "it", "pl", "tr"] as const) {
+      expect(legalLocale(l), l).toBe("en");
+      expect(termsSections(company, l), l).toEqual(termsSections(company, "en"));
+      expect(privacySections(company, l), l).toEqual(privacySections(company, "en"));
+      expect(strings(termsSections(empty, l)).join("\n"), l).toContain("[to be completed]");
     }
   });
 
