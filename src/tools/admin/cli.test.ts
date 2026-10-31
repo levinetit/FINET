@@ -255,6 +255,52 @@ describe.skipIf(!TEST_ADMIN_URL)("CLI admin pe PostgreSQL real", () => {
     expect((await run(["aggregate-events", "--x", "1"])).code).toBe(2);
   });
 
+  it("cleanup-unverified: dry-run implicit; --yes șterge doar conturile vechi neconfirmate; argumente validate; fără STORAGE_DIR refuză", async () => {
+    // Golește eventualele conturi vechi lăsate de alte teste din aceeași bază.
+    const dirDrain = mkdtempSync(join(tmpdir(), "finet-unv-"));
+    try {
+      const env = { ...ENV, STORAGE_DIR: dirDrain };
+      await run(["cleanup-unverified", "--yes", "--limit", "500"], "", env);
+      const stale = await createUserWithHousehold(fx.db, {
+        email: "veche@exemplu.ro",
+        name: "Veche",
+        password: null,
+        firstUserBecomesAdmin: false,
+        emailVerified: false,
+      });
+      const fresh = await createUserWithHousehold(fx.db, {
+        email: "proaspata@exemplu.ro",
+        name: "Proaspata",
+        password: null,
+        firstUserBecomesAdmin: false,
+        emailVerified: false,
+      });
+      await fx.scratch.admin`update finet.users set created_at = now() - interval '30 days'
+        where id = ${stale.userId!}`;
+      const count = async (id: string) =>
+        (await fx.scratch.admin`select count(*)::int as n from finet.users where id = ${id}`)[0]!.n;
+
+      const dry = await run(["cleanup-unverified"], "", env);
+      expect(dry).toEqual({ code: 0, out: "found=1 purged=0 failed=0 dry_run=1", err: "" });
+      expect(await count(stale.userId!)).toBe(1);
+
+      const done = await run(["cleanup-unverified", "--yes"], "", env);
+      expect(done).toEqual({ code: 0, out: "found=1 purged=1 failed=0", err: "" });
+      expect(`${done.out}${done.err}`).not.toContain("veche@exemplu.ro");
+      expect(await count(stale.userId!)).toBe(0);
+      expect(await count(fresh.userId!)).toBe(1);
+
+      expect((await run(["cleanup-unverified", "--days", "0"], "", env)).code).toBe(2);
+      expect((await run(["cleanup-unverified", "--limit", "501"], "", env)).code).toBe(2);
+      expect((await run(["cleanup-unverified", "--yes=1"], "", env)).code).toBe(2);
+      const unmounted = await run(["cleanup-unverified", "--yes"], "", ENV);
+      expect(unmounted.code).toBe(1);
+      expect(unmounted.err).toContain("STORAGE_DIR");
+    } finally {
+      rmSync(dirDrain, { recursive: true, force: true });
+    }
+  });
+
   it("cleanup-orphan-storage: dry-run implicit; --yes șterge DOAR directoarele fără gospodărie; plafon; fără STORAGE_DIR nu atinge nimic; refuză dacă totul pare orfan", async () => {
     const owner = await createUserWithHousehold(fx.db, {
       email: "orfane@exemplu.ro",

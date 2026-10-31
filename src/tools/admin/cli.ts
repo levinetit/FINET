@@ -19,6 +19,7 @@ import { OrphanSafetyError, cleanupOrphanStorage } from "@/modules/documents/orp
 import { expireDocumentFiles } from "@/modules/documents/retention";
 import { purgeIdempotencyKeys } from "@/modules/idempotency/idempotency";
 import { cleanupStatementFiles } from "@/modules/statements/cleanup";
+import { purgeUnverifiedAccounts } from "@/modules/gdpr/unverified-purge";
 import { aggregateOldAppEvents } from "@/modules/usage/stats";
 
 /**
@@ -31,6 +32,13 @@ import { aggregateOldAppEvents } from "@/modules/usage/stats";
  *   admin.mjs cleanup-idempotency
  *   admin.mjs aggregate-events
  *   admin.mjs cleanup-orphan-storage [--yes] [--limit <n>]
+ *   admin.mjs cleanup-unverified [--days <n>] [--limit <n>] [--yes]
+ *
+ * `cleanup-unverified` (Faza 11, SECURITY_CHECKLIST §36): conturile de înregistrare publică
+ * neconfirmate de cel puțin `--days` zile (implicit 7, 1–365), fără parolă, sesiune sau gospodărie
+ * comună (`finet.stale_unverified_users`, 0021). Implicit doar raport (dry-run); `--yes` le
+ * șterge cu logica de ștergere a contului (ADR 0021), cel mult `--limit` (implicit 200, max 500).
+ * Ieșirea: doar contoare.
  *
  * `cleanup-orphan-storage` (revizuirea F9, ADR 0021): directoarele `households/<id>/` din
  * `STORAGE_DIR` fără gospodărie în bază (fișiere rămase după o ștergere de cont eșuată la pasul
@@ -73,6 +81,7 @@ const USAGE = [
   "  admin cleanup-documents [--temp-hours <ore>]",
   "  admin aggregate-events",
   "  admin cleanup-orphan-storage [--yes] [--limit <n>]",
+  "  admin cleanup-unverified [--days <n>] [--limit <n>] [--yes]",
   "Parola se citește din stdin cu --password-stdin; altfel se generează și se afișează o dată.",
 ].join("\n");
 
@@ -92,6 +101,7 @@ const COMMANDS: Readonly<Record<string, readonly string[]>> = {
   "cleanup-documents": ["temp-hours"],
   "aggregate-events": [],
   "cleanup-orphan-storage": ["yes", "limit"],
+  "cleanup-unverified": ["days", "limit", "yes"],
 };
 const BOOLEAN_FLAGS = new Set(["password-stdin", "yes"]);
 
@@ -310,6 +320,47 @@ export async function main(io: AdminIo): Promise<number> {
         }
         throw error;
       }
+    }
+
+    if (command === "cleanup-unverified") {
+      const intFlag = (name: string, min: number, max: number): number | undefined => {
+        const raw = flags[name];
+        if (raw === undefined) return undefined;
+        if (
+          typeof raw !== "string" ||
+          !/^[0-9]{1,4}$/.test(raw) ||
+          Number(raw) < min ||
+          Number(raw) > max
+        ) {
+          throw new UsageError(`--${name}: un număr întreg ${min}–${max}`);
+        }
+        return Number(raw);
+      };
+      const days = intFlag("days", 1, 365);
+      const limit = intFlag("limit", 1, 500);
+      let storage = io.storage;
+      if (!storage) {
+        // Conturile neconfirmate nu au fișiere, dar ștergerea contului cere un storage montat.
+        const dir = io.env.STORAGE_DIR?.trim();
+        if (!dir || !isDirectory(dir)) {
+          io.err("finet-admin: STORAGE_DIR lipsește sau nu e montat");
+          return 1;
+        }
+        storage = new LocalStorage(dir);
+      }
+      const apply = flags.yes === true;
+      const r = await purgeUnverifiedAccounts(
+        { db, storage },
+        {
+          apply,
+          ...(days !== undefined ? { days } : {}),
+          ...(limit !== undefined ? { limit } : {}),
+        },
+      );
+      io.out(
+        `found=${r.found} purged=${r.purged} failed=${r.failed}` + (apply ? "" : " dry_run=1"),
+      );
+      return r.failed > 0 ? 1 : 0;
     }
 
     if (command === "aggregate-events") {

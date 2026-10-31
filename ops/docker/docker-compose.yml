@@ -366,6 +366,8 @@ services:
     #   docker compose ... --profile cleanup run --rm -T finet-cleanup
     # Fișierele orfane (F9-B, ADR 0021): aceeași imagine, comanda dată explicit (dry-run implicit):
     #   docker compose ... --profile cleanup run --rm -T finet-cleanup cleanup-orphan-storage [--yes]
+    # Conturile de înregistrare neconfirmate (Faza 11, 0021; INFRA 4x), dry-run implicit:
+    #   docker compose ... --profile cleanup run --rm -T finet-cleanup cleanup-unverified [--yes]
     image: ${FINET_TOOLS_IMAGE:-finet:tools}
     build:
       context: ../..
