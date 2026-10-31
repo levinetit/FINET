@@ -15,6 +15,7 @@ import * as S from "./statements-handlers";
 import * as MT from "./matching-handlers";
 import * as SH from "./shopping-handlers";
 import * as AD from "./admin-handlers";
+import * as RF from "./referral-handlers";
 import * as RG from "./register-handlers";
 import * as AH from "./ask-handlers";
 import * as SM from "./summary-handlers";
@@ -234,6 +235,7 @@ const OPERATION_OF = new Map<unknown, string>([
   [RG.registerHandler, "registerAccount"],
   [RG.completeRegisterHandler, "completeRegistration"],
   [AD.createFeedbackHandler, "createFeedback"],
+  [RF.meReferralHandler, "getMyReferral"],
   [AD.listAnnouncementsHandler, "listAnnouncements"],
   [AD.reportErrorHandler, "reportError"],
   [AD.adminUsersHandler, "adminListUsers"],

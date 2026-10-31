@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { type Db, withRlsOn } from "@/db";
 import type { Config } from "@/lib/config";
+import { parseRefCode, redeemReferral } from "@/modules/referrals/referrals.service";
 
 import { currentHouseholdIdOf, insertAudit } from "./audit";
 import {
@@ -56,7 +57,7 @@ export const completeInputSchema = z
   .object({ token: z.string().min(20).max(600), password: z.string().min(1).max(1000) })
   .strict();
 
-type Payload = Readonly<{ u: string; e: string; x: number }>;
+type Payload = Readonly<{ u: string; e: string; x: number; r?: string }>;
 
 const b64 = (value: Buffer | string): string => Buffer.from(value).toString("base64url");
 
@@ -70,11 +71,15 @@ export function signRegistrationToken(
   userId: string,
   email: string,
   nowMs: number,
+  referral?: string,
 ): string {
   const payload: Payload = {
     u: userId,
     e: email,
     x: Math.floor(nowMs / 1000) + VERIFY_TOKEN_TTL_SECONDS,
+    // Codul de recomandare (12-C) rămâne în tokenul semnat: linkul poate fi deschis pe alt
+    // dispozitiv, unde cookie-ul `finet_ref` nu există.
+    ...(referral ? { r: referral } : {}),
   };
   const body = b64(JSON.stringify(payload));
   return `${body}.${b64(mac(secret, body))}`;
@@ -101,7 +106,8 @@ export function readRegistrationToken(
     ) {
       return null;
     }
-    return { u: value.u, e: value.e, x: value.x };
+    const r = typeof value.r === "string" ? parseRefCode(value.r) : null;
+    return { u: value.u, e: value.e, x: value.x, ...(r ? { r } : {}) };
   } catch {
     return null;
   }
@@ -118,6 +124,8 @@ export type RegistrationDeps = Readonly<{
 export async function registerAccount(
   deps: RegistrationDeps,
   input: z.infer<typeof registerInputSchema>,
+  /** Codul de recomandare din cookie-ul `finet_ref` (deja validat ca formă), dacă există. */
+  referral?: string,
 ): Promise<void> {
   const { db, config, mailer } = deps;
   const secret = config.auth.secret;
@@ -135,7 +143,7 @@ export async function registerAccount(
   // Cererea nu așteaptă SMTP (aceeași formă de răspuns, același timp, indiferent de adresă).
   sendInBackground(mailer, async () => {
     if (result.created) {
-      const token = signRegistrationToken(secret, result.userId, input.email, now());
+      const token = signRegistrationToken(secret, result.userId, input.email, now(), referral);
       return verifyEmailMessage(
         config.appName,
         input.email,
@@ -147,7 +155,7 @@ export async function registerAccount(
     if (!existing || existing.status !== "active") return null;
     if (!existing.emailVerified) {
       // Înregistrare neterminată: aceeași adresă primește un link nou.
-      const token = signRegistrationToken(secret, existing.id, input.email, now());
+      const token = signRegistrationToken(secret, existing.id, input.email, now(), referral);
       return verifyEmailMessage(
         config.appName,
         input.email,
@@ -202,5 +210,15 @@ export async function completeRegistration(
     }
     return true;
   });
-  return done ? { ok: true } : { ok: false, reason: "invalid_token", message: INVALID_LINK };
+  if (!done) return { ok: false, reason: "invalid_token", message: INVALID_LINK };
+  // Recomandarea (12-C): regulile sunt în baza de date; o eroare aici nu strică niciodată
+  // înregistrarea (contul e deja confirmat).
+  if (claims.r) {
+    try {
+      await redeemReferral(db, user.id, claims.r);
+    } catch {
+      console.error("[register] recomandarea nu a putut fi aplicată");
+    }
+  }
+  return { ok: true };
 }

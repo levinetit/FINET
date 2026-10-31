@@ -725,7 +725,7 @@ Agentul nu a rulat nimic din această secțiune. ADR 0037, SECURITY_CHECKLIST §
      invitee_days = <zile pentru invitat>,
      inviter_days = <zile pentru invitator>,
      inviter_max_rewards = <câte recompense primește un invitator>,
-     redeem_window_hours = <ore, 1–720; implicit 24>;
+     redeem_window_hours = <ore, 1–720; implicit 24; cel puțin 48, cât valabilitatea linkului de confirmare>;
    ```
    Pentru oprire: `reward_plan_code = null` (sau zilele 0).
 3. **Efect:** o recompensă creează/prelungește un abonament cu `provider = 'reward'`. Abonamentele `manual`, `founder`, `stripe` nu sunt atinse. La expirare, gospodăria revine la planul implicit (nu devine doar-citire).

@@ -227,6 +227,7 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 
 ## Feedback, anunțuri, erori, administrare (F11-B, ADR 0028; doar `saas`: 404 în `personal`)
 - `POST /feedback` `{ kind: feedback|bug, message (3–2000), page?, appVersion? }` → 201; `GET /announcements` (cele active, cel mult 5); `POST /errors` `{ kind, route, code, digest?, appVersion? }` → 204 (valorile invalide se ignoră; fără mesaje sau stive).
+- `GET /referrals/me` → `{ data: { code, link, invited, rewarded } }` (doar `saas`, 404 în `personal`; prima cerere creează codul `FIN-XXXXXX`; `rewarded` = recomandări care au adus o recompensă, cele configurate de operator). Linkul public `/ref/<cod>` nu face parte din API: pune cookie-ul `finet_ref` și redirecționează la `/register` (303), la fel pentru orice cod.
 - `GET /admin/users|households|jobs|feedback|errors|announcements` (paginat: `limit` ≤ 200, `offset`), `PATCH /admin/users/{id}` `{ status: active|disabled }`, `PATCH /admin/feedback/{id}` `{ status }`, `POST /admin/announcements`, `PATCH /admin/announcements/{id}`: doar administratorul platformei; ORICE alt utilizator primește 404. Nicio dată financiară; acțiunile de schimbare se auditează.
 
 ## Înregistrarea publică (F11-C, ADR 0029; doar `saas` cu `SIGNUP_ENABLED=1` și SMTP: altfel 404)

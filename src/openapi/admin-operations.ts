@@ -60,6 +60,27 @@ export const ADMIN_OPERATIONS: readonly Operation[] = [
   },
   {
     method: "GET",
+    path: "/api/v1/referrals/me",
+    operationId: "getMyReferral",
+    tag: "referrals",
+    summary: "Codul propriu de recomandare, linkul de distribuit și contoarele (12-C).",
+    description: `${SAAS}Prima cerere creează codul \`FIN-XXXXXX\`. \`invited\` = prietenii care au folosit codul; \`rewarded\` = din ei, câți au adus o recompensă (recompensele sunt configurate de operator și pot fi oprite). Fără \`userId\` în cerere. Nu e blocată de un abonament expirat.`,
+    success: {
+      status: 200,
+      schema: dataOf(
+        z.strictObject({
+          code: z.string().nullable(),
+          link: z.string().nullable(),
+          invited: z.number().int(),
+          rewarded: z.number().int(),
+        }),
+      ),
+      description: "Codul și contoarele.",
+    },
+    errors: [400, 404],
+  },
+  {
+    method: "GET",
     path: "/api/v1/announcements",
     operationId: "listAnnouncements",
     tag: "feedback",

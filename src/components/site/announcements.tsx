@@ -25,7 +25,10 @@ export function Announcements({ items }: Readonly<{ items: readonly Announcement
 
 export function FeedbackLink() {
   return (
-    <p className="mt-8 text-sm">
+    <p className="mt-8 flex gap-4 text-sm">
+      <Link href="/referrals" data-testid="referrals-link">
+        {ro.referrals.link}
+      </Link>
       <Link href="/feedback" data-testid="feedback-link">
         {ro.feedback.link}
       </Link>
