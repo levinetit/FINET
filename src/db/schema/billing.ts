@@ -145,10 +145,10 @@ export const referralSettings = finet.table(
   },
   (t) => [
     check("referral_settings_single", sql`${t.id}`),
-    check(
-      "referral_settings_ranges",
-      sql`${t.inviteeDays} between 0 and 3650 and ${t.inviterDays} between 0 and 3650 and ${t.inviterMaxRewards} between 0 and 1000 and ${t.redeemWindowHours} between 1 and 720`,
-    ),
+    check("referral_settings_invitee_days", sql`${t.inviteeDays} between 0 and 3650`),
+    check("referral_settings_inviter_days", sql`${t.inviterDays} between 0 and 3650`),
+    check("referral_settings_inviter_max", sql`${t.inviterMaxRewards} between 0 and 1000`),
+    check("referral_settings_window", sql`${t.redeemWindowHours} between 1 and 720`),
   ],
 );
 

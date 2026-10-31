@@ -1142,9 +1142,21 @@
           "name": "referral_settings_single",
           "value": "\"finet\".\"referral_settings\".\"id\""
         },
-        "referral_settings_ranges": {
-          "name": "referral_settings_ranges",
-          "value": "\"finet\".\"referral_settings\".\"invitee_days\" between 0 and 3650 and \"finet\".\"referral_settings\".\"inviter_days\" between 0 and 3650 and \"finet\".\"referral_settings\".\"inviter_max_rewards\" between 0 and 1000 and \"finet\".\"referral_settings\".\"redeem_window_hours\" between 1 and 720"
+        "referral_settings_invitee_days": {
+          "name": "referral_settings_invitee_days",
+          "value": "\"finet\".\"referral_settings\".\"invitee_days\" between 0 and 3650"
+        },
+        "referral_settings_inviter_days": {
+          "name": "referral_settings_inviter_days",
+          "value": "\"finet\".\"referral_settings\".\"inviter_days\" between 0 and 3650"
+        },
+        "referral_settings_inviter_max": {
+          "name": "referral_settings_inviter_max",
+          "value": "\"finet\".\"referral_settings\".\"inviter_max_rewards\" between 0 and 1000"
+        },
+        "referral_settings_window": {
+          "name": "referral_settings_window",
+          "value": "\"finet\".\"referral_settings\".\"redeem_window_hours\" between 1 and 720"
         }
       },
       "isRLSEnabled": false

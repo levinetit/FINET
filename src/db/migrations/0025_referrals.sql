@@ -42,7 +42,10 @@ CREATE TABLE "finet"."referral_settings" (
 	"inviter_max_rewards" integer DEFAULT 0 NOT NULL,
 	"redeem_window_hours" integer DEFAULT 24 NOT NULL,
 	CONSTRAINT "referral_settings_single" CHECK ("finet"."referral_settings"."id"),
-	CONSTRAINT "referral_settings_ranges" CHECK ("finet"."referral_settings"."invitee_days" between 0 and 3650 and "finet"."referral_settings"."inviter_days" between 0 and 3650 and "finet"."referral_settings"."inviter_max_rewards" between 0 and 1000 and "finet"."referral_settings"."redeem_window_hours" between 1 and 720)
+	CONSTRAINT "referral_settings_invitee_days" CHECK ("finet"."referral_settings"."invitee_days" between 0 and 3650),
+	CONSTRAINT "referral_settings_inviter_days" CHECK ("finet"."referral_settings"."inviter_days" between 0 and 3650),
+	CONSTRAINT "referral_settings_inviter_max" CHECK ("finet"."referral_settings"."inviter_max_rewards" between 0 and 1000),
+	CONSTRAINT "referral_settings_window" CHECK ("finet"."referral_settings"."redeem_window_hours" between 1 and 720)
 );
 --> statement-breakpoint
 CREATE TABLE "finet"."referrals" (
