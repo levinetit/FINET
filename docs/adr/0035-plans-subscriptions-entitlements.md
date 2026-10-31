@@ -1,6 +1,6 @@
 # ADR 0035: planuri, abonamente și `entitlements` în `saas` (Faza 12-A)
 
-- **Stare:** propus (branch `phase/12a-plans`). **Cere migrația `0023_plans_subscriptions`** (două tabele noi și o funcție de citire; fără modificări ale tabelelor existente). Neaplicată pe Supabase. Fără Stripe în această sub-fază (12-B).
+- **Stare:** 12-A livrat și aplicat (migrația `0023_plans_subscriptions`, PR #51); 12-A.2 propus (branch `phase/12a2-plan-limits`, **cere migrația `0024_queue_priority`**, doar o redefinire de funcție). **Plățile:** operatorul NU folosește Stripe (decizie 2026-10-31); furnizorul de plată, dacă există, e de decis. Tabelul `subscriptions` acceptă deja `provider` = `manual`, `stripe` sau `founder`; un alt furnizor cere o migrație mică la `subscriptions_provider_valid`.
 - **Legături:** master prompt Faza 12, ADR 0029 (înregistrare), ADR 0034 (expunere), SECURITY_CHECKLIST §38.
 
 ## Problema pe care o rezolvă
@@ -15,7 +15,7 @@ Până acum, în `APP_MODE=saas` fiecare apel `can`/`limit` din `entitlements` a
 
 ### 2. Aplicația citește, operatorul scrie
 
-`finet_app` are doar `SELECT` (RLS: planurile pentru orice utilizator autentificat, abonamentul pentru membrii gospodăriei). Scrierea o face operatorul ca `finet_migrator`, direct în bază (INFRA 4y), prin politici explicite pe acel rol. Alegere deliberată față de un CLI de administrare: CLI-ul rulează ca `finet_app`, deci ar fi cerut o funcție `SECURITY DEFINER` de scriere apelabilă de un server web compromis, adică posibilitatea de a-și acorda un plan. Webhook-urile Stripe (12-B) vor avea o funcție dedicată, cu semnătura verificată în aplicație și cu tabel de evenimente văzute (idempotență).
+`finet_app` are doar `SELECT` (RLS: planurile pentru orice utilizator autentificat, abonamentul pentru membrii gospodăriei). Scrierea o face operatorul ca `finet_migrator`, direct în bază (INFRA 4y), prin politici explicite pe acel rol. Alegere deliberată față de un CLI de administrare: CLI-ul rulează ca `finet_app`, deci ar fi cerut o funcție `SECURITY DEFINER` de scriere apelabilă de un server web compromis, adică posibilitatea de a-și acorda un plan. Orice integrare de plată viitoare (12-B, furnizor de decis) va avea o funcție de scriere dedicată, cu semnătura verificată în aplicație și cu tabel de evenimente văzute (idempotență).
 
 ### 3. Planul efectiv: `finet.household_plan(p_household)`
 
@@ -36,7 +36,14 @@ Un singur punct de control, în `handle` (`src/app/api/v1/_lib/http.ts`): în `s
 
 ### 6. Ce este legat de plan acum, și ce nu
 
-Legate și testate pe server: zilnic documente și cota de stocare (apelurile existente), plafonul de membri (`createInvite`: membri + invitații active; `acceptInvite`: depășirea anulează intrarea), `ask.finet`, `reports.custom` (crearea unei definiții), blocarea scrierilor. **Rămân pentru 12-A.2**, pentru că cer schimbări mai adânci: dimensiunea maximă a fișierului pe plan (citirea fișierului se face înainte de a ști planul), tipurile de fișier acceptate, prioritatea cozii în worker, istoricul de bonuri pe plan.
+Legate și testate pe server: zilnic documente și cota de stocare (apelurile existente), plafonul de membri (`createInvite`: membri + invitații active; `acceptInvite`: depășirea anulează intrarea), `ask.finet`, `reports.custom` (crearea unei definiții), blocarea scrierilor. **12-A.2** (migrația `0024_queue_priority`, aceeași ADR):
+
+- `documents.maxFileMb`: dimensiunea maximă a fișierului pe plan. Gospodăria e cunoscută înainte de citirea corpului, deci limita se aplică la primire: `min(limita tehnică din config, plan)`; plan fără cheie sau fără plan → 0 (nimic nu se primește).
+- `documents.jpeg|png|webp|pdf` (funcții de plan): tipurile acceptate, verificate după conținut, înainte de înregistrare; un tip lipsă din plan → `403 plan_restricted`, iar fișierele scrise se șterg. **Un plan `saas` trebuie să listeze tipurile pe care le permite.**
+- `receipts.historyMonths` și `receipts.archive`: bonurile mai vechi decât N luni (după `created_at`) nu se listează și detaliul lor răspunde 404, în afară de planurile cu `receipts.archive` (arhivă permanentă) sau fără cheie. Cu abonament expirat (`read_only`) sau fără plan configurat datele rămân vizibile (citire și export). Se aplică lista și detaliul bonurilor; exporturile și agregatele (prețuri, rapoarte) nu sunt filtrate.
+- `queue.priority`: `finet.queued_documents` păstrează echitatea din 0010 (cel mult 5 pe gospodărie, „pe rând”) și, în cadrul aceluiași rând, ia întâi planul cu prioritatea mai mare. Fără cheie, fără plan viu sau în `personal` prioritatea e 0, deci ordinea rămâne cea veche.
+
+Nu sunt legate de plan: dimensiunea extraselor bancare (`/statements/uploads`, 20 MB fix) și cota zilnică de extrase.
 
 ### 7. Ce NU face această schimbare
 

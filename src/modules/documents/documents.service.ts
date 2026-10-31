@@ -7,7 +7,7 @@ import { DOCUMENT_STATUSES } from "@/db/schema";
 import { type Actor, NotFoundError } from "@/lib/authz";
 import { DEFAULT_TIME_ZONE, localDateOf } from "@/lib/calendar";
 import type { Config } from "@/lib/config";
-import { ConflictError, ValidationError } from "@/lib/errors";
+import { ConflictError, PlanRestrictedError, ValidationError } from "@/lib/errors";
 import {
   type Storage,
   type StorageKey,
@@ -43,6 +43,7 @@ import {
   type UploadedDocument,
   uploadFieldsSchema,
 } from "./documents.schema";
+import type { AcceptedMime } from "./content";
 import { type ReceivedFile, type ReceivedUpload, receiveMultipart } from "./multipart";
 
 /**
@@ -72,6 +73,14 @@ export type DocumentsDeps = LedgerDeps &
   }>;
 
 const MB = 1024 * 1024;
+
+/** Funcția de plan pentru fiecare tip de fișier acceptat (`documents.<tip>`). */
+const PLAN_FILE_TYPE: Readonly<Record<AcceptedMime, "jpeg" | "png" | "webp" | "pdf">> = {
+  "image/jpeg": "jpeg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
+};
 
 export function entitlementsOf(
   deps: Pick<DocumentsDeps, "entitlements" | "config" | "db">,
@@ -116,8 +125,11 @@ export async function uploadDocuments(
   // Doar membrii pot scrie în storage-ul gospodăriei: verificarea apartenenței se face ÎNAINTE
   // de a citi corpul (un străin nu poate umple discul altcuiva).
   await inHousehold(deps, actor, householdId, async () => undefined);
+  // Dimensiunea maximă a planului (Faza 12-A.2): niciodată peste limita tehnică din configurație;
+  // în `saas`, un plan fără cheie sau fără plan dă 0 (FAIL CLOSED: nimic nu se primește).
+  const planMb = await entitlementsOf(deps).limit(householdId, "documents.maxFileMb");
   const upload = await receiveMultipart(request, deps.storage, householdId, {
-    maxFileBytes: limits.maxUploadBytes,
+    maxFileBytes: Math.min(limits.maxUploadBytes, planMb * MB),
     maxFiles: limits.maxFilesPerRequest,
     maxImagePixels: limits.maxImagePixels,
   });
@@ -165,6 +177,14 @@ export async function registerUpload(
       throw new ValidationError({
         kind: "Extrasele bancare vor fi acceptate într-o versiune viitoare.",
       });
+    }
+    // Tipurile de fișier acceptate le decide planul (`documents.jpeg|png|webp|pdf`); în `personal`
+    // `can` e mereu `true`. Fișierele deja scrise se șterg prin `catch`-ul de mai jos.
+    const planFeatures = entitlementsOf(deps);
+    for (const mime of new Set(upload.files.map((f) => f.mime))) {
+      if (!(await planFeatures.can(householdId, `documents.${PLAN_FILE_TYPE[mime]}`))) {
+        throw new PlanRestrictedError("Tipul de fișier nu e disponibil în planul curent.");
+      }
     }
     const longReceipt = fields.longReceipt === "true";
     if (longReceipt) {

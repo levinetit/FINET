@@ -36,6 +36,10 @@ export type LimitValues = {
   "storage.quotaMb": number;
   /** Numărul maxim de membri ai gospodăriei (în `personal` nu există plafon pe plan). */
   "household.maxMembers": number;
+  /** Dimensiunea maximă a unui fișier încărcat, în MB (peste limita tehnică din config nu urcă). */
+  "documents.maxFileMb": number;
+  /** Prioritatea în coada workerului (mai mare = mai devreme, în cadrul aceluiași rând de echitate). */
+  "queue.priority": number;
 };
 export type LimitKey = keyof LimitValues;
 
@@ -44,6 +48,8 @@ const LIMIT_KEYS: readonly LimitKey[] = [
   "ai.monthlyBudget",
   "storage.quotaMb",
   "household.maxMembers",
+  "documents.maxFileMb",
+  "queue.priority",
 ];
 /** Limitele numerice care vin din plan (restul sunt globale). */
 type PlanLimitKey = Exclude<LimitKey, "ai.monthlyBudget">;
@@ -121,6 +127,8 @@ export function createEntitlements(
   limits: Readonly<{
     ai: Pick<Config["ai"], "dailyDocumentLimit" | "monthlyBudget">;
     storage: Config["storage"];
+    /** Limita tehnică de dimensiune (în `personal`); lipsă = fără plafon aici. */
+    documents?: Pick<Config["documents"], "maxUploadBytes">;
   }>,
   db?: DbOrTx,
 ): Entitlements {
@@ -129,6 +137,10 @@ export function createEntitlements(
     "ai.monthlyBudget": limits.ai.monthlyBudget,
     "storage.quotaMb": limits.storage.quotaMb,
     "household.maxMembers": UNLIMITED,
+    "documents.maxFileMb": limits.documents
+      ? Math.max(1, Math.floor(limits.documents.maxUploadBytes / (1024 * 1024)))
+      : UNLIMITED,
+    "queue.priority": 0,
   };
 
   function client(): DbOrTx {
@@ -176,4 +188,24 @@ export function limit<K extends LimitKey>(
   db?: DbOrTx,
 ): Promise<LimitValues[K]> {
   return current(db).limit(householdId, key);
+}
+
+/**
+ * Câte luni de istoric de bonuri vede gospodăria, sau `null` (fără plafon). Doar în `saas`, doar
+ * cu planul în stare `ok`, fără funcția `receipts.archive` (arhivă permanentă) și cu
+ * `receipts.historyMonths` > 0 în plan. Fără plan viu (expirat, fără plan configurat) datele
+ * rămân vizibile: la expirare ele ramân accesibile pentru citire și export (master prompt, Faza 12),
+ * iar o configurare lipsă nu ascunde datele nimănui.
+ */
+export async function receiptHistoryMonths(
+  mode: AppMode,
+  db: DbOrTx,
+  householdId: string,
+): Promise<number | null> {
+  assertHouseholdId(householdId);
+  if (mode !== "saas") return null;
+  const plan = await householdPlan(db, householdId);
+  if (plan.state !== "ok" || plan.features.includes("receipts.archive")) return null;
+  const months = plan.limits["receipts.historyMonths"];
+  return months !== undefined && months > 0 ? months : null;
 }

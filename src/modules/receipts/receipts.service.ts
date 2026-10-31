@@ -22,6 +22,7 @@ import { insertAudit } from "@/modules/auth/audit";
 import { selectCategory } from "@/modules/categories/categories.repo";
 import { addUsage, lockHouseholdDocuments, usageOfDay } from "@/modules/documents/documents.repo";
 import { type DocumentsDeps, entitlementsOf } from "@/modules/documents/documents.service";
+import { receiptHistoryMonths } from "@/modules/entitlements";
 import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
 import { isValidId, parseInput } from "@/modules/ledger/input";
 import { assertAccountsWithinJsonRange } from "@/modules/ledger/range-guard";
@@ -83,6 +84,18 @@ type ReceiptRow = typeof receipts.$inferSelect;
 type LineRow = typeof receiptLines.$inferSelect;
 
 const nowOf = (deps: Pick<ReceiptsDeps, "now">) => (deps.now ?? (() => new Date()))();
+
+/**
+ * Începutul istoricului vizibil după plan (`null` = tot istoricul). Doar în `saas`; vezi
+ * `receiptHistoryMonths` (Faza 12-A.2, ADR 0035).
+ */
+async function historyCutoff(deps: ReceiptsDeps, householdId: string): Promise<Date | null> {
+  const months = await receiptHistoryMonths(deps.config.appMode, deps.db, householdId);
+  if (months === null) return null;
+  const since = nowOf(deps);
+  since.setUTCMonth(since.getUTCMonth() - months);
+  return since;
+}
 
 // --- Citirea --------------------------------------------------------------------------------------
 
@@ -274,9 +287,12 @@ export async function listReceipts(
   }
   const limit = q.limit ?? RECEIPT_LIST_DEFAULT_LIMIT;
   const cursor = q.cursor === undefined ? null : decodeReceiptCursor(q.cursor);
+  const since = await historyCutoff(deps, householdId);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     const hh = m.householdId;
     const conds: SQL[] = [eq(receipts.householdId, hh)];
+    // Istoricul vizibil după plan (Faza 12-A.2): bonurile mai vechi nu se listează.
+    if (since) conds.push(gte(receipts.createdAt, since));
     if (q.status) conds.push(eq(receipts.status, q.status));
     if (q.merchant) conds.push(ilike(receipts.merchantName, `%${escapeLike(q.merchant)}%`));
     if (q.q) {
@@ -347,9 +363,13 @@ export async function getReceipt(
   id: string,
 ): Promise<ReceiptDetail> {
   if (!isValidId(id)) throw new NotFoundError();
-  return inHousehold(deps, actor, householdId, (tx, m) =>
-    detailIn(tx, m.householdId, id.toLowerCase()),
-  );
+  const since = await historyCutoff(deps, householdId);
+  return inHousehold(deps, actor, householdId, async (tx, m) => {
+    const detail = await detailIn(tx, m.householdId, id.toLowerCase());
+    // Un bon din afara istoricului vizibil răspunde ca unul inexistent (fără a spune de ce).
+    if (since && new Date(detail.createdAt) < since) throw new NotFoundError();
+    return detail;
+  });
 }
 
 // --- Corectarea -----------------------------------------------------------------------------------

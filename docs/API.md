@@ -36,6 +36,7 @@ Format unic: `{ "error": { "code", "message", "fields"?, "reason"? } }`.
 | 409 | `conflict` | starea curentă nu permite operația; `reason` stabil (`account_not_empty`, `account_archived`, `category_in_use`, `system_category_readonly`, `account_name_taken`, `tag_name_taken`, `system_tag`, `budget_exists`, `goal_abandoned`, `goal_saved_negative`, `export_too_large`, …) |
 | 409 | `request_in_progress` | o cerere cu aceeași `Idempotency-Key` e în desfășurare |
 | 402 | `subscription_required` | doar `saas`: abonamentul gospodăriei a expirat sau a fost anulat; scrierile sunt blocate, citirea și exportul rămân (ADR 0035) |
+| 403 | `plan_restricted` | doar `saas`: tipul sau dimensiunea fișierului nu sunt permise de planul gospodăriei (ADR 0035) |
 | 413 | `payload_too_large` | corp peste 16 KiB |
 | 415 | `unsupported_media_type` | corp care nu e `application/json` |
 | 422 | `idempotency_key_reused` | aceeași `Idempotency-Key` pentru altă cerere |

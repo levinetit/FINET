@@ -5,7 +5,7 @@ import { z } from "zod";
 import { type Db, type DbOrTx, withRlsOn } from "@/db";
 import { type Actor, ForbiddenError, NotFoundError } from "@/lib/authz";
 import type { Config, RateLimitRule } from "@/lib/config";
-import { ConflictError, ValidationError } from "@/lib/errors";
+import { ConflictError, PlanRestrictedError, ValidationError } from "@/lib/errors";
 import { MoneyOverflowError } from "@/lib/money";
 import type { AskAi } from "@/modules/ask/ask-runtime";
 import {
@@ -195,6 +195,9 @@ export function errorPayload(error: unknown): ErrorPayload | null {
   }
   if (error instanceof ConflictError) {
     return make(409, error.code, error.message, undefined, error.reason);
+  }
+  if (error instanceof PlanRestrictedError) {
+    return make(error.status, error.code, error.message);
   }
   // Faza 8: invitația inutilizabilă (răspuns uniform, fără enumerare) și limita de acceptare.
   if (error instanceof InviteUnavailableError) {
