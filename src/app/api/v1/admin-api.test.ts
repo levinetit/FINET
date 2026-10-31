@@ -483,6 +483,14 @@ describe.skipIf(!TEST_ADMIN_URL)("11-B: feedback, anunțuri, erori, administrare
     expect((await set(adminId, "disabled")).status).toBe(400); // nu propriul cont
     expect((await set(otherId, "dezactivat")).status).toBe(400);
     expect((await set(NIL, "disabled")).status).toBe(404);
+    // Un alt administrator nu poate fi dezactivat (0022), dar poate fi „reactivat”.
+    await fx.scratch.admin`update finet.users set is_platform_admin = true where id = ${otherId}`;
+    expect((await set(otherId, "disabled")).status).toBe(400);
+    expect((await set(otherId, "active")).data).toEqual({ changed: true });
+    await fx.scratch.admin`update finet.users set is_platform_admin = false where id = ${otherId}`;
+    const [still] = await fx.scratch.admin<{ status: string }[]>`
+      select status from finet.users where id = ${otherId}`;
+    expect(still?.status).toBe("active");
     const off = await set(otherId, "disabled");
     expect(off.data).toEqual({ changed: true });
     // Contul dezactivat nu mai are sesiune validă.
@@ -491,7 +499,7 @@ describe.skipIf(!TEST_ADMIN_URL)("11-B: feedback, anunțuri, erori, administrare
     expect((await set(otherId, "active")).data).toEqual({ changed: true });
     const audits = await fx.scratch.admin<{ action: string; metadata: Record<string, unknown> }[]>`
       select action, metadata from finet.audit_events where action = 'admin.user_status_changed' order by created_at, id`;
-    expect(audits.map((a) => a.metadata.status)).toEqual(["disabled", "active"]);
+    expect(audits.map((a) => a.metadata.status)).toEqual(["active", "disabled", "active"]);
   });
 
   async function fetchMe(s: Sessions): Promise<number> {

@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { type Db, type Tx, withRlsOn } from "@/db";
 import { announcements, appErrors, feedback, users } from "@/db/schema";
+import { pgErrorInfo } from "@/db/pg-errors";
 import { NotFoundError } from "@/lib/authz";
 import { ValidationError } from "@/lib/errors";
 import { type AuditEvent, currentHouseholdIdOf, insertAudit } from "@/modules/auth/audit";
@@ -185,24 +186,32 @@ export async function adminSetUserStatus(
   raw: unknown,
 ): Promise<{ changed: boolean }> {
   const { status } = parseInput(userStatusSchema, raw);
-  return withRlsOn(db, { userId: adminId }, async (tx) => {
-    await requireAdmin(tx);
-    if (targetId === adminId) {
-      throw new ValidationError({ id: "Nu îți poți schimba propriul cont." });
-    }
-    const rows = await tx.execute<{ changed: boolean }>(
-      sql`select finet.admin_set_user_status(${targetId}::uuid, ${status}) as changed`,
-    );
-    const changed = rows[0]?.changed === true;
-    if (!changed) throw new NotFoundError();
-    await audit(tx, adminId, {
-      action: "admin.user_status_changed",
-      targetType: "user",
-      targetId,
-      metadata: { status },
+  try {
+    return await withRlsOn(db, { userId: adminId }, async (tx) => {
+      await requireAdmin(tx);
+      if (targetId === adminId) {
+        throw new ValidationError({ id: "Nu îți poți schimba propriul cont." });
+      }
+      const rows = await tx.execute<{ changed: boolean }>(
+        sql`select finet.admin_set_user_status(${targetId}::uuid, ${status}) as changed`,
+      );
+      const changed = rows[0]?.changed === true;
+      if (!changed) throw new NotFoundError();
+      await audit(tx, adminId, {
+        action: "admin.user_status_changed",
+        targetType: "user",
+        targetId,
+        metadata: { status },
+      });
+      return { changed };
     });
-    return { changed };
-  });
+  } catch (error) {
+    // Funcția refuză (22023) dezactivarea unui alt administrator al platformei (0022).
+    if (pgErrorInfo(error)?.code === "22023") {
+      throw new ValidationError({ id: "Un administrator nu poate fi dezactivat." });
+    }
+    throw error;
+  }
 }
 
 export async function adminFeedback(db: Db, userId: string, rawQuery: unknown = {}) {
