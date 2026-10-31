@@ -48,7 +48,7 @@ function isBearer(headers: Headers): boolean {
 
 export async function requireSession(request: Request, deps: SessionDeps): Promise<SessionInfo> {
   const headers = withTrustedClientIp(request.headers, {
-    accessVerified: deps.config.access.required,
+    accessVerified: deps.config.access.clientIpTrusted,
   });
   let result: Awaited<ReturnType<FinetAuth["api"]["getSession"]>> = null;
   try {

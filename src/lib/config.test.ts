@@ -84,7 +84,13 @@ describe("parseConfig", () => {
     expect(c.appName).toBe("FINET");
     expect(c.storage).toMatchObject({ driver: "local", dir: "./.data/storage", quotaMb: 5000 });
     expect(c.storage.s3).toBeNull();
-    expect(c.access).toEqual({ required: false, teamDomain: null, aud: null });
+    expect(c.access).toEqual({
+      required: false,
+      teamDomain: null,
+      aud: null,
+      publicSaas: false,
+      clientIpTrusted: false,
+    });
     expect(c.database.url).toBeNull();
     expect(c.role).toBe("web");
     expect(c.ai.dailyDocumentLimit).toBe(50);
@@ -901,5 +907,67 @@ describe("furnizorul AI (F6-B, ADR 0014)", () => {
       "json_object",
     );
     expect(issuesOf({ ...DEV, AI_RESPONSE_FORMAT: "xml" })).toEqual(["AI_RESPONSE_FORMAT"]);
+  });
+});
+
+describe("expunerea publică `saas` (ADR 0034)", () => {
+  const SAAS_PROD = { ...PROD, APP_MODE: "saas" } as const;
+
+  it("implicit oprită: Access obligatoriu pe tot, IP-ul din Access e de încredere", () => {
+    const c = parseConfig(SAAS_PROD);
+    expect(c.access).toMatchObject({ required: true, publicSaas: false, clientIpTrusted: true });
+  });
+
+  it("SAAS_PUBLIC_ACCESS=true în `saas`: publicSaas, Access rămâne configurat, IP-ul NU mai e de încredere", () => {
+    const c = parseConfig({ ...SAAS_PROD, SAAS_PUBLIC_ACCESS: "true" });
+    expect(c.access).toMatchObject({ required: true, publicSaas: true, clientIpTrusted: false });
+    expect(c.access.teamDomain).not.toBeNull();
+  });
+
+  it("TRUST_CF_CONNECTING_IP=true (doar cu publicSaas) declară originea accesibilă numai prin tunel", () => {
+    const c = parseConfig({
+      ...SAAS_PROD,
+      SAAS_PUBLIC_ACCESS: "true",
+      TRUST_CF_CONNECTING_IP: "true",
+    });
+    expect(c.access).toMatchObject({ publicSaas: true, clientIpTrusted: true });
+  });
+
+  it("FAIL-CLOSED: în `personal` niciun flag de expunere nu e acceptat (producția nu poate porni cu el)", () => {
+    expect(issuesOf({ ...PROD, SAAS_PUBLIC_ACCESS: "true" })).toEqual(["SAAS_PUBLIC_ACCESS"]);
+    expect(issuesOf({ ...PROD, TRUST_CF_CONNECTING_IP: "true" })).toEqual([
+      "TRUST_CF_CONNECTING_IP",
+    ]);
+    // Cu ambele, rămâne eroarea de bază (TRUST e „permis” doar împreună cu publicSaas).
+    expect(
+      issuesOf({ ...PROD, SAAS_PUBLIC_ACCESS: "true", TRUST_CF_CONNECTING_IP: "true" }),
+    ).toEqual(["SAAS_PUBLIC_ACCESS"]);
+    // `false` explicit în `personal` e inofensiv.
+    expect(parseConfig({ ...PROD, SAAS_PUBLIC_ACCESS: "false" }).access.publicSaas).toBe(false);
+  });
+
+  it("publicSaas cere Access configurat (rămâne pe /admin) și TRUST cere publicSaas", () => {
+    expect(
+      issuesOf({ ...SAAS_PROD, SAAS_PUBLIC_ACCESS: "true", CF_ACCESS_TEAM_DOMAIN: undefined }),
+    ).toEqual(["CF_ACCESS_TEAM_DOMAIN"]);
+    expect(
+      issuesOf({
+        ...DEV,
+        APP_MODE: "saas",
+        SAAS_PUBLIC_ACCESS: "true",
+      }),
+    ).toEqual(["SAAS_PUBLIC_ACCESS"]);
+    expect(issuesOf({ ...SAAS_PROD, TRUST_CF_CONNECTING_IP: "true" })).toEqual([
+      "TRUST_CF_CONNECTING_IP",
+    ]);
+  });
+
+  it("acceptă doar `true`/`false`", () => {
+    for (const v of ["1", "yes", "TRUE", "on"]) {
+      expect(issuesOf({ ...SAAS_PROD, SAAS_PUBLIC_ACCESS: v }), v).toEqual(["SAAS_PUBLIC_ACCESS"]);
+      expect(issuesOf({ ...SAAS_PROD, TRUST_CF_CONNECTING_IP: v }), v).toEqual([
+        "TRUST_CF_CONNECTING_IP",
+      ]);
+    }
   });
 });

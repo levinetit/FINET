@@ -83,6 +83,17 @@ export type AccessConfig = Readonly<{
   teamDomain: string | null;
   /** Audiența (AUD tag) aplicației Access. */
   aud: string | null;
+  /**
+   * `saas` public (ADR 0034): căile publice și aplicația nu mai cer JWT Access; rămân sub Access
+   * `/admin`, `/api/v1/admin/*` și `/api/health*`. Doar cu `APP_MODE=saas` și Access configurat.
+   */
+  publicSaas: boolean;
+  /**
+   * `true` când `cf-connecting-ip` poate fi crezut: fie fiecare cerere a trecut prin Access
+   * (`required` fără `publicSaas`), fie operatorul a declarat că originea e accesibilă DOAR prin
+   * tunelul Cloudflare (`TRUST_CF_CONNECTING_IP=true`, doar cu `publicSaas`).
+   */
+  clientIpTrusted: boolean;
 }>;
 
 /**
@@ -300,6 +311,9 @@ const envSchema = z.object({
   STORAGE_S3_SECRET_ACCESS_KEY: optionalString,
 
   CF_ACCESS_REQUIRED: boolString,
+  // Expunere publică `saas` (docs/EXPOSURE.md, ADR 0034): implicit oprite, doar cu APP_MODE=saas.
+  SAAS_PUBLIC_ACCESS: boolString,
+  TRUST_CF_CONNECTING_IP: boolString,
   // Doar dezvoltare/teste: workerul fără TLS verificat (refuzat în producție; ADR 0011).
   FINET_ALLOW_INSECURE_DB: z.enum(["1"]).optional(),
   CF_ACCESS_TEAM_DOMAIN: z.string().regex(HOSTNAME).optional(),
@@ -692,6 +706,24 @@ export function parseConfig(
     need("CF_ACCESS_TEAM_DOMAIN", "când CF_ACCESS_REQUIRED=true");
     need("CF_ACCESS_AUD", "când CF_ACCESS_REQUIRED=true");
   }
+  // Expunere publică (ADR 0034): niciodată în `personal`, și cu Access configurat (rămâne pe /admin).
+  const publicSaas = e.SAAS_PUBLIC_ACCESS === "true";
+  if (publicSaas && e.APP_MODE !== "saas") {
+    issues.push({ variable: "SAAS_PUBLIC_ACCESS", problem: "este permis doar când APP_MODE=saas" });
+  }
+  if (publicSaas && !accessRequired) {
+    issues.push({
+      variable: "SAAS_PUBLIC_ACCESS",
+      problem: "cere CF_ACCESS_REQUIRED=true (Access rămâne pe /admin)",
+    });
+  }
+  const trustTunnelIp = e.TRUST_CF_CONNECTING_IP === "true";
+  if (trustTunnelIp && !publicSaas) {
+    issues.push({
+      variable: "TRUST_CF_CONNECTING_IP",
+      problem: "este permis doar cu SAAS_PUBLIC_ACCESS=true",
+    });
+  }
 
   // Autentificarea (F1-B): serverul web de producție cere secretul Better Auth și adresa publică
   // HTTPS (cookie-urile `Secure`, `trustedOrigins`). Celelalte roluri nu primesc secretul.
@@ -921,6 +953,8 @@ export function parseConfig(
       required: accessRequired,
       teamDomain: e.CF_ACCESS_TEAM_DOMAIN ?? null,
       aud: e.CF_ACCESS_AUD ?? null,
+      publicSaas,
+      clientIpTrusted: publicSaas ? trustTunnelIp : accessRequired,
     }),
     healthToken: e.HEALTH_TOKEN ?? null,
     auth: Object.freeze({

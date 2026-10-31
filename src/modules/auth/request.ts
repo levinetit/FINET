@@ -31,7 +31,7 @@ export const CLIENT_HEADER = "x-finet-client";
 export type TrustPolicy = Readonly<{
   /**
    * `true` când `src/proxy.ts` a verificat deja JWT-ul Cloudflare Access pentru această cerere
-   * (`config.access.required`): doar atunci cererea a trecut prin tunel, iar `cf-connecting-ip`
+   * (`config.access.clientIpTrusted`): doar atunci cererea a trecut prin tunel, iar `cf-connecting-ip`
    * l-a pus Cloudflare, nu clientul.
    */
   accessVerified: boolean;
