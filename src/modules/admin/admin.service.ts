@@ -206,9 +206,9 @@ export async function adminSetUserStatus(
       return { changed };
     });
   } catch (error) {
-    // Funcția refuză (22023) dezactivarea unui alt administrator al platformei (0022).
+    // Funcția refuză (22023) orice schimbare de stare pe un administrator al platformei (0022).
     if (pgErrorInfo(error)?.code === "22023") {
-      throw new ValidationError({ id: "Un administrator nu poate fi dezactivat." });
+      throw new ValidationError({ id: "Starea unui administrator o schimbă doar operatorul." });
     }
     throw error;
   }

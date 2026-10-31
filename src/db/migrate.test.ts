@@ -749,6 +749,8 @@ describe("readMigrations (fără bază)", () => {
     expect([...code.matchAll(/security\s+definer/gi)]).toHaveLength(1);
     expect(code).toContain("finet.is_platform_admin()");
     expect(code).toContain("u.is_platform_admin");
+    // Garda nu depinde de sensul schimbării (nici dezactivare, nici reactivare).
+    expect(code).not.toMatch(/p_status = 'disabled' and exists/);
     expect(code).not.toMatch(/\b(delete|truncate|drop|alter)\b/i);
     expect(code).toContain(
       "revoke all on function finet.admin_set_user_status(uuid, text) from public",
