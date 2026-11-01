@@ -80,7 +80,7 @@ jobs:
           aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
           "$aapt2" dump badging "$apk" | tee badging.txt | head -5
           grep -q "package: name='ro.finet.app'" badging.txt
-          grep -q "^sdkVersion:'29'" badging.txt
+          grep -q "^minSdkVersion:'29'" badging.txt
           grep -q "uses-permission: name='android.permission.INTERNET'" badging.txt
 
       - uses: actions/upload-artifact@v5
