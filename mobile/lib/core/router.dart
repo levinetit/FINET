@@ -7,6 +7,7 @@ import '../features/auth/login_screen.dart';
 import '../features/auth/session.dart';
 import '../features/auth/session_screens.dart';
 import '../features/budgets/budgets_screen.dart';
+import '../features/recurring/recurring_screen.dart';
 import '../features/finance/models.dart';
 import '../features/home/home_screen.dart';
 import '../features/more/more_screen.dart';
@@ -73,6 +74,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(path: '/budgets', builder: (_, _) => const BudgetsScreen()),
+      GoRoute(path: '/recurring', builder: (_, _) => const RecurringScreen()),
       GoRoute(
         path: '/transactions/new',
         builder: (_, _) => const TransactionFormScreen(),

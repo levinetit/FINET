@@ -33,6 +33,12 @@ abstract final class UsageEvents {
   static const reportViewed = 'report_viewed';
   static const transactionCreated = 'transaction_created';
   static const goalContributionAdded = 'goal_contribution_added';
+  static const recurringGenerated = 'recurring_generated';
+  static const receiptScanStarted = 'receipt_scan_started';
+  static const receiptUploaded = 'receipt_uploaded';
+  static const receiptConfirmed = 'receipt_confirmed';
+  static const statementImported = 'statement_imported';
+  static const shareImport = 'share_import';
 }
 
 /// Ecranele acceptate de server pentru `screen_view` (subset folosit acum).
@@ -48,6 +54,9 @@ abstract final class UsageScreens {
   static const transactionEdit = 'transaction_edit';
   static const budgets = 'budgets';
   static const goals = 'goals';
+  static const recurring = 'recurring';
+  static const receipts = 'receipts';
+  static const statements = 'statements';
 }
 
 /// Coada locală de evenimente: mică (cel mult [maxQueue]), în memorie, trimisă în loturi de cel

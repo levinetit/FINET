@@ -81,15 +81,18 @@ jobs:
           echo "Mărime: $size octeți"
           test "$size" -gt 5000000
           aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
-          "$aapt2" dump badging "$apk" | tee badging.txt | head -5
+          # Fișier întreg (fără `| head`, care poate tăia ieșirea): verificările negative depind de el.
+          "$aapt2" dump badging "$apk" > badging.txt
+          head -5 badging.txt
           grep -q "package: name='ro.finet.app'" badging.txt
           grep -q "^minSdkVersion:'29'" badging.txt
           grep -q "uses-permission: name='android.permission.INTERNET'" badging.txt
           # Camera prin intentul sistemului: nicio permisiune de cameră sau de stocare în APK.
-          ! grep -q "uses-permission: name='android.permission.CAMERA'" badging.txt
-          ! grep -q "uses-permission: name='android.permission.READ_EXTERNAL_STORAGE'" badging.txt
-          ! grep -q "uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE'" badging.txt
-          ! grep -q "uses-permission: name='android.permission.READ_MEDIA" badging.txt
+          # `! grep` nu oprește scriptul sub `set -e`, de aceea `if` explicit.
+          if grep -E "uses-permission(-sdk-23)?: name='android\.permission\.(CAMERA|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA[^']*)'" badging.txt; then
+            echo "Permisiune interzisă în APK" >&2
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v5
         with:
