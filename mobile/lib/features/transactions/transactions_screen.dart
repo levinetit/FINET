@@ -292,7 +292,13 @@ class _TransactionTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            AmountText(t.signed, signed: !t.isTransfer, bold: true),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: AmountText(t.signed, signed: !t.isTransfer, bold: true),
+              ),
+            ),
             if (onDelete != null)
               PopupMenuButton<String>(
                 tooltip: 'Mai multe',

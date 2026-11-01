@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:finet_mobile/core/config/env.dart';
 import 'package:finet_mobile/core/network/api_client.dart';
 import 'package:finet_mobile/core/network/api_error.dart';
+import 'package:finet_mobile/core/network/interceptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Adaptor HTTP fals: răspunde din coadă și păstrează cererile primite.
@@ -171,6 +172,45 @@ void main() {
         throwsA(isA<DioException>()),
       );
       expect(adapter.requests, hasLength(1));
+    });
+
+    test(
+      'o cerere marcată `noRetry` (încărcare multipart) nu se reîncearcă',
+      () async {
+        final adapter = FakeAdapter([netError()]);
+        await expectLater(
+          client(adapter).post<dynamic>(
+            '/api/v1/documents',
+            data: {'a': 1},
+            options: Options(extra: {RetryInterceptor.noRetryKey: true}),
+          ),
+          throwsA(isA<DioException>()),
+        );
+        // Corpul `FormData` ar fi consumat: reîncercarea o face apelantul, din aceiași octeți.
+        expect(adapter.requests, hasLength(1));
+      },
+    );
+
+    test(
+      'timeout la conectare și la trimitere se reîncearcă (conexiune slabă)',
+      () async {
+        for (final type in [
+          DioExceptionType.connectionTimeout,
+          DioExceptionType.sendTimeout,
+        ]) {
+          final adapter = FakeAdapter([
+            netError(type),
+            json({'ok': true}),
+          ]);
+          await client(adapter).get<dynamic>('/api/v1/accounts');
+          expect(adapter.requests, hasLength(2), reason: '$type');
+        }
+      },
+    );
+
+    test('încărcările au timeouturi mai lungi decât cererile JSON', () {
+      expect(uploadSendTimeout, greaterThan(const Duration(seconds: 30)));
+      expect(uploadReceiveTimeout, greaterThan(const Duration(seconds: 30)));
     });
 
     test('PATCH (neidempotent, fără cheie) nu se reîncearcă', () async {

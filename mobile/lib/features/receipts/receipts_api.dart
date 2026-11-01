@@ -100,6 +100,8 @@ class ReceiptsApi {
             options: Options(
               extra: {RetryInterceptor.noRetryKey: true},
               contentType: Headers.multipartFormDataContentType,
+              sendTimeout: uploadSendTimeout,
+              receiveTimeout: uploadReceiveTimeout,
             ),
           ),
         );

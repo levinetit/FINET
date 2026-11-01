@@ -39,6 +39,8 @@ abstract final class UsageEvents {
   static const receiptConfirmed = 'receipt_confirmed';
   static const statementImported = 'statement_imported';
   static const shareImport = 'share_import';
+  static const updatePromptShown = 'update_prompt_shown';
+  static const updateStarted = 'update_started';
 }
 
 /// Ecranele acceptate de server pentru `screen_view` (subset folosit acum).
@@ -57,6 +59,7 @@ abstract final class UsageScreens {
   static const recurring = 'recurring';
   static const receipts = 'receipts';
   static const statements = 'statements';
+  static const update = 'update';
 }
 
 /// Coada locală de evenimente: mică (cel mult [maxQueue]), în memorie, trimisă în loturi de cel

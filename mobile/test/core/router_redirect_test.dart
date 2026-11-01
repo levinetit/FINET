@@ -51,4 +51,29 @@ void main() {
       expect(go(page, s), isNull);
     }
   });
+
+  test(
+    'versiune sub minimul serverului: totul duce la ecranul de actualizare',
+    () {
+      String? update(String location) => redirectFor(
+        location: location,
+        session: const SignedIn(_profile),
+        introSeen: true,
+        updateRequired: true,
+      );
+      expect(update('/'), '/update-required');
+      expect(update('/transactions'), '/update-required');
+      expect(update('/update-required'), isNull);
+      // Fără sesiune, loginul rămâne posibil (nu trimite cereri financiare).
+      expect(
+        redirectFor(
+          location: '/login',
+          session: const SignedOut(),
+          introSeen: true,
+          updateRequired: true,
+        ),
+        isNull,
+      );
+    },
+  );
 }

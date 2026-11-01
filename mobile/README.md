@@ -8,6 +8,7 @@ Clientul Android al FINET (Flutter). Specificația: `docs/FINET_ANDROID_MASTER_P
 - Faza B: autentificare (Better Auth `bearer`), sesiune, profil și gospodării, statistici de utilizare, blocare cu amprentă. 
 - Faza C: dashboard, conturi, tranzacții (listă paginată, căutare, filtre, adăugare, editare, ștergere), bugete cu semafor, obiective cu contribuții, raport lunar. Toate cifrele vin de la server; aplicația nu recalculează nimic. Nu există date simulate în aplicație (doar în teste).
 - Faza D: plăți recurente (pauză, reluare, generare, propuneri), scanare de bonuri (cameră prin intentul sistemului, galerie, PDF; fără permisiuni de cameră sau stocare), verificarea și confirmarea bonului, potriviri bon ↔ extras, import de extrase (PDF/CSV/XLSX), acoperire pe luni și „Partajează" din alte aplicații (imagini, PDF, CSV, XLSX). Decizii: `docs/adr/0041-android-recurring-documents-statements.md`.
+- Faza E: semnare release (cheia operatorului, fără cale de rezervă), `android-release.yml` (tag `FINET-vX.Y.Z`), verificarea actualizărilor în aplicație, pictogramă adaptivă, teste de layout/accesibilitate. Pași: `docs/FINET_ANDROID_BUILD.md`; decizii: `docs/adr/0042-android-release-and-stabilization.md`.
 
 ## Comenzi
 

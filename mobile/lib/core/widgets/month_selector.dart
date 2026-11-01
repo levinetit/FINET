@@ -21,11 +21,15 @@ class MonthSelector extends ConsumerWidget {
           icon: const Icon(Icons.chevron_left),
           onPressed: controller.canGoPrevious ? controller.previous : null,
         ),
-        Semantics(
-          liveRegion: true,
-          child: Text(
-            formatMonth(month.firstDay),
-            style: Theme.of(context).textTheme.titleMedium,
+        // Luna se strânge pe mai multe rânduri la fonturi mari, în loc să iasă din ecran.
+        Expanded(
+          child: Semantics(
+            liveRegion: true,
+            child: Text(
+              formatMonth(month.firstDay),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ),
         ),
         IconButton(

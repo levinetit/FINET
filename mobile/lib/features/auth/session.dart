@@ -10,6 +10,7 @@ import '../scan/providers.dart';
 import '../scan/scan_controller.dart';
 import '../settings/settings_controller.dart';
 import '../share/share_source.dart';
+import '../update/update_controller.dart';
 import '../usage/usage_tracker.dart';
 import 'models.dart';
 
@@ -158,6 +159,7 @@ class SessionController extends Notifier<SessionState> {
   }
 
   Future<void> _afterSignIn() async {
+    unawaited(ref.read(updateControllerProvider.notifier).check());
     await syncUsageConsent();
     await ref.read(usageTrackerProvider).flush();
   }

@@ -1,6 +1,6 @@
 # FINET Android — verificări de securitate
 
-Se completează pe parcursul fazelor (`docs/FINET_ANDROID_MASTER_PROMPT.md` §6, §15). Stare la Faza D.
+Se completează pe parcursul fazelor (`docs/FINET_ANDROID_MASTER_PROMPT.md` §6, §15). Stare la Faza E.
 
 | Cerință | Stare | Dovadă |
 |---|---|---|
@@ -25,3 +25,10 @@ Se completează pe parcursul fazelor (`docs/FINET_ANDROID_MASTER_PROMPT.md` §6,
 | Încărcări: aceiași octeți la reîncercare, fără bonuri dublate | făcut (pe server simulat) | `ScanController._prepared`, teste de reîncercare; duplicatele pe serverul real neverificate |
 | Sumele ascunse acoperă ecranele Fazei D | făcut | un test pe fiecare ecran (recurențe, bonuri, extrase) |
 | Camera, partajarea, EXIF/HEIC pe telefon real | **neefectuată** | cere telefon și backend de test |
+| Release semnat doar cu cheia operatorului; fără cheie, build-ul eșuează | făcut (în CI cu cheie temporară) | `build.gradle.kts`, `android.yml` (release fără cheie trebuie să eșueze) |
+| Amprenta certificatului comparată cu cea așteptată; nu cheia de debug | făcut (workflow) | `verify-android-apk.sh release`, `android-release.yml`; **neexecutat cu cheia reală** |
+| Secretele de semnare nu apar în loguri; acțiunile terțe din release fixate pe SHA | făcut | `add-mask`, `env` pe pas, SHA-uri în `android-release.yml` |
+| `API_BASE_URL` de release: HTTPS, nu local/rezervat | făcut | verificare în `android-release.yml` + `AppEnv.validate` |
+| Actualizare: doar link HTTPS, fără instalare automată; sub minim, fără funcții financiare | făcut | `UpdateInfo.fromJson`, `redirectFor(updateRequired)`, `update_flow_test.dart` |
+| Partajare: doar `content://` ale altor aplicații, autorități neobișnuite refuzate | făcut | `MainActivity.kt`; neverificat pe dispozitiv |
+| Instalare și rulare pe telefon real | **neefectuată** | cere telefon, hostname, cont de test |

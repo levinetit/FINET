@@ -1,0 +1,23 @@
+# ADR 0042: clientul Android — release, actualizări și stabilizare (Faza Android E)
+
+- **Stare:** propus în branch `feature/android-e`. Continuă ADR 0038–0041. Specificația: `docs/FINET_ANDROID_MASTER_PROMPT.md` §8 (Faza E), §11, §12, §12.1.
+- **Legături:** `docs/FINET_ANDROID_BUILD.md`, `docs/FINET_ANDROID_ARCHITECTURE.md`, `docs/FINET_ANDROID_TEST_PLAN.md`, `GET /api/v1/app/android/latest`.
+
+## Decizii
+
+1. **Semnarea release nu are cale de rezervă.** `build.gradle.kts` citește cheia din `FINET_KEYSTORE_*` (CI) sau din `android/key.properties` (local). Fără cheie, orice task Gradle „Release" se oprește cu un mesaj clar; vechea semnare cu cheia de debug a dispărut. CI dovedește ambele: un build release fără cheie eșuează, iar unul cu o cheie temporară (generată în job, aruncată la sfârșit) se construiește, se semnează și trece `verify-android-apk.sh release`.
+2. **Un singur script de verificare** (`.github/scripts/verify-android-apk.sh`) pentru debug, release de PR și release real: `applicationId`, `minSdk`, fără permisiuni de cameră/stocare, filtrele de partajare, pictogramă adaptivă (XML), nedepanabil și, în release, `apksigner verify --print-certs` cu amprenta comparată cu cea așteptată. Verificările negative folosesc `if … exit 1` (un `! grep` e ignorat sub `set -e`, defect găsit în Faza D).
+3. **`android-release.yml`** pornește doar la `FINET-v[0-9]+.[0-9]+.[0-9]+` (verificat cu regex exact), cere notele în română (`mobile/release-notes/X.Y.Z.md`), refuză un `API_BASE_URL` care nu e HTTPS sau e local/rezervat, rulează formatul/analiza/testele înainte de build, construiește cu `--build-name` din tag și `--build-number` = numărul rulării (monoton), verifică APK-ul și creează Release-ul cu APK, `.sha256` și `android-latest.json` (formatul fișierului citit de backend). Secretele apar doar în pașii care le cer; parolele sunt mascate; keystore-ul decodat se șterge. Acțiunile terțe din acest workflow sunt fixate pe SHA (jobul ține secrete).
+4. **Publicarea în FINET rămâne un pas al operatorului:** copierea `android-latest.json` în `<STORAGE_DIR>/app/android-latest.json`. Workflow-ul nu are acces la serverul FINET și nu trebuie să-l aibă.
+5. **Actualizări în aplicație:** `GET /api/v1/app/android/latest` la pornire/după autentificare, cel mult o dată pe zi (rezultatul se păstrează în stocare). `versionCode` mai mare → banner „Versiune nouă disponibilă" cu notele și butonul care deschide linkul (doar HTTPS); aplicația nu instalează nimic. `versionCode` instalat sub `minSupportedVersionCode` → ecran „Actualizare necesară", iar routerul duce toate rutele acolo (nicio funcție financiară). Rezultatul păstrat se citește la pornire, înainte de primul ecran, deci o versiune deja respinsă nu apucă să trimită cereri; prima descoperire a unei respingeri se vede abia după primul răspuns al serverului (o fereastră scurtă). Evenimente: `update_prompt_shown`, `update_started`, ecranul `update`.
+6. **Pictogramă adaptivă** din simbolul FINET (vector, strat monocrom pentru pictogramele tematice Android 13+); PNG-urile implicite Flutter au fost șterse (`minSdk` 29 nu are nevoie de ele). Neverificată vizual pe telefon.
+7. **Stabilizare pentru conexiune slabă:** încărcările (poze, PDF-uri) primesc timeouturi mai lungi (trimitere 2 minute, răspuns 90 s); cererile multipart nu sunt reîncercate de interceptorul generic (corpul e consumat), ci de apelant, din aceiași octeți; timeouturile de conectare/trimitere/primire se reîncearcă doar pentru cereri idempotente.
+8. **Accesibilitate:** teste de layout la font 200% (ecran 360×640 dp), 130% și pe tabletă (800×1280 dp) pe toate filele și ecranele secundare, plus ghidurile Android (ținte ≥ 48 dp, etichete, contrast). Au prins și au corectat cinci depășiri (selectorul de lună, starea bugetului, categoriile de pe Acasă, rândurile de tranzacții și rândurile din raport): sumele se micșorează, textul se mută pe mai multe rânduri.
+
+## Ce nu face Faza E
+
+- **Nu există release publicat.** Lipsesc cheia de semnare, secretele/variabilele din mediul `production` și `API_BASE_URL` de producție: toate sunt ale operatorului și nu se inventează. `docs/FINET_ANDROID_BUILD.md` descrie pașii. Până atunci criteriul §15.10 e „blocaj documentat".
+- **Nu am instalat și rulat aplicația pe un telefon real** (§15.11): lipsesc telefonul, hostname-ul și contul de test. Lista de verificare manuală e în `docs/FINET_ANDROID_TEST_PLAN.md`.
+- Nu are teste `integration_test` pe emulator (cer un emulator în CI).
+- Verificarea „cifrele sunt identice cu web-ul" (§15.5) și accesul din altă gospodărie (§15.4, test de backend) rămân de făcut pe backendul real.
+- Pagina de descărcare din FINET există (`/settings/android`); nu am schimbat backendul.

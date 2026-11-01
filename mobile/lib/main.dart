@@ -9,6 +9,7 @@ import 'core/providers.dart';
 import 'core/storage/key_value_store.dart';
 import 'core/time/period.dart';
 import 'features/settings/app_settings.dart';
+import 'features/update/update_controller.dart';
 import 'features/settings/settings_controller.dart';
 
 Future<void> main() async {
@@ -26,9 +27,11 @@ Future<void> main() async {
     store,
     usageStatsDefault: env.usageStatsDefault,
   );
+  final cachedUpdate = await loadCachedUpdate(store);
   runApp(
     ProviderScope(
       overrides: [
+        initialUpdateProvider.overrideWithValue(cachedUpdate),
         appEnvProvider.overrideWithValue(env),
         keyValueStoreProvider.overrideWithValue(store),
         clientInfoProvider.overrideWithValue(info),
