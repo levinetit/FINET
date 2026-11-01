@@ -304,6 +304,8 @@ Remediate în Faza 0 (T5): F1 (secrete pe rol, `FINET_ROLE`), F2 (date în `/srv
 
 ## Android (`docs/FINET_ANDROID_MASTER_PROMPT.md`)
 
+Audit făcut (2026-11-01): `docs/FINET_ANDROID_AUDIT.md`. Backendul acoperă fazele A–D; mediul local nu poate construi Flutter, deci build-ul rulează doar în GitHub Actions.
+
 | Fază | Stare | Depinde de (web) |
 |---|---|---|
 | A — Fundație (Flutter în `mobile/`, temă, navigare, client Dio, date simulate, CI) | neimplementat | — |
