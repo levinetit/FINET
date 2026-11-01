@@ -85,6 +85,11 @@ jobs:
           grep -q "package: name='ro.finet.app'" badging.txt
           grep -q "^minSdkVersion:'29'" badging.txt
           grep -q "uses-permission: name='android.permission.INTERNET'" badging.txt
+          # Camera prin intentul sistemului: nicio permisiune de cameră sau de stocare în APK.
+          ! grep -q "uses-permission: name='android.permission.CAMERA'" badging.txt
+          ! grep -q "uses-permission: name='android.permission.READ_EXTERNAL_STORAGE'" badging.txt
+          ! grep -q "uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE'" badging.txt
+          ! grep -q "uses-permission: name='android.permission.READ_MEDIA" badging.txt
 
       - uses: actions/upload-artifact@v5
         with:
