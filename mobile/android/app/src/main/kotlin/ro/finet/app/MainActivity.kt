@@ -1,6 +1,7 @@
 package ro.finet.app
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -117,9 +118,27 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
-    /** `true` dacă URI-ul e servit de un provider al acestei aplicații (nu se copiază niciodată). */
+    /** Autoritățile tuturor provider-ilor declarați de această aplicație (litere mici). */
+    @Suppress("DEPRECATION")
+    private fun ownAuthorities(): Set<String> = try {
+        packageManager.getPackageInfo(packageName, PackageManager.GET_PROVIDERS).providers
+            ?.flatMap { it.authority?.split(';') ?: emptyList() }
+            ?.map { it.lowercase() }
+            ?.toSet() ?: emptySet()
+    } catch (e: Exception) {
+        emptySet()
+    }
+
+    /**
+     * `true` dacă URI-ul ar putea fi servit de un provider al acestei aplicații (nu se copiază
+     * niciodată). Se închide spre refuz: o autoritate neobișnuită (`userInfo`, `@`, port) se
+     * respinge, deoarece ContentResolver o normalizează altfel decât un simplu șir (`0@autoritate`
+     * ajunge tot la provider-ul propriu).
+     */
     private fun isOwnProvider(uri: Uri): Boolean {
         val authority = uri.authority ?: return true
+        if (uri.userInfo != null || authority.contains('@') || authority.contains(':')) return true
+        if (authority.lowercase() in ownAuthorities()) return true
         // Providerii proprii sunt mereu vizibili; unul al altei aplicații poate fi invizibil
         // (Android 11+), dar atunci deschiderea fluxului e verificată oricum de acel provider.
         val provider = packageManager.resolveContentProvider(authority, 0)
