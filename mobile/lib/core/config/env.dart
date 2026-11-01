@@ -3,7 +3,11 @@
 library;
 
 class AppEnv {
-  const AppEnv({required this.apiBaseUrl, required this.useMockData});
+  const AppEnv({
+    required this.apiBaseUrl,
+    required this.useMockData,
+    this.usageStatsDefault = true,
+  });
 
   /// Citește `--dart-define=API_BASE_URL=...` și `--dart-define=USE_MOCK_DATA=...`.
   /// În Faza A toate ecranele sunt pe date simulate, deci `USE_MOCK_DATA` e implicit `true`.
@@ -14,6 +18,10 @@ class AppEnv {
 
   final String apiBaseUrl;
   final bool useMockData;
+
+  /// Valoarea implicită a statisticilor de utilizare la prima pornire: `true` în `personal`, `false`
+  /// în `saas` (acolo cer acordul explicit, promptul Android §10.1).
+  final bool usageStatsDefault;
 
   /// Problemele de configurare, în română; lista goală înseamnă că totul e în regulă.
   ///

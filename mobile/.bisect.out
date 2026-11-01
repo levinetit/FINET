@@ -1,0 +1,26 @@
+rc=0
+== test/features/lock/lock_test.dart
+Analyzing lock_test.dart...
+No issues found!
+rc=0
+== test/features/usage/usage_tracker_test.dart
+Analyzing usage_tracker_test.dart...
+No issues found!
+rc=0
+== test/core/client/client_info_test.dart
+Analyzing client_info_test.dart...
+No issues found!
+rc=0
+== test/core/router_redirect_test.dart
+Analyzing router_redirect_test.dart...
+No issues found!
+rc=0
+== test/features/app_test.dart
+Analyzing app_test.dart...
+No issues found!
+rc=0
+== lib/features/lock/app_lock.dart
+Analyzing app_lock.dart...
+No issues found!
+rc=0
+FIN

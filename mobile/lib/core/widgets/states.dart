@@ -57,9 +57,17 @@ class EmptyState extends StatelessWidget {
 
 /// Stare de eroare, cu acțiune de reîncercare.
 class ErrorState extends StatelessWidget {
-  const ErrorState({super.key, required this.message, this.onRetry});
+  const ErrorState({
+    super.key,
+    required this.message,
+    this.onRetry,
+    this.secondary,
+  });
   final String message;
   final VoidCallback? onRetry;
+
+  /// Acțiune în plus sub butonul de reîncercare (de exemplu „Deconectează-mă”).
+  final Widget? secondary;
 
   @override
   Widget build(BuildContext context) => _Centered(
@@ -68,10 +76,16 @@ class ErrorState extends StatelessWidget {
     title: 'Ceva nu a mers',
     message: message,
     action: onRetry == null
-        ? null
-        : OutlinedButton(
-            onPressed: onRetry,
-            child: const Text('Încearcă din nou'),
+        ? secondary
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton(
+                onPressed: onRetry,
+                child: const Text('Încearcă din nou'),
+              ),
+              ?secondary,
+            ],
           ),
   );
 }

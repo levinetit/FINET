@@ -258,7 +258,7 @@ void main() {
       );
       expect(e.kind, ApiErrorKind.client);
       expect(e.fields, {'amount': 'Prea mare'});
-      expect(e.analyticsCode, 'VALIDATION');
+      expect(e.analyticsCode, 'validation_failed');
     });
 
     test('500 fără corp JSON → server, cu mesaj implicit', () async {
@@ -315,7 +315,7 @@ void main() {
         fail('trebuia să eșueze');
       } on ApiError catch (e) {
         expect(e.kind, ApiErrorKind.timeout);
-        expect(e.analyticsCode, 'NETWORK_TIMEOUT');
+        expect(e.analyticsCode, 'network_timeout');
       }
     });
   });

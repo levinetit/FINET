@@ -57,4 +57,18 @@ void main() {
       expect(env('https://').validate(isRelease: false), isNotEmpty);
     });
   });
+
+  group('statistici', () {
+    test('implicit pornite (personal); saas le poate opri la build', () {
+      expect(env('https://x.test').usageStatsDefault, isTrue);
+      expect(
+        const AppEnv(
+          apiBaseUrl: '',
+          useMockData: true,
+          usageStatsDefault: false,
+        ).usageStatsDefault,
+        isFalse,
+      );
+    });
+  });
 }

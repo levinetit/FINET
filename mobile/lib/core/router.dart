@@ -1,18 +1,74 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/intro_screen.dart';
+import '../features/auth/login_screen.dart';
+import '../features/auth/session.dart';
+import '../features/auth/session_screens.dart';
 import '../features/home/home_screen.dart';
 import '../features/more/more_screen.dart';
+import '../features/profile/profile_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/scan/scan_screen.dart';
+import '../features/settings/settings_controller.dart';
+import '../features/settings/settings_screen.dart';
 import '../features/transactions/transactions_screen.dart';
+import '../features/usage/usage_tracker.dart';
+import 'providers.dart';
 
-/// Rutele aplicației: navigarea de jos cu cinci ramuri (Acasă, Tranzacții, Scanează, Rapoarte,
-/// Mai mult), fiecare cu starea ei păstrată la schimbarea tabului.
-GoRouter buildRouter({String initialLocation = '/'}) {
-  return GoRouter(
-    initialLocation: initialLocation,
+const _gateRoutes = {'/splash', '/intro', '/login', '/unavailable'};
+
+/// Unde trebuie să fie utilizatorul, după starea aplicației; `null` = rămâne unde e.
+///
+/// Ordinea: ecranul de informare de la prima pornire, apoi verificarea sesiunii, apoi login.
+/// Cu sesiune activă, ecranele de poartă (login, intro, splash) duc la Acasă.
+String? redirectFor({
+  required String location,
+  required SessionState session,
+  required bool introSeen,
+}) {
+  String? go(String target) => location == target ? null : target;
+  if (!introSeen) return go('/intro');
+  return switch (session) {
+    SessionLoading() => go('/splash'),
+    SessionUnavailable() => go('/unavailable'),
+    SignedOut() => go('/login'),
+    SignedIn() => _gateRoutes.contains(location) ? '/' : null,
+  };
+}
+
+/// Reîmprospătează routerul când se schimbă sesiunea sau setările.
+class _RouterRefresh extends ChangeNotifier {
+  _RouterRefresh(Ref ref) {
+    ref
+      ..listen<SessionState>(sessionProvider, (_, _) => notifyListeners())
+      ..listen(settingsProvider, (_, _) => notifyListeners());
+  }
+}
+
+/// Rutele aplicației: porțile (intro, login, splash), navigarea de jos cu cinci ramuri (Acasă,
+/// Tranzacții, Scanează, Rapoarte, Mai mult), apoi Profil și Setări.
+final routerProvider = Provider<GoRouter>((ref) {
+  final refresh = _RouterRefresh(ref);
+  final router = GoRouter(
+    initialLocation: '/splash',
+    refreshListenable: refresh,
+    redirect: (context, state) => redirectFor(
+      location: state.matchedLocation,
+      session: ref.read(sessionProvider),
+      introSeen: ref.read(settingsProvider).introSeen,
+    ),
     routes: [
+      GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
+      GoRoute(path: '/intro', builder: (_, _) => const IntroScreen()),
+      GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(
+        path: '/unavailable',
+        builder: (_, _) => const SessionUnavailableScreen(),
+      ),
+      GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
+      GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _Shell(shell: shell),
         branches: [
@@ -49,20 +105,52 @@ GoRouter buildRouter({String initialLocation = '/'}) {
       ),
     ],
   );
-}
+  ref.onDispose(() {
+    router.dispose();
+    refresh.dispose();
+  });
+  return router;
+});
 
-class _Shell extends StatelessWidget {
+/// Ecranul raportat la `screen_view` pentru fiecare tab (același ca în lista serverului).
+const _tabScreens = [
+  UsageScreens.dashboard,
+  UsageScreens.transactions,
+  UsageScreens.scan,
+  UsageScreens.reports,
+  UsageScreens.settings,
+];
+
+class _Shell extends ConsumerStatefulWidget {
   const _Shell({required this.shell});
   final StatefulNavigationShell shell;
 
   @override
+  ConsumerState<_Shell> createState() => _ShellState();
+}
+
+class _ShellState extends ConsumerState<_Shell> {
+  @override
+  void initState() {
+    super.initState();
+    ref
+        .read(usageTrackerProvider)
+        .screen(_tabScreens[widget.shell.currentIndex]);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final shell = widget.shell;
     return Scaffold(
       body: shell,
       bottomNavigationBar: NavigationBar(
         selectedIndex: shell.currentIndex,
-        onDestinationSelected: (i) =>
-            shell.goBranch(i, initialLocation: i == shell.currentIndex),
+        onDestinationSelected: (i) {
+          if (i != shell.currentIndex) {
+            ref.read(usageTrackerProvider).screen(_tabScreens[i]);
+          }
+          shell.goBranch(i, initialLocation: i == shell.currentIndex);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
