@@ -1,0 +1,91 @@
+# CI FINET Android (Faza A; promptul Android §12): format, analiză statică, teste și APK de debug.
+# Nu publică nimic: build-urile de debug din PR-uri rămân artefacte de CI, nu merg în Releases.
+# Workflow-ul de release semnat (`android-release.yml`) vine în Faza E.
+name: android
+
+on:
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android.yml"
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Versiunea Flutter fixată (canal stable); aceeași în `mobile/README.md`.
+  FLUTTER_VERSION: "3.47.9"
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Versiuni
+        run: |
+          flutter --version
+          java -version
+
+      - name: Dependențe
+        run: flutter pub get
+
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analiză statică
+        run: flutter analyze
+
+      - name: Teste
+        run: flutter test
+
+      # Faza A rulează pe date simulate: nu cere `API_BASE_URL`. Valorile `--dart-define` nu sunt
+      # secrete (se pot extrage din APK), iar în CI nu există nicio cheie.
+      - name: APK de debug
+        run: flutter build apk --debug --dart-define=USE_MOCK_DATA=true
+
+      - name: Verifică APK-ul (identificator, versiune minimă, mărime)
+        run: |
+          apk=build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$apk"
+          size=$(stat -c %s "$apk")
+          echo "Mărime: $size octeți"
+          test "$size" -gt 5000000
+          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$aapt2" dump badging "$apk" | tee badging.txt | head -5
+          grep -q "package: name='ro.finet.app'" badging.txt
+          grep -q "^minSdkVersion:'29'" badging.txt
+          grep -q "uses-permission: name='android.permission.INTERNET'" badging.txt
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: finet-debug-apk
+          path: mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

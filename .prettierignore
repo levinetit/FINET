@@ -14,3 +14,5 @@ docs/
 .claude/
 # Markdown-ul (documentație) nu se reformatează automat
 **/*.md
+# aplicația Android (Flutter/Dart) are propriile unelte: `dart format` în .github/workflows/android.yml
+mobile/
