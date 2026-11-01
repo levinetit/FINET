@@ -160,12 +160,10 @@ void main() {
         expect(h.memory.values.containsKey(StoreKeys.sessionToken), isFalse);
         expect(h.container.read(tokenHolderProvider).value, isNull);
         expect(h.container.read(hideAmountsProvider), isFalse);
-        // Doar `session_expired` rămâne în coadă, pentru următoarea autentificare.
+        // Din ce s-a adunat în sesiune rămâne doar `session_expired`, pentru următoarea
+        // autentificare; ecranele văzute înainte (Acasă, Profil) s-au șters.
         final queued = h.container.read(usageTrackerProvider).queued;
-        expect(
-          queued.map((e) => e.name),
-          everyElement(UsageEvents.sessionExpired),
-        );
+        expect(queued.map((e) => e.name), [UsageEvents.sessionExpired]);
       },
     );
 
@@ -261,7 +259,7 @@ void main() {
       await h.pump(tester);
       await tester.login();
       await tester.openTab('Rapoarte');
-      await h.container.read(usageTrackerProvider).flush();
+      await h.flushEvents(tester);
 
       expect(h.server.usageStatsGranted, isTrue);
       final events = h.server.allEvents;
@@ -288,7 +286,7 @@ void main() {
       await h.pump(tester);
       await tester.login();
       await tester.openTab('Rapoarte');
-      await h.container.read(usageTrackerProvider).flush();
+      await h.flushEvents(tester);
       expect(h.server.eventBatches, isEmpty);
       expect(h.server.usageStatsGranted, isFalse);
       expect(h.container.read(usageTrackerProvider).pending, 0);

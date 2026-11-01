@@ -163,9 +163,9 @@ class SessionController extends Notifier<SessionState> {
   /// ecranelor (sumele ascunse). Identificatorul instalării și setările rămân.
   Future<void> _wipeLocal({bool keepSessionExpired = false}) async {
     ref.read(tokenHolderProvider).value = null;
-    ref
-        .read(usageTrackerProvider)
-        .clear(keepSessionExpired: keepSessionExpired);
+    ref.read(usageTrackerProvider)
+      ..signedIn = false
+      ..clear(keepSessionExpired: keepSessionExpired);
     ref.read(hideAmountsProvider.notifier).reset();
     await ref.read(keyValueStoreProvider).delete(StoreKeys.sessionToken);
   }

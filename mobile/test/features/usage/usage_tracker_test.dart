@@ -114,17 +114,23 @@ void main() {
 
   test('o golire în timpul trimiterii nu strică coada', () async {
     late UsageTracker t;
+    final batches = <List<Map<String, Object>>>[];
     t = UsageTracker(
       enabled: true,
       signedIn: true,
       send: (events) async {
-        t.clear();
-        t.track(UsageEvents.appOpen);
+        batches.add(events);
+        // Doar la primul lot: utilizatorul se deconectează și apare un eveniment nou.
+        if (batches.length == 1) {
+          t.clear();
+          t.track(UsageEvents.appOpen);
+        }
       },
     )..track(UsageEvents.login);
     await t.flush();
-    // Lotul trimis a plecat; evenimentul nou, adăugat între timp, nu se pierde.
-    expect(t.pending, 1);
+    // Lotul trimis a plecat; evenimentul adăugat între timp nu s-a pierdut și s-a trimis și el.
+    expect(batches.map((b) => b.single['name']), ['login', 'app_open']);
+    expect(t.pending, 0);
   });
 
   test('toate numele și ecranele folosite există în contractul serverului', () {

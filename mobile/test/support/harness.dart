@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:finet_mobile/app.dart';
 import 'package:finet_mobile/core/client/client_info.dart';
 import 'package:finet_mobile/core/config/env.dart';
@@ -87,6 +89,15 @@ class Harness {
     container = ProviderScope.containerOf(
       tester.element(find.byType(FinetApp)),
     );
+    await tester.pumpAndSettle();
+  }
+
+  /// Trimite coada de evenimente. Testul rulează într-o zonă cu timp simulat, deci nu se poate
+  /// aștepta direct rezultatul unei cereri: se pornește și se avansează timpul.
+  Future<void> flushEvents(WidgetTester tester) async {
+    unawaited(container.read(usageTrackerProvider).flush());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
   }
 
