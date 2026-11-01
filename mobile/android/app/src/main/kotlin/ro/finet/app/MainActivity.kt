@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Parcelable
 import android.provider.OpenableColumns
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -73,59 +74,79 @@ class MainActivity : FlutterFragmentActivity() {
             done(emptyList())
             return
         }
-        // Copierea fișierelor nu rulează pe firul principal.
+        // Copierea fișierelor nu rulează pe firul principal. Rezultatul se întoarce întotdeauna,
+        // chiar dacă o copiere eșuează, ca apelul din Dart să nu rămână în așteptare.
         executor.execute {
-            val files = uris.take(MAX_FILES).mapNotNull { copyToCache(it) }
+            val files = try {
+                uris.take(MAX_FILES).mapNotNull { copyToCache(it) }
+            } catch (e: Exception) {
+                emptyList()
+            }
             runOnUiThread { done(files) }
         }
     }
 
+    // Intentul vine de la o aplicație străină: orice abatere de la formă (extra de alt tip, parcel
+    // stricat) înseamnă „nimic de importat", nu o prăbușire.
     @Suppress("DEPRECATION")
     private fun sharedUris(source: Intent?): List<Uri> {
         if (source == null) return emptyList()
-        val tiramisu = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-        return when (source.action) {
-            Intent.ACTION_SEND -> {
-                val uri: Uri? = if (tiramisu) {
-                    source.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    source.getParcelableExtra(Intent.EXTRA_STREAM)
+        return try {
+            val tiramisu = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            when (source.action) {
+                Intent.ACTION_SEND -> {
+                    val uri: Uri? = if (tiramisu) {
+                        source.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    } else {
+                        source.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+                    }
+                    listOfNotNull(uri)
                 }
-                listOfNotNull(uri)
-            }
-            Intent.ACTION_SEND_MULTIPLE -> {
-                val list: List<Uri>? = if (tiramisu) {
-                    source.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    source.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                Intent.ACTION_SEND_MULTIPLE -> {
+                    val list: List<Parcelable>? = if (tiramisu) {
+                        source.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    } else {
+                        source.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                    }
+                    list?.filterIsInstance<Uri>() ?: emptyList()
                 }
-                list ?: emptyList()
+                else -> emptyList()
             }
-            else -> emptyList()
+        } catch (e: RuntimeException) {
+            emptyList()
         }
     }
 
+    /** `true` dacă URI-ul e servit de un provider al acestei aplicații (nu se copiază niciodată). */
+    private fun isOwnProvider(uri: Uri): Boolean {
+        val authority = uri.authority ?: return true
+        // Providerii proprii sunt mereu vizibili; unul al altei aplicații poate fi invizibil
+        // (Android 11+), dar atunci deschiderea fluxului e verificată oricum de acel provider.
+        val provider = packageManager.resolveContentProvider(authority, 0)
+        return provider != null && provider.packageName == packageName
+    }
+
     /**
-     * Copiază fișierul partajat în memoria temporară a aplicației. Doar URI-uri `content://`:
-     * `file://` ar putea arăta spre datele private ale aplicației.
+     * Copiază fișierul partajat în memoria temporară a aplicației. Doar URI-uri `content://` ale
+     * altor aplicații: `file://` și provider-ii proprii ar putea arăta spre datele private ale
+     * aplicației. Orice eșec (permisiune, flux, nume) înseamnă „fișier omis".
      */
     private fun copyToCache(uri: Uri): Map<String, String>? {
-        if (uri.scheme != "content") return null
-        val name = ensureExtension(
-            displayName(uri)?.replace(Regex("[^A-Za-z0-9._ -]"), "_")?.take(80) ?: "fisier",
-            contentResolver.getType(uri),
-        )
-        val dir = File(cacheDir, SHARE_DIR).apply { mkdirs() }
-        val out = File(dir, "${UUID.randomUUID()}_$name")
+        var out: File? = null
         return try {
+            if (uri.scheme != "content" || isOwnProvider(uri)) return null
+            val name = ensureExtension(
+                displayName(uri)?.replace(Regex("[^A-Za-z0-9._ -]"), "_")?.take(80) ?: "fisier",
+                contentResolver.getType(uri),
+            )
+            val dir = File(cacheDir, SHARE_DIR).apply { mkdirs() }
+            val target = File(dir, "${UUID.randomUUID()}_$name")
+            out = target
             val input = contentResolver.openInputStream(uri) ?: return null
-            input.use { i -> out.outputStream().use { o -> copyLimited(i, o) } }
-            mapOf("path" to out.absolutePath, "name" to name)
-        } catch (e: IOException) {
-            out.delete()
-            null
-        } catch (e: SecurityException) {
-            out.delete()
+            input.use { i -> target.outputStream().use { o -> copyLimited(i, o) } }
+            mapOf("path" to target.absolutePath, "name" to name)
+        } catch (e: Exception) {
+            out?.delete()
             null
         }
     }
