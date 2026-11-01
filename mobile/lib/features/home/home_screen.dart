@@ -273,7 +273,15 @@ class _CategoryBar extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-            AmountText(money, size: 14),
+            const SizedBox(width: 8),
+            // La fonturi mari suma se micșorează, nu iese din ecran.
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: AmountText(money, size: 14),
+              ),
+            ),
             const SizedBox(width: 8),
             Text(
               '${share.percent}%',

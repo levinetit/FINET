@@ -70,17 +70,17 @@ class _CurrencyReportView extends StatelessWidget {
           Card(
             child: Column(
               children: [
-                ListTile(
+                _AmountTile(
                   title: const Text('Venituri'),
                   trailing: AmountText(m(t.incomeMinor), signed: true),
                 ),
                 const Divider(),
-                ListTile(
+                _AmountTile(
                   title: const Text('Cheltuieli'),
                   trailing: AmountText(m(-t.expenseMinor), signed: true),
                 ),
                 const Divider(),
-                ListTile(
+                _AmountTile(
                   title: Text('Sold net', style: text.titleSmall),
                   trailing: AmountText(m(t.netMinor), signed: true, bold: true),
                 ),
@@ -95,7 +95,7 @@ class _CurrencyReportView extends StatelessWidget {
               child: Column(
                 children: [
                   for (final (i, c) in report.byCategory.indexed) ...[
-                    ListTile(
+                    _AmountTile(
                       title: Text(c.name),
                       subtitle: Text('${c.count} tranzacții · ${c.percent}%'),
                       trailing: AmountText(m(c.amountMinor)),
@@ -114,7 +114,7 @@ class _CurrencyReportView extends StatelessWidget {
               child: Column(
                 children: [
                   for (final (i, mer) in report.topMerchants.indexed) ...[
-                    ListTile(
+                    _AmountTile(
                       title: Text(mer.merchant),
                       subtitle: Text(
                         '${mer.count} tranzacții',
@@ -128,6 +128,55 @@ class _CurrencyReportView extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Rând „etichetă + sumă" care nu iese din ecran la fonturi mari: textul se strânge pe mai multe
+/// rânduri, iar suma se micșorează (un `ListTile` cu `trailing` nu se adaptează).
+class _AmountTile extends StatelessWidget {
+  const _AmountTile({
+    required this.title,
+    this.subtitle,
+    required this.trailing,
+  });
+
+  final Widget title;
+  final Widget? subtitle;
+  final Widget trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DefaultTextStyle.merge(style: text.bodyLarge, child: title),
+                if (subtitle != null)
+                  DefaultTextStyle.merge(
+                    style: text.bodyMedium?.copyWith(
+                      color: context.finet.muted,
+                    ),
+                    child: subtitle!,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: trailing,
+            ),
+          ),
         ],
       ),
     );

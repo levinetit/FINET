@@ -40,6 +40,10 @@ grep -q "package: name='ro.finet.app'" "$work/badging.txt" || fail "applicationI
 grep -q "^minSdkVersion:'29'" "$work/badging.txt" || fail "minSdk"
 grep -q "uses-permission: name='android.permission.INTERNET'" "$work/badging.txt" || fail "INTERNET"
 
+# Pictograma adaptivă FINET (nu cea implicită Flutter, care era PNG în mipmap-*).
+grep -q "application-icon-[0-9]*:'res/mipmap-anydpi-v26/ic_launcher.xml'" "$work/badging.txt" \
+  || fail "pictograma de lansare nu e cea adaptivă FINET"
+
 # Camera prin intentul sistemului: nicio permisiune de cameră sau de stocare în APK.
 if grep -E "uses-permission(-sdk-23)?: name='android\.permission\.(CAMERA|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA[^']*)'" "$work/badging.txt"; then
   fail "permisiune interzisă în APK"

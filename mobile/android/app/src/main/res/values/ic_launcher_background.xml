@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fundalul pictogramei: `bg` din tokenii FINET (tema luminoasă). -->
+    <color name="ic_launcher_background">#F2F5F4</color>
+</resources>

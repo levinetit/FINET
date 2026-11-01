@@ -6,6 +6,11 @@ import '../config/env.dart';
 import 'api_error.dart';
 import 'interceptors.dart';
 
+/// Încărcările de poze și PDF-uri pe o conexiune slabă au nevoie de mai mult timp decât cererile
+/// JSON (30 s): trimiterea fișierului primește 2 minute, răspunsul serverului 90 de secunde.
+const Duration uploadSendTimeout = Duration(minutes: 2);
+const Duration uploadReceiveTimeout = Duration(seconds: 90);
+
 /// Construiește clientul HTTP FINET: URL de bază din configurație, timeouturi, autentificare,
 /// `Idempotency-Key` și reîncercări sigure (promptul Android §8, Faza A).
 ///

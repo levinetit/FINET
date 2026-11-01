@@ -122,9 +122,13 @@ class _BudgetCard extends ConsumerWidget {
               children: [
                 Expanded(child: Text(name, style: text.titleSmall)),
                 // Starea e și text, nu doar culoare (accesibilitate).
-                Text(
-                  item.status.label,
-                  style: text.labelMedium?.copyWith(color: color),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    item.status.label,
+                    textAlign: TextAlign.end,
+                    style: text.labelMedium?.copyWith(color: color),
+                  ),
                 ),
               ],
             ),
