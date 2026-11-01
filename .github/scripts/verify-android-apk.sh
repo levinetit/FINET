@@ -72,8 +72,9 @@ if [ "$mode" = "release" ]; then
   fi
   "$apksigner" verify --verbose --print-certs "$apk" > "$work/sign.txt" 2>&1 \
     || fail "semnătura nu se verifică"
-  grep -E "^(Verifies|Verified using)" "$work/sign.txt" || true
-  cert=$(grep -E "Signer #1 certificate SHA-256 digest:" "$work/sign.txt" | awk '{print $NF}' | head -1)
+  # Ieșirea apksigner conține doar date publice (DN și amprente ale certificatului).
+  cat "$work/sign.txt"
+  cert=$(grep -E "certificate SHA-256 digest:" "$work/sign.txt" | awk '{print $NF}' | head -1 || true)
   [ -n "$cert" ] || fail "nu pot citi amprenta certificatului"
   echo "Amprenta certificatului: $cert"
   if grep -qF "CN=Android Debug" "$work/sign.txt"; then
