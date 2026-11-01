@@ -1,0 +1,194 @@
+# Release FINET Android (Faza E; promptul Android §12.1): la un tag `FINET-vX.Y.Z` construiește APK-ul
+# release semnat, îl verifică și creează un GitHub Release cu APK, suma SHA-256 și metadatele pentru
+# `GET /api/v1/app/android/latest`.
+#
+# Ce trebuie pregătit de operator (o singură dată), în Settings → Environments → `production`:
+#   Secrete:   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   Variabile: API_BASE_URL (HTTPS), ANDROID_CERT_SHA256 (amprenta cheii), opțional
+#              ANDROID_MIN_SUPPORTED_VERSION_CODE (implicit 1)
+# Pașii sunt în `docs/FINET_ANDROID_BUILD.md`. Nicio valoare de aici nu se tipărește în loguri.
+name: android-release
+
+on:
+  push:
+    tags:
+      - "FINET-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: "3.47.9"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Eticheta trebuie să fie exact FINET-vX.Y.Z
+        id: tag
+        working-directory: .
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^FINET-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Eticheta '$TAG' nu se potrivește cu FINET-v[0-9]+.[0-9]+.[0-9]+; nu se publică nimic." >&2
+            exit 1
+          fi
+          echo "version=${TAG#FINET-v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Notele versiunii (în română) trebuie să existe
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          test -s "release-notes/$VERSION.md" || {
+            echo "Lipsește mobile/release-notes/$VERSION.md (ce e nou, în română)." >&2
+            exit 1
+          }
+
+      - name: Configurarea release (fără a tipări valori)
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          CERT: ${{ vars.ANDROID_CERT_SHA256 }}
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KSP: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KA: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KP: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$API_BASE_URL" ] || missing="$missing API_BASE_URL"
+          [ -n "$CERT" ] || missing="$missing ANDROID_CERT_SHA256"
+          [ -n "$KS" ] || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$KSP" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KA" ] || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$KP" ] || missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "Lipsesc din mediul production:$missing" >&2
+            exit 1
+          fi
+          case "$API_BASE_URL" in
+            https://*) ;;
+            *) echo "API_BASE_URL trebuie să fie HTTPS." >&2; exit 1 ;;
+          esac
+          case "$API_BASE_URL" in
+            *localhost*|*127.0.0.1*|*10.0.2.2*|*.invalid*)
+              echo "API_BASE_URL nu poate fi o adresă locală sau rezervată." >&2; exit 1 ;;
+          esac
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Dependențe
+        run: flutter pub get
+
+      # Dacă analiza sau testele pică, nu se publică nimic.
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analiză statică
+        run: flutter analyze
+
+      - name: Teste
+        timeout-minutes: 15
+        run: flutter test
+
+      - name: APK release semnat
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          FINET_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FINET_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FINET_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "::add-mask::$FINET_KEYSTORE_PASSWORD"
+          echo "::add-mask::$FINET_KEY_PASSWORD"
+          export FINET_KEYSTORE_PATH="$RUNNER_TEMP/release.jks"
+          printf '%s' "$KS" | base64 -d > "$FINET_KEYSTORE_PATH"
+          chmod 600 "$FINET_KEYSTORE_PATH"
+          # `versionCode` crește monoton cu numărul rulării.
+          flutter build apk --release \
+            --build-name="$VERSION" --build-number="$BUILD_NUMBER" \
+            --dart-define=API_BASE_URL="$API_BASE_URL"
+          shred -u "$FINET_KEYSTORE_PATH" 2>/dev/null || rm -f "$FINET_KEYSTORE_PATH"
+
+      - name: Verifică APK-ul (semnătură, amprentă, versiune, permisiuni)
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          CERT: ${{ vars.ANDROID_CERT_SHA256 }}
+        run: |
+          ../.github/scripts/verify-android-apk.sh \
+            build/app/outputs/flutter-apk/app-release.apk release "$CERT" "$VERSION" "$BUILD_NUMBER"
+
+      - name: Pregătește fișierele release
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          MIN_CODE: ${{ vars.ANDROID_MIN_SUPPORTED_VERSION_CODE }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          apk="dist/finet-$VERSION.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$apk"
+          (cd dist && sha256sum "finet-$VERSION.apk" > "finet-$VERSION.apk.sha256")
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          v = os.environ["VERSION"]
+          apk = pathlib.Path(f"dist/finet-{v}.apk")
+          notes = pathlib.Path(f"release-notes/{v}.md").read_text(encoding="utf-8").strip()
+          min_code = int(os.environ.get("MIN_CODE") or 1)
+          code = int(os.environ["BUILD_NUMBER"])
+          doc = {
+              "versionName": v,
+              "versionCode": code,
+              "minSupportedVersionCode": min(min_code, code),
+              "url": f"https://github.com/{os.environ['REPO']}/releases/download/{os.environ['TAG']}/finet-{v}.apk",
+              "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+              "sizeBytes": apk.stat().st_size,
+              "notes": notes[:2000],
+          }
+          pathlib.Path("dist/android-latest.json").write_text(
+              json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          cat "dist/finet-$VERSION.apk.sha256"
+
+      - name: Creează GitHub Release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            "mobile/dist/finet-$VERSION.apk" \
+            "mobile/dist/finet-$VERSION.apk.sha256" \
+            "mobile/dist/android-latest.json" \
+            --title "FINET Android $VERSION" \
+            --notes-file "mobile/release-notes/$VERSION.md" \
+            --verify-tag

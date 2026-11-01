@@ -27,6 +27,8 @@ import '../features/settings/settings_controller.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/transactions/transaction_form.dart';
 import '../features/transactions/transactions_screen.dart';
+import '../features/update/update_controller.dart';
+import '../features/update/update_widgets.dart';
 import '../features/usage/usage_tracker.dart';
 import 'providers.dart';
 
@@ -40,6 +42,7 @@ String? redirectFor({
   required String location,
   required SessionState session,
   required bool introSeen,
+  bool updateRequired = false,
 }) {
   String? go(String target) => location == target ? null : target;
   if (!introSeen) return go('/intro');
@@ -47,6 +50,8 @@ String? redirectFor({
     SessionLoading() => go('/splash'),
     SessionUnavailable() => go('/unavailable'),
     SignedOut() => go('/login'),
+    // Versiune sub minimul serverului: nicio funcție financiară până la actualizare.
+    SignedIn() when updateRequired => go('/update-required'),
     SignedIn() => _gateRoutes.contains(location) ? '/' : null,
   };
 }
@@ -56,7 +61,8 @@ class _RouterRefresh extends ChangeNotifier {
   _RouterRefresh(Ref ref) {
     ref
       ..listen<SessionState>(sessionProvider, (_, _) => notifyListeners())
-      ..listen(settingsProvider, (_, _) => notifyListeners());
+      ..listen(settingsProvider, (_, _) => notifyListeners())
+      ..listen(updateControllerProvider, (_, _) => notifyListeners());
   }
 }
 
@@ -71,6 +77,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       location: state.matchedLocation,
       session: ref.read(sessionProvider),
       introSeen: ref.read(settingsProvider).introSeen,
+      updateRequired: ref
+          .read(updateControllerProvider.notifier)
+          .updateRequired,
     ),
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
@@ -79,6 +88,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/unavailable',
         builder: (_, _) => const SessionUnavailableScreen(),
+      ),
+      GoRoute(
+        path: '/update-required',
+        builder: (_, _) => const UpdateRequiredScreen(),
       ),
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),

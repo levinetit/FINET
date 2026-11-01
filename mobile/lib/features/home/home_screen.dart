@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../update/update_widgets.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/money/format.dart';
@@ -40,6 +43,7 @@ class HomeScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const UpdateBanner(),
             const MonthSelector(),
             const SizedBox(height: 8),
             AsyncView<DashboardData>(

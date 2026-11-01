@@ -8,11 +8,15 @@ on:
     paths:
       - "mobile/**"
       - ".github/workflows/android.yml"
+      - ".github/workflows/android-release.yml"
+      - ".github/scripts/verify-android-apk.sh"
   push:
     branches: [main]
     paths:
       - "mobile/**"
       - ".github/workflows/android.yml"
+      - ".github/workflows/android-release.yml"
+      - ".github/scripts/verify-android-apk.sh"
 
 permissions:
   contents: read
@@ -73,40 +77,38 @@ jobs:
       - name: APK de debug
         run: flutter build apk --debug --dart-define=API_BASE_URL=https://finet.invalid
 
-      - name: Verifică APK-ul (identificator, versiune minimă, mărime)
+      - name: Verifică APK-ul de debug
+        run: ../.github/scripts/verify-android-apk.sh build/app/outputs/flutter-apk/app-debug.apk debug
+
+      # Build-ul release nu are voie să existe fără cheie: fără semnare trebuie să EȘUEZE.
+      - name: Release fără cheie trebuie să eșueze
         run: |
-          apk=build/app/outputs/flutter-apk/app-debug.apk
-          test -s "$apk"
-          size=$(stat -c %s "$apk")
-          echo "Mărime: $size octeți"
-          test "$size" -gt 5000000
-          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
-          # Fișier întreg (fără `| head`, care poate tăia ieșirea): verificările negative depind de el.
-          "$aapt2" dump badging "$apk" > badging.txt
-          head -5 badging.txt
-          grep -q "package: name='ro.finet.app'" badging.txt
-          grep -q "^minSdkVersion:'29'" badging.txt
-          grep -q "uses-permission: name='android.permission.INTERNET'" badging.txt
-          # Camera prin intentul sistemului: nicio permisiune de cameră sau de stocare în APK.
-          # `! grep` nu oprește scriptul sub `set -e`, de aceea `if` explicit.
-          if grep -E "uses-permission(-sdk-23)?: name='android\.permission\.(CAMERA|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA[^']*)'" badging.txt; then
-            echo "Permisiune interzisă în APK" >&2
+          if flutter build apk --release --dart-define=API_BASE_URL=https://finet.invalid > release-nokey.log 2>&1; then
+            echo "Build-ul release a reușit fără cheie de semnare" >&2
             exit 1
           fi
-          # „Partajează" din alte aplicații: filtrele de intent trebuie să existe în APK-ul construit
-          # (singura dovadă automată că FINET apare în meniul Android de partajare).
-          "$aapt2" dump xmltree --file AndroidManifest.xml "$apk" > manifest.txt
-          for needle in \
-            'android.intent.action.SEND"' \
-            'android.intent.action.SEND_MULTIPLE"' \
-            '"image/*"' \
-            '"application/pdf"' \
-            '"text/csv"'; do
-            if ! grep -qF "$needle" manifest.txt; then
-              echo "Lipsește din manifest: $needle" >&2
-              exit 1
-            fi
-          done
+          if ! grep -q "Semnarea release nu e pregătită" release-nokey.log; then
+            tail -30 release-nokey.log >&2
+            echo "Eșec din alt motiv decât lipsa cheii" >&2
+            exit 1
+          fi
+
+      # Cu o cheie TEMPORARĂ (generată aici, aruncată la sfârșit) se dovedește că configurația
+      # release se construiește, se semnează și trece verificările. Cheia reală nu există în PR-uri.
+      - name: APK release cu cheie temporară
+        env:
+          FINET_KEYSTORE_PATH: ${{ runner.temp }}/ci-temp.jks
+          FINET_KEY_ALIAS: ci-temp
+        run: |
+          pass=$(openssl rand -hex 16)
+          echo "::add-mask::$pass"
+          keytool -genkeypair -keystore "$FINET_KEYSTORE_PATH" -storetype PKCS12 \
+            -storepass "$pass" -keypass "$pass" -alias "$FINET_KEY_ALIAS" \
+            -keyalg RSA -keysize 2048 -validity 2 -dname "CN=FINET CI temporar" > /dev/null
+          export FINET_KEYSTORE_PASSWORD="$pass" FINET_KEY_PASSWORD="$pass"
+          flutter build apk --release --build-name=0.0.0 --build-number=1 \
+            --dart-define=API_BASE_URL=https://finet.invalid
+          ../.github/scripts/verify-android-apk.sh build/app/outputs/flutter-apk/app-release.apk release - 0.0.0 1
 
       - uses: actions/upload-artifact@v5
         with:

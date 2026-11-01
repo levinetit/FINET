@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../update/update_widgets.dart';
+
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
@@ -21,6 +24,7 @@ class MoreScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const UpdateBanner(),
           Card(
             child: Column(
               children: [

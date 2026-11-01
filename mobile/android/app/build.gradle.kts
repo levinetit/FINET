@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -28,12 +30,50 @@ android {
         versionName = flutter.versionName
     }
 
+    // Semnarea release: cheia operatorului, din variabile de mediu (CI: GitHub Secrets) sau din
+    // `android/key.properties` (local, în afara repository-ului). Nu există cale de rezervă către
+    // cheia de debug: fără cheie, build-ul release se oprește (vezi `taskGraph` mai jos).
+    val keyProps = Properties().apply {
+        val file = rootProject.file("key.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
+    fun signing(env: String, prop: String): String? =
+        System.getenv(env)?.takeIf { it.isNotBlank() } ?: keyProps.getProperty(prop)
+    val storeFilePath = signing("FINET_KEYSTORE_PATH", "storeFile")
+    val storePassword = signing("FINET_KEYSTORE_PASSWORD", "storePassword")
+    val keyAlias = signing("FINET_KEY_ALIAS", "keyAlias")
+    val keyPassword = signing("FINET_KEY_PASSWORD", "keyPassword")
+    val releaseSigningReady = listOf(storeFilePath, storePassword, keyAlias, keyPassword).all { it != null } &&
+        file(storeFilePath!!).exists()
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            create("release") {
+                storeFile = file(storeFilePath!!)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // ATENȚIE: semnarea release (cheia operatorului, GitHub Secrets) vine în Faza E.
-            // Până atunci un APK release e semnat cu cheia de debug și NU se distribuie; CI
-            // construiește doar APK de debug.
-            signingConfig = signingConfigs.getByName("debug")
+            if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    // Un APK release nesemnat sau semnat cu cheia de debug nu trebuie să existe niciodată.
+    gradle.taskGraph.whenReady {
+        val buildsRelease = allTasks.any {
+            it.project == project && it.name.contains("Release", ignoreCase = true)
+        }
+        if (buildsRelease && !releaseSigningReady) {
+            throw GradleException(
+                "Semnarea release nu e pregătită: setează FINET_KEYSTORE_PATH, " +
+                    "FINET_KEYSTORE_PASSWORD, FINET_KEY_ALIAS și FINET_KEY_PASSWORD " +
+                    "(sau android/key.properties). Vezi docs/FINET_ANDROID_BUILD.md.",
+            )
         }
     }
 }

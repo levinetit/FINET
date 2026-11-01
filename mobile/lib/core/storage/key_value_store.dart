@@ -8,6 +8,8 @@ abstract final class StoreKeys {
   static const introSeen = 'intro_seen';
   static const usageStats = 'usage_stats_enabled';
   static const appLock = 'app_lock_enabled';
+  static const updateCache = 'update_cache';
+  static const updateCheckedAt = 'update_checked_at';
 }
 
 /// Stocare cheie-valoare pentru secrete și setări mici. Implementarea reală folosește Android
