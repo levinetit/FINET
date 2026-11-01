@@ -309,7 +309,7 @@ Audit făcut (2026-11-01): `docs/FINET_ANDROID_AUDIT.md`. Backendul acoperă faz
 | Fază | Stare | Depinde de (web) |
 |---|---|---|
 | A — Fundație (Flutter în `mobile/`, temă, navigare, client Dio, date simulate, CI) | **în repo** (branch `feature/android-a`, PR de revizuit; ADR 0038): `applicationId` `ro.finet.app`, `minSdk` 29, Flutter 3.47.9; analiză și 113 teste locale trec, APK-ul de debug se construiește doar în CI (`android.yml`); pictograma de lansare e încă cea implicită Flutter (Faza E) | — |
-| B — Autentificare și profil | neimplementat (API-ul web există din F1-B: login `bearer`, `/api/v1/me`, sesiuni) | Faza 1 + API `/api/v1/` |
+| B — Autentificare și profil | **în repo** (branch `feature/android-b`, ADR 0039): login/logout cu revocare, 401/403, profil și gospodării, `X-FINET-Client`, statistici de utilizare, `FLAG_SECURE`, blocare cu amprentă. Verificat doar pe un server FINET simulat; login pe backendul real și telefonul cu WARP așteaptă hostname-ul și contul de test | Faza 1 + API `/api/v1/` |
 | C — Funcții de bază (dashboard, tranzacții, bugete) | neimplementat | Fazele 2–3 |
 | D — Recurențe și documente (bonuri, extrase, partajare) | neimplementat | Fazele 5–7 |
 | E — Stabilizare și livrare (APK semnat, GitHub Releases) | neimplementat | backend gata în F9-A: `GET /api/v1/app/android/latest`, `/settings/android` |

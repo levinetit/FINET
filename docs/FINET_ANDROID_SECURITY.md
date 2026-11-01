@@ -1,0 +1,22 @@
+# FINET Android — verificări de securitate
+
+Se completează pe parcursul fazelor (`docs/FINET_ANDROID_MASTER_PROMPT.md` §6, §15). Stare la Faza B.
+
+| Cerință | Stare | Dovadă |
+|---|---|---|
+| HTTPS obligatoriu în release; fără oprirea validării TLS | făcut | `network_security_config.xml` (fără trafic în clar), `AppEnv.validate`, teste `env_test.dart`; nu există `badCertificateCallback` |
+| Trafic HTTP doar în debug, doar către `10.0.2.2`/`localhost` | făcut | `src/debug/res/xml/network_security_config.xml` |
+| Tokenul doar în Android Keystore | făcut | `SecureKeyValueStore` (`flutter_secure_storage`); `StoreKeys.sessionToken` |
+| Tokenul nu apare în loguri, URL-uri, erori, statistici | făcut | fără `LogInterceptor` (test), URL-urile nu conțin tokenul (test), `ApiError` nu poartă antete, evenimentele au câmpuri fixe (test) |
+| Fără secrete în APK sau repository | făcut | `--dart-define` conține doar URL și comutatoare; nicio cheie, parolă sau service token Cloudflare |
+| 401 → login, cu datele locale șterse | făcut | `UnauthorizedInterceptor` + `SessionController.expire()`; test `session_flow_test.dart` |
+| 403 → mesaj clar, fără reîncercări | făcut | `RetryInterceptor` reîncearcă doar erori de rețea |
+| Deconectare: revocare pe server, ștergerea tokenului și a cache-ului | făcut | test `deconectare` (server primește `sign-out` cu bearer; nimic nu rămâne) |
+| `FLAG_SECURE` pe ferestrele cu date financiare | făcut (întreaga fereastră) | `MainActivity.kt` |
+| Blocare opțională cu amprentă / PIN | făcut | `app_lock.dart`, `lock_test.dart`; neverificat pe telefon real |
+| Ascunderea sumelor | făcut | `AmountText`, comutator în bara de sus |
+| Fără date financiare în notificări | n/a | nu există notificări |
+| Fără copii de siguranță ale datelor aplicației | făcut | `allowBackup=false`, `data_extraction_rules.xml` |
+| Statistici: fără câmpuri financiare | făcut | `UsageEvent` are 4 câmpuri; test pe schemă |
+| Acces cross-gospodărie | n/a (backend) | testat în backend (`404`) |
+| Verificare pe telefon real | **neefectuată** | cere telefon cu WARP și backend de test |

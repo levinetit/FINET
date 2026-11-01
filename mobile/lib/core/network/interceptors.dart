@@ -24,6 +24,37 @@ class AuthInterceptor extends Interceptor {
   }
 }
 
+/// Antetul `X-FINET-Client` pe fiecare cerere (versiune, Android, model, instalare). Serverul
+/// înregistrează instalarea doar cu consimțământul de statistici; antetul în sine nu conține nimic
+/// financiar.
+class ClientHeaderInterceptor extends Interceptor {
+  ClientHeaderInterceptor(this.headerValue);
+
+  final String Function() headerValue;
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    options.headers['X-FINET-Client'] = headerValue();
+    handler.next(options);
+  }
+}
+
+/// 401 pe o cerere cu token = sesiune expirată sau revocată: apelează [onUnauthorized] o dată
+/// (sesiunea șterge datele locale și duce la login). Cererile fără token (de exemplu loginul
+/// însuși) nu declanșează nimic.
+class UnauthorizedInterceptor extends Interceptor {
+  UnauthorizedInterceptor(this.onUnauthorized);
+
+  final void Function() onUnauthorized;
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final hadToken = err.requestOptions.headers.containsKey('Authorization');
+    if (err.response?.statusCode == 401 && hadToken) onUnauthorized();
+    handler.next(err);
+  }
+}
+
 /// `Idempotency-Key` pe fiecare `POST` (promptul Android §7): UUID generat o singură dată per
 /// acțiune. Cheia stă în `options.headers`, deci o reîncercare automată a aceleiași cereri o
 /// refolosește; o acțiune nouă a utilizatorului primește o cheie nouă.

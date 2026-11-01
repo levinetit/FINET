@@ -14,6 +14,8 @@ import 'interceptors.dart';
 Dio createApiClient(
   AppEnv env, {
   FutureOr<String?> Function()? tokenProvider,
+  String Function()? clientHeader,
+  void Function()? onUnauthorized,
   HttpClientAdapter? adapter,
   Future<void> Function(Duration)? retrySleep,
 }) {
@@ -33,8 +35,10 @@ Dio createApiClient(
   if (adapter != null) dio.httpClientAdapter = adapter;
   dio.interceptors.addAll([
     AuthInterceptor(tokenProvider ?? () => null),
+    if (clientHeader != null) ClientHeaderInterceptor(clientHeader),
     IdempotencyInterceptor(),
     RetryInterceptor(dio: dio, sleep: retrySleep),
+    if (onUnauthorized != null) UnauthorizedInterceptor(onUnauthorized),
   ]);
   return dio;
 }

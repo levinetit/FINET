@@ -20,6 +20,9 @@ enum ApiErrorKind {
   /// 402: abonament necesar (varianta `saas`).
   subscriptionRequired,
 
+  /// 429: prea multe cereri.
+  rateLimited,
+
   /// 4xx cu eroare FINET (validare, conflict, nu există etc.).
   client,
 
@@ -35,6 +38,7 @@ class ApiError implements Exception {
     this.code,
     this.status,
     this.fields = const {},
+    this.retryAfter,
   });
 
   final ApiErrorKind kind;
@@ -43,20 +47,29 @@ class ApiError implements Exception {
   final int? status;
   final Map<String, String> fields;
 
+  /// Din antetul `Retry-After` al unui 429, dacă există.
+  final Duration? retryAfter;
+
   /// Mesajul pentru Cloudflare Access (promptul Android §11).
   static const String accessWallMessage =
       'Nu te poți conecta la FINET. Pornește aplicația Cloudflare One și încearcă din nou.';
 
-  /// Codul pentru evenimentul `error_shown`: doar codul, niciodată textul (promptul §10.1).
+  /// Codul pentru evenimentul `error_shown`: valorile fixe acceptate de server
+  /// (`POST /api/v1/app/events`). Niciodată textul erorii (promptul §10.1).
   String get analyticsCode => switch (kind) {
-    ApiErrorKind.network => 'NETWORK_ERROR',
-    ApiErrorKind.timeout => 'NETWORK_TIMEOUT',
-    ApiErrorKind.unauthorized => 'UNAUTHORIZED',
-    ApiErrorKind.forbidden => 'FORBIDDEN',
-    ApiErrorKind.accessWall => 'ACCESS_WALL',
-    ApiErrorKind.subscriptionRequired => 'SUBSCRIPTION_REQUIRED',
-    ApiErrorKind.client => (code ?? 'CLIENT_ERROR').toUpperCase(),
-    ApiErrorKind.server => 'SERVER_ERROR',
+    ApiErrorKind.network => 'network_unavailable',
+    ApiErrorKind.timeout => 'network_timeout',
+    ApiErrorKind.unauthorized => 'unauthenticated',
+    ApiErrorKind.forbidden || ApiErrorKind.subscriptionRequired => 'forbidden',
+    ApiErrorKind.accessWall => 'access_required',
+    ApiErrorKind.rateLimited => 'rate_limited',
+    ApiErrorKind.server => 'server_error',
+    ApiErrorKind.client => switch (status) {
+      404 => 'not_found',
+      409 => 'conflict',
+      400 || 422 => 'validation_failed',
+      _ => 'unknown',
+    },
   };
 
   @override
@@ -113,8 +126,10 @@ class ApiError implements Exception {
     String? code;
     String? message;
     final fields = <String, String>{};
-    if (body is Map && body['error'] is Map) {
-      final error = body['error'] as Map;
+    if (body is Map) {
+      // Formatul FINET `{ error: { code, message, fields? } }`; rutele Better Auth
+      // (`/api/auth/*`) răspund cu `{ code, message }` la nivelul de sus.
+      final error = body['error'] is Map ? body['error'] as Map : body;
       code = error['code'] is String ? error['code'] as String : null;
       message = error['message'] is String ? error['message'] as String : null;
       final f = error['fields'];
@@ -128,6 +143,7 @@ class ApiError implements Exception {
       401 => ApiErrorKind.unauthorized,
       402 => ApiErrorKind.subscriptionRequired,
       403 => ApiErrorKind.forbidden,
+      429 => ApiErrorKind.rateLimited,
       >= 400 && < 500 => ApiErrorKind.client,
       _ => ApiErrorKind.server,
     };
@@ -137,7 +153,14 @@ class ApiError implements Exception {
       code: code,
       status: status,
       fields: fields,
+      retryAfter: _retryAfter(response),
     );
+  }
+
+  static Duration? _retryAfter(Response<dynamic> response) {
+    final seconds = int.tryParse(response.headers.value('retry-after') ?? '');
+    if (seconds == null || seconds < 0 || seconds > 86400) return null;
+    return Duration(seconds: seconds);
   }
 
   static String _fallbackMessage(ApiErrorKind kind) => switch (kind) {

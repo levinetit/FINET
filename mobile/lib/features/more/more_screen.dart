@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/tokens.dart';
 import '../../core/widgets/finet_scaffold.dart';
@@ -8,13 +9,11 @@ import '../../core/widgets/finet_scaffold.dart';
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
 
-  static const _entries = <(IconData, String, String)>[
-    (Icons.person_outline, 'Profil și gospodării', 'Faza B'),
-    (Icons.savings_outlined, 'Bugete și obiective', 'Faza C'),
-    (Icons.repeat, 'Recurențe', 'Faza D'),
-    (Icons.receipt_long_outlined, 'Bonuri și extrase', 'Faza D'),
-    (Icons.family_restroom_outlined, 'Familie', 'după MVP'),
-    (Icons.settings_outlined, 'Setări și confidențialitate', 'Faza B'),
+  static const _soon = <_Soon>[
+    _Soon(Icons.savings_outlined, 'Bugete și obiective', 'Faza C'),
+    _Soon(Icons.repeat, 'Recurențe', 'Faza D'),
+    _Soon(Icons.receipt_long_outlined, 'Bonuri și extrase', 'Faza D'),
+    _Soon(Icons.family_restroom_outlined, 'Familie', 'după MVP'),
   ];
 
   @override
@@ -29,14 +28,33 @@ class MoreScreen extends StatelessWidget {
           Card(
             child: Column(
               children: [
-                for (final (i, e) in _entries.indexed) ...[
+                ListTile(
+                  leading: Icon(
+                    Icons.person_outline,
+                    color: context.finet.muted,
+                  ),
+                  title: const Text('Profil și gospodării'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/profile'),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Icon(
+                    Icons.settings_outlined,
+                    color: context.finet.muted,
+                  ),
+                  title: const Text('Setări și confidențialitate'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/settings'),
+                ),
+                for (final e in _soon) ...[
+                  const Divider(),
                   ListTile(
-                    leading: Icon(e.$1, color: context.finet.muted),
-                    title: Text(e.$2),
-                    subtitle: Text('Disponibil în ${e.$3}'),
+                    leading: Icon(e.icon, color: context.finet.muted),
+                    title: Text(e.title),
+                    subtitle: Text('Disponibil în ${e.phase}'),
                     enabled: false,
                   ),
-                  if (i != _entries.length - 1) const Divider(),
                 ],
               ],
             ),
@@ -44,7 +62,7 @@ class MoreScreen extends StatelessWidget {
           const SizedBox(height: 24),
           Center(
             child: Text(
-              'FINET Android · versiunea de dezvoltare',
+              'FINET Android',
               style: text.bodySmall?.copyWith(color: context.finet.muted),
             ),
           ),
@@ -52,4 +70,11 @@ class MoreScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _Soon {
+  const _Soon(this.icon, this.title, this.phase);
+  final IconData icon;
+  final String title;
+  final String phase;
 }

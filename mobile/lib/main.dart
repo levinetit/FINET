@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
+import 'core/client/client_info.dart';
 import 'core/config/env.dart';
+import 'core/providers.dart';
+import 'core/storage/key_value_store.dart';
+import 'features/settings/app_settings.dart';
+import 'features/settings/settings_controller.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final env = AppEnv.fromEnvironment();
   final problems = env.validate(isRelease: kReleaseMode);
@@ -13,7 +18,23 @@ void main() {
     runApp(_ConfigError(problems: problems));
     return;
   }
-  runApp(const ProviderScope(child: FinetApp()));
+  final store = SecureKeyValueStore();
+  final info = await loadClientInfo(store);
+  final settings = await AppSettings.load(
+    store,
+    usageStatsDefault: env.usageStatsDefault,
+  );
+  runApp(
+    ProviderScope(
+      overrides: [
+        appEnvProvider.overrideWithValue(env),
+        keyValueStoreProvider.overrideWithValue(store),
+        clientInfoProvider.overrideWithValue(info),
+        initialSettingsProvider.overrideWithValue(settings),
+      ],
+      child: const FinetApp(),
+    ),
+  );
 }
 
 /// Configurare greșită la build: aplicația nu pornește „pe jumătate”, afișează motivul.

@@ -63,6 +63,8 @@ jobs:
         run: flutter analyze
 
       - name: Teste
+        # Un test blocat nu trebuie să țină runner-ul 40 de minute.
+        timeout-minutes: 10
         run: flutter test
 
       # Faza A rulează pe date simulate: nu cere `API_BASE_URL`. Valorile `--dart-define` nu sunt
