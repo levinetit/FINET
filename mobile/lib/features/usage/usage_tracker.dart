@@ -29,6 +29,10 @@ abstract final class UsageEvents {
   static const sessionExpired = 'session_expired';
   static const screenView = 'screen_view';
   static const errorShown = 'error_shown';
+  static const dashboardViewed = 'dashboard_viewed';
+  static const reportViewed = 'report_viewed';
+  static const transactionCreated = 'transaction_created';
+  static const goalContributionAdded = 'goal_contribution_added';
 }
 
 /// Ecranele acceptate de server pentru `screen_view` (subset folosit acum).
@@ -41,6 +45,9 @@ abstract final class UsageScreens {
   static const reports = 'reports';
   static const settings = 'settings';
   static const profile = 'profile';
+  static const transactionEdit = 'transaction_edit';
+  static const budgets = 'budgets';
+  static const goals = 'goals';
 }
 
 /// Coada locală de evenimente: mică (cel mult [maxQueue]), în memorie, trimisă în loturi de cel

@@ -6,6 +6,8 @@ import '../features/auth/intro_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/session.dart';
 import '../features/auth/session_screens.dart';
+import '../features/budgets/budgets_screen.dart';
+import '../features/finance/models.dart';
 import '../features/home/home_screen.dart';
 import '../features/more/more_screen.dart';
 import '../features/profile/profile_screen.dart';
@@ -13,6 +15,7 @@ import '../features/reports/reports_screen.dart';
 import '../features/scan/scan_screen.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/transactions/transaction_form.dart';
 import '../features/transactions/transactions_screen.dart';
 import '../features/usage/usage_tracker.dart';
 import 'providers.dart';
@@ -69,6 +72,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+      GoRoute(path: '/budgets', builder: (_, _) => const BudgetsScreen()),
+      GoRoute(
+        path: '/transactions/new',
+        builder: (_, _) => const TransactionFormScreen(),
+      ),
+      GoRoute(
+        path: '/transactions/edit',
+        // Tranzacția vine ca `extra`; fără ea (de exemplu după repornire) se revine la listă.
+        redirect: (_, state) =>
+            state.extra is FinTransaction ? null : '/transactions',
+        builder: (_, state) =>
+            TransactionFormScreen(existing: state.extra! as FinTransaction),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _Shell(shell: shell),
         branches: [

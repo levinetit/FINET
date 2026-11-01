@@ -17,14 +17,14 @@ void main() {
 
     expect(find.text('Aplicația este blocată'), findsOneWidget);
     // Conținutul nu e desenat și nu e expus accesibilității cât timp e blocat.
-    expect(find.text('Sold net'), findsNothing);
+    expect(find.text('Sold net (RON)'), findsNothing);
     expect(auth.prompts, 1);
 
     auth.succeeds = true;
     await tester.tap(find.text('Deblochează'));
     await tester.pumpAndSettle();
     expect(find.text('Aplicația este blocată'), findsNothing);
-    expect(find.text('Sold net'), findsOneWidget);
+    expect(find.text('Sold net (RON)'), findsOneWidget);
   });
 
   testWidgets('fără blocare activată nu cere nimic', (tester) async {
@@ -43,7 +43,7 @@ void main() {
     final h = Harness(settings: locked, authenticator: auth, clock: () => now)
       ..signedInStore();
     await h.pump(tester);
-    expect(find.text('Sold net'), findsOneWidget);
+    expect(find.text('Sold net (RON)'), findsOneWidget);
     expect(auth.prompts, 1);
 
     // 30 de secunde în fundal: rămâne deblocată.
@@ -52,7 +52,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(auth.prompts, 1);
-    expect(find.text('Sold net'), findsOneWidget);
+    expect(find.text('Sold net (RON)'), findsOneWidget);
 
     // 3 minute în fundal: se blochează și cere autentificarea.
     auth.succeeds = false;
@@ -62,7 +62,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(auth.prompts, 2);
     expect(find.text('Aplicația este blocată'), findsOneWidget);
-    expect(find.text('Sold net'), findsNothing);
+    expect(find.text('Sold net (RON)'), findsNothing);
   });
 
   group('comutatorul din Setări', () {

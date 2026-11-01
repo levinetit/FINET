@@ -20,7 +20,6 @@ class SettingsScreen extends ConsumerWidget {
     final muted = text.bodySmall?.copyWith(color: context.finet.muted);
     return FinetScaffold(
       title: 'Setări',
-      mock: false,
       screen: UsageScreens.settings,
       body: ListView(
         padding: const EdgeInsets.all(16),

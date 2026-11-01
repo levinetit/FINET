@@ -23,6 +23,7 @@ class HouseholdInfo {
     required this.role,
     required this.currency,
     this.current = false,
+    this.timezone = 'Europe/Bucharest',
   });
 
   /// Din `GET /api/v1/households` (`HouseholdSummary`) sau din `Me.household`.
@@ -32,6 +33,9 @@ class HouseholdInfo {
     role: _str(json, 'role'),
     currency: Currency.tryParse(json['defaultCurrency']) ?? Currency.ron,
     current: json['current'] == true,
+    timezone: json['timezone'] is String
+        ? json['timezone']! as String
+        : 'Europe/Bucharest',
   );
 
   final String id;
@@ -39,6 +43,9 @@ class HouseholdInfo {
   final String role;
   final Currency currency;
   final bool current;
+
+  /// Fusul orar al gospodăriei (IANA); „azi” și luna curentă se calculează în el.
+  final String timezone;
 
   bool get isOwner => role == 'owner';
 }

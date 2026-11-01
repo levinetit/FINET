@@ -53,10 +53,7 @@ DioException netError([
   DioExceptionType type = DioExceptionType.connectionError,
 ]) => DioException(requestOptions: RequestOptions(), type: type);
 
-const env = AppEnv(
-  apiBaseUrl: 'https://finet.exemplu.test',
-  useMockData: false,
-);
+const env = AppEnv(apiBaseUrl: 'https://finet.exemplu.test');
 
 Dio client(FakeAdapter adapter, {String? token}) => createApiClient(
   env,

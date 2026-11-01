@@ -4,8 +4,9 @@ Clientul Android al FINET (Flutter). Specificația: `docs/FINET_ANDROID_MASTER_P
 
 - `applicationId`: `ro.finet.app` · `minSdk`: 29 (Android 10)
 - Flutter **3.47.9** (stable), Dart 3.13.7. Aceeași versiune e fixată în `.github/workflows/android.yml`.
-- Faza A: ecrane pe **date simulate** (banda „Date simulate”).
-- Faza B: autentificare (Better Auth `bearer`), sesiune, profil și gospodării, statistici de utilizare, blocare cu amprentă. Cifrele rămân simulate până în Faza C.
+- Faza A: fundația (temă, navigare, bani, client HTTP).
+- Faza B: autentificare (Better Auth `bearer`), sesiune, profil și gospodării, statistici de utilizare, blocare cu amprentă. 
+- Faza C: dashboard, conturi, tranzacții (listă paginată, căutare, filtre, adăugare, editare, ștergere), bugete cu semafor, obiective cu contribuții, raport lunar. Toate cifrele vin de la server; aplicația nu recalculează nimic. Nu există date simulate în aplicație (doar în teste).
 
 ## Comenzi
 
@@ -15,15 +16,14 @@ flutter pub get
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze
 flutter test
-flutter build apk --debug --dart-define=USE_MOCK_DATA=true
+flutter build apk --debug --dart-define=API_BASE_URL=https://finet.invalid
 ```
 
 ## Configurare (`--dart-define`)
 
 | Variabilă | Rol |
 |---|---|
-| `API_BASE_URL` | adresa serverului FINET; în release doar HTTPS, fără adrese locale. Valoarea reală o dă operatorul. |
-| `USE_MOCK_DATA` | `true` implicit până în Faza C; un build release cu date simulate nu pornește. |
+| `API_BASE_URL` | adresa serverului FINET (obligatorie); în release doar HTTPS, fără adrese locale. Valoarea reală o dă operatorul. |
 | `USAGE_STATS_DEFAULT` | `true` implicit (`personal`); `false` pentru `saas` (statisticile cer acord explicit). |
 
 Valorile `--dart-define` nu sunt secrete (se pot extrage din APK). Aplicația nu conține chei, parole sau service tokenuri.

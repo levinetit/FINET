@@ -26,7 +26,6 @@ class ProfileScreen extends ConsumerWidget {
     final muted = text.bodySmall?.copyWith(color: context.finet.muted);
     return FinetScaffold(
       title: 'Profil',
-      mock: false,
       screen: UsageScreens.profile,
       body: session is! SignedIn
           ? const LoadingState()

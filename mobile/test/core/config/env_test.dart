@@ -1,8 +1,7 @@
 import 'package:finet_mobile/core/config/env.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-AppEnv env(String url, {bool mock = false}) =>
-    AppEnv(apiBaseUrl: url, useMockData: mock);
+AppEnv env(String url) => AppEnv(apiBaseUrl: url);
 
 void main() {
   group('release', () {
@@ -22,13 +21,6 @@ void main() {
       expect(env('https://10.0.2.2').validate(isRelease: true), isNotEmpty);
     });
 
-    test('datele simulate sunt respinse', () {
-      expect(
-        env('https://finet.exemplu.test', mock: true).validate(isRelease: true),
-        isNotEmpty,
-      );
-    });
-
     test('lipsa adresei este respinsă', () {
       expect(env('').validate(isRelease: true), isNotEmpty);
     });
@@ -44,11 +36,7 @@ void main() {
       );
     });
 
-    test('cu date simulate adresa nu e obligatorie', () {
-      expect(env('', mock: true).validate(isRelease: false), isEmpty);
-    });
-
-    test('fără date simulate adresa e obligatorie', () {
+    test('adresa e obligatorie (nu mai există date simulate)', () {
       expect(env('').validate(isRelease: false), isNotEmpty);
     });
 
@@ -64,7 +52,6 @@ void main() {
       expect(
         const AppEnv(
           apiBaseUrl: '',
-          useMockData: true,
           usageStatsDefault: false,
         ).usageStatsDefault,
         isFalse,

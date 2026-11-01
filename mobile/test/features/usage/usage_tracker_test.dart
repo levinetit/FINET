@@ -134,33 +134,66 @@ void main() {
   });
 
   test('toate numele și ecranele folosite există în contractul serverului', () {
+    // Listele din `POST /api/v1/app/events` (docs/openapi.json); clientul folosește un subset.
     const serverNames = {
       'app_open',
       'login',
       'logout',
       'session_expired',
       'screen_view',
+      'receipt_scan_started',
+      'receipt_uploaded',
+      'receipt_confirmed',
+      'statement_imported',
+      'transaction_created',
+      'share_import',
+      'update_prompt_shown',
+      'update_started',
       'error_shown',
+      'dashboard_viewed',
+      'report_viewed',
+      'budget_created',
+      'goal_created',
+      'goal_contribution_added',
+      'tag_created',
+      'export_downloaded',
+      'recurring_created',
+      'recurring_generated',
     };
     const serverScreens = {
       'login',
       'onboarding',
       'dashboard',
       'transactions',
+      'transaction_detail',
+      'transaction_edit',
+      'accounts',
+      'categories',
+      'transfers',
       'scan',
+      'receipts',
+      'statements',
+      'budgets',
+      'goals',
+      'recurring',
       'reports',
       'settings',
       'profile',
+      'update',
     };
-    expect({
+    final used = {
       UsageEvents.appOpen,
       UsageEvents.login,
       UsageEvents.logout,
       UsageEvents.sessionExpired,
       UsageEvents.screenView,
       UsageEvents.errorShown,
-    }, serverNames);
-    expect({
+      UsageEvents.dashboardViewed,
+      UsageEvents.reportViewed,
+      UsageEvents.transactionCreated,
+      UsageEvents.goalContributionAdded,
+    };
+    final screens = {
       UsageScreens.login,
       UsageScreens.onboarding,
       UsageScreens.dashboard,
@@ -169,7 +202,12 @@ void main() {
       UsageScreens.reports,
       UsageScreens.settings,
       UsageScreens.profile,
-    }, serverScreens);
+      UsageScreens.transactionEdit,
+      UsageScreens.budgets,
+      UsageScreens.goals,
+    };
+    expect(serverNames, containsAll(used));
+    expect(serverScreens, containsAll(screens));
   });
 
   test('codurile de eroare sunt cele acceptate de server', () {

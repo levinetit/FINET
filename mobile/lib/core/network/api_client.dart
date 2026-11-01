@@ -51,3 +51,16 @@ Future<T> guardApi<T>(Future<T> Function() request) async {
     throw ApiError.fromDio(e);
   }
 }
+
+/// Citește un răspuns; orice abatere de la forma așteptată devine [ApiError] de server (nu o
+/// excepție necontrolată în interfață).
+T parseBody<T>(T Function() read) {
+  try {
+    return read();
+  } on Object {
+    throw const ApiError(
+      kind: ApiErrorKind.server,
+      message: 'Răspuns neașteptat de la server.',
+    );
+  }
+}
