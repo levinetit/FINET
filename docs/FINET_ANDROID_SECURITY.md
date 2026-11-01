@@ -1,6 +1,6 @@
 # FINET Android — verificări de securitate
 
-Se completează pe parcursul fazelor (`docs/FINET_ANDROID_MASTER_PROMPT.md` §6, §15). Stare la Faza B.
+Se completează pe parcursul fazelor (`docs/FINET_ANDROID_MASTER_PROMPT.md` §6, §15). Stare la Faza D.
 
 | Cerință | Stare | Dovadă |
 |---|---|---|
@@ -20,3 +20,8 @@ Se completează pe parcursul fazelor (`docs/FINET_ANDROID_MASTER_PROMPT.md` §6,
 | Statistici: fără câmpuri financiare | făcut | `UsageEvent` are 4 câmpuri; test pe schemă |
 | Acces cross-gospodărie | n/a (backend) | testat în backend (`404`) |
 | Verificare pe telefon real | **neefectuată** | cere telefon cu WARP și backend de test |
+| Fără permisiuni de cameră sau de stocare în APK | făcut | camera prin intentul sistemului, `tools:node="remove"` în manifest, verificare în `android.yml` (`if grep … exit 1`) |
+| Fișiere partajate: doar `content://`, copiate în cache, șterse după încărcare și la deconectare | făcut | `MainActivity.kt`, `SystemTempFiles`, teste `scan_flow_test.dart` / `share_flow_test.dart` |
+| Încărcări: aceiași octeți la reîncercare, fără bonuri dublate | făcut (pe server simulat) | `ScanController._prepared`, teste de reîncercare; duplicatele pe serverul real neverificate |
+| Sumele ascunse acoperă ecranele Fazei D | făcut | un test pe fiecare ecran (recurențe, bonuri, extrase) |
+| Camera, partajarea, EXIF/HEIC pe telefon real | **neefectuată** | cere telefon și backend de test |

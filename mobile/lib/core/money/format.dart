@@ -57,3 +57,14 @@ String formatMonth(DateTime d) {
   final name = _months[d.month - 1];
   return '${name[0].toUpperCase()}${name.substring(1)} ${d.year}';
 }
+
+/// Suma pentru un câmp de editare (`1234,50`, fără simbol și fără separatori de mii), care se
+/// citește înapoi cu `parseAmount`. Doar pentru sume nenegative.
+String editableAmount(Money m) {
+  final digits = m.currency.minorUnitDigits;
+  final raw = m.amountMinor.abs().toString().padLeft(digits + 1, '0');
+  final integer = raw.substring(0, raw.length - digits);
+  return digits > 0
+      ? '$integer,${raw.substring(raw.length - digits)}'
+      : integer;
+}

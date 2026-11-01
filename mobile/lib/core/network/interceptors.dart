@@ -95,6 +95,10 @@ class RetryInterceptor extends Interceptor {
 
   static const String _attemptKey = 'finet_retry_attempt';
 
+  /// Cererile cu corp `FormData` (încărcări) nu se pot trimite a doua oară: fluxul e consumat.
+  /// Ele pun `extra[noRetryKey] = true`, iar apelantul reconstruiește corpul din aceiași octeți.
+  static const String noRetryKey = 'finet_no_retry';
+
   static const _networkTypes = {
     DioExceptionType.connectionTimeout,
     DioExceptionType.sendTimeout,
@@ -109,7 +113,8 @@ class RetryInterceptor extends Interceptor {
   ) async {
     final options = err.requestOptions;
     final attempt = (options.extra[_attemptKey] as int?) ?? 0;
-    if (!_networkTypes.contains(err.type) ||
+    if (options.extra[noRetryKey] == true ||
+        !_networkTypes.contains(err.type) ||
         attempt >= maxRetries ||
         !_isSafeToRepeat(options)) {
       return handler.next(err);

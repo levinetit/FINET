@@ -7,6 +7,16 @@ import '../features/auth/login_screen.dart';
 import '../features/auth/session.dart';
 import '../features/auth/session_screens.dart';
 import '../features/budgets/budgets_screen.dart';
+import '../features/recurring/recurring_screen.dart';
+import '../features/receipts/matches_screen.dart';
+import '../features/receipts/receipt_review_screen.dart';
+import '../features/receipts/receipts_screen.dart';
+import '../features/scan/upload_status_screen.dart';
+import '../features/scan/media.dart';
+import '../features/share/share_screens.dart';
+import '../features/statements/import_screen.dart';
+import '../features/statements/preview_screen.dart';
+import '../features/statements/statements_screen.dart';
 import '../features/finance/models.dart';
 import '../features/home/home_screen.dart';
 import '../features/more/more_screen.dart';
@@ -73,6 +83,43 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(path: '/budgets', builder: (_, _) => const BudgetsScreen()),
+      GoRoute(path: '/recurring', builder: (_, _) => const RecurringScreen()),
+      GoRoute(
+        path: '/scan/status',
+        builder: (_, _) => const UploadStatusScreen(),
+      ),
+      GoRoute(path: '/receipts', builder: (_, _) => const ReceiptsScreen()),
+      GoRoute(
+        path: '/receipts/:id',
+        builder: (_, state) =>
+            ReceiptReviewScreen(receiptId: state.pathParameters['id']!),
+      ),
+      GoRoute(path: '/matches', builder: (_, _) => const MatchesScreen()),
+      GoRoute(
+        path: '/share/pdf',
+        // Fișierul vine ca `extra`; fără el (după repornire) nu e nimic de importat.
+        redirect: (_, state) => state.extra is PickedMedia ? null : '/scan',
+        builder: (_, state) =>
+            SharedPdfScreen(file: state.extra! as PickedMedia),
+      ),
+      GoRoute(
+        path: '/share/unsupported',
+        builder: (_, _) => const SharedUnsupportedScreen(),
+      ),
+      GoRoute(path: '/statements', builder: (_, _) => const StatementsScreen()),
+      GoRoute(
+        path: '/statements/import',
+        builder: (_, state) => StatementImportScreen(
+          shared: state.extra is PickedMedia
+              ? state.extra! as PickedMedia
+              : null,
+        ),
+      ),
+      GoRoute(
+        path: '/statements/:id',
+        builder: (_, state) =>
+            StatementPreviewScreen(importId: state.pathParameters['id']!),
+      ),
       GoRoute(
         path: '/transactions/new',
         builder: (_, _) => const TransactionFormScreen(),

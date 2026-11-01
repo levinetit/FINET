@@ -81,10 +81,32 @@ jobs:
           echo "Mărime: $size octeți"
           test "$size" -gt 5000000
           aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
-          "$aapt2" dump badging "$apk" | tee badging.txt | head -5
+          # Fișier întreg (fără `| head`, care poate tăia ieșirea): verificările negative depind de el.
+          "$aapt2" dump badging "$apk" > badging.txt
+          head -5 badging.txt
           grep -q "package: name='ro.finet.app'" badging.txt
           grep -q "^minSdkVersion:'29'" badging.txt
           grep -q "uses-permission: name='android.permission.INTERNET'" badging.txt
+          # Camera prin intentul sistemului: nicio permisiune de cameră sau de stocare în APK.
+          # `! grep` nu oprește scriptul sub `set -e`, de aceea `if` explicit.
+          if grep -E "uses-permission(-sdk-23)?: name='android\.permission\.(CAMERA|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA[^']*)'" badging.txt; then
+            echo "Permisiune interzisă în APK" >&2
+            exit 1
+          fi
+          # „Partajează" din alte aplicații: filtrele de intent trebuie să existe în APK-ul construit
+          # (singura dovadă automată că FINET apare în meniul Android de partajare).
+          "$aapt2" dump xmltree --file AndroidManifest.xml "$apk" > manifest.txt
+          for needle in \
+            'android.intent.action.SEND"' \
+            'android.intent.action.SEND_MULTIPLE"' \
+            '"image/*"' \
+            '"application/pdf"' \
+            '"text/csv"'; do
+            if ! grep -qF "$needle" manifest.txt; then
+              echo "Lipsește din manifest: $needle" >&2
+              exit 1
+            fi
+          done
 
       - uses: actions/upload-artifact@v5
         with:

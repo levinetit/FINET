@@ -41,6 +41,9 @@ class FakeServer implements HttpClientAdapter {
   final Map<String, RouteHandler> routes = {};
   final List<RequestOptions> requests = [];
 
+  /// Corpurile brute `multipart/form-data` primite, în ordinea sosirii (pentru încărcări).
+  final List<Uint8List> multipartBodies = [];
+
   /// Dacă e `true`, orice cerere eșuează ca lipsă de rețea.
   bool offline = false;
 
@@ -80,6 +83,9 @@ class FakeServer implements HttpClientAdapter {
     'current': activeHousehold == id,
     'joinedAt': '2026-01-01T00:00:00.000Z',
   };
+
+  /// Cererea poartă tokenul valid (pentru modulele de test care adaugă rute).
+  bool authorized(RequestOptions o) => _authorized(o);
 
   bool _authorized(RequestOptions o) =>
       !sessionRevoked && o.headers['Authorization'] == 'Bearer $token';
@@ -706,6 +712,14 @@ class FakeServer implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests.add(options);
+    if ((options.contentType ?? '').startsWith('multipart/') &&
+        requestStream != null) {
+      final b = BytesBuilder();
+      await for (final chunk in requestStream) {
+        b.add(chunk);
+      }
+      multipartBodies.add(b.takeBytes());
+    }
     if (offline) {
       throw DioException(
         requestOptions: options,
