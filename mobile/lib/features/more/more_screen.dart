@@ -10,7 +10,6 @@ class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
 
   static const _soon = <_Soon>[
-    _Soon(Icons.receipt_long_outlined, 'Bonuri și extrase', 'Faza D'),
     _Soon(Icons.family_restroom_outlined, 'Familie', 'după MVP'),
   ];
 
@@ -60,6 +59,16 @@ class MoreScreen extends StatelessWidget {
                   title: const Text('Plăți recurente'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/recurring'),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Icon(
+                    Icons.receipt_long_outlined,
+                    color: context.finet.muted,
+                  ),
+                  title: const Text('Bonuri'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/receipts'),
                 ),
                 for (final e in _soon) ...[
                   const Divider(),

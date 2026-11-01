@@ -12,6 +12,7 @@ import 'package:finet_mobile/features/settings/app_settings.dart';
 import 'package:finet_mobile/features/settings/settings_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_server.dart';
@@ -47,6 +48,7 @@ class Harness {
     AppSettings? settings,
     FakeAuthenticator? authenticator,
     DateTime Function()? clock,
+    this.overrides = const [],
   }) : server = server ?? FakeServer(),
        store = store ?? MemoryKeyValueStore(),
        settings =
@@ -60,6 +62,9 @@ class Harness {
   final AppSettings settings;
   final FakeAuthenticator authenticator;
   final DateTime Function() clock;
+
+  /// Înlocuiri suplimentare de provideri (de exemplu selectorul de poze din teste).
+  final List<Override> overrides;
 
   MemoryKeyValueStore get memory => store as MemoryKeyValueStore;
 
@@ -81,6 +86,7 @@ class Harness {
         httpAdapterProvider.overrideWithValue(server),
         authenticatorProvider.overrideWithValue(authenticator),
         clockProvider.overrideWithValue(clock),
+        ...overrides,
       ],
       child: const FinetApp(),
     );
