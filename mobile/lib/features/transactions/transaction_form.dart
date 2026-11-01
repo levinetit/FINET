@@ -246,6 +246,7 @@ class _FormState extends ConsumerState<_Form> {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: _accountId,
             decoration: const InputDecoration(
               labelText: 'Cont',
@@ -274,6 +275,7 @@ class _FormState extends ConsumerState<_Form> {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String?>(
+            isExpanded: true,
             key: ValueKey(_type),
             initialValue: _categoryId,
             decoration: const InputDecoration(

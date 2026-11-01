@@ -56,7 +56,7 @@ void main() {
     expect(find.text('Adaugă'), findsOneWidget);
 
     await tester.openTab('Scanează');
-    expect(find.text('Scanarea bonurilor vine în curând'), findsOneWidget);
+    expect(find.text('Fotografiază bonul'), findsOneWidget);
 
     await tester.openTab('Rapoarte');
     expect(find.textContaining('Raport lunar'), findsOneWidget);

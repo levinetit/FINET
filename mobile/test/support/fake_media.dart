@@ -30,11 +30,17 @@ class FakeNormalizer implements MediaNormalizer {
   @override
   Future<UploadFile> normalize(PickedMedia media) async {
     calls[media.path] = (calls[media.path] ?? 0) + 1;
-    final isPdf = media.kind == MediaKind.pdf;
+    final isImage = media.kind == MediaKind.image;
+    final mime = switch (media.kind) {
+      MediaKind.pdf => 'application/pdf',
+      MediaKind.csv => 'text/csv',
+      MediaKind.spreadsheet => 'application/octet-stream',
+      _ => 'image/jpeg',
+    };
     return UploadFile(
       bytes: utf8.encode('octeti:${media.path}'),
-      filename: isPdf ? media.name : '${media.name.split('.').first}.jpg',
-      mimeType: isPdf ? 'application/pdf' : 'image/jpeg',
+      filename: isImage ? '${media.name.split('.').first}.jpg' : media.name,
+      mimeType: mime,
     );
   }
 }

@@ -9,6 +9,7 @@ import '../../core/storage/key_value_store.dart';
 import '../scan/providers.dart';
 import '../scan/scan_controller.dart';
 import '../settings/settings_controller.dart';
+import '../share/share_source.dart';
 import '../usage/usage_tracker.dart';
 import 'models.dart';
 
@@ -172,6 +173,8 @@ class SessionController extends Notifier<SessionState> {
     await ref.read(keyValueStoreProvider).delete(StoreKeys.sessionToken);
     // Poze și fișiere primite prin „Partajează” nu rămân pe telefon după deconectare.
     ref.invalidate(scanControllerProvider);
-    await ref.read(tempFilesProvider).wipeAll();
+    ref.invalidate(pendingShareProvider);
+    // Ștergerea fișierelor nu blochează deconectarea (eșecurile se ignoră în `wipeAll`).
+    unawaited(ref.read(tempFilesProvider).wipeAll());
   }
 }

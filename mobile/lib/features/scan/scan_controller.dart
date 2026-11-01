@@ -122,6 +122,16 @@ class ScanController extends Notifier<ScanState> {
     );
   }
 
+  /// Poze primite din „Partajează": se adaugă ca și cele făcute cu camera.
+  void addShared(List<PickedMedia> files) => _add(files);
+
+  /// Un PDF primit din „Partajează" și ales ca bon.
+  void addSharedPdf(PickedMedia file) {
+    _discardAll();
+    _started();
+    state = ScanState(items: [file]);
+  }
+
   void remove(int index) {
     final items = [...state.items];
     final removed = items.removeAt(index);

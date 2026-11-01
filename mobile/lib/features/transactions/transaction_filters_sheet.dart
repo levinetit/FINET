@@ -80,6 +80,7 @@ class _TransactionFiltersSheetState
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: _f.accountId,
               decoration: const InputDecoration(
                 labelText: 'Cont',
@@ -95,6 +96,7 @@ class _TransactionFiltersSheetState
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: _f.categoryId,
               decoration: const InputDecoration(
                 labelText: 'Categorie',

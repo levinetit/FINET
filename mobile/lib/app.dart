@@ -9,6 +9,7 @@ import 'core/router.dart';
 import 'core/theme/theme.dart';
 import 'features/auth/session.dart';
 import 'features/lock/app_lock.dart';
+import 'features/share/share_coordinator.dart';
 
 /// Aplicația FINET: Material 3 din tokenii FINET, română, temă luminoasă și întunecată după
 /// setarea telefonului, blocare cu amprentă (opțională) și trimiterea statisticilor de utilizare.
@@ -64,8 +65,9 @@ class _FinetAppState extends ConsumerState<FinetApp>
       supportedLocales: const [Locale('ro', 'RO')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: ref.watch(routerProvider),
-      builder: (context, child) =>
-          LockGate(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => LockGate(
+        child: ShareCoordinator(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

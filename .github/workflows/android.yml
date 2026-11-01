@@ -93,6 +93,20 @@ jobs:
             echo "Permisiune interzisă în APK" >&2
             exit 1
           fi
+          # „Partajează" din alte aplicații: filtrele de intent trebuie să existe în APK-ul construit
+          # (singura dovadă automată că FINET apare în meniul Android de partajare).
+          "$aapt2" dump xmltree --file AndroidManifest.xml "$apk" > manifest.txt
+          for needle in \
+            'android.intent.action.SEND"' \
+            'android.intent.action.SEND_MULTIPLE"' \
+            '"image/*"' \
+            '"application/pdf"' \
+            '"text/csv"'; do
+            if ! grep -qF "$needle" manifest.txt; then
+              echo "Lipsește din manifest: $needle" >&2
+              exit 1
+            fi
+          done
 
       - uses: actions/upload-artifact@v5
         with:

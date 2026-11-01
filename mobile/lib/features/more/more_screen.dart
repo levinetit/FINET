@@ -70,6 +70,16 @@ class MoreScreen extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/receipts'),
                 ),
+                const Divider(),
+                ListTile(
+                  leading: Icon(
+                    Icons.account_balance_outlined,
+                    color: context.finet.muted,
+                  ),
+                  title: const Text('Extrase bancare'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/statements'),
+                ),
                 for (final e in _soon) ...[
                   const Divider(),
                   ListTile(

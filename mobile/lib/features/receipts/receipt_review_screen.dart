@@ -400,256 +400,272 @@ class _ReceiptFormState extends ConsumerState<_ReceiptForm> {
     ];
     _accountId ??= eligible.length == 1 ? eligible.first.id : null;
     final editable = _editable;
-    return ListView(
+    // Formular cu un număr mic de câmpuri: toate se construiesc, ca verificarea să nu piardă
+    // câmpuri aflate sub ecran (ListView le-ar construi doar la derulare).
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          '${r.status.label} · ${providerText(r.providerUsed)}',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        if (fallbackText(r.fallbackReason) != null)
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            fallbackText(r.fallbackReason)!,
-            style: TextStyle(color: c.muted),
-          ),
-        if (r.confidence != null)
-          Text(
-            'Scor de încredere: ${r.confidence} din 100 (calculat din verificări)',
-            style: TextStyle(color: c.muted),
-          ),
-        if (r.duplicateOfReceiptId != null) ...[
-          const SizedBox(height: 8),
-          Card(
-            color: c.warn.withValues(alpha: 0.12),
-            child: ListTile(
-              leading: Icon(Icons.copy_all_outlined, color: c.warn),
-              title: const Text('Posibil duplicat al bonului'),
-              subtitle: const Text('Deschide bonul original'),
-              onTap: () => context.push('/receipts/${r.duplicateOfReceiptId}'),
-            ),
-          ),
-        ],
-        if (r.issues.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Probleme găsite',
+            '${r.status.label} · ${providerText(r.providerUsed)}',
             style: Theme.of(context).textTheme.titleSmall,
           ),
-          for (final issue in r.issues)
-            Semantics(
-              label: 'Problemă: ${issueText(issue)}',
-              child: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.warning_amber_rounded, size: 18, color: c.warn),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(issueText(issue))),
-                  ],
-                ),
+          if (fallbackText(r.fallbackReason) != null)
+            Text(
+              fallbackText(r.fallbackReason)!,
+              style: TextStyle(color: c.muted),
+            ),
+          if (r.confidence != null)
+            Text(
+              'Scor de încredere: ${r.confidence} din 100 (calculat din verificări)',
+              style: TextStyle(color: c.muted),
+            ),
+          if (r.duplicateOfReceiptId != null) ...[
+            const SizedBox(height: 8),
+            Card(
+              color: c.warn.withValues(alpha: 0.12),
+              child: ListTile(
+                leading: Icon(Icons.copy_all_outlined, color: c.warn),
+                title: const Text('Posibil duplicat al bonului'),
+                subtitle: const Text('Deschide bonul original'),
+                onTap: () =>
+                    context.push('/receipts/${r.duplicateOfReceiptId}'),
               ),
             ),
-        ] else if (r.status == ReceiptStatus.needsReview)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Verificările nu au găsit probleme.',
-              style: TextStyle(color: c.muted),
+          ],
+          if (r.issues.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Probleme găsite',
+              style: Theme.of(context).textTheme.titleSmall,
             ),
-          ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _merchant,
-          enabled: editable,
-          decoration: const InputDecoration(labelText: 'Magazin'),
-          onChanged: (_) => _touch(),
-        ),
-        const SizedBox(height: 12),
-        InputDecorator(
-          decoration: const InputDecoration(labelText: 'Data'),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(_date == null ? 'fără dată' : formatDate(_date!)),
-              ),
-              if (editable)
-                TextButton(
-                  onPressed: _pickDate,
-                  child: const Text('Alege data'),
+            for (final issue in r.issues)
+              Semantics(
+                label: 'Problemă: ${issueText(issue)}',
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 18,
+                        color: c.warn,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(issueText(issue))),
+                    ],
+                  ),
                 ),
-            ],
+              ),
+          ] else if (r.status == ReceiptStatus.needsReview)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Verificările nu au găsit probleme.',
+                style: TextStyle(color: c.muted),
+              ),
+            ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _merchant,
+            enabled: editable,
+            decoration: const InputDecoration(labelText: 'Magazin'),
+            onChanged: (_) => _touch(),
           ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _total,
-          enabled: editable,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: 'Total (${r.currency.code})'),
-          onChanged: (_) => _touch(),
-        ),
-        if (r.paymentMethod != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text('Plata: ${r.paymentMethod!.label}'),
-          ),
-        const SizedBox(height: 16),
-        Text(
-          'Produsele de pe bon',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        if (r.linesSum != null && r.total != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              'Suma liniilor: ${displayMoney(r.linesSum!, hidden: hidden)} · '
-              'Total bon: ${displayMoney(r.total!, hidden: hidden)}'
-              '${_dirty ? ' (se actualizează după salvare)' : ''}',
-              style: TextStyle(color: c.muted),
+          const SizedBox(height: 12),
+          InputDecorator(
+            decoration: const InputDecoration(labelText: 'Data'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(_date == null ? 'fără dată' : formatDate(_date!)),
+                ),
+                if (editable)
+                  TextButton(
+                    onPressed: _pickDate,
+                    child: const Text('Alege data'),
+                  ),
+              ],
             ),
           ),
-        if (r.removedCount > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '${r.removedCount} linii eliminate la unirea pozelor (suprapunere).',
-              style: TextStyle(color: c.muted),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _total,
+            enabled: editable,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Total (${r.currency.code})',
             ),
+            onChanged: (_) => _touch(),
           ),
-        for (var i = 0; i < _lines.length; i++)
-          _LineEditor(
-            key: ObjectKey(_lines[i]),
-            draft: _lines[i],
-            index: i,
-            editable: editable,
-            categories: categories,
-            onChanged: _touch,
-            onRemove: () {
-              setState(() {
-                _lines.removeAt(i).dispose();
-                _dirty = true;
-              });
-            },
+          if (r.paymentMethod != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('Plata: ${r.paymentMethod!.label}'),
+            ),
+          const SizedBox(height: 16),
+          Text(
+            'Produsele de pe bon',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-        if (editable)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () {
+          if (r.linesSum != null && r.total != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Suma liniilor: ${displayMoney(r.linesSum!, hidden: hidden)} · '
+                'Total bon: ${displayMoney(r.total!, hidden: hidden)}'
+                '${_dirty ? ' (se actualizează după salvare)' : ''}',
+                style: TextStyle(color: c.muted),
+              ),
+            ),
+          if (r.removedCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '${r.removedCount} linii eliminate la unirea pozelor (suprapunere).',
+                style: TextStyle(color: c.muted),
+              ),
+            ),
+          for (var i = 0; i < _lines.length; i++)
+            _LineEditor(
+              key: ObjectKey(_lines[i]),
+              draft: _lines[i],
+              index: i,
+              editable: editable,
+              categories: categories,
+              onChanged: _touch,
+              onRemove: () {
                 setState(() {
-                  _lines.add(_LineDraft.blank());
+                  _lines.removeAt(i).dispose();
                   _dirty = true;
                 });
               },
-              icon: const Icon(Icons.add),
-              label: const Text('Adaugă o linie'),
             ),
-          ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(_error!, style: TextStyle(color: c.bad)),
-          ),
-        if (_info != null)
-          Padding(padding: const EdgeInsets.only(top: 8), child: Text(_info!)),
-        if (editable) ...[
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: _busy || !_dirty ? null : _save,
-            child: const Text('Salvează corecturile'),
-          ),
-          const Divider(height: 32),
-          if (eligible.isEmpty)
-            Text(
-              'Pentru a salva bonul ai nevoie de un cont deschis în ${r.currency.code}. '
-              'Creează-l din aplicația web.',
-            )
-          else ...[
-            DropdownButtonFormField<String>(
-              initialValue: _accountId,
-              decoration: const InputDecoration(labelText: 'Contul'),
-              items: [
-                for (final a in eligible)
-                  DropdownMenuItem(value: a.id, child: Text(a.name)),
-              ],
-              onChanged: _busy
-                  ? null
-                  : (v) => setState(() {
-                      _accountId = v;
-                      _confirmKey = const Uuid().v4();
-                    }),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String?>(
-              initialValue: _categoryId,
-              decoration: const InputDecoration(
-                labelText: 'Categoria tranzacției',
-                helperText:
-                    'Lasă gol pentru categoria cu cea mai mare sumă de pe bon.',
+          if (editable)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _lines.add(_LineDraft.blank());
+                    _dirty = true;
+                  });
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Adaugă o linie'),
               ),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Automată'),
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_error!, style: TextStyle(color: c.bad)),
+            ),
+          if (_info != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_info!),
+            ),
+          if (editable) ...[
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: _busy || !_dirty ? null : _save,
+              child: const Text('Salvează corecturile'),
+            ),
+            const Divider(height: 32),
+            if (eligible.isEmpty)
+              Text(
+                'Pentru a salva bonul ai nevoie de un cont deschis în ${r.currency.code}. '
+                'Creează-l din aplicația web.',
+              )
+            else ...[
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: _accountId,
+                decoration: const InputDecoration(labelText: 'Contul'),
+                items: [
+                  for (final a in eligible)
+                    DropdownMenuItem(value: a.id, child: Text(a.name)),
+                ],
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() {
+                        _accountId = v;
+                        _confirmKey = const Uuid().v4();
+                      }),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                isExpanded: true,
+                initialValue: _categoryId,
+                decoration: const InputDecoration(
+                  labelText: 'Categoria tranzacției',
+                  helperText: 'Lasă gol pentru categoria cu cea mai mare sumă de pe bon.',
                 ),
-                for (final cat in categories)
-                  if (cat.kind == TxType.expense)
-                    DropdownMenuItem<String?>(
-                      value: cat.id,
-                      child: Text(cat.name),
-                    ),
-              ],
-              onChanged: _busy
-                  ? null
-                  : (v) => setState(() {
-                      _categoryId = v;
-                      _confirmKey = const Uuid().v4();
-                    }),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _busy || _dirty || _accountId == null
-                  ? null
-                  : _confirm,
-              child: const Text('Confirmă și salvează'),
-            ),
-            if (_dirty)
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text('Salvează întâi corecturile.'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Automată'),
+                  ),
+                  for (final cat in categories)
+                    if (cat.kind == TxType.expense)
+                      DropdownMenuItem<String?>(
+                        value: cat.id,
+                        child: Text(cat.name),
+                      ),
+                ],
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() {
+                        _categoryId = v;
+                        _confirmKey = const Uuid().v4();
+                      }),
               ),
-          ],
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: _busy ? null : _reprocess,
-            child: const Text('Citește din nou'),
-          ),
-        ],
-        if (r.status == ReceiptStatus.saved)
-          const Padding(
-            padding: EdgeInsets.only(top: 12),
-            child: Text('Bonul e salvat ca tranzacție; nu se mai modifică.'),
-          ),
-        if (r.status == ReceiptStatus.failed)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: TextButton(
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _busy || _dirty || _accountId == null
+                    ? null
+                    : _confirm,
+                child: const Text('Confirmă și salvează'),
+              ),
+              if (_dirty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text('Salvează întâi corecturile.'),
+                ),
+            ],
+            const SizedBox(height: 8),
+            TextButton(
               onPressed: _busy ? null : _reprocess,
               child: const Text('Citește din nou'),
             ),
+          ],
+          if (r.status == ReceiptStatus.saved)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Text('Bonul e salvat ca tranzacție; nu se mai modifică.'),
+            ),
+          if (r.status == ReceiptStatus.failed)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: TextButton(
+                onPressed: _busy ? null : _reprocess,
+                child: const Text('Citește din nou'),
+              ),
+            ),
+          if (matches != null && matches.candidates.isNotEmpty) ...[
+            const Divider(height: 32),
+            MatchPanel(matches: matches),
+          ],
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: _busy ? null : _delete,
+            icon: Icon(Icons.delete_outline, color: c.bad),
+            label: Text('Șterge bonul', style: TextStyle(color: c.bad)),
           ),
-        if (matches != null && matches.candidates.isNotEmpty) ...[
-          const Divider(height: 32),
-          MatchPanel(matches: matches),
         ],
-        const SizedBox(height: 16),
-        TextButton.icon(
-          onPressed: _busy ? null : _delete,
-          icon: Icon(Icons.delete_outline, color: c.bad),
-          label: Text('Șterge bonul', style: TextStyle(color: c.bad)),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -705,6 +721,7 @@ class _LineEditor extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<LineKind>(
+              isExpanded: true,
               initialValue: draft.kind,
               decoration: const InputDecoration(labelText: 'Tip'),
               items: [
@@ -722,6 +739,7 @@ class _LineEditor extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: known ? draft.categoryId : null,
               decoration: const InputDecoration(labelText: 'Categorie'),
               items: [
