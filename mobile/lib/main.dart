@@ -7,11 +7,13 @@ import 'core/client/client_info.dart';
 import 'core/config/env.dart';
 import 'core/providers.dart';
 import 'core/storage/key_value_store.dart';
+import 'core/time/period.dart';
 import 'features/settings/app_settings.dart';
 import 'features/settings/settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  initTimezones();
   final env = AppEnv.fromEnvironment();
   final problems = env.validate(isRelease: kReleaseMode);
   if (problems.isNotEmpty) {

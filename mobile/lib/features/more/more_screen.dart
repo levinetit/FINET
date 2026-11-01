@@ -10,7 +10,6 @@ class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
 
   static const _soon = <_Soon>[
-    _Soon(Icons.savings_outlined, 'Bugete și obiective', 'Faza C'),
     _Soon(Icons.repeat, 'Recurențe', 'Faza D'),
     _Soon(Icons.receipt_long_outlined, 'Bonuri și extrase', 'Faza D'),
     _Soon(Icons.family_restroom_outlined, 'Familie', 'după MVP'),
@@ -21,7 +20,6 @@ class MoreScreen extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     return FinetScaffold(
       title: 'Mai mult',
-      mock: false,
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -46,6 +44,16 @@ class MoreScreen extends StatelessWidget {
                   title: const Text('Setări și confidențialitate'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/settings'),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Icon(
+                    Icons.savings_outlined,
+                    color: context.finet.muted,
+                  ),
+                  title: const Text('Bugete și obiective'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/budgets'),
                 ),
                 for (final e in _soon) ...[
                   const Divider(),

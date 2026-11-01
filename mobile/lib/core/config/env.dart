@@ -3,21 +3,19 @@
 library;
 
 class AppEnv {
-  const AppEnv({
-    required this.apiBaseUrl,
-    required this.useMockData,
-    this.usageStatsDefault = true,
-  });
+  const AppEnv({required this.apiBaseUrl, this.usageStatsDefault = true});
 
-  /// Citește `--dart-define=API_BASE_URL=...` și `--dart-define=USE_MOCK_DATA=...`.
-  /// În Faza A toate ecranele sunt pe date simulate, deci `USE_MOCK_DATA` e implicit `true`.
+  /// Citește `--dart-define=API_BASE_URL=...` și `--dart-define=USAGE_STATS_DEFAULT=...`.
   factory AppEnv.fromEnvironment() => const AppEnv(
     apiBaseUrl: String.fromEnvironment('API_BASE_URL'),
-    useMockData: bool.fromEnvironment('USE_MOCK_DATA', defaultValue: true),
+    usageStatsDefault: bool.fromEnvironment(
+      'USAGE_STATS_DEFAULT',
+      defaultValue: true,
+    ),
   );
 
+  /// Adresa serverului FINET, fără `/` la final (o dă operatorul; nu se inventează).
   final String apiBaseUrl;
-  final bool useMockData;
 
   /// Valoarea implicită a statisticilor de utilizare la prima pornire: `true` în `personal`, `false`
   /// în `saas` (acolo cer acordul explicit, promptul Android §10.1).
@@ -25,16 +23,12 @@ class AppEnv {
 
   /// Problemele de configurare, în română; lista goală înseamnă că totul e în regulă.
   ///
-  /// - Release: doar HTTPS, fără `localhost` și `10.0.2.2`, fără date simulate.
+  /// - Release: doar HTTPS, fără `localhost` și `10.0.2.2`.
   /// - Debug: HTTPS sau HTTP către emulator (`10.0.2.2`) / `localhost`.
-  /// - Cu date simulate, adresa serverului nu e obligatorie.
   List<String> validate({required bool isRelease}) {
     final problems = <String>[];
-    if (isRelease && useMockData) {
-      problems.add('Build-ul release nu poate folosi date simulate.');
-    }
     if (apiBaseUrl.isEmpty) {
-      if (!useMockData) problems.add('Lipsește API_BASE_URL.');
+      problems.add('Lipsește API_BASE_URL.');
       return problems;
     }
     final uri = Uri.tryParse(apiBaseUrl);

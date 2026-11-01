@@ -12,7 +12,6 @@ class ScanScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const FinetScaffold(
       title: 'Scanează',
-      mock: false,
       body: EmptyState(
         title: 'Scanarea bonurilor vine în curând',
         message: 'Vei putea fotografia un bon sau importa un PDF. Citirea o face serverul FINET.',

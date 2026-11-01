@@ -67,10 +67,11 @@ jobs:
         timeout-minutes: 10
         run: flutter test
 
-      # Faza A rulează pe date simulate: nu cere `API_BASE_URL`. Valorile `--dart-define` nu sunt
-      # secrete (se pot extrage din APK), iar în CI nu există nicio cheie.
+      # `API_BASE_URL` din CI e o adresă rezervată (`.invalid`), nu un server real: APK-ul de debug
+      # din CI nu se conectează nicăieri. Valorile `--dart-define` nu sunt secrete (se pot extrage
+      # din APK), iar în CI nu există nicio cheie.
       - name: APK de debug
-        run: flutter build apk --debug --dart-define=USE_MOCK_DATA=true
+        run: flutter build apk --debug --dart-define=API_BASE_URL=https://finet.invalid
 
       - name: Verifică APK-ul (identificator, versiune minimă, mărime)
         run: |

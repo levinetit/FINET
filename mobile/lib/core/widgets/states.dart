@@ -2,30 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
 
-/// Banda „Date simulate” (Faza A): orice ecran pe date inventate o afișează (promptul §9).
-class MockBanner extends StatelessWidget {
-  const MockBanner({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.finet;
-    return Semantics(
-      label: 'Date simulate, nu sunt datele tale',
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        color: c.marker,
-        child: Text(
-          'Date simulate',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.labelMedium
-              ?.copyWith(color: const Color(0xFF14201C)),
-        ),
-      ),
-    );
-  }
-}
-
 /// Stare de încărcare, distinctă de „gol” și „eroare” (promptul §9).
 class LoadingState extends StatelessWidget {
   const LoadingState({super.key, this.label = 'Se încarcă…'});

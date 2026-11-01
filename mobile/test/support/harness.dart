@@ -5,6 +5,7 @@ import 'package:finet_mobile/core/client/client_info.dart';
 import 'package:finet_mobile/core/config/env.dart';
 import 'package:finet_mobile/core/providers.dart';
 import 'package:finet_mobile/core/storage/key_value_store.dart';
+import 'package:finet_mobile/core/time/period.dart';
 import 'package:finet_mobile/features/lock/app_lock.dart';
 import 'package:finet_mobile/features/lock/authenticator.dart';
 import 'package:finet_mobile/features/settings/app_settings.dart';
@@ -65,16 +66,14 @@ class Harness {
   late final ProviderContainer container;
 
   Future<void> pump(WidgetTester tester) async {
+    initTimezones();
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     final scope = ProviderScope(
       overrides: [
         appEnvProvider.overrideWithValue(
-          const AppEnv(
-            apiBaseUrl: 'https://finet.exemplu.test',
-            useMockData: true,
-          ),
+          const AppEnv(apiBaseUrl: 'https://finet.exemplu.test'),
         ),
         keyValueStoreProvider.overrideWithValue(store),
         clientInfoProvider.overrideWithValue(testClientInfo),

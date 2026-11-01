@@ -10,6 +10,11 @@ import '../theme/tokens.dart';
 /// Textul afișat în locul unei sume ascunse.
 const String hiddenAmount = '••••';
 
+/// Suma ca text: formatată sau „••••” când sumele sunt ascunse. Orice text care conține o sumă
+/// (nu doar [AmountText]) trebuie să treacă pe aici, ca ascunderea să fie completă.
+String displayMoney(Money money, {required bool hidden}) =>
+    hidden ? hiddenAmount : formatMoney(money);
+
 /// Suma formatată românește, în IBM Plex Mono cu cifre tabulare. Veniturile sunt verzi, iar
 /// cheltuielile roșii doar când [signed] e `true` (suma are semn). Respectă comutatorul „ascunde
 /// sumele”.

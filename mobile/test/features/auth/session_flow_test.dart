@@ -81,7 +81,7 @@ void main() {
       final h = Harness();
       await h.pump(tester);
       await tester.login();
-      expect(find.text('Sold net'), findsOneWidget);
+      expect(find.text('Sold net (RON)'), findsOneWidget);
       expect(h.memory.values[StoreKeys.sessionToken], FakeServer.token);
       expect(h.container.read(sessionProvider), isA<SignedIn>());
     });
@@ -121,7 +121,7 @@ void main() {
     ) async {
       final h = Harness()..signedInStore();
       await h.pump(tester);
-      expect(find.text('Sold net'), findsOneWidget);
+      expect(find.text('Sold net (RON)'), findsOneWidget);
       expect(h.server.requestsTo('POST /api/auth/sign-in/email'), isEmpty);
     });
 
@@ -140,7 +140,7 @@ void main() {
       h.server.offline = false;
       await tester.tap(find.text('Încearcă din nou'));
       await tester.pumpAndSettle();
-      expect(find.text('Sold net'), findsOneWidget);
+      expect(find.text('Sold net (RON)'), findsOneWidget);
     });
   });
 
@@ -150,7 +150,7 @@ void main() {
       (tester) async {
         final h = Harness()..signedInStore();
         await h.pump(tester);
-        expect(find.text('Sold net'), findsOneWidget);
+        expect(find.text('Sold net (RON)'), findsOneWidget);
 
         h.server.sessionRevoked = true;
         await openProfile(tester);
@@ -178,7 +178,7 @@ void main() {
 
       h.server.sessionRevoked = false;
       await tester.login();
-      expect(find.text('Sold net'), findsOneWidget);
+      expect(find.text('Sold net (RON)'), findsOneWidget);
       final names = h.server.allEvents.map((e) => e['name']);
       expect(names, containsAll(['session_expired', 'login', 'app_open']));
     });
