@@ -84,25 +84,42 @@ class _Centered extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
+    // Centrat când încape, derulabil când nu (text mărit, ecran scund): altfel acțiunea de la
+    // final ar ieși din ecran fără cale de a o atinge.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: iconColor ?? context.finet.muted),
-            const SizedBox(height: 12),
-            Text(title, style: text.titleMedium, textAlign: TextAlign.center),
-            if (message != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                message!,
-                style: text.bodyMedium?.copyWith(color: context.finet.muted),
-                textAlign: TextAlign.center,
-              ),
-            ],
-            if (action != null) ...[const SizedBox(height: 16), action!],
-          ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight.isFinite
+                ? (constraints.maxHeight - 48).clamp(0, double.infinity)
+                : 0,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 40, color: iconColor ?? context.finet.muted),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: text.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                if (message != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    message!,
+                    style: text.bodyMedium?.copyWith(
+                      color: context.finet.muted,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                if (action != null) ...[const SizedBox(height: 16), action!],
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -164,6 +164,25 @@ class ScanController extends Notifier<ScanState> {
   }
 
   /// Golește rezultatul ultimei încărcări, după ce utilizatorul l-a văzut.
+  /// Scoate din rezultat un document șters de utilizator; fără documente rămase, rezultatul se golește.
+  void removeDocument(String id) {
+    final result = state.result;
+    if (result == null) return;
+    final left = [
+      for (final d in result.documents)
+        if (d.id != id) d,
+    ];
+    state = state.copyWith(
+      result: () => left.isEmpty
+          ? null
+          : UploadResult(
+              documents: left,
+              batchId: result.batchId,
+              created: result.created,
+            ),
+    );
+  }
+
   void dismissResult() {
     if (state.result == null) return;
     state = state.copyWith(result: () => null);

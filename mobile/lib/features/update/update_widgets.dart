@@ -72,7 +72,8 @@ class UpdateRequiredScreen extends ConsumerWidget {
     return FinetScaffold(
       title: 'Actualizare necesară',
       screen: UsageScreens.update,
-      body: Padding(
+      // Derulabil: la text mărit sau ecran scund butonul „Descarcă” nu trebuie să iasă din ecran.
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -21,6 +21,7 @@ import '../finance/providers.dart';
 import '../scan/providers.dart';
 import '../usage/usage_tracker.dart';
 import 'match_panel.dart';
+import 'receipt_delete.dart';
 import 'models.dart';
 import 'providers.dart';
 import 'receipts_api.dart';
@@ -40,6 +41,22 @@ class ReceiptReviewScreen extends ConsumerWidget {
     final detail = ref.watch(receiptDetailProvider(receiptId));
     return FinetScaffold(
       title: 'Bon',
+      // Meniul e aici, nu în formular: rămâne la îndemână și când bonul se încarcă sau nu a putut
+      // fi citit (eroare), adică exact când butonul de la finalul formularului lipsește.
+      actions: [
+        PopupMenuButton<String>(
+          tooltip: 'Mai multe',
+          onSelected: (_) async {
+            if (await confirmAndDeleteReceipt(context, ref, receiptId) &&
+                context.mounted) {
+              context.pop();
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'delete', child: Text('Șterge bonul')),
+          ],
+        ),
+      ],
       body: AsyncView<Receipt>(
         value: detail,
         onRetry: () => ref.invalidate(receiptDetailProvider(receiptId)),
@@ -350,33 +367,11 @@ class _ReceiptFormState extends ConsumerState<_ReceiptForm> {
   }
 
   Future<void> _delete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ștergi bonul?'),
-        content: const Text(
-          'Se șterg bonul și pozele lui. Tranzacția creată din el rămâne.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Nu'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Șterge'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || _busy) return;
+    if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(receiptsApiProvider).deleteReceipt(_receipt.id);
-      await ref.read(receiptsControllerProvider.notifier).refresh();
-      if (mounted) context.pop();
-    } on ApiError catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      final deleted = await confirmAndDeleteReceipt(context, ref, _receipt.id);
+      if (deleted && mounted) context.pop();
     } finally {
       if (mounted) setState(() => _busy = false);
     }

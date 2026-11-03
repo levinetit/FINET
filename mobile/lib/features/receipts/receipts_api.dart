@@ -189,6 +189,12 @@ class ReceiptsApi {
     await guardApi(() => _dio.delete<dynamic>('/api/v1/receipts/$id'));
   }
 
+  /// Șterge un document (și fișierul lui). Necesar pentru documentele refuzate/eșuate, care nu
+  /// au bon și deci nu apar în lista de bonuri.
+  Future<void> deleteDocument(String id) async {
+    await guardApi(() => _dio.delete<dynamic>('/api/v1/documents/$id'));
+  }
+
   Future<void> reprocess(String id, {required String idempotencyKey}) async {
     await guardApi(
       () => _dio.post<dynamic>(

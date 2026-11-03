@@ -52,7 +52,7 @@ class SharedUnsupportedScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return FinetScaffold(
       title: 'Fișiere primite',
-      body: const Padding(
+      body: const SingleChildScrollView(
         padding: EdgeInsets.all(24),
         child: Text(
           'Nu pot importa această combinație de fișiere. Partajează fie până la 4 poze ale '
