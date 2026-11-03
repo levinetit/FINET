@@ -41,7 +41,7 @@ jobs:
           DEPS_JSON: ${{ steps.meta.outputs.updated-dependencies-json }}
           # Dependențe excluse (PR-uri individuale, merge manual): auth, driver/ORM de bază de date,
           # imaginea docker postgres. Expresie regulară extinsă, ancorată pe întregul nume.
-          EXCLUDED: '^(better-auth|@better-auth/.+|postgres|pg|drizzle-orm|drizzle-kit|drizzle-.+|.+/postgres)$'
+          EXCLUDED: "^(better-auth|@better-auth/.+|postgres|pg|drizzle-orm|drizzle-kit|drizzle-.+|.+/postgres)$"
         run: |
           set -euo pipefail
 
