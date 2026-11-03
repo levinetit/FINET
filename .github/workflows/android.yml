@@ -110,7 +110,7 @@ jobs:
             --dart-define=API_BASE_URL=https://finet.invalid
           ../.github/scripts/verify-android-apk.sh build/app/outputs/flutter-apk/app-release.apk release - 0.0.0 1
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: finet-debug-apk
           path: mobile/build/app/outputs/flutter-apk/app-debug.apk
