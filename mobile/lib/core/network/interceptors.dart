@@ -4,6 +4,37 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
+/// Antetul `Origin` pe fiecare cerere, egal cu originea serverului (`scheme://host[:port]` din
+/// `API_BASE_URL`). Dio nu îl trimite singur (nu e browser). Better Auth cere `Origin` de îndată ce
+/// cererea poartă un antet `Cookie`, iar Cloudflare Access adaugă cookie-ul `CF_Authorization` pe
+/// traseul către server: fără acest antet, `POST /api/auth/*` (login, sign-out) dă 403
+/// `Missing or null Origin`. Originea nu e un secret și coincide cu `trustedOrigins` de pe server;
+/// pe `/api/v1` cu bearer serverul o ignoră. Un `Origin` pus explicit de apelant rămâne neatins.
+class OriginInterceptor extends Interceptor {
+  OriginInterceptor(String baseUrl) : origin = originOf(baseUrl);
+
+  /// Originea calculată; `null` dacă URL-ul de bază nu e un http(s) valid (atunci nu se trimite nimic).
+  final String? origin;
+
+  /// `https://host` sau `https://host:port` (porturile implicite se omit), fără cale.
+  static String? originOf(String baseUrl) {
+    final uri = Uri.tryParse(baseUrl);
+    if (uri == null || uri.host.isEmpty) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+    return uri.origin;
+  }
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final value = origin;
+    final present = options.headers.keys.any(
+      (k) => k.toLowerCase() == 'origin',
+    );
+    if (value != null && !present) options.headers['Origin'] = value;
+    handler.next(options);
+  }
+}
+
 /// Antet cu tokenul de sesiune (`Authorization: Bearer …`). Tokenul nu apare niciodată în loguri.
 /// În Faza A nu există sesiune: [tokenProvider] întoarce `null`.
 class AuthInterceptor extends Interceptor {
