@@ -74,6 +74,47 @@ describe.skipIf(!TEST_ADMIN_URL)("client nativ, corpuri non-JSON, ceas controlat
     expect(await session.json()).toBeNull();
   });
 
+  // Producție: Cloudflare Access adaugă cookie-ul `CF_Authorization` pe traseul către server, deci
+  // cererea clientului nativ ajunge cu antet `Cookie`; Better Auth cere atunci `Origin`
+  // (`validateOrigin`, better-auth 1.7.13). Clientul Android trimite `Origin` = originea `APP_URL`.
+  it("login mobil cu cookie de Access (CF_Authorization): fără Origin → 403, cu Origin corect → 200", async () => {
+    const cf = { cookie: "CF_Authorization=jeton-access-de-test", "x-finet-client": "android/1.0" };
+    const fara = await login(env, "ana@exemplu.ro", PASSWORD, { ...cf, origin: "" });
+    expect(fara.response.status).toBe(403);
+    expect(await fara.response.text()).toContain("MISSING_OR_NULL_ORIGIN");
+    expect(fara.bearer).toBeNull();
+
+    const gresit = await login(env, "ana@exemplu.ro", PASSWORD, {
+      ...cf,
+      origin: "https://altul.exemplu.test",
+    });
+    expect(gresit.response.status).toBe(403);
+    expect(gresit.bearer).toBeNull();
+
+    const ok = await login(env, "ana@exemplu.ro", PASSWORD, { ...cf, origin: APP_URL });
+    expect(ok.response.status).toBe(200);
+    expect(ok.bearer).toBeTruthy();
+  });
+
+  it("sign-out cu bearer + cookie de Access: fără Origin → 403, cu Origin corect → 200", async () => {
+    const r = await login(env, "ana@exemplu.ro", PASSWORD);
+    expect(r.bearer).toBeTruthy();
+    const headers = {
+      cookie: "CF_Authorization=jeton-access-de-test",
+      authorization: `Bearer ${r.bearer}`,
+    };
+    const fara = await handleAuthRequest(
+      authRequest("/api/auth/sign-out", { body: {}, headers: { ...headers, origin: "" } }),
+      env,
+    );
+    expect(fara.status).toBe(403);
+    const ok = await handleAuthRequest(
+      authRequest("/api/auth/sign-out", { body: {}, headers: { ...headers, origin: APP_URL } }),
+      env,
+    );
+    expect(ok.status).toBe(200);
+  });
+
   it("corpurile non-JSON pe căile limitate sunt refuzate (415), fără să ajungă la Better Auth", async () => {
     for (const path of [
       "/api/auth/sign-in/email",

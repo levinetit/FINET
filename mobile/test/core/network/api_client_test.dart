@@ -6,6 +6,7 @@ import 'package:finet_mobile/core/config/env.dart';
 import 'package:finet_mobile/core/network/api_client.dart';
 import 'package:finet_mobile/core/network/api_error.dart';
 import 'package:finet_mobile/core/network/interceptors.dart';
+import 'package:finet_mobile/features/auth/auth_api.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Adaptor HTTP fals: răspunde din coadă și păstrează cererile primite.
@@ -64,6 +65,71 @@ Dio client(FakeAdapter adapter, {String? token}) => createApiClient(
 );
 
 void main() {
+  group('Origin', () {
+    // Cloudflare Access adaugă cookie-ul CF_Authorization, iar Better Auth cere atunci `Origin`
+    // (altfel 403 "Missing or null Origin"): clientul îl trimite mereu, egal cu originea serverului.
+    String? originOf(RequestOptions o) => o.headers['Origin'] as String?;
+
+    test('loginul (POST /api/auth/sign-in/email) poartă Origin = originea serverului', () async {
+      final adapter = FakeAdapter([
+        json(
+          {'ok': true},
+          headers: {
+            'set-auth-token': ['tok'],
+          },
+        ),
+      ]);
+      await AuthApi(client(adapter)).login('ana@exemplu.ro', 'parola');
+      expect(adapter.requests.single.path, '/api/auth/sign-in/email');
+      expect(originOf(adapter.requests.single), 'https://finet.exemplu.test');
+    });
+
+    test('POST /api/v1 și GET poartă Origin', () async {
+      final adapter = FakeAdapter([
+        json({'ok': true}),
+        json({'ok': true}),
+      ]);
+      final dio = client(adapter, token: 'abc');
+      await dio.post<dynamic>('/api/v1/transactions', data: {'a': 1});
+      await dio.get<dynamic>('/api/v1/me');
+      expect(adapter.requests, hasLength(2));
+      for (final r in adapter.requests) {
+        expect(originOf(r), 'https://finet.exemplu.test');
+      }
+    });
+
+    test(
+      'originea ignoră calea și porturile implicite; păstrează portul explicit',
+      () {
+        expect(
+          OriginInterceptor.originOf('https://finet.exemplu.test'),
+          'https://finet.exemplu.test',
+        );
+        expect(
+          OriginInterceptor.originOf('https://finet.exemplu.test:443/app'),
+          'https://finet.exemplu.test',
+        );
+        expect(
+          OriginInterceptor.originOf('http://10.0.2.2:3000'),
+          'http://10.0.2.2:3000',
+        );
+        expect(OriginInterceptor.originOf(''), isNull);
+        expect(OriginInterceptor.originOf('ftp://exemplu.test'), isNull);
+      },
+    );
+
+    test('un Origin pus explicit de apelant nu se înlocuiește', () async {
+      final adapter = FakeAdapter([
+        json({'ok': true}),
+      ]);
+      await client(adapter).post<dynamic>(
+        '/api/v1/x',
+        options: Options(headers: {'Origin': 'https://altul.test'}),
+      );
+      expect(originOf(adapter.requests.single), 'https://altul.test');
+    });
+  });
+
   group('Idempotency-Key', () {
     test('POST primește o cheie UUID; GET nu', () async {
       final adapter = FakeAdapter([

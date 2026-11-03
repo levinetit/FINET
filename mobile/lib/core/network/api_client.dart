@@ -39,6 +39,7 @@ Dio createApiClient(
   );
   if (adapter != null) dio.httpClientAdapter = adapter;
   dio.interceptors.addAll([
+    OriginInterceptor(env.apiBaseUrl),
     AuthInterceptor(tokenProvider ?? () => null),
     if (clientHeader != null) ClientHeaderInterceptor(clientHeader),
     IdempotencyInterceptor(),
