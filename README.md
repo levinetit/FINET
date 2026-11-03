@@ -6,6 +6,7 @@ Aplicație de finanțe personale și de familie pentru România: bonuri fiscale 
 
 ## Documentație
 - Specificația: [`docs/FINET_MASTER_PROMPT.md`](docs/FINET_MASTER_PROMPT.md) · Android: [`docs/FINET_ANDROID_MASTER_PROMPT.md`](docs/FINET_ANDROID_MASTER_PROMPT.md)
+- Instalare pe un server nou (wizard): [`docs/INSTALL.md`](docs/INSTALL.md), [ADR 0044](docs/adr/0044-installer-wizard.md)
 - Ghidul operatorului: [`docs/GHID_CONSTRUIRE.md`](docs/GHID_CONSTRUIRE.md) (pentru deploy, [`docs/INFRA.md`](docs/INFRA.md) are prioritate: Docker pe VPS, [ADR 0002](docs/adr/0002-deploy-docker-pe-vps.md))
 - Arhitectura existentă: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · Stack și versiuni: [ADR 0001](docs/adr/0001-stack.md)
 - Confidențialitate: [`docs/PRIVACY_NOTES.md`](docs/PRIVACY_NOTES.md) · Securitate: [`docs/SECURITY_CHECKLIST.md`](docs/SECURITY_CHECKLIST.md) · Autentificare: [ADR 0003](docs/adr/0003-auth.md)

@@ -122,6 +122,8 @@ URL-urile Supabase au `sslmode=verify-full`. CA-ul Supabase (`prod-ca-2021.crt`,
 
 ## 4. Pașii operatorului, în ordine
 
+> **Automatizat:** `ops/install/finet-install.sh` (wizard cu `--check`) face pașii 4–9 de mai jos; vezi [`docs/INSTALL.md`](INSTALL.md) și [ADR 0044](adr/0044-installer-wizard.md). Procedura manuală rămâne referința.
+
 1. **Decide** varianta de intrare (A tunel, recomandat; B Traefik). Fișierele FINET stau în `/srv/finet/` (vezi „Date în afara `/home`”).
 2. **Supabase:** `ops/supabase/README.md` (proiect UE, Data API oprit, SSL, Network Restrictions pe IP-ul de ieșire al VPS-ului, `roles.sql` cu psql, bucket privat). Actualizează `ops/postgres/VERSION` cu versiunea reală.
 3. **Cloudflare:** `ops/cloudflare/README.md` (hostname, ruta în tunel sau DNS pentru Traefik, aplicația Access după `access-policy.md`, WARP). Notează `CF_ACCESS_TEAM_DOMAIN` și `CF_ACCESS_AUD`.

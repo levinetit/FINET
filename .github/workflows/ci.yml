@@ -182,7 +182,14 @@ jobs:
         run: |
           command -v shellcheck > /dev/null || sudo apt-get install -y shellcheck
           shellcheck --version
-          shellcheck -s sh -x ops/backup/*.sh
+          shellcheck -s sh -x ops/backup/*.sh ops/install/*.sh
+
+      # Installer-ul (ADR 0044) rulat într-un container Debian efemer, cu stub-uri pentru docker/git/
+      # rețea: --check fără scrieri, instalare și mutare simulate, niciun secret în loguri.
+      - name: Installer (ops/install/test.sh, container Debian)
+        run: >-
+          docker run --rm -v "$PWD:/work:ro" debian:bookworm-slim sh -c
+          'apt-get update -qq && apt-get install -y -qq python3 openssl > /dev/null && sh /work/ops/install/test.sh'
 
       - name: Construiește imaginea de backup
         run: docker build -f ops/backup/Dockerfile --target backup -t finet-backup:ci .
