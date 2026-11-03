@@ -60,6 +60,8 @@ if active | grep -Eq 'crontab[[:space:]]+(-e|-r)\b'; then fail "crontab -e/-r ac
 if active | grep -Eq '(^|[[:space:];|&])read[[:space:]]+-[a-zA-Z]*s'; then fail "read -s (nu există în dash)"; else ok "fără read -s"; fi
 if active | grep -Eq 'pipefail|\[\[[^:]|set[[:space:]]+-x|^[[:space:]]*local[[:space:]]|=\(|<\('; then fail "bashism/trasare în finet-install.sh"; else ok "fără bashisme (pipefail, [[, local, array, <(), set -x)"; fi
 if active | grep -Eq 'docker( compose)? build|--build|docker pull|docker login'; then fail "build/pull local (imaginile vin doar din CI)"; else ok "fără build local"; fi
+if active | grep -Eq 'run --rm --no-build|[[:space:]]run[[:space:]][^|]*--no-build'; then fail "--no-build pe «docker compose run» (flag inexistent; există doar la up/build)"; else ok "--no-build doar la up"; fi
+if active | grep -Eq 'telnet://'; then fail "curl telnet:// (nu se oprește după conectare)"; else ok "fără sondă curl telnet://"; fi
 if active | grep -Eq 'curl[^|]*(-H|--header)[[:space:]]+["'\'']?Authorization'; then fail "antet Authorization în argumentele curl"; else ok "tokenul nu e în argumentele curl"; fi
 if head -n 1 "$INSTALL" | grep -q '^#!/bin/sh'; then ok "shebang #!/bin/sh"; else fail "shebang"; fi
 
@@ -207,6 +209,13 @@ case "$u" in
   *) exit 0 ;;
 esac'
 stub df 'echo "Filesystem 1024-blocks Used Available Capacity Mounted"; echo "/dev/x 200000000 1000000 150000000 1% /"'
+REALPY=$(command -v python3)
+{
+  printf '#!/bin/sh\n'
+  printf 'case "$*" in *socket.create_connection*) printf "python3-tcp %%s %%s\\n" "$4" "$5" >> "%s"; exit 0 ;; esac\n' "$CALLS"
+  printf 'exec "%s" "$@"\n' "$REALPY"
+} >"$BIN/python3"
+chmod +x "$BIN/python3"
 for n in git openssl rclone crontab ssh rsync systemctl install chown chmod mkdir whiptail dialog cloudflared stty tee; do stub "$n" 'exit 0'; done
 stub crontab 'case "$1 $2 $3" in "-l -u root") exit 0 ;; *) exit 97 ;; esac'
 
@@ -281,6 +290,9 @@ contains "dry-run: planul pentru cron.d" "$TMP/out/o1" "ar face: scriu $TMP/root
 contains "dry-run: planul pentru migrații" "$TMP/out/o1" "finet-migrate de două ori"
 contains "dry-run: pașii manuali Cloudflare" "$TMP/out/o1" "Pași manuali rămași în Cloudflare"
 contains "dry-run: IP-ul de ieșire afișat" "$TMP/out/o1" "IP-ul public de ieșire: 203.0.113.7"
+contains "dry-run: IP-ul e afișat ÎNAINTE de întrebarea din Supabase" "$TMP/out/o1" "IP-ul public de ieșire al acestui server: 203.0.113.7"
+if grep -q 'necunoscut (află-l' "$TMP/out/o1"; then fail "IP-ul de ieșire raportat necunoscut"; else ok "IP-ul de ieșire cunoscut la întrebare"; fi
+contains "dry-run: sonda TCP spre Supabase" "$CALLS" "python3-tcp aws-0-eu-west-1.pooler.supabase.com 6543"
 contains "dry-run: verificare terminată" "$TMP/out/o1" "nu s-a scris nimic"
 
 if [ -z "$(find "$TMP/root" -mindepth 2 2>/dev/null)" ]; then ok "dry-run nu scrie nimic în prefix, cron, log, systemd, logrotate, bin"; else
@@ -381,6 +393,7 @@ if [ "$(id -u)" -eq 0 ] && command -v openssl > /dev/null 2>&1; then
     } >"$A/bin/$1"
     chmod +x "$A/bin/$1"
   }
+  cp "$BIN/python3" "$A/bin/python3"
   cp "$BIN/curl" "$A/bin/curl"
   sed -i "s#$ACALLS#$ACALLS#" "$A/bin/curl"
   cp "$BIN/df" "$A/bin/df"
@@ -457,7 +470,8 @@ esac'
   if grep -q -- '--password-stdin' "$ACALLS"; then ok "create-user cu --password-stdin"; else fail "create-user fără --password-stdin"; fi
   # toate apelurile compose folosesc aceeași listă -f (inclusiv ask) și --no-build
   if grep '^docker compose' "$ACALLS" | grep -E ' (up|run) ' | grep -v ' finet-backup' | grep -vq 'docker-compose.ask.yml'; then fail "un apel compose up/run fără docker-compose.ask.yml (ar recrea finet-web fără secretul ask)"; else ok "toate apelurile compose up/run includ docker-compose.ask.yml"; fi
-  if grep '^docker compose' "$ACALLS" | grep -E ' (up|run) ' | grep -v ' finet-backup' | grep -vq -- '--no-build'; then fail "up/run fără --no-build"; else ok "up/run cu --no-build (fără build local)"; fi
+  if grep '^docker compose' "$ACALLS" | grep -E ' up ' | grep -vq -- '--no-build'; then fail "up fără --no-build"; else ok "up cu --no-build (fără build local)"; fi
+  if grep '^docker compose' "$ACALLS" | grep -E ' run ' | grep -q -- '--no-build'; then fail "run cu --no-build (flag inexistent)"; else ok "run fără --no-build (imaginile sunt verificate dinainte)"; fi
   if grep -E '^docker .*(build|pull|load)' "$ACALLS" | grep -vq 'compose'; then fail "docker build/pull/load apelat"; else ok "fără build/pull local"; fi
   contains "migrații: a doua rulare 0" "$A/o1" "a doua rulare: aplicate acum 0"
   contains "N1 verificat" "$A/o1" "N1 finet-web: 0 URL-uri"

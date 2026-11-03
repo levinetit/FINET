@@ -71,7 +71,7 @@ APP_HOST="" NET_NAME=apps NET_SUBNET=172.88.88.0/24 WEB_IP=172.88.88.130 WORKER_
 ENTRY=nimic TRAEFIK_RESOLVER=letsencrypt CF_TEAM_V="" CF_AUD_V="" CF_TUNNEL_TOKEN_V="" CLOUDFLARED_INSTALL=nu
 AI_ENABLE_V=nu AI_BASE="" AI_ALLOWED="" AI_BUDGET_V=0 AI_KEY_V="" AI_ASK_KEY_V="" AI_ASK_EFF=nu
 KEEP_AI_KEY_V=nu KEEP_AI_ASK_KEY_V=nu KEEP_DB_APP=nu KEEP_DB_MIG=nu KEEP_BK_PG_PASS=nu KEEP_RESTIC=nu
-DB_APP="" DB_MIG="" DB_WORKER="" DB_HOSTPORTS="" CA_SRC="" CA_NAME="" CA_LOCAL="" EGRESS="" EGRESS_OK=nu
+DB_APP="" DB_MIG="" DB_WORKER="" DB_HOSTPORTS="" CA_SRC="" CA_NAME="" CA_LOCAL="" EGRESS="" EGRESS_TRIED=0 EGRESS_OK=nu
 NET_EXISTING_SUBNET="" ADMIN_EMAIL="" ADMIN_NAME="" ADMIN_GEN=da ADMIN_PASS="" BA_EXISTS=nu HT_EXISTS=nu
 IMAGES_SHA_V=auto GH_TOKEN_V="" GH_KEEP=nu BACKUP_ON=nu BACKUP_READY=nu BACKUP_TEST=nu BK_PG_PASS=""
 RESTIC_PASS="" RESTIC_GEN=nu RCLONE_REMOTE_V=Gdrive RCLONE_CONF_SRC="" BACKUP_PATH_V="" BACKUP_PG_USER_V=""
@@ -638,7 +638,8 @@ nearest_dir() {
   while [ ! -d "$_d" ] && [ "$_d" != / ]; do _d=$(dirname "$_d"); done
   printf '%s' "$_d"
 }
-tcp_ok() { curl -sS -m 8 -o /dev/null "telnet://$1:$2" </dev/null >/dev/null 2>&1; }
+# Conexiune TCP (curl telnet:// nu se oprește singur după conectare; socket-ul Python da).
+tcp_ok() { python3 -I -c 'import socket,sys; socket.create_connection((sys.argv[1], int(sys.argv[2])), 8).close()' "$1" "$2" >/dev/null 2>&1; }
 https_ok() { curl -fsSI -m 10 -o /dev/null "$1" >/dev/null 2>&1; }
 
 preflight_system() {
@@ -705,6 +706,13 @@ egress_ip() { # → stdout: IP-ul public de ieșire
   return 1
 }
 
+detect_egress() { # o singură dată; EGRESS rămâne gol dacă nu se află
+  if [ -z "$EGRESS" ] && [ "$EGRESS_TRIED" = 0 ]; then
+    EGRESS_TRIED=1
+    EGRESS=$(egress_ip) || EGRESS=""
+  fi
+}
+
 preflight_network() {
   section "Precondiții: acces de ieșire"
   if https_ok https://github.com; then chk_ok "GitHub (github.com)"; else chk_fail "nu ajung la https://github.com"; fi
@@ -719,10 +727,10 @@ preflight_network() {
     _ap=$(url_port "$AI_BASE")
     if tcp_ok "$_ah" "$_ap"; then chk_ok "AI_BASE_URL (${_ah}:${_ap})"; else chk_fail "nu ajung la AI_BASE_URL (${_ah}:${_ap})"; fi
   fi
-  if EGRESS=$(egress_ip); then
+  detect_egress
+  if [ -n "$EGRESS" ]; then
     chk_ok "IP-ul public de ieșire: $EGRESS"
   else
-    EGRESS=""
     chk_warn "nu am putut afla IP-ul public de ieșire (ifconfig.me / api.ipify.org)"
   fi
 }
@@ -809,8 +817,8 @@ collect_common_entry() {
 
 collect_network() {
   section "Rețeaua Docker"
-  ask NET_NAME NET_NAME "Numele rețelei Docker externe (compose: FINET_APPS_NETWORK)" "$(envget "$PREFIX/compose/compose.env" FINET_APPS_NETWORK || :)" v_netname
-  if [ -z "$NET_NAME" ]; then NET_NAME=apps; fi
+  _dnet=$(envget "$PREFIX/compose/compose.env" FINET_APPS_NETWORK || :)
+  ask NET_NAME NET_NAME "Numele rețelei Docker externe (compose: FINET_APPS_NETWORK)" "${_dnet:-apps}" v_netname
   _dsub=172.88.88.0/24
   _dweb=172.88.88.130
   _dwrk=172.88.88.131
@@ -857,6 +865,7 @@ collect_ai_new() {
 
 collect_supabase() {
   section "Supabase"
+  detect_egress
   note "Rolurile și schema se creează de operator în Supabase (ops/supabase/README.md, roles.sql)."
   if [ -n "${EGRESS:-}" ]; then
     note "IP-ul public de ieșire al acestui server: $EGRESS"
@@ -1022,6 +1031,8 @@ collect_move() {
   collect_network
   collect_common_entry
   collect_images
+  detect_egress
+  note "IP-ul public de ieșire al acestui server: ${EGRESS:-necunoscut (află-l cu: curl -s https://ifconfig.me)}"
   askyn EGRESS_OK EGRESS_IP_ADDED "Ai adăugat IP-ul public al ACESTUI server în Supabase → Network Restrictions? (IP-ul se afișează la verificarea de rețea; poți lăsa și IP-ul vechi până la mutare)" nu
   askyn BACKUP_ON BACKUP_ENABLE "Programez backup-ul zilnic (secretele de backup vin din copie)?" da
   BACKUP_READY=nu
@@ -1065,13 +1076,17 @@ print_summary() {
     note "CA Supabase: $CA_NAME"
     note "Administrator: $ADMIN_EMAIL (parola: $([ "$ADMIN_GEN" = da ] && printf 'generată, afișată o dată' || printf 'dată de tine, prin stdin'))"
   fi
-  note "Backup: ${BACKUP_ON:-nu}; cron: ${CRON_ON:-nu}"
+  note "Backup: ${BACKUP_ON:-nu}$([ "${BACKUP_READY:-nu}" = da ] && [ "$MODE" = new ] && printf ' (repository restic: rclone:%s:%s)' "$RCLONE_REMOTE_V" "$BACKUP_PATH_V"); cron: ${CRON_ON:-nu}"
   note "Pe serverul VECHI (dacă există): oprește containerele și scoate cron-urile FINET, altfel rulează dublu."
 }
 
 confirm() {
   if [ "$DRY" = 1 ]; then return 0; fi
-  ask CONFIRM_V CONFIRM "Aplic?" nu v_yn
+  if [ -n "$TUI" ] && [ -z "$ANSWERS" ]; then
+    $TUI --title "FINET — instalare" --defaultno --yesno "Aplic?" 8 40 || die "Nu s-a aplicat nimic (răspuns: nu)."
+    return 0
+  fi
+  ask CONFIRM_V CONFIRM "Aplic? [da/NU]" nu v_yn
   [ "$CONFIRM_V" = da ] || die "Nu s-a aplicat nimic (răspuns: nu)."
 }
 
@@ -1389,7 +1404,7 @@ step_dbtest() {
 }
 
 run_migrate() { # → $MIGOUT
-  MIGOUT=$(dc --profile migrate run --rm --no-build -T finet-migrate 2>&1) || {
+  MIGOUT=$(dc --profile migrate run --rm -T finet-migrate 2>&1) || {
     printf '%s\n' "$MIGOUT" >>"$LOG"
     die "finet-migrate a eșuat (vezi log)."
   }
@@ -1430,7 +1445,7 @@ step_user() {
     [ "${#ADMIN_PASS}" -ge 16 ] || die "Generarea parolei a eșuat."
     show_once_tty "Parola administratorului" "$ADMIN_PASS"
   fi
-  _uo=$(printf '%s\n' "$ADMIN_PASS" | dc --profile admin run --rm --no-build -T finet-admin create-user --email "$ADMIN_EMAIL" --name "$ADMIN_NAME" --password-stdin 2>&1) || {
+  _uo=$(printf '%s\n' "$ADMIN_PASS" | dc --profile admin run --rm -T finet-admin create-user --email "$ADMIN_EMAIL" --name "$ADMIN_NAME" --password-stdin 2>&1) || {
     printf '%s\n' "$_uo" >>"$LOG"
     die "create-user a eșuat (vezi log; un utilizator existent nu e o eroare)."
   }
@@ -1647,14 +1662,19 @@ step_cron() {
   for _l in finet-cleanup.log finet-backup.log; do
     if [ -e "$LOG_DIR/$_l" ]; then note "există: $LOG_DIR/$_l"; else act "creez $LOG_DIR/$_l (root, 600)" install -o root -g root -m 600 /dev/null "$LOG_DIR/$_l"; fi
   done
-  if [ -e "$LOGROTATE_DIR/finet-backup" ]; then
-    note "logrotate pentru finet-backup.log există deja ($LOGROTATE_DIR/finet-backup)"
-    _lrlogs="$LOG_DIR/finet-cleanup.log"
-  else
-    _lrlogs="$LOG_DIR/finet-cleanup.log $LOG_DIR/finet-backup.log"
-  fi
-  printf '%s {\n  weekly\n  rotate 8\n  compress\n  missingok\n  notifempty\n  create 0600 root root\n}\n' "$_lrlogs" >"$TMP/logrotate"
-  if [ -e "$LOGROTATE_DIR/finet-install" ] && cmp -s "$TMP/logrotate" "$LOGROTATE_DIR/finet-install"; then
+  _lrlogs=""
+  for _l in finet-cleanup.log finet-backup.log; do
+    # logrotate dă eroare la două stanze pentru același fișier: sar peste cele deja acoperite.
+    if grep -Fqs -- "$LOG_DIR/$_l" "$LOGROTATE_DIR"/* 2>/dev/null && ! grep -Fqs -- "$LOG_DIR/$_l" "$LOGROTATE_DIR/finet-install" 2>/dev/null; then
+      note "logrotate pentru $_l există deja în $LOGROTATE_DIR"
+    else
+      _lrlogs="$_lrlogs $LOG_DIR/$_l"
+    fi
+  done
+  printf '%s {\n  weekly\n  rotate 8\n  compress\n  missingok\n  notifempty\n  create 0600 root root\n}\n' "${_lrlogs# }" >"$TMP/logrotate"
+  if [ -z "$_lrlogs" ]; then
+    note "logrotate: nimic de adăugat"
+  elif [ -e "$LOGROTATE_DIR/finet-install" ] && cmp -s "$TMP/logrotate" "$LOGROTATE_DIR/finet-install"; then
     note "logrotate identic"
   else
     act "scriu $LOGROTATE_DIR/finet-install" install -o root -g root -m 644 "$TMP/logrotate" "$LOGROTATE_DIR/finet-install"
@@ -1729,10 +1749,10 @@ step_backup() {
   else
     chk_warn "rclone nu e instalat pe gazdă: remote-ul nu a fost verificat (imaginea de backup îl are)"
   fi
-  if dc_backup run --rm --no-build -T finet-backup snapshots >>"$LOG" 2>&1; then
+  if dc_backup run --rm -T finet-backup snapshots >>"$LOG" 2>&1; then
     note "repository-ul restic există deja (init omis)"
   else
-    act "inițializez repository-ul restic" dc_backup run --rm --no-build -T finet-backup init
+    act "inițializez repository-ul restic" dc_backup run --rm -T finet-backup init
   fi
   if [ "${BACKUP_TEST:-nu}" = da ]; then
     if FINET_BACKUP_HOST_ENV=$PREFIX/env/backup-host.env sh "$SRC/ops/backup/run-backup.sh" >>"$LOG" 2>&1; then
