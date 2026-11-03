@@ -39,7 +39,7 @@
     "admin:cleanup-idempotency": "pnpm build:tools && node dist/tools/admin.mjs cleanup-idempotency"
   },
   "dependencies": {
-    "better-auth": "1.7.13",
+    "better-auth": "1.7.14",
     "busboy": "1.6.0",
     "clsx": "2.1.1",
     "drizzle-orm": "0.45.4",
