@@ -25,7 +25,12 @@ class FakeReceipts {
       final polls = docPolls[id] = (docPolls[id] ?? 0) + 1;
       if (consentRequired) {
         doc['status'] = 'awaiting_consent';
-      } else if (doc['status'] != 'needs_review' && doc['status'] != 'done') {
+      } else if (!const {
+        'needs_review',
+        'done',
+        'rejected',
+        'failed',
+      }.contains(doc['status'])) {
         doc['status'] = polls == 1 ? 'processing' : 'needs_review';
         if (polls >= 2) doc['receiptId'] = receiptNew;
       }
@@ -73,6 +78,15 @@ class FakeReceipts {
         r['lineCount'] = (r['lines']! as List).length;
       }
       return jsonBody({'data': _detail(r)});
+    });
+    server.on('DELETE /api/v1/documents/{id}', (o) {
+      if (!server.authorized(o)) return _unauth();
+      final id = o.uri.pathSegments[3];
+      if (documents.remove(id) == null) {
+        return finetError(404, 'not_found', 'Nu există.');
+      }
+      deletedDocuments.add(id);
+      return emptyBody(204);
     });
     server.on('DELETE /api/v1/receipts/{id}', (o) {
       final r = _receipt(o);
@@ -161,6 +175,11 @@ class FakeReceipts {
 
   /// Dacă e `true`, documentele rămân în `awaiting_consent` (fără acord pentru AI).
   bool consentRequired = false;
+
+  /// Dacă e setat, documentele încărcate sunt refuzate imediat cu acest cod de eroare (fără bon).
+  String? rejectWith;
+
+  final List<String> deletedDocuments = [];
 
   /// Câte încărcări următoare cad cu eroare de rețea.
   int failUploads = 0;
@@ -353,14 +372,14 @@ class FakeReceipts {
       final doc = {
         'id': id,
         'kind': 'receipt',
-        'status': 'queued',
+        'status': rejectWith == null ? 'queued' : 'rejected',
         'mime': part.contentType ?? 'image/jpeg',
         'sizeBytes': part.bytes.length,
         'pages': null,
         'batchId': null,
         'documentOrder': null,
         'possibleDuplicateOfId': null,
-        'errorCode': null,
+        'errorCode': rejectWith,
         'createdAt': '2026-11-01T10:00:00.000Z',
         'expiresAt': null,
         'fileDeleted': false,

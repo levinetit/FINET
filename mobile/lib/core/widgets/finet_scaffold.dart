@@ -13,6 +13,7 @@ class FinetScaffold extends ConsumerStatefulWidget {
     required this.body,
     this.screen,
     this.floatingActionButton,
+    this.actions = const [],
   });
 
   final String title;
@@ -22,6 +23,9 @@ class FinetScaffold extends ConsumerStatefulWidget {
   /// își raportează ecranul din navigarea de jos, nu de aici.
   final String? screen;
   final Widget? floatingActionButton;
+
+  /// Acțiuni suplimentare în bara de sus, înaintea comutatorului „ascunde sumele”.
+  final List<Widget> actions;
 
   @override
   ConsumerState<FinetScaffold> createState() => _FinetScaffoldState();
@@ -54,6 +58,7 @@ class _FinetScaffoldState extends ConsumerState<FinetScaffold> {
           ],
         ),
         actions: [
+          ...widget.actions,
           IconButton(
             tooltip: hidden ? 'Arată sumele' : 'Ascunde sumele',
             icon: Icon(
@@ -65,7 +70,14 @@ class _FinetScaffoldState extends ConsumerState<FinetScaffold> {
           ),
         ],
       ),
-      body: Column(children: [Expanded(child: widget.body)]),
+      // Aplicația desenează sub barele sistemului (Android 15+ edge-to-edge): fără acest
+      // `SafeArea`, ultimul rând al unui ecran derulabil rămâne sub bara de navigare/gesturi
+      // și nu poate fi atins. Sus nu e nevoie (îl tratează AppBar-ul); în navigarea de jos
+      // `Scaffold`-ul părinte a consumat deja marginea de jos, deci aici nu se dublează.
+      body: SafeArea(
+        top: false,
+        child: Column(children: [Expanded(child: widget.body)]),
+      ),
       floatingActionButton: widget.floatingActionButton,
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/network/api_error.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/widgets/async_view.dart';
 import '../../core/widgets/finet_scaffold.dart';
@@ -114,6 +115,21 @@ class _DocumentCard extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(documentErrorText(doc.errorCode)),
               ),
+            // Documentul eșuat/refuzat nu are bon, deci nu apare în lista de bonuri: aici e
+            // singurul loc de unde se poate șterge.
+            if (doc.status == DocumentStatus.failed ||
+                doc.status == DocumentStatus.rejected)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _delete(context, ref, doc.id),
+                  icon: Icon(Icons.delete_outline, color: c.bad),
+                  label: Text(
+                    'Șterge documentul',
+                    style: TextStyle(color: c.bad),
+                  ),
+                ),
+              ),
             if (doc.possibleDuplicateOfId != null)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
@@ -139,6 +155,36 @@ class _DocumentCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref, String id) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ștergi documentul?'),
+        content: const Text('Se șterg documentul și fișierul lui.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Nu'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Șterge'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(receiptsApiProvider).deleteDocument(id);
+      if (context.mounted) {
+        ref.read(scanControllerProvider.notifier).removeDocument(id);
+      }
+    } on ApiError catch (e) {
+      messenger?.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   static IconData _icon(DocumentStatus s) => switch (s) {
