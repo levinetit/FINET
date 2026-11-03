@@ -1,4 +1,4 @@
-# Auto-merge Dependabot doar pentru patch-uri (ADR 0027).
+# Auto-merge Dependabot doar pentru patch-uri (ADR 0043).
 #
 # De ce `pull_request_target` și nu `pull_request`: pe PR-urile Dependabot, `pull_request` rulează
 # cu GITHUB_TOKEN doar-citire și fără secretele de Actions, deci `gh pr merge --auto` ar eșua.

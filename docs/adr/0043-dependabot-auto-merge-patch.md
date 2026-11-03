@@ -1,4 +1,4 @@
-# ADR 0027: Auto-merge Dependabot pentru patch-uri
+# ADR 0043: Auto-merge Dependabot pentru patch-uri
 
 - **Stare:** propus. Activarea cere două setări de repo (mai jos); fără ele workflow-ul nu face nimic util sau, mai rău, unește fără CI.
 - **Legături:** `.github/dependabot.yml`, `.github/workflows/dependabot-auto-merge.yml`, `.github/workflows/ci.yml` (`ci`, `backup-restore`), ADR 0002 (deploy manual din imagini CI).

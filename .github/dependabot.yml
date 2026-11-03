@@ -1,5 +1,5 @@
 # Dependabot: săptămânal. Patch-urile se grupează într-un singur PR per ecosistem și se pot
-# auto-merge-ui (vezi .github/workflows/dependabot-auto-merge.yml și docs/adr/0027). Excepțiile
+# auto-merge-ui (vezi .github/workflows/dependabot-auto-merge.yml și docs/adr/0043). Excepțiile
 # (better-auth, postgres/pg, drizzle-*) sunt EXCLUSE din grupuri: rămân PR-uri individuale, cu
 # merge manual. Grupurile se evaluează în ordinea de mai jos.
 version: 2
