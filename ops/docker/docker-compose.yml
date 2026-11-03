@@ -480,3 +480,5 @@ services:
 networks:
   apps:
     external: true
+    # Numele rețelei externe e configurabil (installer: ops/install/finet-install.sh); implicit `apps`.
+    name: ${FINET_APPS_NETWORK:-apps}
