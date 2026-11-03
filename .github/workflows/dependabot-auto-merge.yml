@@ -1,0 +1,61 @@
+# Auto-merge Dependabot doar pentru patch-uri (ADR 0043).
+#
+# De ce `pull_request_target` și nu `pull_request`: pe PR-urile Dependabot, `pull_request` rulează
+# cu GITHUB_TOKEN doar-citire și fără secretele de Actions, deci `gh pr merge --auto` ar eșua.
+# `pull_request_target` rulează din workflow-ul de pe `main` și poate avea drepturi de scriere.
+# Riscul clasic al acestui eveniment e checkout-ul codului din PR; aici NU se face checkout și nu
+# se execută nimic din PR. Singurele date folosite din PR sunt metadatele Dependabot.
+#
+# Merge-ul real rămâne condiționat de verificările cerute pe `main` (branch protection/ruleset):
+# `--auto` doar așteaptă ca ele să treacă. FĂRĂ verificări cerute, PR-ul s-ar uni imediat.
+name: dependabot-auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      # Pinuit pe SHA (v2.5.0): acțiunea rulează cu drepturi de scriere.
+      - name: Metadate Dependabot
+        id: meta
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Activează auto-merge (squash) doar pentru patch-uri permise
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          DEPS_JSON: ${{ steps.meta.outputs.updated-dependencies-json }}
+          # Dependențe excluse (PR-uri individuale, merge manual): auth, driver/ORM de bază de date,
+          # imaginea docker postgres. Expresie regulară extinsă, ancorată pe întregul nume.
+          EXCLUDED: "^(better-auth|@better-auth/.+|postgres|pg|drizzle-orm|drizzle-kit|drizzle-.+|.+/postgres)$"
+        run: |
+          set -euo pipefail
+
+          # PR grupat: update-type e cel mai mare nivel, dar verificăm fiecare dependență în parte.
+          if [ "$UPDATE_TYPE" != "version-update:semver-patch" ]; then
+            echo "Sărit: update-type=$UPDATE_TYPE (doar patch)."; exit 0
+          fi
+          if ! jq -e 'length > 0 and all(.[]; .updateType == "version-update:semver-patch")' <<<"$DEPS_JSON" >/dev/null; then
+            echo "Sărit: nu toate dependențele sunt patch (sau lista e goală)."; exit 0
+          fi
+          blocked="$(jq -r '.[].dependencyName' <<<"$DEPS_JSON" | grep -E "$EXCLUDED" || true)"
+          if [ -n "$blocked" ]; then
+            echo "Sărit: dependență exclusă:"; echo "$blocked"; exit 0
+          fi
+
+          echo "Activez auto-merge (squash) pentru $PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
