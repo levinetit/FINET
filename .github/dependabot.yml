@@ -1,3 +1,7 @@
+# Dependabot: săptămânal. Patch-urile se grupează într-un singur PR per ecosistem și se pot
+# auto-merge-ui (vezi .github/workflows/dependabot-auto-merge.yml și docs/adr/0027). Excepțiile
+# (better-auth, postgres/pg, drizzle-*) sunt EXCLUSE din grupuri: rămân PR-uri individuale, cu
+# merge manual. Grupurile se evaluează în ordinea de mai jos.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -6,21 +10,54 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     groups:
+      # Patch-uri, fără excepții.
+      npm-patch:
+        update-types: [patch]
+        exclude-patterns:
+          - better-auth
+          - "@better-auth/*"
+          - postgres
+          - pg
+          - drizzle-orm
+          - drizzle-kit
+          - "drizzle-*"
+      # Minor la dev-dependencies, ca înainte (patch-urile sunt deja în grupul de mai sus).
       dev-dependencies:
         dependency-type: development
-        update-types: [minor, patch]
+        update-types: [minor]
+        exclude-patterns:
+          - better-auth
+          - "@better-auth/*"
+          - postgres
+          - pg
+          - drizzle-orm
+          - drizzle-kit
+          - "drizzle-*"
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions-patch:
+        update-types: [patch]
 
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    groups:
+      docker-patch:
+        update-types: [patch]
+        exclude-patterns:
+          - postgres
 
   - package-ecosystem: docker-compose
     directory: /.devcontainer
     schedule:
       interval: weekly
+    groups:
+      docker-compose-patch:
+        update-types: [patch]
+        exclude-patterns:
+          - postgres
