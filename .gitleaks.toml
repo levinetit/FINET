@@ -1,0 +1,21 @@
+# Configurația gitleaks (secret-scan.yml). Pornește de la regulile implicite și exclude
+# valorile FICTIVE de test, documentate ca atare în repo.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valori de test și exemple documentate (nu sunt secrete)"
+paths = [
+  '''pnpm-lock\.yaml$''',
+  '''docs/openapi\.json$''',
+  '''fixtures/''',
+  '''^mobile/android/gradle/wrapper/''',
+]
+regexes = [
+  # Parolele fictive ale rolurilor din PostgreSQL-ul efemer de test (ops/postgres/test-bootstrap.sql).
+  '''finet_(migrator|app|backup)_ci''',
+  '''finet_(ci|dev|test)''',
+  # Cheia AI fictivă din e2e și din CI.
+  '''sk-e2e-fictiv-0+''',
+  '''e2e-parola-de-test-ci-1''',
+]
