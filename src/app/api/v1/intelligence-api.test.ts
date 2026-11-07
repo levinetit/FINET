@@ -53,10 +53,11 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/health-score pe PostgreSQL real", 
   const PASS = "parola-sanatate-1";
   const newKey = () => `sanatate-cheie-${String(++keySeq).padStart(6, "0")}`;
 
-  async function call(handler: Handler, path: string, init: ApiInit) {
+  async function call(handler: Handler, path: string, init: ApiInit, ...rest: string[]) {
     const res = await (handler as (...a: unknown[]) => Promise<Response>)(
       apiRequest(path, init),
       env,
+      ...rest,
     );
     await assertContract(handler, res);
     const body = (await readJson(res)) as Body;
@@ -330,6 +331,124 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/health-score pe PostgreSQL real", 
       expect(bad.body.error?.fields).toHaveProperty("days");
       const none = await call(I.forecastHandler, "/api/v1/forecast", {});
       expect(none.status).toBe(401);
+    });
+  });
+
+  describe("planul de economisire și abonamentele", () => {
+    it("planul: obiectivul activ cu rata la termen; fondul de urgență pe monedă; simularea", async () => {
+      const goal = await call(P.createGoalHandler, "/api/v1/goals", {
+        bearer: A.bearer,
+        headers: { "idempotency-key": newKey() },
+        // 1.200 lei de strâns în 60 de zile (28 oct → 27 dec), 300 deja.
+        body: { name: "Vacanță", target: "1500", currency: "RON", deadline: "2026-12-27" },
+      });
+      expect(goal.status, JSON.stringify(goal.body)).toBe(201);
+      const goalId = (goal.body.data as { id: string }).id;
+      const contrib = await call(
+        P.contributeGoalHandler,
+        `/api/v1/goals/${goalId}/contributions`,
+        {
+          bearer: A.bearer,
+          headers: { "idempotency-key": newKey() },
+          body: { direction: "add", amount: "300" },
+        },
+        goalId,
+      );
+      expect(contrib.status).toBe(200);
+
+      const r = await call(I.savingsPlanHandler, "/api/v1/savings-plan", { bearer: A.bearer });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const data = r.body.data as {
+        today: string;
+        goals: {
+          goalId: string;
+          plan: {
+            status: string;
+            daysLeft: number | null;
+            dailyMinor: number | null;
+            monthlyMinor: number | null;
+          };
+        }[];
+        emergency: {
+          currency: string;
+          averageExpenseMinor: number | null;
+          liquidMinor: number;
+          options: { months: number; targetMinor: number; gapMinor: number; coveredPct: number }[];
+        }[];
+      };
+      expect(data.today).toBe("2026-10-28");
+      const g = data.goals.find((x) => x.goalId === goalId)!;
+      expect(g.plan).toMatchObject({
+        status: "on_track",
+        daysLeft: 60,
+        dailyMinor: 2000,
+        monthlyMinor: 60880,
+      });
+      const ron = data.emergency.find((e) => e.currency === "RON")!;
+      expect(ron.averageExpenseMinor).not.toBeNull();
+      expect(ron.options.map((o) => o.months)).toEqual([3, 6]);
+      expect(ron.options[0]!.targetMinor).toBe(ron.averageExpenseMinor! * 3);
+
+      const sim = await call(I.simulateSavingsHandler, "/api/v1/savings-plan/simulate", {
+        bearer: A.bearer,
+        body: {
+          currency: "RON",
+          target: "1200",
+          savedMinor: 0,
+          deadline: "2026-12-27",
+          monthly: "300",
+        },
+      });
+      expect(sim.status, JSON.stringify(sim.body)).toBe(200);
+      const s = sim.body.data as {
+        byDeadline: { dailyMinor: number } | null;
+        byMonthly: { months: number | null; finishOn: string | null } | null;
+      };
+      expect(s.byDeadline?.dailyMinor).toBe(2000);
+      expect(s.byMonthly).toEqual({ monthlyMinor: 30000, months: 4, finishOn: "2027-02-27" });
+      const past = await call(I.simulateSavingsHandler, "/api/v1/savings-plan/simulate", {
+        bearer: A.bearer,
+        body: { currency: "RON", target: "1200", deadline: "2026-01-01" },
+      });
+      expect(past.status).toBe(400);
+      expect(past.body.error?.fields).toHaveProperty("deadline");
+      const bad = await call(I.simulateSavingsHandler, "/api/v1/savings-plan/simulate", {
+        bearer: A.bearer,
+        body: { currency: "RON", savedMinor: 5 },
+      });
+      expect(bad.status).toBe(400);
+    });
+
+    it("abonamentele: regula de chirie normalizată, reînnoirea, Bogdan fără reguli", async () => {
+      const r = await call(I.subscriptionsHandler, "/api/v1/subscriptions", { bearer: A.bearer });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const data = r.body.data as {
+        today: string;
+        currencies: {
+          currency: string;
+          activeCount: number;
+          monthlyMinor: number;
+          annualMinor: number;
+          upcoming: { name: string; daysToRenewal: number | null }[];
+          subscriptions: { name: string; monthlyMinor: number; status: string }[];
+        }[];
+        detected: unknown[];
+      };
+      const ron = data.currencies.find((c) => c.currency === "RON")!;
+      expect(ron.activeCount).toBe(1);
+      expect(ron.monthlyMinor).toBe(150000);
+      expect(ron.annualMinor).toBe(1800000);
+      expect(ron.subscriptions[0]).toMatchObject({
+        name: "Chirie",
+        monthlyMinor: 150000,
+        status: "active",
+      });
+      expect(ron.upcoming[0]).toMatchObject({ name: "Chirie", daysToRenewal: 8 });
+      expect(Array.isArray(data.detected)).toBe(true);
+
+      const b = await call(I.subscriptionsHandler, "/api/v1/subscriptions", { bearer: B.bearer });
+      expect(b.status).toBe(200);
+      expect((b.body.data as { currencies: unknown[] }).currencies).toEqual([]);
     });
   });
 

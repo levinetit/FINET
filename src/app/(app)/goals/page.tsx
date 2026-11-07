@@ -7,14 +7,19 @@ import { GoalLine } from "@/components/planning/summary";
 import { Alert } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { GOAL_STATUSES } from "@/db/schema";
+import { DB_CURRENCIES, GOAL_STATUSES } from "@/db/schema";
 import { ro } from "@/messages/ro";
 import { goalToJson } from "@/modules/goals/goals.schema";
 import { listGoals } from "@/modules/goals/goals.service";
+import { savingsPlanViewToJson } from "@/modules/goals/plan.schema";
+import { getSavingsPlan } from "@/modules/goals/plan.service";
 
 import { load, requireLedgerPage } from "../../_lib/ledger-page";
 import { exportPath } from "../../_lib/planning-ui";
 import { PageHeader } from "../page-header";
+
+import { EmergencyFund, GoalPlans } from "./savings-plan";
+import { SavingsSimulator } from "./savings-simulator";
 
 export const metadata: Metadata = { title: ro.goals.title };
 
@@ -46,9 +51,15 @@ export default async function GoalsPage() {
     );
   }
   const householdId = page.householdId;
-  const result = await load(async () =>
-    (await listGoals({ db: page.session.runtime.db }, page.actor, householdId)).map(goalToJson),
-  );
+  const result = await load(async () => {
+    const deps = { db: page.session.runtime.db };
+    const [goals, plan] = await Promise.all([
+      listGoals(deps, page.actor, householdId),
+      // ADR 0047: rata necesară pe obiectiv activ și fondul de urgență.
+      getSavingsPlan(deps, page.actor, householdId),
+    ]);
+    return { goals: goals.map(goalToJson), plan: savingsPlanViewToJson(plan) };
+  });
   if (!result.ok) {
     return (
       <>
@@ -57,7 +68,7 @@ export default async function GoalsPage() {
       </>
     );
   }
-  const goals = result.value;
+  const { goals, plan } = result.value;
   return (
     <>
       {header}
@@ -88,6 +99,9 @@ export default async function GoalsPage() {
             );
           })
         )}
+        <GoalPlans goals={plan.goals} />
+        <EmergencyFund plans={plan.emergency} />
+        <SavingsSimulator currencies={DB_CURRENCIES} />
         <div className="flex flex-wrap items-start gap-3">
           <ExportButton
             path={exportPath("goals")}

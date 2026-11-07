@@ -20896,6 +20896,172 @@
         }
       }
     },
+    "/api/v1/savings-plan": {
+      "get": {
+        "operationId": "getSavingsPlan",
+        "tags": [
+          "goals"
+        ],
+        "summary": "Planul de economisire: obiectivele active cu rata necesară și fondul de urgență (ADR 0047).",
+        "description": "Pentru fiecare obiectiv activ: restul de strâns și suma pe zi / săptămână / lună ca ținta să fie atinsă la termen (rotunjit în sus; `no_deadline` fără termen, `overdue` după termen, `done` atins). Fondul de urgență pe monedă: media cheltuielilor ultimelor 3 luni, lichidul, țintele la 3 și 6 luni cu diferența și rata lunară pe 12 luni.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Planul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SavingsPlan"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/savings-plan/simulate": {
+      "post": {
+        "operationId": "simulateSavings",
+        "tags": [
+          "goals"
+        ],
+        "summary": "Simulează un plan de economisire (fără scriere; merge și cu abonament expirat).",
+        "description": "Ținta (`targetMinor` sau `target`), cât ai deja (`savedMinor`, implicit 0) și, opțional, termenul (`deadline`, ≥ azi) și/sau rata lunară (`monthlyMinor` sau `monthly`). Răspunsul are planul la termen și/sau durata la rata dată.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "currency": {
+                    "type": "string",
+                    "enum": [
+                      "RON",
+                      "EUR",
+                      "USD"
+                    ]
+                  },
+                  "targetMinor": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 10000000000000
+                  },
+                  "target": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "savedMinor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000000000
+                  },
+                  "deadline": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "monthlyMinor": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 10000000000000
+                  },
+                  "monthly": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "currency"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Simularea.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SavingsSimulation"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/shopping-lists": {
       "get": {
         "operationId": "listShoppingLists",
@@ -29139,6 +29305,57 @@
         }
       }
     },
+    "/api/v1/subscriptions": {
+      "get": {
+        "operationId": "getSubscriptions",
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Abonamentele: regulile recurente de cheltuieli, normalizate lunar și anual (ADR 0047).",
+        "description": "Pe monedă: numărul de abonamente active și pe pauză, costul lunar și anual normalizat (lunar = suma / interval; anual = suma / (12 × interval); săptămânal × 52/12; zilnic × 365/12), gruparea pe categorii, reînnoirile din următoarele 30 de zile și lista completă (fără regulile încheiate). `detected` = plățile recurente propuse din istoric (ADR 0019) care nu sunt încă reguli.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Abonamentele.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Subscriptions"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/summary/monthly": {
       "get": {
         "operationId": "getMonthlySummary",
@@ -33977,6 +34194,452 @@
         "additionalProperties": false,
         "title": "NetWorth"
       },
+      "SavingsPlan": {
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Dată calendaristică `YYYY-MM-DD`."
+          },
+          "goals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "goalId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "currency": {
+                  "type": "string",
+                  "enum": [
+                    "RON",
+                    "EUR",
+                    "USD"
+                  ]
+                },
+                "targetMinor": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                },
+                "savedMinor": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                },
+                "deadline": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                      "description": "Dată calendaristică `YYYY-MM-DD`."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "accountId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "plan": {
+                  "type": "object",
+                  "properties": {
+                    "remainingMinor": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                    },
+                    "daysLeft": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "dailyMinor": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "weeklyMinor": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "monthlyMinor": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "done",
+                        "no_deadline",
+                        "on_track",
+                        "overdue"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "remainingMinor",
+                    "daysLeft",
+                    "dailyMinor",
+                    "weeklyMinor",
+                    "monthlyMinor",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "goalId",
+                "name",
+                "currency",
+                "targetMinor",
+                "savedMinor",
+                "deadline",
+                "accountId",
+                "plan"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "emergency": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "currency": {
+                  "type": "string",
+                  "enum": [
+                    "RON",
+                    "EUR",
+                    "USD"
+                  ]
+                },
+                "averageExpenseMinor": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "liquidMinor": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "months": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "targetMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "gapMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "monthlyMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "coveredX100": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "coveredPct": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    },
+                    "required": [
+                      "months",
+                      "targetMinor",
+                      "gapMinor",
+                      "monthlyMinor",
+                      "coveredX100",
+                      "coveredPct"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "currency",
+                "averageExpenseMinor",
+                "liquidMinor",
+                "options"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "today",
+          "goals",
+          "emergency"
+        ],
+        "additionalProperties": false,
+        "title": "SavingsPlan"
+      },
+      "SavingsSimulation": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "RON",
+              "EUR",
+              "USD"
+            ]
+          },
+          "targetMinor": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+          },
+          "savedMinor": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+          },
+          "today": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Dată calendaristică `YYYY-MM-DD`."
+          },
+          "byDeadline": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "remainingMinor": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                  },
+                  "daysLeft": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "dailyMinor": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "weeklyMinor": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "monthlyMinor": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "done",
+                      "no_deadline",
+                      "on_track",
+                      "overdue"
+                    ]
+                  },
+                  "deadline": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                    "description": "Dată calendaristică `YYYY-MM-DD`."
+                  }
+                },
+                "required": [
+                  "remainingMinor",
+                  "daysLeft",
+                  "dailyMinor",
+                  "weeklyMinor",
+                  "monthlyMinor",
+                  "status",
+                  "deadline"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "byMonthly": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "monthlyMinor": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                  },
+                  "months": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "finishOn": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "description": "Dată calendaristică `YYYY-MM-DD`."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "monthlyMinor",
+                  "months",
+                  "finishOn"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "currency",
+          "targetMinor",
+          "savedMinor",
+          "today",
+          "byDeadline",
+          "byMonthly"
+        ],
+        "additionalProperties": false,
+        "title": "SavingsSimulation"
+      },
       "Session": {
         "type": "object",
         "properties": {
@@ -34032,6 +34695,470 @@
         ],
         "additionalProperties": false,
         "title": "Session"
+      },
+      "Subscriptions": {
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Dată calendaristică `YYYY-MM-DD`."
+          },
+          "currencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "currency": {
+                  "type": "string",
+                  "enum": [
+                    "RON",
+                    "EUR",
+                    "USD"
+                  ]
+                },
+                "activeCount": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "pausedCount": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "monthlyMinor": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                },
+                "annualMinor": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                },
+                "byCategory": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "categoryId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "categoryName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "monthlyMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "categoryId",
+                      "categoryName",
+                      "monthlyMinor",
+                      "count"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "upcoming": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ruleId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "merchant": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "categoryId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "categoryName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "accountId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "currency": {
+                        "type": "string",
+                        "enum": [
+                          "RON",
+                          "EUR",
+                          "USD"
+                        ]
+                      },
+                      "amountMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "frequency": {
+                        "type": "string",
+                        "enum": [
+                          "daily",
+                          "weekly",
+                          "monthly",
+                          "yearly"
+                        ]
+                      },
+                      "interval": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "monthlyMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "annualMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "nextRenewalOn": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                            "description": "Dată calendaristică `YYYY-MM-DD`."
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "daysToRenewal": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "active",
+                          "paused",
+                          "completed"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "ruleId",
+                      "name",
+                      "merchant",
+                      "categoryId",
+                      "categoryName",
+                      "accountId",
+                      "currency",
+                      "amountMinor",
+                      "frequency",
+                      "interval",
+                      "monthlyMinor",
+                      "annualMinor",
+                      "nextRenewalOn",
+                      "daysToRenewal",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "subscriptions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ruleId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "merchant": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "categoryId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "categoryName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "accountId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "currency": {
+                        "type": "string",
+                        "enum": [
+                          "RON",
+                          "EUR",
+                          "USD"
+                        ]
+                      },
+                      "amountMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "frequency": {
+                        "type": "string",
+                        "enum": [
+                          "daily",
+                          "weekly",
+                          "monthly",
+                          "yearly"
+                        ]
+                      },
+                      "interval": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "monthlyMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "annualMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "nextRenewalOn": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                            "description": "Dată calendaristică `YYYY-MM-DD`."
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "daysToRenewal": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "active",
+                          "paused",
+                          "completed"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "ruleId",
+                      "name",
+                      "merchant",
+                      "categoryId",
+                      "categoryName",
+                      "accountId",
+                      "currency",
+                      "amountMinor",
+                      "frequency",
+                      "interval",
+                      "monthlyMinor",
+                      "annualMinor",
+                      "nextRenewalOn",
+                      "daysToRenewal",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "currency",
+                "activeCount",
+                "pausedCount",
+                "monthlyMinor",
+                "annualMinor",
+                "byCategory",
+                "upcoming",
+                "subscriptions"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "detected": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "signature": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "merchant": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "currency": {
+                  "type": "string",
+                  "enum": [
+                    "RON",
+                    "EUR",
+                    "USD"
+                  ]
+                },
+                "amountMinor": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                },
+                "frequency": {
+                  "type": "string",
+                  "enum": [
+                    "weekly",
+                    "monthly",
+                    "yearly"
+                  ]
+                },
+                "occurrences": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "lastOn": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                },
+                "nextOn": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                },
+                "accountId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "accountName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "signature",
+                "description",
+                "merchant",
+                "currency",
+                "amountMinor",
+                "frequency",
+                "occurrences",
+                "lastOn",
+                "nextOn",
+                "accountId",
+                "accountName"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "today",
+          "currencies",
+          "detected"
+        ],
+        "additionalProperties": false,
+        "title": "Subscriptions"
       },
       "Tag": {
         "type": "object",

@@ -19,6 +19,7 @@ export const ro = {
     goals: "Obiective",
     shopping: "Liste",
     recurring: "Recurențe",
+    subscriptions: "Abonamente",
     import: "Import",
     scan: "Scanează",
     receipts: "Bonuri",
@@ -2171,6 +2172,90 @@ export const ro = {
       invalidValue: "Scrie o valoare, de exemplu 250.000 sau −120.000.",
       exists: "Există deja o evaluare la această dată. Șterge-o întâi dacă vrei s-o înlocuiești.",
     },
+  },
+  savings: {
+    planTitle: "Planul de economisire",
+    planHint: "Cât trebuie pus deoparte ca ținta să fie atinsă la termen; rotunjit în sus.",
+    remaining: "De strâns",
+    perDay: "pe zi",
+    perWeek: "pe săptămână",
+    perMonth: "pe lună",
+    daysLeft: (n: number) => (n === 1 ? "o zi rămasă" : `${n} zile rămase`),
+    statuses: {
+      done: "Țintă atinsă",
+      no_deadline: "Fără termen: adaugă un termen ca să vezi rata necesară.",
+      on_track: "La termen",
+      overdue: "Termen depășit: restul e scadent acum.",
+    },
+    emergencyTitle: "Fondul de urgență",
+    emergencyHint:
+      "Ținta = luni de cheltuieli medii (ultimele 3 luni cu cheltuieli), din conturile lichide (numerar, bancă, economii).",
+    emergencyNoData: "Fără cheltuieli în ultimele 3 luni: ținta nu se poate calcula.",
+    emergencyAverage: (avg: string) => `Cheltuiala lunară medie: ${avg}.`,
+    emergencyLiquid: (liquid: string) => `Lichid disponibil: ${liquid}.`,
+    emergencyOption: (months: number, target: string) => `${months} luni de cheltuieli (${target})`,
+    emergencyCovered: (covered: string) => `acoperit ${covered}`,
+    emergencyGap: (gap: string, monthly: string) =>
+      `mai ai de strâns ${gap}; ${monthly} pe lună timp de 12 luni`,
+    emergencyReached: "atins",
+    simulateTitle: "Simulează un plan",
+    simulateHint:
+      "Fără să atingi conturile: spune ținta și fie termenul, fie cât poți pune deoparte pe lună.",
+    target: "Ținta",
+    saved: "Ai deja",
+    deadline: "Termenul",
+    monthly: "Rata lunară",
+    currency: "Moneda",
+    simulate: "Calculează",
+    simulating: "Se calculează…",
+    needOne: "Alege un termen sau o rată lunară.",
+    resultDeadline: (daily: string, weekly: string, monthly: string, days: number) =>
+      `La termen (${days} de zile): ${daily} pe zi, ${weekly} pe săptămână, ${monthly} pe lună.`,
+    resultMonthly: (months: number, finishOn: string) =>
+      months === 1
+        ? `Cu rata aleasă ajungi la țintă într-o lună (${finishOn}).`
+        : `Cu rata aleasă ajungi la țintă în ${months} luni (${finishOn}).`,
+    resultDone: "Ținta e deja atinsă.",
+    resultOverdue: "Termenul a trecut: restul e scadent acum.",
+    invalidTarget: "Scrie o țintă pozitivă.",
+    invalidMonthly: "Scrie o rată lunară pozitivă.",
+  },
+  subscriptions: {
+    eyebrow: "Abonamente și plăți recurente",
+    title: "Abonamente",
+    intro:
+      "Fiecare regulă recurentă de cheltuieli e un abonament: costul e normalizat lunar și anual, iar reînnoirea e următoarea scadență. Adaugă sau modifică abonamentele din Recurențe; plățile detectate din istoric pot deveni reguli cu un clic.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi abonamentele.",
+    empty:
+      "Nu ai reguli recurente de cheltuieli. Adaugă-le din Recurențe (chirie, streaming, telefon, sală).",
+    monthly: "Cost lunar",
+    annual: "Cost anual",
+    counts: (active: number, paused: number) =>
+      `${active} ${active === 1 ? "activ" : "active"} · ${paused} ${paused === 1 ? "pe pauză" : "pe pauză"}`,
+    upcomingTitle: "Reînnoiri în următoarele 30 de zile",
+    upcomingEmpty: "Nicio reînnoire în următoarele 30 de zile.",
+    renewsIn: (days: number) =>
+      days < 0
+        ? `scadent de ${-days} zile`
+        : days === 0
+          ? "azi"
+          : days === 1
+            ? "mâine"
+            : `în ${days} zile`,
+    byCategoryTitle: "Pe categorii (cost lunar)",
+    noCategory: "Fără categorie",
+    listTitle: "Toate abonamentele",
+    paused: "pe pauză",
+    perMonth: "/ lună",
+    perYear: "/ an",
+    open: "Deschide regula",
+    detectedTitle: "Plăți recurente detectate din istoric",
+    detectedHint:
+      "Nu sunt reguli încă: acceptă-le din Recurențe ca să intre în abonamente și în prognoză.",
+    detectedEmpty: "Nicio plată recurentă nouă detectată.",
+    detectedLine: (occurrences: number, lastOn: string) =>
+      `${occurrences} apariții, ultima pe ${lastOn}`,
+    manage: "Gestionează în Recurențe",
   },
   advisor: {
     eyebrow: "Consilier financiar",

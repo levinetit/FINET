@@ -13,6 +13,7 @@ import { budgetCreateSchema, budgetUpdateSchema } from "@/modules/budgets/budget
 import { MAX_TOP_CATEGORIES } from "@/modules/dashboard/dashboard.schema";
 import { PDF_CONTENT_TYPE, XLSX_CONTENT_TYPE } from "@/lib/export-table";
 import { CSV_DIALECTS } from "@/modules/exports/csv";
+import { savingsSimulateSchema } from "@/modules/goals/plan";
 import { valuationCreateSchema } from "@/modules/net-worth/net-worth.schema";
 import {
   goalContributionSchema,
@@ -113,6 +114,9 @@ import {
   moneySchema,
   monthlyReportSchema,
   netWorthSchema,
+  savingsPlanSchema,
+  savingsSimulationSchema,
+  subscriptionsSchema,
   recurringCountsSchema,
   recurringGenerateResultSchema,
   recurringRuleSchema,
@@ -1550,6 +1554,42 @@ export const OPERATIONS: readonly Operation[] = [
     summary: "Șterge o evaluare a contului.",
     success: { status: 204, schema: null, description: "Ștearsă." },
     errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/savings-plan",
+    operationId: "getSavingsPlan",
+    tag: "goals",
+    summary:
+      "Planul de economisire: obiectivele active cu rata necesară și fondul de urgență (ADR 0047).",
+    description:
+      "Pentru fiecare obiectiv activ: restul de strâns și suma pe zi / săptămână / lună ca ținta să fie atinsă la termen (rotunjit în sus; `no_deadline` fără termen, `overdue` după termen, `done` atins). Fondul de urgență pe monedă: media cheltuielilor ultimelor 3 luni, lichidul, țintele la 3 și 6 luni cu diferența și rata lunară pe 12 luni.",
+    success: { status: 200, schema: dataOf(savingsPlanSchema), description: "Planul." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/savings-plan/simulate",
+    operationId: "simulateSavings",
+    tag: "goals",
+    summary: "Simulează un plan de economisire (fără scriere; merge și cu abonament expirat).",
+    description:
+      "Ținta (`targetMinor` sau `target`), cât ai deja (`savedMinor`, implicit 0) și, opțional, termenul (`deadline`, ≥ azi) și/sau rata lunară (`monthlyMinor` sau `monthly`). Răspunsul are planul la termen și/sau durata la rata dată.",
+    body: { schema: savingsSimulateSchema },
+    success: { status: 200, schema: dataOf(savingsSimulationSchema), description: "Simularea." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/subscriptions",
+    operationId: "getSubscriptions",
+    tag: "recurring",
+    summary:
+      "Abonamentele: regulile recurente de cheltuieli, normalizate lunar și anual (ADR 0047).",
+    description:
+      "Pe monedă: numărul de abonamente active și pe pauză, costul lunar și anual normalizat (lunar = suma / interval; anual = suma / (12 × interval); săptămânal × 52/12; zilnic × 365/12), gruparea pe categorii, reînnoirile din următoarele 30 de zile și lista completă (fără regulile încheiate). `detected` = plățile recurente propuse din istoric (ADR 0019) care nu sunt încă reguli.",
+    success: { status: 200, schema: dataOf(subscriptionsSchema), description: "Abonamentele." },
+    errors: [VALIDATION, NOT_FOUND],
   },
   // --- Dashboard și raportul lunar -----------------------------------------------------------
   {

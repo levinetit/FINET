@@ -8,11 +8,23 @@ import { getAdvice } from "@/modules/advisor/advisor.service";
 import { type PlanningDeps, resolveMonth } from "@/modules/budgets/budgets.service";
 import { forecastViewToJson } from "@/modules/forecast/forecast.schema";
 import { getForecast } from "@/modules/forecast/forecast.service";
+import { getSavingsPlan, simulateSavings } from "@/modules/goals/plan.service";
+import { savingsPlanViewToJson, savingsSimulationToJson } from "@/modules/goals/plan.schema";
+import { getSubscriptions } from "@/modules/subscriptions/subscriptions.service";
+import { subscriptionsViewToJson } from "@/modules/subscriptions/subscriptions.schema";
 import { healthViewToJson } from "@/modules/health/health.schema";
 import { getHealthScore } from "@/modules/health/health.service";
 import { inHousehold } from "@/modules/ledger/context";
 
-import { type ApiContext, type ApiDeps, currentHousehold, handle, json, readQuery } from "./http";
+import {
+  type ApiContext,
+  type ApiDeps,
+  currentHousehold,
+  handle,
+  json,
+  readJsonBody,
+  readQuery,
+} from "./http";
 
 /**
  * Handlerele „inteligenței financiare” (modernizare 2026, pașii D–F; ADR 0045): scorul de sănătate,
@@ -74,5 +86,40 @@ export function advisorHandler(request: Request, d: ApiDeps): Promise<Response> 
     const month = await monthOf(ctx, hh, query.month);
     const view = await getAdvice(planning(d.db, ctx), ctx.actor, hh, { month });
     return json({ data: adviceViewToJson(view) });
+  });
+}
+
+/** `GET /api/v1/savings-plan` — planul obiectivelor active și fondul de urgență, pe monedă. */
+export function savingsPlanHandler(request: Request, d: ApiDeps): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    readQuery(request, {});
+    const hh = await currentHousehold(ctx);
+    const view = await getSavingsPlan(planning(d.db, ctx), ctx.actor, hh);
+    return json({ data: savingsPlanViewToJson(view) });
+  });
+}
+
+/** `POST /api/v1/savings-plan/simulate` — simulare fără scriere (merge și cu abonament expirat). */
+export function simulateSavingsHandler(request: Request, d: ApiDeps): Promise<Response> {
+  return handle(
+    request,
+    d,
+    async (ctx) => {
+      const body = await readJsonBody(request);
+      const hh = await currentHousehold(ctx);
+      const sim = await simulateSavings(planning(d.db, ctx), ctx.actor, hh, body);
+      return json({ data: savingsSimulationToJson(sim) });
+    },
+    { allowReadOnly: true },
+  );
+}
+
+/** `GET /api/v1/subscriptions` — abonamentele (regulile recurente de cheltuieli) și cele detectate. */
+export function subscriptionsHandler(request: Request, d: ApiDeps): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    readQuery(request, {});
+    const hh = await currentHousehold(ctx);
+    const view = await getSubscriptions(planning(d.db, ctx), ctx.actor, hh);
+    return json({ data: subscriptionsViewToJson(view) });
   });
 }

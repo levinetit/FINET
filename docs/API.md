@@ -233,6 +233,14 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 | `GET /api/v1/forecast?days=30|60|90` | prognoza de cash-flow (implicit 90 de zile), separat pe monedă: soldul de azi al conturilor active, soldul proiectat pe zile (scadențele regulilor recurente active + media zilnică a veniturilor/cheltuielilor nerecurente din ultimele 3 luni complete), rezumate la 30/60/90 (sold proiectat, programate, minimul și ziua lui), plățile viitoare (cel mult 30), linia de bază și un indicator de încredere (`high|medium|low`, 0–100, cu motive). Calculat în aplicație, fără AI; `label` spune că e o estimare. |
 | `GET /api/v1/advisor?month=` | consilierul lunii, separat pe monedă: tranzacții neobișnuite (≥ 2× mediana cheltuielilor anterioare la același comerciant, minimum 3, sau din aceeași categorie, minimum 5; ≥ 1 % din lună; fără cele recurente), tipare (categorii ±25 % față de media lunilor anterioare, comercianți noi, concentrare ≥ 30 %), sugestii pe priorități cu sume calculate (`overdraft_ahead`, `pay_down_card`, `review_budgets`, `emergency_fund`, `trim_category`, `check_unusual`, `automate_recurring`, `keep_going`), scorul de sănătate și, pentru luna curentă, minimul prognozei. Determinist, fără AI; nimic nu se execută; `label` spune că nu e sfat financiar. |
 
+## Planul de economisire și abonamentele (modernizare 2026, ADR 0047)
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/savings-plan` | obiectivele active cu restul de strâns și suma pe zi / săptămână / lună la termen (`status`: `on_track`, `no_deadline`, `overdue`, `done`; rotunjit în sus), plus fondul de urgență pe monedă (media cheltuielilor ultimelor 3 luni, lichidul, țintele la 3 și 6 luni cu diferența, rata lunară pe 12 luni și `coveredPct`). |
+| `POST /api/v1/savings-plan/simulate` | `{ currency, targetMinor|target, savedMinor?, deadline?, monthlyMinor|monthly? }` → planul la termen și/sau lunile până la țintă la rata dată (`finishOn`); fără scriere; merge și cu abonament expirat. |
+| `GET /api/v1/subscriptions` | pe monedă: abonamentele active/pe pauză (regulile recurente de cheltuieli) cu cost lunar și anual normalizat, reînnoirile din 30 de zile, gruparea pe categorii, lista; `detected` = plățile recurente propuse din istoric care nu sunt încă reguli. |
+
 ## Averea netă și evaluările conturilor (modernizare 2026, ADR 0046)
 
 | Endpoint | Ce face |

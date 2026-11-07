@@ -568,6 +568,120 @@ export const valuationSchema = z
   })
   .meta({ title: "AccountValuation" });
 
+/** Planul de economisire și abonamentele (modernizare 2026, pașii H–I; ADR 0047). */
+const planSchema = z.strictObject({
+  remainingMinor: minor,
+  daysLeft: int.nullable(),
+  dailyMinor: minor.nullable(),
+  weeklyMinor: minor.nullable(),
+  monthlyMinor: minor.nullable(),
+  status: z.enum(["done", "no_deadline", "on_track", "overdue"]),
+});
+export const savingsPlanSchema = z
+  .strictObject({
+    today: date,
+    goals: z.array(
+      z.strictObject({
+        goalId: uuid,
+        name: z.string(),
+        currency,
+        targetMinor: minor,
+        savedMinor: minor,
+        deadline: date.nullable(),
+        accountId: uuid.nullable(),
+        plan: planSchema,
+      }),
+    ),
+    emergency: z.array(
+      z.strictObject({
+        currency,
+        averageExpenseMinor: minor.nullable(),
+        liquidMinor: minor,
+        options: z.array(
+          z.strictObject({
+            months: int,
+            targetMinor: minor,
+            gapMinor: minor,
+            monthlyMinor: minor,
+            coveredX100: int,
+            coveredPct: int.min(0).max(100),
+          }),
+        ),
+      }),
+    ),
+  })
+  .meta({ title: "SavingsPlan" });
+
+export const savingsSimulationSchema = z
+  .strictObject({
+    currency,
+    targetMinor: minor,
+    savedMinor: minor,
+    today: date,
+    byDeadline: planSchema.extend({ deadline: date }).nullable(),
+    byMonthly: z
+      .strictObject({ monthlyMinor: minor, months: int.nullable(), finishOn: date.nullable() })
+      .nullable(),
+  })
+  .meta({ title: "SavingsSimulation" });
+
+const subscriptionSchema = z.strictObject({
+  ruleId: uuid,
+  name: z.string(),
+  merchant: z.string().nullable(),
+  categoryId: uuid.nullable(),
+  categoryName: z.string().nullable(),
+  accountId: uuid,
+  currency,
+  amountMinor: minor,
+  frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
+  interval: int,
+  monthlyMinor: minor,
+  annualMinor: minor,
+  nextRenewalOn: date.nullable(),
+  daysToRenewal: int.nullable(),
+  status: z.enum(["active", "paused", "completed"]),
+});
+export const subscriptionsSchema = z
+  .strictObject({
+    today: date,
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        activeCount: int,
+        pausedCount: int,
+        monthlyMinor: minor,
+        annualMinor: minor,
+        byCategory: z.array(
+          z.strictObject({
+            categoryId: uuid.nullable(),
+            categoryName: z.string().nullable(),
+            monthlyMinor: minor,
+            count: int,
+          }),
+        ),
+        upcoming: z.array(subscriptionSchema),
+        subscriptions: z.array(subscriptionSchema),
+      }),
+    ),
+    detected: z.array(
+      z.strictObject({
+        signature: z.string(),
+        description: z.string(),
+        merchant: z.string().nullable(),
+        currency,
+        amountMinor: minor,
+        frequency: z.enum(["weekly", "monthly", "yearly"]),
+        occurrences: int,
+        lastOn: date,
+        nextOn: date,
+        accountId: uuid,
+        accountName: z.string(),
+      }),
+    ),
+  })
+  .meta({ title: "Subscriptions" });
+
 export const monthlyReportSchema = z
   .strictObject({
     month: z.string(),

@@ -54,6 +54,8 @@ const ITEMS = [
   // Faza 10: listele de cumpărături (bifare la raft, comparație cu bonul); pe telefon în „Mai mult”.
   { href: "/shopping-lists", label: ro.nav.shopping, icon: CartIcon, mobile: false },
   { href: "/recurring", label: ro.nav.recurring, icon: RepeatIcon, mobile: false },
+  // Modernizare 2026 (ADR 0047): abonamentele = vedere peste regulile recurente de cheltuieli.
+  { href: "/subscriptions", label: ro.nav.subscriptions, icon: RepeatIcon, mobile: false },
   // Faza 8: familia (membri, invitații, solduri, decontări); pe telefon în „Mai mult”.
   { href: "/family", label: ro.nav.family, icon: UsersIcon, mobile: false },
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
