@@ -4,6 +4,7 @@ import type { Tx } from "@/db";
 import type { Actor } from "@/lib/authz";
 import { type Month, monthBounds, monthsEndingAt } from "@/lib/calendar";
 import type { Currency } from "@/lib/money";
+import { LIQUID_ACCOUNT_TYPES, TRANSACTIONAL_ACCOUNT_TYPES } from "@/db/schema";
 import { selectAccounts } from "@/modules/accounts/accounts.repo";
 import { computeBalances } from "@/modules/accounts/accounts.service";
 import {
@@ -27,7 +28,9 @@ import { type HealthView, healthQuerySchema } from "./health.schema";
  * și stările bugetelor vizibile. Calculul e pur (`health.ts`).
  */
 
-const LIQUID_TYPES = new Set(["cash", "bank", "savings"]);
+const LIQUID_TYPES = new Set<string>(LIQUID_ACCOUNT_TYPES);
+/** Datoria pe termen scurt: soldurile negative ale conturilor tranzacționale (card, descoperit). */
+const SHORT_TERM_DEBT_TYPES = new Set<string>(TRANSACTIONAL_ACCOUNT_TYPES);
 
 export type HealthBalances = Readonly<{ liquidMinor: bigint; debtMinor: bigint }>;
 
@@ -43,8 +46,9 @@ export async function balancesByCurrency(
     const balance = balances.get(row.id) ?? 0n;
     const acc = out.get(row.currency) ?? { liquidMinor: 0n, debtMinor: 0n };
     if (balance < 0n) {
-      // Card de credit folosit sau descoperit de cont: datorie pe termen scurt.
-      acc.debtMinor += -balance;
+      // Card de credit folosit sau descoperit de cont: datorie pe termen scurt. Creditele și
+      // celelalte pasive (ADR 0046) sunt datorii pe termen lung: intră în averea netă, nu aici.
+      if (SHORT_TERM_DEBT_TYPES.has(row.type)) acc.debtMinor += -balance;
     } else if (LIQUID_TYPES.has(row.type)) {
       acc.liquidMinor += balance;
     }

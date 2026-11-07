@@ -215,7 +215,13 @@
                       "cash",
                       "bank",
                       "savings",
-                      "credit_card"
+                      "credit_card",
+                      "investment",
+                      "property",
+                      "vehicle",
+                      "other_asset",
+                      "loan",
+                      "other_liability"
                     ]
                   },
                   "currency": {
@@ -417,7 +423,13 @@
                       "cash",
                       "bank",
                       "savings",
-                      "credit_card"
+                      "credit_card",
+                      "investment",
+                      "property",
+                      "vehicle",
+                      "other_asset",
+                      "loan",
+                      "other_liability"
                     ]
                   },
                   "currency": {
@@ -721,6 +733,251 @@
           },
           "422": {
             "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{id}/valuations": {
+      "get": {
+        "operationId": "listAccountValuations",
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Evaluările contului, cele mai noi primele.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evaluările.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AccountValuation"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAccountValuation",
+        "tags": [
+          "accounts"
+        ],
+        "summary": "O evaluare nouă a unui cont evaluat (`Idempotency-Key` opțional).",
+        "description": "Doar pentru tipurile `investment`, `property`, `vehicle`, `other_asset`, `loan`, `other_liability` (altfel 400). Valoarea e semnată ca un sold (activ +, pasiv −), în unități minore (`valueMinor`) sau ca text (`value`). O singură evaluare pe zi și cont (409 `valuation_exists`); data nu poate fi în viitor și nici mai veche de 10 ani.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "valuedOn": {
+                    "type": "string"
+                  },
+                  "valueMinor": {
+                    "type": "integer",
+                    "minimum": -10000000000000,
+                    "maximum": 10000000000000
+                  },
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 400
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "valuedOn"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Evaluarea creată.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AccountValuation"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replay": {
+                "$ref": "#/components/headers/IdempotentReplay"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "409": {
+            "$ref": "#/components/responses/E409"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
+          },
+          "422": {
+            "$ref": "#/components/responses/E422"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{id}/valuations/{valuationId}": {
+      "delete": {
+        "operationId": "deleteAccountValuation",
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Șterge o evaluare a contului.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "name": "valuationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id (uuid). Un id invalid sau al altei gospodării dă 404."
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Ștearsă."
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "403": {
+            "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "413": {
+            "$ref": "#/components/responses/E413"
+          },
+          "415": {
+            "$ref": "#/components/responses/E415"
           },
           "429": {
             "$ref": "#/components/responses/E429"
@@ -11559,6 +11816,67 @@
           },
           "403": {
             "$ref": "#/components/responses/E403"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
+    "/api/v1/net-worth": {
+      "get": {
+        "operationId": "getNetWorth",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Averea netă curentă și istoricul lunar, separat pe monedă (ADR 0046).",
+        "description": "Valoarea fiecărui cont vizibil (inclusiv arhivat): soldul din tranzacții pentru conturile tranzacționale, evaluarea cea mai recentă pentru cele evaluate (investiții, proprietăți, vehicule, credite, altele). Activele = valorile pozitive, pasivele = cele negative; avere netă = active − pasive. Istoricul = aceeași formulă la sfârșitul fiecăreia dintre ultimele `months` luni (implicit 12, cel mult 60), recalculat, fără instantanee.",
+        "parameters": [
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "description": "Câte luni de istoric (1–60, implicit 12).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,16}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Averea netă.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/NetWorth"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
           },
           "404": {
             "$ref": "#/components/responses/E404"
@@ -30964,7 +31282,13 @@
               "cash",
               "bank",
               "savings",
-              "credit_card"
+              "credit_card",
+              "investment",
+              "property",
+              "vehicle",
+              "other_asset",
+              "loan",
+              "other_liability"
             ]
           },
           "currency": {
@@ -31050,6 +31374,74 @@
         ],
         "additionalProperties": false,
         "title": "Account"
+      },
+      "AccountValuation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "RON",
+              "EUR",
+              "USD"
+            ]
+          },
+          "valuedOn": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Dată calendaristică `YYYY-MM-DD`."
+          },
+          "valueMinor": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Semnată ca un sold: activ pozitiv, pasiv negativ."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdByUserId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "currency",
+          "valuedOn",
+          "valueMinor",
+          "note",
+          "createdByUserId",
+          "createdAt"
+        ],
+        "additionalProperties": false,
+        "title": "AccountValuation"
       },
       "Advice": {
         "type": "object",
@@ -33341,6 +33733,249 @@
         ],
         "additionalProperties": false,
         "title": "MonthlyReport"
+      },
+      "NetWorth": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Dată calendaristică `YYYY-MM-DD`."
+          },
+          "currencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "currency": {
+                  "type": "string",
+                  "enum": [
+                    "RON",
+                    "EUR",
+                    "USD"
+                  ]
+                },
+                "asOf": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                },
+                "current": {
+                  "type": "object",
+                  "properties": {
+                    "asOf": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                      "description": "Dată calendaristică `YYYY-MM-DD`."
+                    },
+                    "assetsMinor": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                    },
+                    "liabilitiesMinor": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                    },
+                    "netMinor": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                    }
+                  },
+                  "required": [
+                    "asOf",
+                    "assetsMinor",
+                    "liabilitiesMinor",
+                    "netMinor"
+                  ],
+                  "additionalProperties": false
+                },
+                "byType": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "cash",
+                          "bank",
+                          "savings",
+                          "credit_card",
+                          "investment",
+                          "property",
+                          "vehicle",
+                          "other_asset",
+                          "loan",
+                          "other_liability"
+                        ]
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "asset",
+                          "liability"
+                        ]
+                      },
+                      "valueMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "accounts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "accountId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "cash",
+                                "bank",
+                                "savings",
+                                "credit_card",
+                                "investment",
+                                "property",
+                                "vehicle",
+                                "other_asset",
+                                "loan",
+                                "other_liability"
+                              ]
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "asset",
+                                "liability"
+                              ]
+                            },
+                            "valueMinor": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                            },
+                            "basis": {
+                              "type": "string",
+                              "enum": [
+                                "balance",
+                                "valuation"
+                              ]
+                            },
+                            "valuedOn": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "archived": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "accountId",
+                            "name",
+                            "type",
+                            "kind",
+                            "valueMinor",
+                            "basis",
+                            "valuedOn",
+                            "archived"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "kind",
+                      "valueMinor",
+                      "accounts"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "history": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "asOf": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "description": "Dată calendaristică `YYYY-MM-DD`."
+                      },
+                      "assetsMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "liabilitiesMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "netMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      }
+                    },
+                    "required": [
+                      "asOf",
+                      "assetsMinor",
+                      "liabilitiesMinor",
+                      "netMinor"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "currency",
+                "asOf",
+                "current",
+                "byType",
+                "history"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "asOf",
+          "currencies"
+        ],
+        "additionalProperties": false,
+        "title": "NetWorth"
       },
       "Session": {
         "type": "object",

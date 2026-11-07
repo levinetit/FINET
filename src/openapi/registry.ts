@@ -13,6 +13,7 @@ import { budgetCreateSchema, budgetUpdateSchema } from "@/modules/budgets/budget
 import { MAX_TOP_CATEGORIES } from "@/modules/dashboard/dashboard.schema";
 import { PDF_CONTENT_TYPE, XLSX_CONTENT_TYPE } from "@/lib/export-table";
 import { CSV_DIALECTS } from "@/modules/exports/csv";
+import { valuationCreateSchema } from "@/modules/net-worth/net-worth.schema";
 import {
   goalContributionSchema,
   goalCreateSchema,
@@ -111,6 +112,7 @@ import {
   meSchema,
   moneySchema,
   monthlyReportSchema,
+  netWorthSchema,
   recurringCountsSchema,
   recurringGenerateResultSchema,
   recurringRuleSchema,
@@ -118,6 +120,7 @@ import {
   tagSchema,
   transactionSchema,
   transferSchema,
+  valuationSchema,
 } from "./schemas";
 
 /**
@@ -1498,6 +1501,55 @@ export const OPERATIONS: readonly Operation[] = [
     query: [MONTH_PARAM],
     success: { status: 200, schema: dataOf(adviceSchema), description: "Analiza." },
     errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/net-worth",
+    operationId: "getNetWorth",
+    tag: "reports",
+    summary: "Averea netă curentă și istoricul lunar, separat pe monedă (ADR 0046).",
+    description:
+      "Valoarea fiecărui cont vizibil (inclusiv arhivat): soldul din tranzacții pentru conturile tranzacționale, evaluarea cea mai recentă pentru cele evaluate (investiții, proprietăți, vehicule, credite, altele). Activele = valorile pozitive, pasivele = cele negative; avere netă = active − pasive. Istoricul = aceeași formulă la sfârșitul fiecăreia dintre ultimele `months` luni (implicit 12, cel mult 60), recalculat, fără instantanee.",
+    query: [
+      {
+        name: "months",
+        schema: intParam,
+        description: "Câte luni de istoric (1–60, implicit 12).",
+      },
+    ],
+    success: { status: 200, schema: dataOf(netWorthSchema), description: "Averea netă." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/accounts", "/valuations"),
+    operationId: "listAccountValuations",
+    tag: "accounts",
+    summary: "Evaluările contului, cele mai noi primele.",
+    success: { status: 200, schema: dataOf(z.array(valuationSchema)), description: "Evaluările." },
+    errors: [NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/accounts", "/valuations"),
+    operationId: "createAccountValuation",
+    tag: "accounts",
+    summary: "O evaluare nouă a unui cont evaluat (`Idempotency-Key` opțional).",
+    description:
+      "Doar pentru tipurile `investment`, `property`, `vehicle`, `other_asset`, `loan`, `other_liability` (altfel 400). Valoarea e semnată ca un sold (activ +, pasiv −), în unități minore (`valueMinor`) sau ca text (`value`). O singură evaluare pe zi și cont (409 `valuation_exists`); data nu poate fi în viitor și nici mai veche de 10 ani.",
+    body: { schema: valuationCreateSchema },
+    success: { status: 201, schema: dataOf(valuationSchema), description: "Evaluarea creată." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "DELETE",
+    path: `${pathOf("/api/v1/accounts", "/valuations")}/{valuationId}`,
+    operationId: "deleteAccountValuation",
+    tag: "accounts",
+    summary: "Șterge o evaluare a contului.",
+    success: { status: 204, schema: null, description: "Ștearsă." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
   },
   // --- Dashboard și raportul lunar -----------------------------------------------------------
   {

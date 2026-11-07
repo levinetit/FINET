@@ -28,6 +28,8 @@ const UNIQUE_REASONS: Readonly<Record<string, string>> = {
   receipts_household_dedup_key: "duplicate_receipt",
   // Faza 10 (0017): o linie de bon propusă/confirmată pentru cel mult UN articol al listei.
   shopping_list_items_line_key: "line_already_matched",
+  // Modernizare 2026 (0027): o singură evaluare pe cont și zi.
+  account_valuations_account_day_key: "valuation_exists",
 };
 
 /**

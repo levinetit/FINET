@@ -91,7 +91,10 @@ export type AuditAction =
   | "admin.feedback_status_changed"
   | "admin.feedback_rewarded"
   | "admin.announcement_created"
-  | "admin.announcement_updated";
+  | "admin.announcement_updated"
+  // Averea netă (ADR 0046): doar id-ul contului, fără valori.
+  | "valuation.created"
+  | "valuation.deleted";
 
 export type AuditEvent = Readonly<{
   action: AuditAction;

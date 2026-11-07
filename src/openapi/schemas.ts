@@ -514,6 +514,60 @@ export const adviceSchema = z
   })
   .meta({ title: "Advice" });
 
+/** Averea netă și evaluările (modernizare 2026, pasul G; ADR 0046). */
+const netWorthPoint = z.strictObject({
+  asOf: date,
+  assetsMinor: minor,
+  liabilitiesMinor: minor,
+  netMinor: minor,
+});
+const accountKind = z.enum(["asset", "liability"]);
+export const netWorthSchema = z
+  .strictObject({
+    asOf: date,
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        asOf: date,
+        current: netWorthPoint,
+        byType: z.array(
+          z.strictObject({
+            type: z.enum(ACCOUNT_TYPES),
+            kind: accountKind,
+            valueMinor: minor,
+            accounts: z.array(
+              z.strictObject({
+                accountId: uuid,
+                name: z.string(),
+                type: z.enum(ACCOUNT_TYPES),
+                kind: accountKind,
+                valueMinor: minor,
+                basis: z.enum(["balance", "valuation"]),
+                valuedOn: date.nullable(),
+                archived: z.boolean(),
+              }),
+            ),
+          }),
+        ),
+        history: z.array(netWorthPoint),
+      }),
+    ),
+  })
+  .meta({ title: "NetWorth" });
+
+export const valuationSchema = z
+  .strictObject({
+    id: uuid,
+    accountId: uuid,
+    currency,
+    valuedOn: date,
+    valueMinor: minor.meta({ description: "Semnată ca un sold: activ pozitiv, pasiv negativ." }),
+    note: z.string().nullable(),
+    createdByUserId: uuid.nullable(),
+    createdAt: z.string(),
+  })
+  .meta({ title: "AccountValuation" });
+
 export const monthlyReportSchema = z
   .strictObject({
     month: z.string(),

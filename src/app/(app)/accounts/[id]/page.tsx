@@ -7,6 +7,9 @@ import { isValidId } from "@/modules/ledger/input";
 import { ro } from "@/messages/ro";
 import { accountToJson } from "@/modules/accounts/accounts.schema";
 import { getAccount } from "@/modules/accounts/accounts.service";
+import { isValuedType } from "@/modules/net-worth/net-worth";
+import { valuationToJson } from "@/modules/net-worth/net-worth.schema";
+import { listValuations } from "@/modules/net-worth/net-worth.service";
 import { listTransactions } from "@/modules/transactions/transactions.service";
 
 import { formatMinor } from "../../../_lib/ledger-ui";
@@ -15,6 +18,7 @@ import { PageHeader } from "../../page-header";
 import { AccountForm } from "../account-form";
 
 import { AccountActions } from "./account-actions";
+import { ValuationsPanel } from "./valuations-panel";
 
 export const metadata: Metadata = { title: ro.accounts.editTitle };
 
@@ -36,7 +40,11 @@ export default async function AccountPage({
       accountId: account.id,
       limit: 1,
     });
-    return { account: accountToJson(account), empty: used.data.length === 0 };
+    // ADR 0046: evaluările, doar pentru conturile evaluate (investiții, proprietăți, credite…).
+    const valuations = isValuedType(account.type)
+      ? (await listValuations(deps, page.actor, householdId, account.id)).map(valuationToJson)
+      : null;
+    return { account: accountToJson(account), empty: used.data.length === 0, valuations };
   });
   if (!result.ok) {
     return (
@@ -46,7 +54,7 @@ export default async function AccountPage({
       </>
     );
   }
-  const { account, empty } = result.value;
+  const { account, empty, valuations } = result.value;
   return (
     <>
       <PageHeader
@@ -63,6 +71,13 @@ export default async function AccountPage({
           meUserId={page.actor.userId}
         />
         <AccountActions id={account.id} archived={account.archived} empty={empty} />
+        {valuations ? (
+          <ValuationsPanel
+            accountId={account.id}
+            currency={account.currency}
+            valuations={valuations}
+          />
+        ) : null}
       </div>
     </>
   );

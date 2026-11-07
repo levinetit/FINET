@@ -5,6 +5,7 @@ import { errorSchema } from "@/openapi/schemas";
 import * as A from "./app-handlers";
 import * as L from "./ledger-handlers";
 import * as I from "./intelligence-handlers";
+import * as N from "./net-worth-handlers";
 import * as M from "./me-handlers";
 import * as P from "./planning-handlers";
 import * as D from "./documents-handlers";
@@ -88,6 +89,10 @@ const OPERATION_OF = new Map<unknown, string>([
   [I.healthScoreHandler, "getHealthScore"],
   [I.forecastHandler, "getForecast"],
   [I.advisorHandler, "getAdvice"],
+  [N.netWorthHandler, "getNetWorth"],
+  [N.listValuationsHandler, "listAccountValuations"],
+  [N.createValuationHandler, "createAccountValuation"],
+  [N.deleteValuationHandler, "deleteAccountValuation"],
   [L.listHouseholdsHandler, "listHouseholds"],
   [L.getHouseholdHandler, "getHousehold"],
   [L.listAccountsHandler, "listAccounts"],

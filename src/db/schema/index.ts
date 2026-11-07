@@ -14,6 +14,7 @@ export * from "./family";
 export * from "./finet";
 export * from "./households";
 export * from "./ledger";
+export * from "./net-worth";
 export * from "./planning";
 export * from "./recurring";
 export * from "./shopping";

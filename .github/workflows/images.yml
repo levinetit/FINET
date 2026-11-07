@@ -87,6 +87,7 @@ jobs:
           exit-code: "0"
 
       - name: Scanează imaginea (Trivy, SARIF)
+        id: trivy-sarif
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           image-ref: finet:${{ matrix.name }}-${{ github.sha }}
@@ -99,7 +100,8 @@ jobs:
           skip-setup-trivy: true
 
       - name: Publică SARIF-ul Trivy
-        if: always()
+        # Doar dacă scanarea a produs fișierul (un build eșuat nu are imagine de scanat).
+        if: steps.trivy-sarif.outcome == 'success'
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: trivy-${{ matrix.name }}.sarif

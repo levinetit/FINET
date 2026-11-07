@@ -17,7 +17,13 @@ export function pickHorizon(raw: string | string[] | undefined): HorizonChoice {
   return (HORIZONS as readonly number[]).includes(n) ? (n as HorizonChoice) : 90;
 }
 
-export function chartPoints(points: ForecastJson["points"]): Readonly<{
+/** Punctele acceptate: cele ale prognozei sau orice serie (dată, sold, scadențe) — ex. averea netă. */
+export type SeriesPoint = Pick<
+  ForecastJson["points"][number],
+  "date" | "balanceMinor" | "scheduledMinor"
+>;
+
+export function chartPoints(points: readonly SeriesPoint[]): Readonly<{
   points: ForecastChartPoint[];
   zeroY: number | null;
 }> {

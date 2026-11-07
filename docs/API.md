@@ -233,6 +233,17 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 | `GET /api/v1/forecast?days=30|60|90` | prognoza de cash-flow (implicit 90 de zile), separat pe monedă: soldul de azi al conturilor active, soldul proiectat pe zile (scadențele regulilor recurente active + media zilnică a veniturilor/cheltuielilor nerecurente din ultimele 3 luni complete), rezumate la 30/60/90 (sold proiectat, programate, minimul și ziua lui), plățile viitoare (cel mult 30), linia de bază și un indicator de încredere (`high|medium|low`, 0–100, cu motive). Calculat în aplicație, fără AI; `label` spune că e o estimare. |
 | `GET /api/v1/advisor?month=` | consilierul lunii, separat pe monedă: tranzacții neobișnuite (≥ 2× mediana cheltuielilor anterioare la același comerciant, minimum 3, sau din aceeași categorie, minimum 5; ≥ 1 % din lună; fără cele recurente), tipare (categorii ±25 % față de media lunilor anterioare, comercianți noi, concentrare ≥ 30 %), sugestii pe priorități cu sume calculate (`overdraft_ahead`, `pay_down_card`, `review_budgets`, `emergency_fund`, `trim_category`, `check_unusual`, `automate_recurring`, `keep_going`), scorul de sănătate și, pentru luna curentă, minimul prognozei. Determinist, fără AI; nimic nu se execută; `label` spune că nu e sfat financiar. |
 
+## Averea netă și evaluările conturilor (modernizare 2026, ADR 0046)
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/net-worth?months=` | averea netă curentă (active, pasive, net) pe monedă, defalcarea pe tipuri de cont cu baza fiecărei valori (`balance` sau `valuation` + data), istoricul la sfârșitul ultimelor `months` luni (1–60, implicit 12), recalculat fără instantanee. Conturile tranzacționale intră cu soldul; cele evaluate (`investment`, `property`, `vehicle`, `other_asset`, `loan`, `other_liability`) cu evaluarea cea mai recentă. |
+| `GET /api/v1/accounts/{id}/valuations` | evaluările contului, cele mai noi primele. |
+| `POST /api/v1/accounts/{id}/valuations` | o evaluare: `valuedOn`, `valueMinor` sau `value` (semnată: activ +, pasiv −), `note` opțional; doar pe conturi evaluate (400 altfel), o singură evaluare pe zi (409 `valuation_exists`), data ≤ azi; `Idempotency-Key` opțional → 201. |
+| `DELETE /api/v1/accounts/{id}/valuations/{valuationId}` | șterge evaluarea (204; 404 dacă nu există sau e a altei gospodării). |
+
+Tipurile de cont acceptate de `POST /api/v1/accounts` sunt acum cele zece de mai sus; cele vechi rămân neschimbate.
+
 ## Feedback, anunțuri, erori, administrare (F11-B, ADR 0028; doar `saas`: 404 în `personal`)
 - `POST /feedback` `{ kind: feedback|bug, message (3–2000), page?, appVersion? }` → 201; `GET /announcements` (cele active, cel mult 5); `POST /errors` `{ kind, route, code, digest?, appVersion? }` → 204 (valorile invalide se ignoră; fără mesaje sau stive).
 - `GET /referrals/me` → `{ data: { code, link, invited, rewarded } }` (doar `saas`, 404 în `personal`; prima cerere creează codul `FIN-XXXXXX`; `rewarded` = recomandări care au adus o recompensă, cele configurate de operator). Linkul public `/ref/<cod>` nu face parte din API: pune cookie-ul `finet_ref` și redirecționează la `/register` (303), la fel pentru orice cod.

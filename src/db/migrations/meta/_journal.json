@@ -183,6 +183,13 @@
       "when": 1795800000000,
       "tag": "0026_feedback_reward",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795900000000,
+      "tag": "0027_net_worth",
+      "breakpoints": true
     }
   ]
 }

@@ -20,10 +20,12 @@ import {
   meSchema,
   moneySchema,
   monthlyReportSchema,
+  netWorthSchema,
   sessionSchema,
   tagSchema,
   transactionSchema,
   transferSchema,
+  valuationSchema,
 } from "./schemas";
 
 /**
@@ -46,6 +48,7 @@ function responseSchema(schema: z.ZodType): Json {
 /** Entitățile răspunsurilor, emise o singură dată în `components.schemas` și referite prin `$ref`. */
 const COMPONENTS: ReadonlyArray<readonly [string, z.ZodType]> = [
   ["Account", accountSchema],
+  ["AccountValuation", valuationSchema],
   ["Advice", adviceSchema],
   ["Budget", budgetSchema],
   ["BudgetStatus", budgetStatusSchema],
@@ -61,6 +64,7 @@ const COMPONENTS: ReadonlyArray<readonly [string, z.ZodType]> = [
   ["Me", meSchema],
   ["Money", moneySchema],
   ["MonthlyReport", monthlyReportSchema],
+  ["NetWorth", netWorthSchema],
   ["Session", sessionSchema],
   ["Tag", tagSchema],
   ["Transaction", transactionSchema],

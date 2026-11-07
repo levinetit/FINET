@@ -37,7 +37,38 @@ import { DB_CURRENCIES, households } from "./households";
  * același: un cont cu tranzacții sau o categorie folosită nu se pot șterge (5.6).
  */
 
-export const ACCOUNT_TYPES = ["cash", "bank", "savings", "credit_card"] as const;
+/**
+ * Tipurile de cont. Modernizare 2026 (ADR 0046, migrația 0027): pe lângă cele tranzacționale
+ * (`cash`, `bank`, `savings`, `credit_card`), activele și pasivele evaluate periodic
+ * (`investment`, `property`, `vehicle`, `other_asset`, `loan`, `other_liability`), a căror
+ * valoare curentă vine din `account_valuations` (cea mai recentă) sau, fără evaluare, din sold.
+ */
+export const ACCOUNT_TYPES = [
+  "cash",
+  "bank",
+  "savings",
+  "credit_card",
+  "investment",
+  "property",
+  "vehicle",
+  "other_asset",
+  "loan",
+  "other_liability",
+] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
+/** Conturile lichide (soldul e bani disponibili): intră în prognoză și în fondul de urgență. */
+export const LIQUID_ACCOUNT_TYPES = ["cash", "bank", "savings"] as const;
+/** Conturile al căror sold vine din tranzacții (nu din evaluări). */
+export const TRANSACTIONAL_ACCOUNT_TYPES = ["cash", "bank", "savings", "credit_card"] as const;
+/** Conturile evaluate periodic (`account_valuations`); pasivele au valoarea negativă. */
+export const VALUED_ACCOUNT_TYPES = [
+  "investment",
+  "property",
+  "vehicle",
+  "other_asset",
+  "loan",
+  "other_liability",
+] as const;
 export const CATEGORY_KINDS = ["income", "expense"] as const;
 export const TRANSACTION_TYPES = ["income", "expense", "transfer"] as const;
 export const TRANSACTION_SOURCES = ["manual", "receipt", "statement", "recurring"] as const;
@@ -79,7 +110,10 @@ export const accounts = finet.table(
     index("accounts_owner_user_id_idx").on(t.ownerUserId),
     check("accounts_name_length", sql`char_length(${t.name}) between 1 and 100`),
     check("accounts_name_trimmed", sql`${t.name} = btrim(${t.name})`),
-    check("accounts_type_valid", sql`${t.type} in ('cash', 'bank', 'savings', 'credit_card')`),
+    check(
+      "accounts_type_valid",
+      sql`${t.type} in ('cash', 'bank', 'savings', 'credit_card', 'investment', 'property', 'vehicle', 'other_asset', 'loan', 'other_liability')`,
+    ),
     check("accounts_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
     // Plafonul sumelor (ADR 0004): |sold inițial| ≤ 10^13 unități minore (100 de miliarde).
     check(

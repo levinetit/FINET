@@ -10,6 +10,7 @@ import {
   monthsEndingAt,
 } from "@/lib/calendar";
 import type { Currency } from "@/lib/money";
+import { TRANSACTIONAL_ACCOUNT_TYPES } from "@/db/schema";
 import { selectAccounts } from "@/modules/accounts/accounts.repo";
 import { computeBalances } from "@/modules/accounts/accounts.service";
 import { type PlanningDeps } from "@/modules/budgets/budgets.service";
@@ -36,6 +37,8 @@ import { type ForecastView, forecastQuerySchema } from "./forecast.schema";
  * pur (`forecast.ts`). Nicio scriere.
  */
 
+const TRANSACTIONAL = new Set<string>(TRANSACTIONAL_ACCOUNT_TYPES);
+
 export async function getForecast(
   deps: PlanningDeps,
   actor: Actor,
@@ -61,8 +64,11 @@ export async function getForecast(
       selectMonthlyTotalsBySource(tx, m.householdId, from, to),
     ]);
 
+    // Doar conturile tranzacționale (cash, bancă, economii, card): o proprietate sau un credit
+    // (ADR 0046) nu sunt bani disponibili în următoarele 90 de zile.
     const opening = new Map<Currency, bigint>();
     for (const a of accountRows) {
+      if (!TRANSACTIONAL.has(a.type)) continue;
       opening.set(a.currency, (opening.get(a.currency) ?? 0n) + (balances.get(a.id) ?? 0n));
     }
     const currencies = sortCurrencies([
