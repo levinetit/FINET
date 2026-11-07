@@ -155,7 +155,7 @@ export const budgets = finet.table(
     index("budgets_user_id_idx").on(t.userId),
     check("budgets_period_valid", sql`${t.period} in ('monthly')`),
     check("budgets_amount_range", sql`${t.amountMinor} between 1 and 10000000000000`),
-    check("budgets_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check("budgets_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`),
     check("budgets_warn_pct_range", sql`${t.warnPct} between 1 and 100`),
     check("budgets_scope_valid", sql`${t.scope} in ('household', 'personal')`),
     check("budgets_scope_user", sql`(${t.scope} = 'personal') = (${t.userId} is not null)`),
@@ -190,7 +190,7 @@ export const goals = finet.table(
     check("goals_name_trimmed", sql`${t.name} = btrim(${t.name})`),
     check("goals_target_range", sql`${t.targetMinor} between 1 and 10000000000000`),
     check("goals_saved_range", sql`${t.savedMinor} between 0 and 10000000000000`),
-    check("goals_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check("goals_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`),
     check("goals_status_valid", sql`${t.status} in ('active', 'achieved', 'abandoned')`),
     // Atins ⇔ economisit ≥ țintă (în afară de abandonat, care e manual).
     check(

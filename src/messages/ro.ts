@@ -2356,6 +2356,11 @@ export const ro = {
         "Poți opri emailurile din Setări → Notificări. FINET nu trimite niciodată linkuri de autentificare în aceste mesaje.",
     },
   },
+  fx: {
+    approx: (amount: string, date: string) => `≈ ${amount} în total, la cursul BCE din ${date}`,
+    missing: (currencies: string) => `fără curs pentru ${currencies}`,
+    hint: "Conversie doar pentru afișare, din cursurile zilnice ale Băncii Centrale Europene; sumele rămân în moneda lor.",
+  },
   advisor: {
     eyebrow: "Consilier financiar",
     title: "Consilierul FINET",

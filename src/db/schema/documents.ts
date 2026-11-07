@@ -334,7 +334,7 @@ export const receipts = finet.table(
       "receipts_vat_total_range",
       sql`${t.vatTotalMinor} is null or ${t.vatTotalMinor} between 0 and 10000000000000`,
     ),
-    check("receipts_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check("receipts_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`),
     check(
       "receipts_status_valid",
       sql`${t.status} in ('queued', 'needs_review', 'saved', 'failed')`,
@@ -516,7 +516,7 @@ export const aiCalls = finet.table(
     ),
     check(
       "ai_calls_cost_shape",
-      sql`(${t.costEstimateMinor} is null) = (${t.costCurrency} is null) and (${t.costEstimateMinor} is null or ${t.costEstimateMinor} between 0 and 10000000000000) and (${t.costCurrency} is null or ${t.costCurrency} in ('RON', 'EUR', 'USD'))`,
+      sql`(${t.costEstimateMinor} is null) = (${t.costCurrency} is null) and (${t.costEstimateMinor} is null or ${t.costEstimateMinor} between 0 and 10000000000000) and (${t.costCurrency} is null or ${t.costCurrency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP'))`,
     ),
     check("ai_calls_duration_range", sql`${t.durationMs} between 0 and 3600000`),
     check(
@@ -593,7 +593,10 @@ export const aiBudgetUsage = finet.table(
   (t) => [
     primaryKey({ name: "ai_budget_usage_pkey", columns: [t.month, t.currency] }),
     check("ai_budget_usage_month_first_day", sql`extract(day from ${t.month}) = 1`),
-    check("ai_budget_usage_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "ai_budget_usage_currency_valid",
+      sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
     check("ai_budget_usage_reserved_range", sql`${t.reservedMinor} between 0 and 10000000000000`),
     check("ai_budget_usage_calls_range", sql`${t.calls} between 0 and 100000000`),
   ],

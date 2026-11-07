@@ -705,6 +705,17 @@ export const notificationPreferencesSchema = z
   })
   .meta({ title: "NotificationPreferences" });
 
+/** Cursurile valutare (modernizare 2026, pasul K; ADR 0049). */
+export const fxRatesSchema = z
+  .strictObject({
+    base: z.literal("EUR"),
+    date: date,
+    rates: z.record(z.string(), int.min(1)).meta({
+      description: "Monedă → curs × 1.000.000 (unități din monedă pentru 1 EUR); EUR = 1.000.000.",
+    }),
+  })
+  .meta({ title: "FxRates" });
+
 export const monthlyReportSchema = z
   .strictObject({
     month: z.string(),

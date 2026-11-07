@@ -107,6 +107,7 @@ import {
   dataOf,
   adviceSchema,
   forecastSchema,
+  fxRatesSchema,
   goalSchema,
   healthScoreSchema,
   householdDetailSchema,
@@ -1672,6 +1673,24 @@ export const OPERATIONS: readonly Operation[] = [
     description:
       "Pe monedă: numărul de abonamente active și pe pauză, costul lunar și anual normalizat (lunar = suma / interval; anual = suma / (12 × interval); săptămânal × 52/12; zilnic × 365/12), gruparea pe categorii, reînnoirile din următoarele 30 de zile și lista completă (fără regulile încheiate). `detected` = plățile recurente propuse din istoric (ADR 0019) care nu sunt încă reguli.",
     success: { status: 200, schema: dataOf(subscriptionsSchema), description: "Abonamentele." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/fx/rates",
+    operationId: "getFxRates",
+    tag: "reports",
+    summary: "Cursurile BCE cele mai recente (baza EUR), pentru afișare (ADR 0049).",
+    description:
+      "Cursurile zilnice ale Băncii Centrale Europene, descărcate de worker cu `FX_RATES=1`: `rates` = monedă → curs × 1.000.000 (întreg). `?date=` dă cursurile cele mai recente de până la acea zi (rapoarte istorice). 404 dacă nu există niciun curs (worker oprit sau încă nerulat). Conversia e doar pentru afișare; sumele stocate rămân în moneda lor.",
+    query: [
+      {
+        name: "date",
+        schema: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/),
+        description: "Ziua `YYYY-MM-DD` (implicit cea mai recentă).",
+      },
+    ],
+    success: { status: 200, schema: dataOf(fxRatesSchema), description: "Cursurile." },
     errors: [VALIDATION, NOT_FOUND],
   },
   // --- Dashboard și raportul lunar -----------------------------------------------------------

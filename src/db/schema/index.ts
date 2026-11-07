@@ -12,6 +12,7 @@ export * from "./billing";
 export * from "./documents";
 export * from "./family";
 export * from "./finet";
+export * from "./fx";
 export * from "./households";
 export * from "./ledger";
 export * from "./net-worth";

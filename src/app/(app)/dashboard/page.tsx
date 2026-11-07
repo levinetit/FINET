@@ -33,6 +33,7 @@ import { getMe } from "@/modules/profile/profile.service";
 import { transactionToJson } from "@/modules/transactions/transactions.schema";
 import { listTransactions } from "@/modules/transactions/transactions.service";
 
+import { approxForPage } from "../../_lib/fx-ui";
 import { load, requireLedgerPage } from "../../_lib/ledger-page";
 import { formatCalendarDate, formatMinor, formatSigned } from "../../_lib/ledger-ui";
 import { pageMonth } from "../../_lib/planning-page";
@@ -78,12 +79,15 @@ export default async function DashboardPage({
               getBalances(deps, page.actor, householdId),
               listMembers(deps, page.actor, householdId),
             ]);
+          const totals = accounts.totals.map(currencyTotalToJson);
           return {
             dashboard: dashboardToJson(dashboard),
             budgets: budgets.map(budgetStatusToJson),
             goals: goals.map(goalToJson),
             accounts: accounts.accounts.map(accountToJson),
-            totals: accounts.totals.map(currencyTotalToJson),
+            totals,
+            // ADR 0049: „≈ în moneda de bază” doar cu ≥ 2 monede și cursuri BCE disponibile.
+            approx: await approxForPage(db, totals, me.household?.defaultCurrency ?? "RON"),
             recent: recent.data.map(transactionToJson),
             categoryName: new Map(categories.map((c) => [c.id, c.name] as const)),
             family: { me: balancesToJson(balances).me, members: members.length },
@@ -271,7 +275,7 @@ export default async function DashboardPage({
                 <CardTitle id="balances-title">{t.balancesTitle}</CardTitle>
               </CardHeader>
               <div className="flex flex-col gap-4">
-                <CurrencyTotals totals={v.totals} />
+                <CurrencyTotals totals={v.totals} approx={v.approx} />
                 {v.accounts.length > 0 ? (
                   <AccountsList accounts={v.accounts} testId="dashboard-accounts" />
                 ) : null}

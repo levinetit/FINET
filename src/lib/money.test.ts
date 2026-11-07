@@ -68,7 +68,7 @@ describe("money()", () => {
   });
 
   it("respinge monedele nepermise", () => {
-    expect(() => money(1n, "GBP" as Currency)).toThrow(UnsupportedCurrencyError);
+    expect(() => money(1n, "CHF" as Currency)).toThrow(UnsupportedCurrencyError);
     expect(() => money(1n, "ron" as Currency)).toThrow(UnsupportedCurrencyError);
     expect(() => money(1n, undefined as unknown as Currency)).toThrow(UnsupportedCurrencyError);
   });
@@ -78,7 +78,7 @@ describe("money()", () => {
   });
 
   it("listează monedele permise", () => {
-    expect(CURRENCIES).toEqual(["RON", "EUR", "USD"]);
+    expect(CURRENCIES).toEqual(["RON", "EUR", "USD", "HUF", "GBP"]);
     expect(isCurrency("EUR")).toBe(true);
     expect(isCurrency("CHF")).toBe(false);
     expect(isCurrency(1)).toBe(false);
@@ -340,7 +340,7 @@ describe("parseAmount()", () => {
 
   it("respinge input ne-string și monede nepermise", () => {
     expect(() => parseAmount(12 as unknown as string, "RON")).toThrow(InvalidAmountError);
-    expect(() => parseAmount("12", "GBP" as Currency)).toThrow(UnsupportedCurrencyError);
+    expect(() => parseAmount("12", "CHF" as Currency)).toThrow(UnsupportedCurrencyError);
   });
 
   it("proprietate: parseAmount(toDecimalString) și formatare românească fac drumul complet", () => {
@@ -436,6 +436,6 @@ describe("toJson() / fromJson()", () => {
     for (const value of bad) {
       expect(() => fromJson(value)).toThrow(MoneyError);
     }
-    expect(() => fromJson({ amountMinor: 100, currency: "GBP" })).toThrow(UnsupportedCurrencyError);
+    expect(() => fromJson({ amountMinor: 100, currency: "CHF" })).toThrow(UnsupportedCurrencyError);
   });
 });

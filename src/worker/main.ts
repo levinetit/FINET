@@ -6,6 +6,7 @@ import { type Db, createDb } from "@/db";
 import type { Mailer } from "@/modules/auth/mailer";
 
 import { bossOptions } from "./boss";
+import { FX_CRON, JOB_FX_REFRESH, handleFxRefresh } from "./fx/fx-jobs";
 import { HEARTBEAT_INTERVAL_MS, heartbeatBeat, heartbeatStart, heartbeatStop } from "./heartbeat";
 import {
   JOB_NOTIFY_EVALUATE,
@@ -136,6 +137,8 @@ export type WorkerOptions = Readonly<{
   statements?: Readonly<{ storage: DocumentJobDeps["storage"] }>;
   /** Notificările zilnice (ADR 0048): `mailer` null = fără email; `appUrl` pentru linkurile din email. */
   notify?: Readonly<{ mailer: Mailer | null; appUrl: string | null }>;
+  /** Cursurile BCE (ADR 0049), doar cu `FX_RATES=1`. */
+  fx?: Readonly<{ enabled: boolean }>;
 }>;
 
 export type RunningWorker = Readonly<{ boss: PgBoss; db: Db; stop: () => Promise<void> }>;
@@ -348,6 +351,22 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
         return { targets: s.targets, inserted: s.inserted, emailed: s.emailed, failed: s.failed };
       }),
     );
+  }
+
+  // Modernizare 2026 (ADR 0049): cursurile BCE, zilnic și o dată la pornire (doar cu FX_RATES=1).
+  if (options.fx?.enabled) {
+    await boss.createQueue(JOB_FX_REFRESH, { policy: "singleton", ...QUEUE_OPTIONS });
+    await boss.schedule(JOB_FX_REFRESH, FX_CRON, null, {
+      tz: GENERATE_TZ,
+      singletonKey: JOB_FX_REFRESH,
+    });
+    const fxDeps = { db, log };
+    await boss.work(
+      JOB_FX_REFRESH,
+      { localConcurrency: 1 },
+      safeHandler(JOB_FX_REFRESH, log, async () => handleFxRefresh(fxDeps)),
+    );
+    await boss.send(JOB_FX_REFRESH, null, { singletonKey: `${JOB_FX_REFRESH}:start` });
   }
 
   await heartbeatStart(db);

@@ -105,7 +105,10 @@ export const recurringRules = finet.table(
       .where(sql`${t.status} = 'active'`),
     check("recurring_rules_type_valid", sql`${t.type} in ('income', 'expense')`),
     check("recurring_rules_amount_range", sql`${t.amountMinor} between 1 and 10000000000000`),
-    check("recurring_rules_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "recurring_rules_currency_valid",
+      sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
     check(
       "recurring_rules_description_length",
       sql`char_length(${t.description}) >= 1 and char_length(${t.description}) <= 500 and ${t.description} = btrim(${t.description})`,

@@ -11,7 +11,9 @@ import {
   currencyTotalToJson,
 } from "@/modules/accounts/accounts.schema";
 import { listAccounts } from "@/modules/accounts/accounts.service";
+import { getMe } from "@/modules/profile/profile.service";
 
+import { approxForPage } from "../../_lib/fx-ui";
 import { requireLedgerPage, load } from "../../_lib/ledger-page";
 import { PageHeader } from "../page-header";
 
@@ -62,6 +64,13 @@ export default async function AccountsPage() {
   const accounts: AccountJson[] = result.value.accounts.map(accountToJson);
   // Totalurile serviciului: doar conturile active, separat pe monedă (fără conversie).
   const totals = result.value.totals.map(currencyTotalToJson);
+  // ADR 0049: „≈ în moneda de bază” (doar afișare), cu ≥ 2 monede și cursuri BCE disponibile.
+  const me = await getMe(page.session.runtime.db, page.actor.userId);
+  const approx = await approxForPage(
+    page.session.runtime.db,
+    totals,
+    me.household?.defaultCurrency ?? "RON",
+  );
   const active = accounts.filter((a) => !a.archived);
   const archived = accounts.filter((a) => a.archived);
 
@@ -74,7 +83,7 @@ export default async function AccountsPage() {
             <CardTitle id="totals-title">{ro.accounts.totals}</CardTitle>
             <CardDescription>{ro.accounts.totalsHint}</CardDescription>
           </CardHeader>
-          <CurrencyTotals totals={totals} />
+          <CurrencyTotals totals={totals} approx={approx} />
         </Card>
         <Card aria-labelledby="active-title">
           <CardHeader>

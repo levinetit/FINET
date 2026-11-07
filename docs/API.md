@@ -233,6 +233,14 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 | `GET /api/v1/forecast?days=30|60|90` | prognoza de cash-flow (implicit 90 de zile), separat pe monedă: soldul de azi al conturilor active, soldul proiectat pe zile (scadențele regulilor recurente active + media zilnică a veniturilor/cheltuielilor nerecurente din ultimele 3 luni complete), rezumate la 30/60/90 (sold proiectat, programate, minimul și ziua lui), plățile viitoare (cel mult 30), linia de bază și un indicator de încredere (`high|medium|low`, 0–100, cu motive). Calculat în aplicație, fără AI; `label` spune că e o estimare. |
 | `GET /api/v1/advisor?month=` | consilierul lunii, separat pe monedă: tranzacții neobișnuite (≥ 2× mediana cheltuielilor anterioare la același comerciant, minimum 3, sau din aceeași categorie, minimum 5; ≥ 1 % din lună; fără cele recurente), tipare (categorii ±25 % față de media lunilor anterioare, comercianți noi, concentrare ≥ 30 %), sugestii pe priorități cu sume calculate (`overdraft_ahead`, `pay_down_card`, `review_budgets`, `emergency_fund`, `trim_category`, `check_unusual`, `automate_recurring`, `keep_going`), scorul de sănătate și, pentru luna curentă, minimul prognozei. Determinist, fără AI; nimic nu se execută; `label` spune că nu e sfat financiar. |
 
+## Monede și cursuri valutare (modernizare 2026, ADR 0049)
+
+Monedele acceptate peste tot (conturi, tranzacții, bugete, obiective, reguli, evaluări): `RON`, `EUR`, `USD`, `HUF`, `GBP`. Sumele rămân în moneda lor; conversia e doar pentru afișare.
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/fx/rates?date=` | cursurile BCE cele mai recente (≤ ziua cerută), baza `EUR`: `rates` = monedă → curs × 1.000.000 (întreg; `EUR` = 1.000.000). 404 fără cursuri (workerul cu `FX_RATES=1` nu a rulat). |
+
 ## Notificări (modernizare 2026, ADR 0048)
 
 | Endpoint | Ce face |

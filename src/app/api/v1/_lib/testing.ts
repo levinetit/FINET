@@ -93,6 +93,7 @@ const OPERATION_OF = new Map<unknown, string>([
   [I.savingsPlanHandler, "getSavingsPlan"],
   [I.simulateSavingsHandler, "simulateSavings"],
   [I.subscriptionsHandler, "getSubscriptions"],
+  [I.fxRatesHandler, "getFxRates"],
   [N.netWorthHandler, "getNetWorth"],
   [NT.listNotificationsHandler, "listNotifications"],
   [NT.readNotificationHandler, "readNotification"],

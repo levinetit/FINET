@@ -115,7 +115,10 @@ export const transactionSplits = finet.table(
     index("transaction_splits_payer_user_id_idx").on(t.payerUserId),
     check("transaction_splits_share_min", sql`${t.shareMinor} >= 0`),
     check("transaction_splits_share_max", sql`${t.shareMinor} <= 10000000000000`),
-    check("transaction_splits_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "transaction_splits_currency_valid",
+      sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
   ],
 );
 
@@ -158,7 +161,7 @@ export const settlements = finet.table(
     check("settlements_distinct_users", sql`${t.fromUserId} <> ${t.toUserId}`),
     check("settlements_amount_min", sql`${t.amountMinor} >= 1`),
     check("settlements_amount_max", sql`${t.amountMinor} <= 10000000000000`),
-    check("settlements_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check("settlements_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`),
     check("settlements_settled_on_min", sql`${t.settledOn} >= date '1900-01-01'`),
     check("settlements_settled_on_max", sql`${t.settledOn} <= date '2999-12-31'`),
     check("settlements_note_length", sql`${t.note} is null or char_length(${t.note}) <= 200`),

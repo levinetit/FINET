@@ -6,13 +6,13 @@
  * - Sumele sunt `bigint` în unități minore (bani: 1 RON = 100 bani). Niciodată float: fără
  *   `parseFloat`, fără rotunjiri pe `number`, fără `Number(...)` pe sume. Singura excepție e
  *   conversia verificată din `toJson`, explicată acolo.
- * - Monedele permise: RON (implicit), EUR, USD. Operațiile cer aceeași monedă; nu există conversie
- *   valutară aici (cursul BNR vine într-o fază ulterioară).
+ * - Monedele permise: RON (implicit), EUR, USD, HUF, GBP. Operațiile cer aceeași monedă; conversia
+ *   (doar pentru afișare, la cursul BCE) e în `src/lib/fx.ts` (ADR 0049).
  * - Împărțirile folosesc metoda restului cel mai mare: suma părților e exact totalul.
  */
 
 /** Monedele permise pe cont (ISO 4217). */
-export const CURRENCIES = ["RON", "EUR", "USD"] as const;
+export const CURRENCIES = ["RON", "EUR", "USD", "HUF", "GBP"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
 /** Moneda implicită a aplicației. */
@@ -23,6 +23,10 @@ export const MINOR_UNIT_DIGITS: Readonly<Record<Currency, number>> = {
   RON: 2,
   EUR: 2,
   USD: 2,
+  // Modernizare 2026 (ADR 0049): forintul are oficial 2 zecimale (ISO 4217), chiar dacă monedele
+  // sub 5 Ft nu mai circulă; lira sterlină 2.
+  HUF: 2,
+  GBP: 2,
 };
 
 export type Money = Readonly<{ amountMinor: bigint; currency: Currency }>;

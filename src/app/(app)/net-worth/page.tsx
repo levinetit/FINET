@@ -8,11 +8,14 @@ import { cn } from "@/lib/utils";
 import { ro } from "@/messages/ro";
 import { type NetWorthJson, netWorthViewToJson } from "@/modules/net-worth/net-worth.schema";
 import { getNetWorth } from "@/modules/net-worth/net-worth.service";
+import { getMe } from "@/modules/profile/profile.service";
 
 import { chartPoints } from "../../_lib/forecast-ui";
+import { approxForPage } from "../../_lib/fx-ui";
 import { load, requireLedgerPage } from "../../_lib/ledger-page";
 import { formatMinor } from "../../_lib/ledger-ui";
 import { formatDate } from "../../_lib/planning-ui";
+import { ApproxLine } from "../accounts/accounts-list";
 import { PageHeader } from "../page-header";
 
 export const metadata: Metadata = { title: ro.netWorth.title };
@@ -136,11 +139,19 @@ export default async function NetWorthPage() {
     );
   }
   const view = data.value;
+  // ADR 0049: averea netă totală „≈ în moneda de bază”, cu ≥ 2 monede și cursuri disponibile.
+  const me = await getMe(page.session.runtime.db, page.actor.userId);
+  const approx = await approxForPage(
+    page.session.runtime.db,
+    view.currencies.map((n) => ({ currency: n.currency, amountMinor: n.current.netMinor })),
+    me.household?.defaultCurrency ?? "RON",
+  );
   return (
     <>
       {header}
       <p className="mb-4 text-muted-foreground">{t.intro}</p>
-      <div className="flex flex-col gap-4">
+      <ApproxLine approx={approx} />
+      <div className="mt-2 flex flex-col gap-4">
         {view.currencies.length === 0 ? (
           <Card>
             <p className="text-muted-foreground" data-testid="net-worth-empty">

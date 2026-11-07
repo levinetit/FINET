@@ -229,7 +229,9 @@
                     "enum": [
                       "RON",
                       "EUR",
-                      "USD"
+                      "USD",
+                      "HUF",
+                      "GBP"
                     ]
                   },
                   "openingBalanceMinor": {
@@ -437,7 +439,9 @@
                     "enum": [
                       "RON",
                       "EUR",
-                      "USD"
+                      "USD",
+                      "HUF",
+                      "GBP"
                     ]
                   },
                   "openingBalanceMinor": {
@@ -3375,7 +3379,9 @@
                                             "enum": [
                                               "RON",
                                               "EUR",
-                                              "USD"
+                                              "USD",
+                                              "HUF",
+                                              "GBP"
                                             ]
                                           },
                                           "totalMinor": {
@@ -3422,7 +3428,9 @@
                                             "enum": [
                                               "RON",
                                               "EUR",
-                                              "USD"
+                                              "USD",
+                                              "HUF",
+                                              "GBP"
                                             ]
                                           },
                                           "items": {
@@ -3682,7 +3690,9 @@
                     "enum": [
                       "RON",
                       "EUR",
-                      "USD"
+                      "USD",
+                      "HUF",
+                      "GBP"
                     ]
                   },
                   "warnPct": {
@@ -7357,7 +7367,9 @@
                                 "enum": [
                                   "RON",
                                   "EUR",
-                                  "USD"
+                                  "USD",
+                                  "HUF",
+                                  "GBP"
                                 ]
                               },
                               "pairs": {
@@ -7442,7 +7454,9 @@
                                 "enum": [
                                   "RON",
                                   "EUR",
-                                  "USD"
+                                  "USD",
+                                  "HUF",
+                                  "GBP"
                                 ]
                               },
                               "owesMinor": {
@@ -8620,7 +8634,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "settledOn": {
@@ -8772,7 +8788,9 @@
                     "enum": [
                       "RON",
                       "EUR",
-                      "USD"
+                      "USD",
+                      "HUF",
+                      "GBP"
                     ]
                   },
                   "settledOn": {
@@ -8838,7 +8856,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "settledOn": {
@@ -9031,7 +9051,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "settledOn": {
@@ -9195,7 +9217,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "totalMinor": {
@@ -9452,6 +9476,67 @@
         }
       }
     },
+    "/api/v1/fx/rates": {
+      "get": {
+        "operationId": "getFxRates",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Cursurile BCE cele mai recente (baza EUR), pentru afișare (ADR 0049).",
+        "description": "Cursurile zilnice ale Băncii Centrale Europene, descărcate de worker cu `FX_RATES=1`: `rates` = monedă → curs × 1.000.000 (întreg). `?date=` dă cursurile cele mai recente de până la acea zi (rapoarte istorice). 404 dacă nu există niciun curs (worker oprit sau încă nerulat). Conversia e doar pentru afișare; sumele stocate rămân în moneda lor.",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Ziua `YYYY-MM-DD` (implicit cea mai recentă).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cursurile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FxRates"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/goals": {
       "get": {
         "operationId": "listGoals",
@@ -9558,7 +9643,9 @@
                     "enum": [
                       "RON",
                       "EUR",
-                      "USD"
+                      "USD",
+                      "HUF",
+                      "GBP"
                     ]
                   },
                   "deadline": {
@@ -10486,7 +10573,9 @@
                                 "enum": [
                                   "RON",
                                   "EUR",
-                                  "USD"
+                                  "USD",
+                                  "HUF",
+                                  "GBP"
                                 ]
                               },
                               "status": {
@@ -10870,7 +10959,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "ambiguous": {
@@ -10909,7 +11000,9 @@
                                   "enum": [
                                     "RON",
                                     "EUR",
-                                    "USD"
+                                    "USD",
+                                    "HUF",
+                                    "GBP"
                                   ]
                                 },
                                 "description": {
@@ -11082,7 +11175,9 @@
                         "enum": [
                           "RON",
                           "EUR",
-                          "USD"
+                          "USD",
+                          "HUF",
+                          "GBP"
                         ]
                       }
                     },
@@ -12346,7 +12441,9 @@
               "enum": [
                 "RON",
                 "EUR",
-                "USD"
+                "USD",
+                "HUF",
+                "GBP"
               ]
             }
           },
@@ -12478,7 +12575,9 @@
                                 "enum": [
                                   "RON",
                                   "EUR",
-                                  "USD"
+                                  "USD",
+                                  "HUF",
+                                  "GBP"
                                 ]
                               },
                               "observations": {
@@ -12763,7 +12862,9 @@
               "enum": [
                 "RON",
                 "EUR",
-                "USD"
+                "USD",
+                "HUF",
+                "GBP"
               ]
             }
           },
@@ -12878,7 +12979,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "granularity": {
@@ -13285,7 +13388,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "confidence": {
@@ -13641,7 +13746,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "confidence": {
@@ -14337,7 +14444,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "confidence": {
@@ -14988,7 +15097,9 @@
                               "enum": [
                                 "RON",
                                 "EUR",
-                                "USD"
+                                "USD",
+                                "HUF",
+                                "GBP"
                               ]
                             },
                             "confidence": {
@@ -15443,7 +15554,9 @@
                               "enum": [
                                 "RON",
                                 "EUR",
-                                "USD"
+                                "USD",
+                                "HUF",
+                                "GBP"
                               ]
                             },
                             "ambiguous": {
@@ -15482,7 +15595,9 @@
                                     "enum": [
                                       "RON",
                                       "EUR",
-                                      "USD"
+                                      "USD",
+                                      "HUF",
+                                      "GBP"
                                     ]
                                   },
                                   "description": {
@@ -15905,7 +16020,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "description": {
@@ -16276,7 +16393,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "description": {
@@ -16637,7 +16756,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "description": {
@@ -16828,7 +16949,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "description": {
@@ -17228,7 +17351,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "description": {
@@ -17564,7 +17689,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "description": {
@@ -17877,7 +18004,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "description": {
@@ -18143,7 +18272,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "description": {
@@ -19641,7 +19772,9 @@
                                 "enum": [
                                   "RON",
                                   "EUR",
-                                  "USD"
+                                  "USD",
+                                  "HUF",
+                                  "GBP"
                                 ]
                               },
                               "mode": {
@@ -19837,7 +19970,9 @@
                                 "enum": [
                                   "RON",
                                   "EUR",
-                                  "USD"
+                                  "USD",
+                                  "HUF",
+                                  "GBP"
                                 ]
                               },
                               "lineTotalMinor": {
@@ -20977,7 +21112,9 @@
                                 "enum": [
                                   "RON",
                                   "EUR",
-                                  "USD"
+                                  "USD",
+                                  "HUF",
+                                  "GBP"
                                 ]
                               },
                               "mode": {
@@ -21173,7 +21310,9 @@
                                 "enum": [
                                   "RON",
                                   "EUR",
-                                  "USD"
+                                  "USD",
+                                  "HUF",
+                                  "GBP"
                                 ]
                               },
                               "lineTotalMinor": {
@@ -21389,7 +21528,9 @@
                     "enum": [
                       "RON",
                       "EUR",
-                      "USD"
+                      "USD",
+                      "HUF",
+                      "GBP"
                     ]
                   },
                   "targetMinor": {
@@ -25940,7 +26081,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "months": {
@@ -26090,7 +26233,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "bank": {
@@ -26328,7 +26473,9 @@
                                       "enum": [
                                         "RON",
                                         "EUR",
-                                        "USD"
+                                        "USD",
+                                        "HUF",
+                                        "GBP"
                                       ]
                                     },
                                     {
@@ -26490,7 +26637,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "bank": {
@@ -26728,7 +26877,9 @@
                                     "enum": [
                                       "RON",
                                       "EUR",
-                                      "USD"
+                                      "USD",
+                                      "HUF",
+                                      "GBP"
                                     ]
                                   },
                                   {
@@ -26979,7 +27130,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "bank": {
@@ -27217,7 +27370,9 @@
                                     "enum": [
                                       "RON",
                                       "EUR",
-                                      "USD"
+                                      "USD",
+                                      "HUF",
+                                      "GBP"
                                     ]
                                   },
                                   {
@@ -27466,7 +27621,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "bank": {
@@ -27704,7 +27861,9 @@
                                     "enum": [
                                       "RON",
                                       "EUR",
-                                      "USD"
+                                      "USD",
+                                      "HUF",
+                                      "GBP"
                                     ]
                                   },
                                   {
@@ -27880,7 +28039,9 @@
                             "enum": [
                               "RON",
                               "EUR",
-                              "USD"
+                              "USD",
+                              "HUF",
+                              "GBP"
                             ]
                           },
                           "status": {
@@ -28068,7 +28229,9 @@
                                         "enum": [
                                           "RON",
                                           "EUR",
-                                          "USD"
+                                          "USD",
+                                          "HUF",
+                                          "GBP"
                                         ]
                                       },
                                       "status": {
@@ -28189,7 +28352,9 @@
                                         "enum": [
                                           "RON",
                                           "EUR",
-                                          "USD"
+                                          "USD",
+                                          "HUF",
+                                          "GBP"
                                         ]
                                       },
                                       "bank": {
@@ -28427,7 +28592,9 @@
                                                   "enum": [
                                                     "RON",
                                                     "EUR",
-                                                    "USD"
+                                                    "USD",
+                                                    "HUF",
+                                                    "GBP"
                                                   ]
                                                 },
                                                 {
@@ -28734,7 +28901,9 @@
                                         "enum": [
                                           "RON",
                                           "EUR",
-                                          "USD"
+                                          "USD",
+                                          "HUF",
+                                          "GBP"
                                         ]
                                       },
                                       "status": {
@@ -28855,7 +29024,9 @@
                                         "enum": [
                                           "RON",
                                           "EUR",
-                                          "USD"
+                                          "USD",
+                                          "HUF",
+                                          "GBP"
                                         ]
                                       },
                                       "bank": {
@@ -29093,7 +29264,9 @@
                                                   "enum": [
                                                     "RON",
                                                     "EUR",
-                                                    "USD"
+                                                    "USD",
+                                                    "HUF",
+                                                    "GBP"
                                                   ]
                                                 },
                                                 {
@@ -29440,7 +29613,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "status": {
@@ -29604,7 +29779,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "status": {
@@ -29838,7 +30015,9 @@
                                     "enum": [
                                       "RON",
                                       "EUR",
-                                      "USD"
+                                      "USD",
+                                      "HUF",
+                                      "GBP"
                                     ]
                                   },
                                   {
@@ -30969,7 +31148,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "totalMinor": {
@@ -31207,7 +31388,9 @@
                           "enum": [
                             "RON",
                             "EUR",
-                            "USD"
+                            "USD",
+                            "HUF",
+                            "GBP"
                           ]
                         },
                         "totalMinor": {
@@ -31930,7 +32113,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "openingBalanceMinor": {
@@ -32027,7 +32212,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "valuedOn": {
@@ -32093,7 +32280,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "month": {
@@ -32483,7 +32672,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "warnPct": {
@@ -32591,7 +32782,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "warnPct": {
@@ -32889,7 +33082,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "totals": {
@@ -33275,7 +33470,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "today": {
@@ -33604,6 +33801,40 @@
         "additionalProperties": false,
         "title": "Forecast"
       },
+      "FxRates": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "string",
+            "const": "EUR"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Dată calendaristică `YYYY-MM-DD`."
+          },
+          "rates": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "description": "Monedă → curs × 1.000.000 (unități din monedă pentru 1 EUR); EUR = 1.000.000."
+          }
+        },
+        "required": [
+          "base",
+          "date",
+          "rates"
+        ],
+        "additionalProperties": false,
+        "title": "FxRates"
+      },
       "Goal": {
         "type": "object",
         "properties": {
@@ -33632,7 +33863,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "deadline": {
@@ -33719,7 +33952,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "month": {
@@ -33880,7 +34115,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "timezone": {
@@ -33968,7 +34205,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "timezone": {
@@ -34057,7 +34296,9 @@
                 "enum": [
                   "RON",
                   "EUR",
-                  "USD"
+                  "USD",
+                  "HUF",
+                  "GBP"
                 ]
               },
               "theme": {
@@ -34095,7 +34336,9 @@
                     "enum": [
                       "RON",
                       "EUR",
-                      "USD"
+                      "USD",
+                      "HUF",
+                      "GBP"
                     ]
                   },
                   "timezone": {
@@ -34146,7 +34389,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           }
         },
@@ -34173,7 +34418,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "totals": {
@@ -34387,7 +34634,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "asOf": {
@@ -34733,7 +34982,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "targetMinor": {
@@ -34877,7 +35128,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "averageExpenseMinor": {
@@ -34976,7 +35229,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "targetMinor": {
@@ -35227,7 +35482,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "activeCount": {
@@ -35343,7 +35600,9 @@
                         "enum": [
                           "RON",
                           "EUR",
-                          "USD"
+                          "USD",
+                          "HUF",
+                          "GBP"
                         ]
                       },
                       "amountMinor": {
@@ -35479,7 +35738,9 @@
                         "enum": [
                           "RON",
                           "EUR",
-                          "USD"
+                          "USD",
+                          "HUF",
+                          "GBP"
                         ]
                       },
                       "amountMinor": {
@@ -35604,7 +35865,9 @@
                   "enum": [
                     "RON",
                     "EUR",
-                    "USD"
+                    "USD",
+                    "HUF",
+                    "GBP"
                   ]
                 },
                 "amountMinor": {
@@ -35764,7 +36027,9 @@
             "enum": [
               "RON",
               "EUR",
-              "USD"
+              "USD",
+              "HUF",
+              "GBP"
             ]
           },
           "occurredOn": {
@@ -35963,7 +36228,9 @@
                 "enum": [
                   "RON",
                   "EUR",
-                  "USD"
+                  "USD",
+                  "HUF",
+                  "GBP"
                 ]
               }
             },
@@ -35999,7 +36266,9 @@
                 "enum": [
                   "RON",
                   "EUR",
-                  "USD"
+                  "USD",
+                  "HUF",
+                  "GBP"
                 ]
               }
             },

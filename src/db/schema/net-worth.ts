@@ -57,6 +57,9 @@ export const accountValuations = finet.table(
       "account_valuations_note_length",
       sql`${t.note} is null or char_length(${t.note}) <= 200`,
     ),
-    check("account_valuations_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "account_valuations_currency_valid",
+      sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
   ],
 );

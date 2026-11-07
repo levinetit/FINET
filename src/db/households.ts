@@ -12,7 +12,7 @@ import { type Tx } from "./rls";
  */
 export type NewHousehold = Readonly<{
   name: string;
-  defaultCurrency?: "RON" | "EUR" | "USD";
+  defaultCurrency?: "RON" | "EUR" | "USD" | "HUF" | "GBP";
   timezone?: string;
 }>;
 

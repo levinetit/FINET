@@ -2,12 +2,14 @@ import "server-only";
 
 import type { DbOrTx } from "@/db";
 import { type Month, addMonths, isMonth } from "@/lib/calendar";
+import { NotFoundError } from "@/lib/authz";
 import { ValidationError } from "@/lib/errors";
 import { adviceViewToJson } from "@/modules/advisor/advisor.schema";
 import { getAdvice } from "@/modules/advisor/advisor.service";
 import { type PlanningDeps, resolveMonth } from "@/modules/budgets/budgets.service";
 import { forecastViewToJson } from "@/modules/forecast/forecast.schema";
 import { getForecast } from "@/modules/forecast/forecast.service";
+import { latestRates, ratesToJson } from "@/modules/fx/fx.service";
 import { getSavingsPlan, simulateSavings } from "@/modules/goals/plan.service";
 import { savingsPlanViewToJson, savingsSimulationToJson } from "@/modules/goals/plan.schema";
 import { getSubscriptions } from "@/modules/subscriptions/subscriptions.service";
@@ -121,5 +123,20 @@ export function subscriptionsHandler(request: Request, d: ApiDeps): Promise<Resp
     const hh = await currentHousehold(ctx);
     const view = await getSubscriptions(planning(d.db, ctx), ctx.actor, hh);
     return json({ data: subscriptionsViewToJson(view) });
+  });
+}
+
+/** `GET /api/v1/fx/rates?date=` — cursurile BCE cele mai recente (≤ data), baza EUR, ADR 0049. */
+export function fxRatesHandler(request: Request, d: ApiDeps): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const query = readQuery(request, { date: "string" });
+    await currentHousehold(ctx);
+    const date = query.date === undefined ? undefined : String(query.date);
+    if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new ValidationError({ date: "Data trebuie să fie de forma AAAA-LL-ZZ." });
+    }
+    const table = await latestRates(d.db, date);
+    if (!table) throw new NotFoundError();
+    return json({ data: ratesToJson(table) });
   });
 }

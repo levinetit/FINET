@@ -72,6 +72,8 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
         mailer: createMailer(config.notify.smtp, { production: config.nodeEnv === "production" }),
         appUrl: config.appUrl,
       },
+      // Cursurile BCE (ADR 0049): doar cu FX_RATES=1 (altfel nicio cerere externă).
+      fx: { enabled: config.fx.enabled },
     });
     log({
       event: "receipts",
@@ -79,6 +81,7 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
       ai: config.ai.baseUrl !== null && config.ai.apiKey !== null,
       statements: config.storage.driver === "local",
       listMatch: config.ai.listMatch,
+      fx: config.fx.enabled,
     });
     io.onSignal(worker.stop);
     return { code: 0, worker };

@@ -114,7 +114,7 @@ export const accounts = finet.table(
       "accounts_type_valid",
       sql`${t.type} in ('cash', 'bank', 'savings', 'credit_card', 'investment', 'property', 'vehicle', 'other_asset', 'loan', 'other_liability')`,
     ),
-    check("accounts_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check("accounts_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`),
     // Plafonul sumelor (ADR 0004): |sold inițial| ≤ 10^13 unități minore (100 de miliarde).
     check(
       "accounts_opening_balance_range",
@@ -269,7 +269,7 @@ export const transactions = finet.table(
     // 1 ≤ sumă ≤ 10^13 unități minore (plafonul din ADR 0004; semnul vine din `type`).
     check("transactions_amount_range", sql`${t.amountMinor} between 1 and 10000000000000`),
     check("transactions_type_valid", sql`${t.type} in ('income', 'expense', 'transfer')`),
-    check("transactions_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check("transactions_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`),
     check(
       "transactions_source_valid",
       sql`${t.source} in ('manual', 'receipt', 'statement', 'recurring')`,
