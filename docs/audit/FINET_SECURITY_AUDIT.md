@@ -43,7 +43,7 @@ Pasul C din `docs/roadmap/FINET_MODERNIZATION_PLAN.md`. Acoperă starea de dinai
 | # | Nivel | Constatare | Stare |
 |---|---|---|---|
 | S1 | MEDIUM | L8 bearer + cookie | **închis** (ADR 0051) |
-| S2 | MEDIUM | LOW-4 plafoane per gospodărie | **închis** (ADR 0051) |
+| S2 | MEDIUM | LOW-4 plafoane per gospodărie (cu lacăt consultativ contra TOCTOU; bugetele numărate pe mulțimea vizibilă sub RLS) | **închis** (ADR 0051) |
 | S3 | MEDIUM | lanț CI (SHA, audit, CodeQL, gitleaks, Trivy) | **închis** (pasul A) |
 | S4 | LOW | L6 token de resetare în clar | deschis (dependență externă) |
 | S5 | LOW | MFA absent pentru `saas` public | deschis (decizie de produs; cere migrație + UI) |

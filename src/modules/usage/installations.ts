@@ -2,6 +2,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 
+import { log } from "@/lib/log";
 import { type DbOrTx, type Tx, withRlsOn } from "@/db";
 import { CLIENT_HEADER, type ClientInfo, parseClientInfo } from "@/modules/auth/request";
 
@@ -97,7 +98,7 @@ export async function recordClientInstallation(
   try {
     return await upsertInstallation(db, userId, info, now);
   } catch {
-    console.error("[api] instalarea clientului nu a putut fi înregistrată");
+    log.error("api", "installation_record_failed");
     return "none";
   }
 }

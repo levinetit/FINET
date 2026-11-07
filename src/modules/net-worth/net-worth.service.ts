@@ -22,6 +22,7 @@ import {
   type LedgerDeps,
   assertUnderCap,
   inHousehold,
+  lockHouseholdCap,
 } from "@/modules/ledger/context";
 import { parseInput, resolveAmount } from "@/modules/ledger/input";
 
@@ -163,6 +164,7 @@ export async function addValuation(
     if (input.valuedOn < monthBounds(addMonths(currentMonth(now(), tz), -120)).from) {
       throw new ValidationError({ valuedOn: "Data evaluării e prea veche (cel mult 10 ani)." });
     }
+    await lockHouseholdCap(tx, "valuations", m.householdId);
     assertUnderCap(
       (await selectAccountValuations(tx, m.householdId, account.id)).length,
       HOUSEHOLD_CAPS.valuationsPerAccount,

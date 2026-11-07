@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 
+import { log } from "@/lib/log";
 import { Field } from "@/components/ledger/field";
 import { ExportButton } from "@/components/planning/export-button";
 import { TableExportButtons } from "@/components/planning/table-export-buttons";
@@ -132,7 +133,7 @@ export default async function TransactionsPage({
       unstable_rethrow(error);
       if (error instanceof ValidationError) filterError = true;
       else {
-        console.error("[ui] tranzacțiile nu au putut fi încărcate");
+        log.error("ui", "transactions_load_failed");
         loadError = true;
       }
     }

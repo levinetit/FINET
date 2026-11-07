@@ -11,6 +11,7 @@ import {
   type LedgerDeps,
   assertUnderCap,
   inHousehold,
+  lockHouseholdCap,
 } from "@/modules/ledger/context";
 import {
   MAX_AMOUNT_MINOR,
@@ -134,6 +135,7 @@ export async function createGoal(
   const targetMinor = resolveTarget(input, input.currency);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     await checkAccount(tx, m.householdId, input.accountId, input.currency);
+    await lockHouseholdCap(tx, "goals", m.householdId);
     assertUnderCap(
       (await selectGoals(tx, m.householdId)).length,
       HOUSEHOLD_CAPS.goals,

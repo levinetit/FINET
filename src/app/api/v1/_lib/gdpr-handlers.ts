@@ -1,5 +1,6 @@
 import "server-only";
 
+import { log } from "@/lib/log";
 import { withRlsOn } from "@/db";
 import { type Storage, getStorage } from "@/lib/storage";
 import { zipStream } from "@/lib/zip";
@@ -155,7 +156,7 @@ export function dataExportHandler(request: Request, d: GdprApiDeps): Promise<Res
           else controller.enqueue(next.value);
         } catch {
           if (cancelled) return;
-          console.error("[api] export GDPR întrerupt");
+          log.warn("api", "gdpr_export_aborted");
           controller.error(new Error("export întrerupt"));
         }
       },

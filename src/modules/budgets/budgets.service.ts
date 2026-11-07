@@ -12,6 +12,7 @@ import {
   type LedgerDeps,
   assertUnderCap,
   inHousehold,
+  lockHouseholdCap,
 } from "@/modules/ledger/context";
 import { isValidId, parseInput, resolvePositiveAmount } from "@/modules/ledger/input";
 
@@ -191,6 +192,7 @@ export async function createBudget(
   const scope = input.scope ?? "household";
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     await checkCategory(tx, m.householdId, input.categoryId);
+    await lockHouseholdCap(tx, "budgets", m.householdId);
     assertUnderCap(
       (await selectBudgets(tx, m.householdId, actor.userId, true)).length,
       HOUSEHOLD_CAPS.budgets,

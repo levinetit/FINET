@@ -9,6 +9,7 @@ import {
   type LedgerDeps,
   assertUnderCap,
   inHousehold,
+  lockHouseholdCap,
 } from "@/modules/ledger/context";
 import { isValidId, parseInput } from "@/modules/ledger/input";
 
@@ -115,6 +116,7 @@ export async function createCategory(
   const input = parseInput(categoryCreateSchema, rawInput);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     if (input.parentId) await checkParent(tx, m.householdId, input.parentId, input.kind, null);
+    await lockHouseholdCap(tx, "categories", m.householdId);
     assertUnderCap(
       (await selectCategories(tx, m.householdId)).filter((c) => c.systemKey === null).length,
       HOUSEHOLD_CAPS.categories,

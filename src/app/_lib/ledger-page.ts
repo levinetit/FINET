@@ -2,6 +2,7 @@ import "server-only";
 
 import { notFound, unstable_rethrow } from "next/navigation";
 
+import { errorCodeOf, log } from "@/lib/log";
 import { withRlsOn } from "@/db";
 import { type Actor, NotFoundError } from "@/lib/authz";
 import { currentHouseholdIdOf } from "@/modules/auth/audit";
@@ -52,7 +53,7 @@ export async function load<T>(fn: () => Promise<T>): Promise<Loaded<T>> {
   } catch (error) {
     unstable_rethrow(error);
     if (error instanceof NotFoundError) notFound();
-    console.error("[ui] datele paginii nu au putut fi încărcate");
+    log.error("ui", "page_load_failed", { code: errorCodeOf(error) });
     return { ok: false };
   }
 }

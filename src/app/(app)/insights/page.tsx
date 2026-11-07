@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { log } from "@/lib/log";
 import { Alert } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,7 +105,7 @@ export default async function InsightsPage({
     } catch (error) {
       runProblem =
         error instanceof ConflictError && error.reason === "too_many_lines" ? "too_many" : "error";
-      if (runProblem === "error") console.error("[ui] raportul nu a putut fi rulat");
+      if (runProblem === "error") log.error("ui", "report_run_failed");
     }
   }
 

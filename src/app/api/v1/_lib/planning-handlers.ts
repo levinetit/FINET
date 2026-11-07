@@ -1,5 +1,6 @@
 import "server-only";
 
+import { log } from "@/lib/log";
 import type { DbOrTx } from "@/db";
 import { type Month, addMonths, isMonth } from "@/lib/calendar";
 import { ValidationError } from "@/lib/errors";
@@ -388,7 +389,7 @@ function streamCsv(
         else controller.enqueue(encoder.encode(next.value));
       } catch {
         if (cancelled) return;
-        console.error("[api] export CSV întrerupt");
+        log.warn("api", "csv_export_aborted");
         controller.error(new Error("export întrerupt"));
       }
     },

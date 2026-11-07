@@ -1,5 +1,6 @@
 import "server-only";
 
+import { log } from "@/lib/log";
 import { NotFoundError } from "@/lib/authz";
 import type { Config, RateLimitRule } from "@/lib/config";
 import { type Mailer, createMailer } from "@/modules/auth/mailer";
@@ -103,7 +104,7 @@ async function limit(
 function failure(error: unknown): Response {
   const payload = errorPayload(error);
   if (payload) return json(payload.body, payload.status, payload.headers);
-  console.error("[register] eroare neașteptată");
+  log.error("register", "unexpected");
   return json({ error: { code: "internal_error", message: "Eroare internă." } }, 500);
 }
 

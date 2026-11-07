@@ -1,5 +1,7 @@
 import "server-only";
 
+import { sql } from "drizzle-orm";
+
 import { type DbOrTx, type Tx } from "@/db";
 import { pgErrorInfo } from "@/db/pg-errors";
 import { type Actor, type Membership, NotFoundError, withMember } from "@/lib/authz";
@@ -116,6 +118,19 @@ export const HOUSEHOLD_CAPS = Object.freeze({
   tags: 200,
   valuationsPerAccount: 1000,
 });
+
+/**
+ * Lacăt consultativ per (plafon, gospodărie) pe durata tranzacției: două cereri paralele nu pot
+ * număra amândouă „sub plafon” și depăși limita (TOCTOU). Se ia ÎNAINTE de numărare. Numărarea
+ * rulează sub RLS: rândurile personale ale altor membri (bugete personale) nu sunt vizibile, deci
+ * plafonul se aplică pe mulțimea vizibilă fiecărui membru (cel mult membri × plafon în total,
+ * tot finit; documentat în ADR 0051).
+ */
+export async function lockHouseholdCap(tx: Tx, scope: string, householdId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`finet.cap:${scope}:${householdId}`}))`,
+  );
+}
 
 export function assertUnderCap(current: number, cap: number, what: string): void {
   if (current >= cap) {

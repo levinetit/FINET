@@ -10,6 +10,7 @@ import {
   type LedgerDeps,
   assertUnderCap,
   inHousehold,
+  lockHouseholdCap,
 } from "@/modules/ledger/context";
 import { isValidId, parseInput, resolveAmount } from "@/modules/ledger/input";
 import { assertAccountsWithinJsonRange } from "@/modules/ledger/range-guard";
@@ -178,6 +179,7 @@ export async function createAccount(
         );
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     checkOwnerOnCreate(actor, input.ownerUserId);
+    await lockHouseholdCap(tx, "accounts", m.householdId);
     assertUnderCap(
       (await selectAccounts(tx, m.householdId, { includeArchived: true })).length,
       HOUSEHOLD_CAPS.accounts,
