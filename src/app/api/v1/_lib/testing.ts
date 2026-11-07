@@ -4,6 +4,7 @@ import { errorSchema } from "@/openapi/schemas";
 
 import * as A from "./app-handlers";
 import * as L from "./ledger-handlers";
+import * as I from "./intelligence-handlers";
 import * as M from "./me-handlers";
 import * as P from "./planning-handlers";
 import * as D from "./documents-handlers";
@@ -84,6 +85,7 @@ export async function sessionsFor(
 // ---------------------------------------------------------------------------------------------
 
 const OPERATION_OF = new Map<unknown, string>([
+  [I.healthScoreHandler, "getHealthScore"],
   [L.listHouseholdsHandler, "listHouseholds"],
   [L.getHouseholdHandler, "getHousehold"],
   [L.listAccountsHandler, "listAccounts"],

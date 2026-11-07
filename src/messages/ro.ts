@@ -27,6 +27,7 @@ export const ro = {
     reports: "Rapoarte",
     insights: "Rapoarte inteligente",
     ask: "Întreabă FINET",
+    health: "Sănătate",
     profile: "Profil",
     settings: "Setări",
     help: "Ajutor",
@@ -2118,6 +2119,79 @@ export const ro = {
     notUnderstoodTitle: "Nu am înțeles",
     note: "Cifrele sunt calculate în aplicație din tranzacțiile pe care le poți vedea; nu e sfat financiar.",
     noRows: "Nicio tranzacție în această perioadă.",
+  },
+  health: {
+    eyebrow: "Sănătate financiară",
+    title: "Scorul de sănătate financiară",
+    nav: "Sănătate",
+    label:
+      "Scor orientativ calculat din datele tale. Nu este un scor de credit și nu este sfat financiar.",
+    intro:
+      "Un scor de la 0 la 100, calculat în aplicație din tranzacțiile, conturile și bugetele pe care le poți vedea. Fiecare componentă arată valoarea măsurată, pragurile folosite și ce ar schimba scorul. Nu se trimite nimic în afara aplicației.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi scorul.",
+    noData: "Nu există încă date pentru această lună. Adaugă tranzacții sau importă un extras.",
+    noScore: "Fără scor: nicio componentă nu are date în această monedă.",
+    scoreOf: "din 100",
+    monthOne: "lună",
+    monthMany: "luni",
+    bands: { good: "Bun", ok: "Rezonabil", watch: "De urmărit", fragile: "Fragil" },
+    bandHints: {
+      good: "Economisești constant și ai rezerve. Păstrează ritmul.",
+      ok: "Situație stabilă, cu loc de îmbunătățire la componentele slabe de mai jos.",
+      watch: "Câteva componente trag scorul în jos; începe cu cea cu ponderea cea mai mare.",
+      fragile:
+        "Cheltuielile depășesc veniturile sau lipsesc rezervele. Vezi explicațiile de mai jos.",
+    },
+    componentsTitle: "Componentele scorului",
+    weight: "Pondere",
+    noScoreComponent: "Fără date",
+    statuses: { good: "Bine", ok: "Acceptabil", weak: "Slab", none: "Fără date" },
+    thresholdsTitle: "Cum se calculează",
+    thresholds: [
+      "Rata de economisire (25 %): (venit − cheltuieli) / venit în luna aleasă; ≥ 20 % dă 100, 0 % dă 40, ≤ −20 % dă 0.",
+      "Flux de numerar (15 %): câte dintre ultimele 6 luni cu activitate au venit ≥ cheltuieli.",
+      "Fond de urgență (20 %): soldul lichid (cash, bancă, economii) împărțit la cheltuiala lunară medie din ultimele 3 luni; 6 luni de acoperire dau 100.",
+      "Stabilitatea cheltuielilor (15 %): abaterea medie a cheltuielilor lunare față de medie, pe ultimele 6 luni; ≤ 10 % dă 100, 50 % dă 20.",
+      "Aderența la bugete (10 %): bugetele lunii, verde = 1, galben = ½, roșu = 0.",
+      "Datorii (15 %): soldurile negative (carduri de credit, descoperiri) față de venitul lunar; 0 dă 100, ≥ 50 % dă 0.",
+      "O componentă fără date nu intră în medie; ponderile celorlalte se redistribuie.",
+    ],
+    components: {
+      savings_rate: {
+        name: "Rata de economisire",
+        noIncome: "Fără venituri înregistrate în această lună, rata nu se poate calcula.",
+        saved: "Ai economisit {net} din {income} venit ({rate}). Peste 20 % înseamnă scor maxim.",
+        overspent:
+          "Ai cheltuit cu {net} mai mult decât venitul de {income} ({rate}). Scorul crește când cheltuielile scad sub venit.",
+      },
+      cash_flow: {
+        name: "Flux de numerar",
+        noData: "Nicio lună cu activitate în ultimele 6 luni.",
+        text: "{positive} din {total} luni cu activitate au avut venituri cel puțin egale cu cheltuielile.",
+      },
+      emergency_fund: {
+        name: "Fond de urgență",
+        noExpenses: "Fără cheltuieli în ultimele luni, acoperirea nu se poate estima.",
+        text: "Soldul lichid de {liquid} acoperă {months} de cheltuieli (media lunară: {avg}). Ținta pentru scor maxim: {target} luni.",
+      },
+      spending_stability: {
+        name: "Stabilitatea cheltuielilor",
+        notEnough: "Sunt necesare cel puțin 3 luni cu cheltuieli.",
+        text: "Pe {count} luni, cheltuielile au variat în medie cu {deviation} față de media de {mean}.",
+      },
+      budget_adherence: {
+        name: "Aderența la bugete",
+        noBudgets: "Nu ai bugete active în această lună; creează unul ca să intre în scor.",
+        text: "{green} bugete în limită, {yellow} aproape de limită, {red} depășite, din {total}.",
+      },
+      debt: {
+        name: "Datorii pe termen scurt",
+        none: "Fără solduri negative pe carduri de credit sau descoperiri de cont.",
+        noIncome:
+          "Ai datorii de {debt}, dar niciun venit înregistrat din care să se calculeze raportul.",
+        text: "Datoria de {debt} reprezintă {ratio} din venitul lunar de {income}. Sub 50 % scorul crește liniar spre 100.",
+      },
+    },
   },
   summary: {
     title: "Rezumatul lunii",

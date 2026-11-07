@@ -103,6 +103,7 @@ import {
   dashboardSchema,
   dataOf,
   goalSchema,
+  healthScoreSchema,
   householdDetailSchema,
   householdSummarySchema,
   meSchema,
@@ -1452,6 +1453,19 @@ export const OPERATIONS: readonly Operation[] = [
     body: { schema: z.strictObject({}), optional: true },
     success: { status: 200, schema: dataOf(recurringRuleSchema), description: "Regula." },
     errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE, REUSED],
+  },
+  // --- Inteligență financiară (modernizare 2026; ADR 0045) ------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/health-score",
+    operationId: "getHealthScore",
+    tag: "reports",
+    summary: "Scorul de sănătate financiară al lunii, separat pe monedă.",
+    description:
+      "Scor 0–100 calculat în aplicație (fără AI) din rata de economisire, fluxul de numerar, fondul de urgență, stabilitatea cheltuielilor, aderența la bugete și datoriile pe termen scurt; fiecare componentă are valoarea, ponderea și explicația. Nu e scor de credit. O componentă fără date e `null` și nu intră în medie.",
+    query: [MONTH_PARAM],
+    success: { status: 200, schema: dataOf(healthScoreSchema), description: "Scorul." },
+    errors: [VALIDATION, NOT_FOUND],
   },
   // --- Dashboard și raportul lunar -----------------------------------------------------------
   {

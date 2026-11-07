@@ -339,6 +339,45 @@ export const dashboardSchema = z
   })
   .meta({ title: "Dashboard" });
 
+/** Scorul de sănătate financiară (modernizare 2026, pasul D; ADR 0045). */
+const healthComponentSchema = z.strictObject({
+  key: z.enum([
+    "savings_rate",
+    "cash_flow",
+    "emergency_fund",
+    "spending_stability",
+    "budget_adherence",
+    "debt",
+  ]),
+  weight: int.meta({ description: "Ponderea în scor (suma ponderilor componentelor = 100)." }),
+  score: int
+    .min(0)
+    .max(100)
+    .nullable()
+    .meta({ description: "0–100; `null` fără date (nu intră în medie)." }),
+  status: z.enum(["good", "ok", "weak", "none"]),
+  value: int.nullable().meta({ description: "Valoarea măsurată, întreg, în `unit`." }),
+  unit: z.enum(["bp", "percent", "months_x100"]),
+  display: z.string().meta({ description: "Valoarea formatată (ro-RO)." }),
+  explanation: z.string().meta({ description: "De ce are scorul; cifrele vin din date." }),
+});
+
+export const healthScoreSchema = z
+  .strictObject({
+    month: z.string(),
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        month: z.string(),
+        score: int.min(0).max(100).nullable(),
+        band: z.enum(["good", "ok", "watch", "fragile"]).nullable(),
+        components: z.array(healthComponentSchema),
+        label: z.string().meta({ description: "Nu e scor de credit, nu e sfat financiar." }),
+      }),
+    ),
+  })
+  .meta({ title: "HealthScore" });
+
 export const monthlyReportSchema = z
   .strictObject({
     month: z.string(),

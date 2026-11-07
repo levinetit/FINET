@@ -1,0 +1,238 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { TEST_ADMIN_URL } from "@/db/testing";
+import { type AuthEnv, type AuthFixture, authEnv, createAuthFixture } from "@/modules/auth/testing";
+import { createUserWithHousehold } from "@/modules/auth/users.service";
+import { systemCategoryId } from "@/modules/ledger/testing";
+
+import type { ApiDeps } from "./_lib/http";
+import * as I from "./_lib/intelligence-handlers";
+import * as L from "./_lib/ledger-handlers";
+import * as P from "./_lib/planning-handlers";
+import {
+  type ApiInit,
+  type Sessions,
+  apiRequest,
+  assertContract,
+  readJson,
+  sessionsFor,
+} from "./_lib/testing";
+
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
+
+/**
+ * Inteligența financiară prin API (modernizare 2026, pasul D; ADR 0045): scorul de sănătate pe
+ * PostgreSQL real, ca `finet_app`: cifrele din date, izolarea între gospodării (fiecare vede
+ * DOAR propriile tranzacții, conturi și bugete), validarea lunii, 401, contractul OpenAPI.
+ */
+
+type Handler = (request: Request, deps: ApiDeps, ...rest: never[]) => Promise<Response>;
+type Body = Awaited<ReturnType<typeof readJson>>;
+
+type HealthJson = {
+  month: string;
+  currencies: {
+    currency: string;
+    score: number | null;
+    band: string | null;
+    components: { key: string; score: number | null; value: number | null; weight: number }[];
+    label: string;
+  }[];
+};
+
+describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/health-score pe PostgreSQL real", () => {
+  let fx: AuthFixture;
+  let env: AuthEnv & ApiDeps;
+  // 28 octombrie 2026, 10:00 UTC → luna curentă în București: 2026-10.
+  const clock = Date.parse("2026-10-28T10:00:00Z");
+  let A: Sessions;
+  let B: Sessions;
+  let groceries: string;
+  let keySeq = 0;
+  const PASS = "parola-sanatate-1";
+  const newKey = () => `sanatate-cheie-${String(++keySeq).padStart(6, "0")}`;
+
+  async function call(handler: Handler, path: string, init: ApiInit) {
+    const res = await (handler as (...a: unknown[]) => Promise<Response>)(
+      apiRequest(path, init),
+      env,
+    );
+    await assertContract(handler, res);
+    const body = (await readJson(res)) as Body;
+    return { status: res.status, body, res };
+  }
+
+  const idOf = (r: { body: Body }) => (r.body.data as { id: string }).id;
+
+  async function newAccount(
+    s: Sessions,
+    name: string,
+    type: string,
+    openingBalance: string,
+    currency = "RON",
+  ) {
+    const r = await call(L.createAccountHandler, "/api/v1/accounts", {
+      bearer: s.bearer,
+      body: { name, type, currency, openingBalance },
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    return idOf(r);
+  }
+
+  async function newTx(s: Sessions, body: Record<string, unknown>) {
+    const r = await call(L.createTransactionHandler, "/api/v1/transactions", {
+      bearer: s.bearer,
+      headers: { "idempotency-key": newKey() },
+      body,
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    return idOf(r);
+  }
+
+  beforeAll(async () => {
+    fx = await createAuthFixture("finet_it_intelligence_api");
+    env = {
+      ...authEnv(fx.db, { now: () => clock }),
+      limits: { mutations: { max: 100_000, windowSeconds: 60 } },
+    };
+    const mk = (email: string, name: string) =>
+      createUserWithHousehold(fx.db, {
+        email,
+        name,
+        password: PASS,
+        firstUserBecomesAdmin: false,
+        emailVerified: true,
+      });
+    await mk("ana@exemplu.ro", "Ana");
+    await mk("bogdan@exemplu.ro", "Bogdan");
+    A = await sessionsFor(env, "ana@exemplu.ro", PASS);
+    B = await sessionsFor(env, "bogdan@exemplu.ro", PASS);
+    groceries = await systemCategoryId(fx.scratch.admin, "expense.groceries");
+
+    // Ana: cont bancar cu 3.000 lei, card de credit cu −500 lei; 6 luni de venituri și cheltuieli.
+    const bank = await newAccount(A, "Bancă", "bank", "3000");
+    await newAccount(A, "Card", "credit_card", "-500");
+    for (let i = 0; i < 6; i++) {
+      const month = `2026-${String(5 + i).padStart(2, "0")}`;
+      await newTx(A, {
+        type: "income",
+        accountId: bank,
+        amount: "5000",
+        occurredOn: `${month}-05`,
+        description: "Salariu",
+      });
+      await newTx(A, {
+        type: "expense",
+        accountId: bank,
+        categoryId: groceries,
+        amount: i === 5 ? "4000" : "3800",
+        occurredOn: `${month}-10`,
+        description: "Cumpărături",
+      });
+    }
+    const budget = await call(P.createBudgetHandler, "/api/v1/budgets", {
+      bearer: A.bearer,
+      headers: { "idempotency-key": newKey() },
+      body: { categoryId: groceries, amount: "4500", currency: "RON" },
+    });
+    expect(budget.status, JSON.stringify(budget.body)).toBe(201);
+
+    // Bogdan: doar un cont cash cu 100 lei și o cheltuială; fără venituri.
+    const cash = await newAccount(B, "Numerar", "cash", "100");
+    await newTx(B, {
+      type: "expense",
+      accountId: cash,
+      amount: "40",
+      occurredOn: "2026-10-12",
+      description: "Pâine",
+    });
+  });
+
+  afterAll(async () => {
+    await fx?.close();
+  });
+
+  it("401 fără sesiune", async () => {
+    const r = await call(I.healthScoreHandler, "/api/v1/health-score", {});
+    expect(r.status).toBe(401);
+  });
+
+  it("scorul Anei: cifrele din tranzacții, conturi și bugete", async () => {
+    const r = await call(I.healthScoreHandler, "/api/v1/health-score", { bearer: A.bearer });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const data = r.body.data as HealthJson;
+    expect(data.month).toBe("2026-10");
+    expect(data.currencies).toHaveLength(1);
+    const ron = data.currencies[0]!;
+    expect(ron.currency).toBe("RON");
+    expect(ron.label).toContain("Nu este un scor de credit");
+    const by = Object.fromEntries(ron.components.map((c) => [c.key, c]));
+    // Octombrie: 5.000 venit − 4.000 cheltuieli = 20 % → 2.000 bp → 100.
+    expect(by.savings_rate!.value).toBe(2000);
+    expect(by.savings_rate!.score).toBe(100);
+    // Toate cele 6 luni au venit ≥ cheltuieli.
+    expect(by.cash_flow!.score).toBe(100);
+    // Lichid: 3.000 + 5·(5.000 − 3.800) + (5.000 − 4.000) = 10.000; media ultimelor 3 luni cu
+    // cheltuieli: (3.800 + 3.800 + 4.000)/3 = 3.866,67 → 2,59 luni → 259/600 → 43.
+    expect(by.emergency_fund!.value).toBe(259);
+    expect(by.emergency_fund!.score).toBe(43);
+    // Cheltuieli 3.800 ×5 și 4.000: media 3.833,33, MAD 55,56 → 145 bp → 100.
+    expect(by.spending_stability!.value).toBe(145);
+    expect(by.spending_stability!.score).toBe(100);
+    // Un buget de 4.500 cu 4.000 cheltuiți (88 % ≥ 80 % avertizare) → galben → 50.
+    expect(by.budget_adherence!.score).toBe(50);
+    // Card de credit −500 față de venitul de 5.000 → 10 % → 1.000 bp → 80.
+    expect(by.debt!.value).toBe(1000);
+    expect(by.debt!.score).toBe(80);
+    // (100·25 + 100·15 + 43·20 + 100·15 + 50·10 + 80·15) / 100 = 80,6 → 81.
+    expect(ron.score).toBe(81);
+    expect(ron.band).toBe("good");
+  });
+
+  it("izolare: Bogdan vede doar datele lui (fără venit, cash 100, fără bugete)", async () => {
+    const r = await call(I.healthScoreHandler, "/api/v1/health-score", { bearer: B.bearer });
+    expect(r.status).toBe(200);
+    const ron = (r.body.data as HealthJson).currencies[0]!;
+    const by = Object.fromEntries(ron.components.map((c) => [c.key, c]));
+    expect(by.savings_rate!.score).toBeNull();
+    expect(by.budget_adherence!.score).toBeNull();
+    // 100 − 40 = 60 lichid; o singură lună cu cheltuieli (40) → 1,5 luni → 150/600 → 25.
+    expect(by.emergency_fund!.value).toBe(150);
+    expect(by.emergency_fund!.score).toBe(25);
+    expect(by.cash_flow!.score).toBe(0);
+    expect(by.debt!.score).toBe(100);
+    expect(ron.score).toBe((0 * 15 + 25 * 20 + 100 * 15) / (15 + 20 + 15));
+  });
+
+  it("luna din URL: validă în fereastră, 400 în afara ei sau malformată", async () => {
+    const ok = await call(I.healthScoreHandler, "/api/v1/health-score?month=2026-08", {
+      bearer: A.bearer,
+    });
+    expect(ok.status).toBe(200);
+    expect((ok.body.data as HealthJson).month).toBe("2026-08");
+    // August: 5.000 − 3.800 = 24 % → 100; lunile mai–august.
+    const by = Object.fromEntries(
+      (ok.body.data as HealthJson).currencies[0]!.components.map((c) => [c.key, c]),
+    );
+    expect(by.savings_rate!.value).toBe(2400);
+
+    const future = await call(I.healthScoreHandler, "/api/v1/health-score?month=2026-11", {
+      bearer: A.bearer,
+    });
+    expect(future.status).toBe(400);
+    expect(future.body.error?.fields).toHaveProperty("month");
+    const bad = await call(I.healthScoreHandler, "/api/v1/health-score?month=octombrie", {
+      bearer: A.bearer,
+    });
+    expect(bad.status).toBe(400);
+    const extra = await call(I.healthScoreHandler, "/api/v1/health-score?foo=1", {
+      bearer: A.bearer,
+    });
+    expect(extra.status).toBe(400);
+  });
+
+  it("cu cookie: GET merge fără Origin (nu e mutație)", async () => {
+    const r = await call(I.healthScoreHandler, "/api/v1/health-score", { cookie: A.cookie });
+    expect(r.status).toBe(200);
+  });
+});
