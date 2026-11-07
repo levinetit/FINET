@@ -101,3 +101,27 @@ export async function inHousehold<T>(
     return translateDbError(error);
   }
 }
+
+/**
+ * Plafoane per gospodărie (LOW-4 din revizuirea Fazei 2, închis în modernizarea 2026, ADR 0051):
+ * limite tehnice, generoase pentru un uz real, care opresc un client compromis sau defect să umple
+ * baza. Independente de planurile `saas` (ADR 0035), care pot fi mai strânse. Depășirea → 409
+ * `household_limit_reached` (nu 400: cererea e validă, starea nu permite).
+ */
+export const HOUSEHOLD_CAPS = Object.freeze({
+  accounts: 100,
+  categories: 300,
+  budgets: 200,
+  goals: 200,
+  tags: 200,
+  valuationsPerAccount: 1000,
+});
+
+export function assertUnderCap(current: number, cap: number, what: string): void {
+  if (current >= cap) {
+    throw new ConflictError(
+      "household_limit_reached",
+      `Gospodăria a atins plafonul de ${cap} ${what}.`,
+    );
+  }
+}

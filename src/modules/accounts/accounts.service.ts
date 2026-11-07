@@ -5,7 +5,12 @@ import { type Actor, NotFoundError } from "@/lib/authz";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { type Currency, add, money, sub, zero } from "@/lib/money";
 import { insertAudit } from "@/modules/auth/audit";
-import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
+import {
+  HOUSEHOLD_CAPS,
+  type LedgerDeps,
+  assertUnderCap,
+  inHousehold,
+} from "@/modules/ledger/context";
 import { isValidId, parseInput, resolveAmount } from "@/modules/ledger/input";
 import { assertAccountsWithinJsonRange } from "@/modules/ledger/range-guard";
 
@@ -173,6 +178,11 @@ export async function createAccount(
         );
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     checkOwnerOnCreate(actor, input.ownerUserId);
+    assertUnderCap(
+      (await selectAccounts(tx, m.householdId, { includeArchived: true })).length,
+      HOUSEHOLD_CAPS.accounts,
+      "conturi",
+    );
     const row = await insertAccount(tx, {
       householdId: m.householdId,
       name: input.name,

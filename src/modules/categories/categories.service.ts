@@ -4,7 +4,12 @@ import type { Tx } from "@/db";
 import { type Actor, NotFoundError } from "@/lib/authz";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { insertAudit } from "@/modules/auth/audit";
-import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
+import {
+  HOUSEHOLD_CAPS,
+  type LedgerDeps,
+  assertUnderCap,
+  inHousehold,
+} from "@/modules/ledger/context";
 import { isValidId, parseInput } from "@/modules/ledger/input";
 
 import {
@@ -110,6 +115,11 @@ export async function createCategory(
   const input = parseInput(categoryCreateSchema, rawInput);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     if (input.parentId) await checkParent(tx, m.householdId, input.parentId, input.kind, null);
+    assertUnderCap(
+      (await selectCategories(tx, m.householdId)).filter((c) => c.systemKey === null).length,
+      HOUSEHOLD_CAPS.categories,
+      "categorii proprii",
+    );
     const row = await insertCategory(tx, {
       householdId: m.householdId,
       name: input.name,

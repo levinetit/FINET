@@ -285,6 +285,13 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/me pe PostgreSQL real", () => {
       env,
     );
     expect(viaBearer.status).toBe(200);
+    // L8 (închis în modernizarea 2026): un bearer INVALID însoțit de un cookie valid, fără Origin,
+    // nu primește sesiunea cookie-ului „deghizată” în bearer (scutită de CSRF): 401.
+    const smuggled = await patchMeHandler(
+      api("/api/v1/me", { method: "PATCH", cookie: web.cookie, bearer: "nu-e-un-token", body }),
+      env,
+    );
+    expect(smuggled.status).toBe(401);
   });
 
   it("schimbarea parolei: cere parola curentă, aplică politica, revocă celelalte sesiuni, audit", async () => {

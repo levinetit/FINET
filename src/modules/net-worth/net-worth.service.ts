@@ -17,7 +17,12 @@ import { insertAudit } from "@/modules/auth/audit";
 import { selectHouseholdTimeZone } from "@/modules/budgets/budgets.repo";
 import type { PlanningDeps } from "@/modules/budgets/budgets.service";
 import { sortCurrencies } from "@/modules/dashboard/dashboard.service";
-import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
+import {
+  HOUSEHOLD_CAPS,
+  type LedgerDeps,
+  assertUnderCap,
+  inHousehold,
+} from "@/modules/ledger/context";
 import { parseInput, resolveAmount } from "@/modules/ledger/input";
 
 import {
@@ -158,6 +163,11 @@ export async function addValuation(
     if (input.valuedOn < monthBounds(addMonths(currentMonth(now(), tz), -120)).from) {
       throw new ValidationError({ valuedOn: "Data evaluării e prea veche (cel mult 10 ani)." });
     }
+    assertUnderCap(
+      (await selectAccountValuations(tx, m.householdId, account.id)).length,
+      HOUSEHOLD_CAPS.valuationsPerAccount,
+      "evaluări pe cont",
+    );
     const valueMinor = resolveAmount(
       { amountMinor: input.valueMinor, amount: input.value },
       account.currency as Currency,

@@ -6,7 +6,12 @@ import { ConflictError, ValidationError } from "@/lib/errors";
 import { type Currency, add, money, percentOf, sub } from "@/lib/money";
 import { selectAccount } from "@/modules/accounts/accounts.repo";
 import { insertAudit } from "@/modules/auth/audit";
-import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
+import {
+  HOUSEHOLD_CAPS,
+  type LedgerDeps,
+  assertUnderCap,
+  inHousehold,
+} from "@/modules/ledger/context";
 import {
   MAX_AMOUNT_MINOR,
   isValidId,
@@ -129,6 +134,11 @@ export async function createGoal(
   const targetMinor = resolveTarget(input, input.currency);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     await checkAccount(tx, m.householdId, input.accountId, input.currency);
+    assertUnderCap(
+      (await selectGoals(tx, m.householdId)).length,
+      HOUSEHOLD_CAPS.goals,
+      "obiective",
+    );
     const row = await insertGoal(tx, {
       householdId: m.householdId,
       name: input.name,
