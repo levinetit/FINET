@@ -4,7 +4,13 @@ import type { Tx } from "@/db";
 import { type Actor, NotFoundError } from "@/lib/authz";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { insertAudit } from "@/modules/auth/audit";
-import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
+import {
+  HOUSEHOLD_CAPS,
+  type LedgerDeps,
+  assertUnderCap,
+  inHousehold,
+  lockHouseholdCap,
+} from "@/modules/ledger/context";
 import { isValidId, parseInput } from "@/modules/ledger/input";
 import { selectTransaction } from "@/modules/transactions/transactions.repo";
 
@@ -92,6 +98,8 @@ export async function createTag(
   const input = parseInput(tagCreateSchema, rawInput);
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     if (await tagNameTaken(tx, m.householdId, input.name)) throw nameTaken();
+    await lockHouseholdCap(tx, "tags", m.householdId);
+    assertUnderCap((await selectTags(tx, m.householdId)).length, HOUSEHOLD_CAPS.tags, "etichete");
     const row = await insertTag(tx, {
       householdId: m.householdId,
       name: input.name,

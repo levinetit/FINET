@@ -1,9 +1,9 @@
-# FINET — arhitectura (ce există după Fazele 1–6 și F8-A)
+# FINET — arhitectura (ce există în cod, actualizat la modernizarea 2026)
 
-Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`.
+Acest document descrie **doar codul existent**. Ce e planificat apare separat, marcat „planificat”. Specificația completă: `docs/FINET_MASTER_PROMPT.md` (secțiunile 3 și 6). Deploy: `docs/INFRA.md`. Starea pe faze: `docs/ROADMAP.md`. Auditul complet: `docs/audit/FINET_COMPLETE_AUDIT.md`.
 
 ## Pe scurt
-Monolit Next.js 16 (App Router, TypeScript strict), rulat ca server Node `standalone` într-un container Docker. Din Faza 1: schema Drizzle `finet` cu RLS, Better Auth (parole Argon2id, sesiuni în bază, `bearer`), API-ul `/api/v1/me*`, CLI-ul admin și interfața web de autentificare și profil (F1-C). Din F2-A: registrul financiar (conturi, categorii, tranzacții, transferuri) ca servicii server-side; din F2-B: API-ul `/api/v1` peste ele (cu `Idempotency-Key`), OpenAPI generat și statisticile de utilizare (instalări, evenimente, consimțăminte). Din F2-C: interfața registrului (conturi, tranzacții, transferuri, categorii, soldurile pe dashboard). Nu există încă worker real. Deciziile: ADR 0003 (Faza 1), ADR 0004 (registrul), ADR 0005 (API-ul), ADR 0006 (interfața registrului).
+Monolit Next.js 16 (App Router, TypeScript strict), rulat ca server Node `standalone` într-un container Docker, cu un worker pg-boss separat și un runner de migrații. Fazele 1–13 sunt în cod (ADR 0003–0044): autentificare Better Auth, registrul financiar cu RLS, planificare (bugete, obiective, rapoarte, exporturi), recurențe, bonuri cu AI, extrase bancare, familie, PWA/GDPR, liste de cumpărături și prețuri, „Întreabă FINET”, site și administrare `saas`, planuri/recomandări, limbi pe paginile publice, client Android Flutter. **Modernizarea 2026** (ADR 0045–0052, secțiunea dedicată mai jos) adaugă scorul de sănătate, prognoza de cash-flow, consilierul, averea netă, planul de economisire, abonamentele, notificările, HUF/GBP cu cursuri BCE, interfața Open Banking, logarea structurată și întăririle de securitate. Secțiunile istorice de mai jos (F2-A … F7-A) rămân valabile ca descriere a straturilor.
 
 ## Structura existentă
 
@@ -134,7 +134,18 @@ Interfața `Storage` (`put`/`putStream`/`get`/`openRead`/`delete`/`exists`); che
 
 ## Deploy și CI
 - Imaginea: `Dockerfile` (multi-stage, user non-root, healthcheck). Compose: `ops/docker/docker-compose.yml` (`finet-web`, `finet-worker` și `finet-migrate`, fiecare cu `FINET_ROLE` fixat, propriul `env_file` nesecret din `/srv/finet/env/`, doar secretele rolului său ca fișiere `secrets:` din `/srv/finet/secrets/` și CA-ul Supabase montat read-only).
-- CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, audit non-blocant) și job-ul `e2e` (migrații, utilizatori prin CLI, Playwright Chromium: `smoke`, `auth`, `ledger` în `personal` apoi în `saas`, plus `access` pe serverul de producție). Coverage nu rulează în CI.
+- CI: `.github/workflows/ci.yml`: job-ul `ci` (install, lint, format, `openapi:check`, typecheck, migrații de două ori, teste cu PostgreSQL `ops/postgres/VERSION`, build, scanarea secretelor, buget JS, `pnpm audit --prod` **blocant de la HIGH**), job-ul `backup-restore` și job-ul `e2e` (Playwright, 18 proiecte, ambele moduri). În plus (modernizare 2026): `codeql.yml`, `secret-scan.yml` (gitleaks), Trivy în `images.yml`; toate acțiunile pinuite pe SHA; imaginea de bază pe digest. Coverage nu rulează în CI.
+
+## Modernizarea 2026 (ADR 0045–0052)
+Toate modulele noi urmează modelul registrului: servicii cu `inHousehold` (apartenență + RLS), funcții pure testate separat, handlere subțiri în `src/app/api/v1/_lib/{intelligence,net-worth,notifications}-handlers.ts`, răspunsuri verificate față de OpenAPI, pagini server-side cu SVG propriu.
+- **Inteligență financiară (fără AI, fără migrație):** `src/modules/health` (scor 0–100 din șase componente explicate; `/health`, `GET /api/v1/health-score`), `src/modules/forecast` (sold proiectat 30/60/90 de zile din scadențele regulilor + media nerecurentă, cu încredere; `/forecast`, `GET /api/v1/forecast`), `src/modules/advisor` (tranzacții neobișnuite, tipare, sugestii cu sume; `/advisor`, `GET /api/v1/advisor`). ADR 0045.
+- **Averea netă (migrația 0027):** tipuri noi de cont (`investment`, `property`, `vehicle`, `other_asset`, `loan`, `other_liability`), `account_valuations`, istoric recalculat la sfârșit de lună; `src/modules/net-worth`, `/net-worth`, evaluări pe pagina contului. ADR 0046.
+- **Plan de economisire și abonamente (fără migrație):** `src/modules/goals/plan.*` (rate zi/săptămână/lună, fond de urgență, simulare) și `src/modules/subscriptions` (reguli recurente normalizate lunar/anual, reînnoiri, detectate); `/goals`, `/subscriptions`. ADR 0047.
+- **Notificări (migrația 0028):** `notifications`, `notification_preferences`, jobul zilnic `notify.evaluate` în worker (`src/worker/notifications`), reguli pure în `src/modules/notifications/rules.ts`, digest pe email opțional; `/notifications`, `/settings/notifications`, banner în layout. ADR 0048.
+- **Monede (migrația 0029):** HUF și GBP, `fx_rates` din BCE (`src/modules/fx`, jobul `fx.refresh` cu `FX_RATES=1`), conversie doar pentru afișare (`src/lib/fx.ts`, linia „≈” pe dashboard/conturi/avere). ADR 0049.
+- **Open Banking:** doar interfața `BankingProvider` + furnizorul `mock` + maparea în extrase (`src/modules/banking`); evaluarea furnizorilor în `docs/research/open-banking-ro-eu.md`. ADR 0050.
+- **Securitate:** L8 (bearer fără cookie), plafoane per gospodărie (`HOUSEHOLD_CAPS`, cu lacăt), audit în `docs/audit/FINET_SECURITY_AUDIT.md`. ADR 0051.
+- **Observabilitate și texte:** `src/lib/log.ts` (JSON structurat, fără conținut), `src/messages/index.ts` (`messagesFor`, azi mereu `ro`). ADR 0052.
 
 ## Planificat (nu există încă)
-Driverul S3, înregistrarea publică și modul `saas` (Faza 11). Graficele nu folosesc Recharts (SVG propriu, ADR 0008).
+Driverul S3; furnizorul real Open Banking (tabele, job de sincronizare, pagini); push Android; traducerea aplicației autentificate; MFA pentru `saas` public. Graficele nu folosesc Recharts (SVG propriu, ADR 0008).

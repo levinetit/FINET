@@ -1,0 +1,52 @@
+# Analiză statică de securitate CodeQL (JavaScript/TypeScript) pe PR-uri, pe `main` și săptămânal.
+# Rezultatele apar în Security → Code scanning. Modernizare 2026, pasul A (audit §3, §5).
+# Nu rulează pe Dart: CodeQL nu are suport pentru Flutter; aplicația Android are `dart analyze`
+# în `android.yml`.
+name: codeql
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Luni, 06:17 UTC (ora aleasă la întâmplare, ca să nu coincidă cu vârfurile GitHub).
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: javascript-typescript
+          # `security-and-quality` adaugă și regulile de calitate; pornim cu cele de securitate,
+          # extinse (fără zgomot de stil, care e acoperit de ESLint).
+          queries: security-extended
+          config: |
+            paths-ignore:
+              - node_modules
+              - .next
+              - dist
+              - docs/demo
+              - public/sw.js
+
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:javascript-typescript"

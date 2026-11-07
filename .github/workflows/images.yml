@@ -5,7 +5,7 @@ name: images
 
 on:
   push:
-    branches: [main, "phase/**"]
+    branches: [main, "phase/**", "feature/**"]
   workflow_dispatch:
 
 permissions:
@@ -20,6 +20,10 @@ jobs:
     name: imagine ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      # Rezultatele Trivy (SARIF) merg în Security → Code scanning.
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -35,14 +39,14 @@ jobs:
             target: backup
             file: ops/backup/Dockerfile
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Construiește imaginea (${{ matrix.target }})
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ${{ matrix.file }}
@@ -61,9 +65,44 @@ jobs:
           ls -l out
 
       - name: Publică artefactul (7 zile)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: finet-${{ matrix.name }}-${{ github.sha }}
           path: out/
           retention-days: 7
           if-no-files-found: error
+
+      # Scanarea imaginii (Trivy): sistemul de operare + pachetele Node din imagine. NEBLOCANTĂ
+      # (exit-code 0): artefactul e deja publicat, iar `pull-images.sh` cere o rulare `success`;
+      # o CVE nouă în imaginea de bază nu trebuie să blocheze un deploy de urgență. Rezultatele
+      # apar în Security → Code scanning (SARIF) și în jurnalul pasului (tabel CRITICAL/HIGH).
+      # Modernizare 2026, pasul A.
+      - name: Scanează imaginea (Trivy, tabel CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          image-ref: finet:${{ matrix.name }}-${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Scanează imaginea (Trivy, SARIF)
+        id: trivy-sarif
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          image-ref: finet:${{ matrix.name }}-${{ github.sha }}
+          format: sarif
+          output: trivy-${{ matrix.name }}.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+          # Baza de date a fost descărcată de pasul anterior.
+          skip-setup-trivy: true
+
+      - name: Publică SARIF-ul Trivy
+        # Doar dacă scanarea a produs fișierul (un build eșuat nu are imagine de scanat).
+        if: steps.trivy-sarif.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-${{ matrix.name }}

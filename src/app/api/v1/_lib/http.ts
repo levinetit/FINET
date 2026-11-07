@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { errorCodeOf, log } from "@/lib/log";
 import { type Db, type DbOrTx, withRlsOn } from "@/db";
 import { type Actor, ForbiddenError, NotFoundError } from "@/lib/authz";
 import type { Config, RateLimitRule } from "@/lib/config";
@@ -237,7 +238,7 @@ export function json(body: unknown, status = 200, headers: Record<string, string
 function errorResponse(error: unknown): Response {
   const payload = errorPayload(error);
   if (payload) return json(payload.body, payload.status, payload.headers);
-  console.error("[api] eroare neașteptată");
+  log.error("api", "unexpected", { code: errorCodeOf(error) });
   return json({ error: { code: "internal_error", message: "Eroare internă." } }, 500);
 }
 

@@ -192,7 +192,7 @@ describe("parseConfig", () => {
     expect(typeof c.ai.monthlyBudget.amountMinor).toBe("bigint");
     expect(issuesOf({ ...DEV, AI_MONTHLY_BUDGET: "12.345" })).toEqual(["AI_MONTHLY_BUDGET"]);
     expect(issuesOf({ ...DEV, AI_MONTHLY_BUDGET: "1e3" })).toEqual(["AI_MONTHLY_BUDGET"]);
-    expect(issuesOf({ ...DEV, AI_MONTHLY_BUDGET_CURRENCY: "GBP" })).toEqual([
+    expect(issuesOf({ ...DEV, AI_MONTHLY_BUDGET_CURRENCY: "CHF" })).toEqual([
       "AI_MONTHLY_BUDGET_CURRENCY",
     ]);
   });
@@ -900,6 +900,12 @@ describe("furnizorul AI (F6-B, ADR 0014)", () => {
     expect(parseConfig({ ...DEV, AI_LIST_MATCH: "0" }).ai.listMatch).toBe(false);
     expect(parseConfig({ ...DEV, AI_LIST_MATCH: "1" }).ai.listMatch).toBe(true);
     expect(issuesOf({ ...DEV, AI_LIST_MATCH: "da" })).toEqual(["AI_LIST_MATCH"]);
+  });
+
+  it("FX_RATES (ADR 0049): implicit oprit; 0/1; altceva e eroare", () => {
+    expect(parseConfig(DEV).fx.enabled).toBe(false);
+    expect(parseConfig({ ...DEV, FX_RATES: "1" }).fx.enabled).toBe(true);
+    expect(issuesOf({ ...DEV, FX_RATES: "da" })).toEqual(["FX_RATES"]);
     expect(parseConfig({ ...DEV, AI_RESPONSE_FORMAT: "json_schema" }).ai.responseFormat).toBe(
       "json_schema",
     );

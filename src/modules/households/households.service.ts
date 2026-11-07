@@ -19,7 +19,7 @@ import { isValidId } from "@/modules/ledger/input";
 export type HouseholdSummary = Readonly<{
   id: string;
   name: string;
-  defaultCurrency: "RON" | "EUR" | "USD";
+  defaultCurrency: "RON" | "EUR" | "USD" | "HUF" | "GBP";
   timezone: string;
   role: HouseholdRole;
   /** Gospodăria în care lucrează API-ul: cea activă (ADR 0016), altfel cea mai veche. */

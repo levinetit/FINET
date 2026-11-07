@@ -1,31 +1,58 @@
 import Link from "next/link";
 
 import type { MoneyJson } from "@/lib/money";
+import type { Currency } from "@/lib/money";
 import { ro } from "@/messages/ro";
 import type { AccountJson } from "@/modules/accounts/accounts.schema";
 
 import { formatMinor } from "../../_lib/ledger-ui";
+import { formatDate } from "../../_lib/planning-ui";
 
 /** Totalurile pe monedă (fiecare monedă separat, fără conversie, 5.1). */
-export function CurrencyTotals({ totals }: Readonly<{ totals: readonly MoneyJson[] }>) {
+/** Totalul aproximativ în moneda de bază (ADR 0049), calculat pe server; `null` = nimic de afișat. */
+export type ApproxJson = Readonly<{
+  currency: Currency;
+  amountMinor: number;
+  rateDate: string;
+  missing: readonly string[];
+}>;
+
+export function ApproxLine({ approx }: Readonly<{ approx: ApproxJson | null }>) {
+  if (!approx) return null;
+  return (
+    <p className="mt-2 text-sm text-muted-foreground" data-testid="approx-total">
+      {ro.fx.approx(formatMinor(approx.amountMinor, approx.currency), formatDate(approx.rateDate))}
+      {approx.missing.length > 0 ? ` (${ro.fx.missing(approx.missing.join(", "))})` : ""}
+      <span className="sr-only"> {ro.fx.hint}</span>
+    </p>
+  );
+}
+
+export function CurrencyTotals({
+  totals,
+  approx = null,
+}: Readonly<{ totals: readonly MoneyJson[]; approx?: ApproxJson | null }>) {
   if (totals.length === 0) {
     return <p className="text-muted-foreground">{ro.dashboard.balancesEmpty}</p>;
   }
   return (
-    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="currency-totals">
-      {totals.map((t) => (
-        <div
-          key={t.currency}
-          className="rounded-md bg-surface-2 px-4 py-3"
-          data-testid={`total-${t.currency}`}
-        >
-          <dt className="text-sm text-muted-foreground">{ro.ledger.currencyTotal(t.currency)}</dt>
-          <dd className="font-mono text-xl font-semibold tabular-nums">
-            {formatMinor(t.amountMinor, t.currency)}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <>
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="currency-totals">
+        {totals.map((t) => (
+          <div
+            key={t.currency}
+            className="rounded-md bg-surface-2 px-4 py-3"
+            data-testid={`total-${t.currency}`}
+          >
+            <dt className="text-sm text-muted-foreground">{ro.ledger.currencyTotal(t.currency)}</dt>
+            <dd className="font-mono text-xl font-semibold tabular-nums">
+              {formatMinor(t.amountMinor, t.currency)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <ApproxLine approx={approx} />
+    </>
   );
 }
 

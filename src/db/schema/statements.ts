@@ -143,7 +143,10 @@ export const statementImports = finet.table(
       "statement_imports_balance_status_valid",
       sql`${t.balanceStatus} in ('ok', 'mismatch', 'unknown')`,
     ),
-    check("statement_imports_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "statement_imports_currency_valid",
+      sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
     check("statement_imports_parser_version_min", sql`${t.parserVersion} >= 1`),
     check("statement_imports_parser_version_max", sql`${t.parserVersion} <= 1000`),
     check("statement_imports_source_sha256_format", sql`${t.sourceSha256} ~ '^[0-9a-f]{64}$'`),
@@ -276,7 +279,10 @@ export const statementLines = finet.table(
     check("statement_lines_direction_valid", sql`${t.direction} in ('debit', 'credit')`),
     check("statement_lines_amount_min", sql`${t.amountMinor} >= 1`),
     check("statement_lines_amount_max", sql`${t.amountMinor} <= 10000000000000`),
-    check("statement_lines_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "statement_lines_currency_valid",
+      sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
     check("statement_lines_occurred_on_min", sql`${t.occurredOn} >= date '1900-01-01'`),
     check("statement_lines_occurred_on_max", sql`${t.occurredOn} <= date '2999-12-31'`),
     check("statement_lines_description_length", sql`char_length(${t.description}) <= 500`),
@@ -292,7 +298,7 @@ export const statementLines = finet.table(
     ),
     check(
       "statement_lines_fx_currency_valid",
-      sql`${t.fxCurrency} is null or ${t.fxCurrency} in ('RON', 'EUR', 'USD')`,
+      sql`${t.fxCurrency} is null or ${t.fxCurrency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
     ),
     check("statement_lines_fx_kind", sql`${t.fxCurrency} is null or ${t.kind} = 'fx'`),
     check(
@@ -405,7 +411,10 @@ export const statementUploads = finet.table(
       "statement_uploads_status_valid",
       sql`${t.status} in ('queued', 'processing', 'parsed', 'failed')`,
     ),
-    check("statement_uploads_currency_valid", sql`${t.currency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "statement_uploads_currency_valid",
+      sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
     check("statement_uploads_sha256_format", sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
     check("statement_uploads_size_min", sql`${t.sizeBytes} >= 1`),
     check("statement_uploads_size_max", sql`${t.sizeBytes} <= 20971520`),
@@ -500,7 +509,7 @@ export const recurringSuggestionDismissals = finet.table(
     index("recurring_suggestion_dismissals_dismissed_by_idx").on(t.dismissedByUserId),
     check(
       "recurring_suggestion_dismissals_currency_valid",
-      sql`${t.currency} in ('RON', 'EUR', 'USD')`,
+      sql`${t.currency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
     ),
     check(
       "recurring_suggestion_dismissals_signature_format",

@@ -29,6 +29,8 @@ import {
   documents,
   feedback,
   feedbackRewards,
+  notificationPreferences,
+  notifications,
   goals,
   householdMembers,
   households,
@@ -306,6 +308,29 @@ async function profile(db: Db, userId: string) {
         .from(feedbackRewards)
         .where(eq(feedbackRewards.userId, userId))
         .then((rows) => rows[0] ?? null),
+      // Modernizare 2026 (ADR 0048, Art. 15): notificările primite și preferințele lor.
+      notificationPreferences: await tx
+        .select({
+          inApp: notificationPreferences.inApp,
+          email: notificationPreferences.email,
+          kinds: notificationPreferences.kinds,
+        })
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId))
+        .then((rows) => rows[0] ?? null),
+      notifications: await tx
+        .select({
+          householdId: notifications.householdId,
+          kind: notifications.kind,
+          title: notifications.title,
+          body: notifications.body,
+          link: notifications.link,
+          createdAt: notifications.createdAt,
+          readAt: notifications.readAt,
+        })
+        .from(notifications)
+        .where(eq(notifications.userId, userId))
+        .orderBy(asc(notifications.createdAt), asc(notifications.id)),
     };
   });
 }

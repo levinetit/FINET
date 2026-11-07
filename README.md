@@ -2,7 +2,7 @@
 
 Aplicație de finanțe personale și de familie pentru România: bonuri fiscale citite automat, extrase bancare, bugete, recurențe și decontări în familie.
 
-**Stare:** Faza 1 (autentificare, profil, gospodărie) e pe producție. Faza 2 (conturi, categorii, tranzacții, transferuri) e **implementată în repo, parțial închisă**: servicii cu RLS, API `/api/v1` cu `Idempotency-Key` și OpenAPI, paginile `/accounts`, `/transactions`, `/transfers/new`, `/categories`, soldurile pe `/dashboard`, E2E `ledger`. Rămân migrațiile `0002`/`0003` pe Supabase (operatorul), prima rulare E2E pe GitHub și revizuirea de securitate. Detalii: [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/reports/faza-2.md`](docs/reports/faza-2.md).
+**Stare (2026-11-07):** Fazele 0–13 sunt în cod, iar varianta `personal` rulează pe producție (`docs/ROADMAP.md`). Branch-ul `feature/finet-modernization-2026` (PR #81) aduce auditul complet, întărirea CI, actualizarea dependențelor, scorul de sănătate, prognoza de cash-flow, consilierul, averea netă, planul de economisire, abonamentele, notificările, HUF/GBP cu cursuri BCE, interfața Open Banking și logarea structurată (ADR 0045–0052; rapoarte în `docs/audit/` și `docs/reports/FINET_MODERNIZATION_FINAL_REPORT.md`). Migrațiile 0027–0029 se aplică pe producție doar de operator.
 
 ## Documentație
 - Specificația: [`docs/FINET_MASTER_PROMPT.md`](docs/FINET_MASTER_PROMPT.md) · Android: [`docs/FINET_ANDROID_MASTER_PROMPT.md`](docs/FINET_ANDROID_MASTER_PROMPT.md)

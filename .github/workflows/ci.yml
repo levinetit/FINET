@@ -23,7 +23,7 @@ jobs:
     outputs:
       major: ${{ steps.read.outputs.major }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: ops/postgres/VERSION
           sparse-checkout-cone-mode: false
@@ -63,11 +63,11 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -136,17 +136,17 @@ jobs:
 
       - name: Raport mărime JavaScript
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bundle-size
           path: bundle-size.json
           if-no-files-found: ignore
 
-      # Non-blocant la început (avertismentele tranzitive pot fi zgomot); se face blocant
-      # după ce lista e curată.
+      # Blocant de la severitatea HIGH (lista era curată la 2026-11-07; modernizare 2026, pasul A).
+      # O vulnerabilitate tranzitivă fără remediere se tratează cu `pnpm audit --fix` sau cu o
+      # suprascriere în `pnpm.overrides`, documentată în docs/audit/DEPENDENCY_MODERNIZATION.md.
       - name: Audit dependențe (producție)
-        continue-on-error: true
-        run: pnpm audit --prod
+        run: pnpm audit --prod --audit-level high
 
   # Backup + restaurare testată (F3-D, docs/BACKUP.md): imaginea de backup REALĂ (construită aici,
   # pe runner, nu pe host), scripturile ei (backup.sh, restore.sh) pe un PostgreSQL efemer cu
@@ -174,7 +174,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -214,7 +214,7 @@ jobs:
           -e FINET_BACKUP_BIN_DIR=/opt/finet-backup
           -v "$PWD:/work:ro" --entrypoint sh finet-backup:ci /work/ops/backup/restore-test.sh
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -272,11 +272,11 @@ jobs:
       STORAGE_DIR: .data/e2e-storage
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -390,7 +390,7 @@ jobs:
 
       - name: Raport Playwright (la eșec)
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-traces
           path: test-results/

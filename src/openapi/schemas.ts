@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  NOTIFICATION_KINDS,
   ACCOUNT_TYPES,
   AI_PROVIDERS_USED,
   DOCUMENT_KINDS,
@@ -338,6 +339,382 @@ export const dashboardSchema = z
     ),
   })
   .meta({ title: "Dashboard" });
+
+/** Scorul de sănătate financiară (modernizare 2026, pasul D; ADR 0045). */
+const healthComponentSchema = z.strictObject({
+  key: z.enum([
+    "savings_rate",
+    "cash_flow",
+    "emergency_fund",
+    "spending_stability",
+    "budget_adherence",
+    "debt",
+  ]),
+  weight: int.meta({ description: "Ponderea în scor (suma ponderilor componentelor = 100)." }),
+  score: int
+    .min(0)
+    .max(100)
+    .nullable()
+    .meta({ description: "0–100; `null` fără date (nu intră în medie)." }),
+  status: z.enum(["good", "ok", "weak", "none"]),
+  value: int.nullable().meta({ description: "Valoarea măsurată, întreg, în `unit`." }),
+  unit: z.enum(["bp", "percent", "months_x100"]),
+  display: z.string().meta({ description: "Valoarea formatată (ro-RO)." }),
+  explanation: z.string().meta({ description: "De ce are scorul; cifrele vin din date." }),
+});
+
+export const healthScoreSchema = z
+  .strictObject({
+    month: z.string(),
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        month: z.string(),
+        score: int.min(0).max(100).nullable(),
+        band: z.enum(["good", "ok", "watch", "fragile"]).nullable(),
+        components: z.array(healthComponentSchema),
+        label: z.string().meta({ description: "Nu e scor de credit, nu e sfat financiar." }),
+      }),
+    ),
+  })
+  .meta({ title: "HealthScore" });
+
+/** Prognoza de cash-flow (modernizare 2026, pasul E; ADR 0045). */
+const forecastHorizon = z.union([z.literal(30), z.literal(60), z.literal(90)]);
+export const forecastSchema = z
+  .strictObject({
+    today: date,
+    days: forecastHorizon,
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        today: date,
+        days: forecastHorizon,
+        openingMinor: minor,
+        points: z.array(
+          z.strictObject({
+            date,
+            balanceMinor: minor,
+            scheduledMinor: minor,
+            baselineMinor: minor,
+          }),
+        ),
+        horizons: z.array(
+          z.strictObject({
+            days: forecastHorizon,
+            endOn: date,
+            projectedMinor: minor,
+            scheduledIncomeMinor: minor,
+            scheduledExpenseMinor: minor,
+            baselineIncomeMinor: minor,
+            baselineExpenseMinor: minor,
+            lowestMinor: minor,
+            lowestOn: date,
+          }),
+        ),
+        upcoming: z.array(
+          z.strictObject({
+            date,
+            ruleId: uuid,
+            description: z.string(),
+            type: z.enum(["income", "expense"]),
+            amountMinor: minor,
+          }),
+        ),
+        baseline: z.strictObject({
+          dailyIncomeMinor: minor,
+          dailyExpenseMinor: minor,
+          historyMonths: int,
+          historyDays: int,
+          recurringCoverageBp: int.nullable(),
+          spendingVariationBp: int.nullable(),
+        }),
+        confidence: z.strictObject({
+          level: z.enum(["high", "medium", "low"]),
+          score: int.min(0).max(100),
+          reasons: z.array(z.strictObject({ code: z.string(), text: z.string() })),
+        }),
+        label: z.string().meta({ description: "Estimare, nu sfat financiar." }),
+      }),
+    ),
+  })
+  .meta({ title: "Forecast" });
+
+/** Consilierul financiar (modernizare 2026, pasul F; ADR 0045). */
+export const adviceSchema = z
+  .strictObject({
+    month: z.string(),
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        month: z.string(),
+        expenseTotalMinor: minor,
+        unusual: z.array(
+          z.strictObject({
+            transactionId: uuid,
+            occurredOn: date,
+            merchant: z.string().nullable(),
+            description: z.string().nullable(),
+            categoryId: uuid.nullable(),
+            categoryName: z.string().nullable(),
+            amountMinor: minor,
+            baselineMinor: minor,
+            basis: z.enum(["merchant", "category"]),
+            ratioBp: int,
+            explanation: z.string(),
+          }),
+        ),
+        patterns: z.array(
+          z.strictObject({
+            code: z.enum([
+              "category_up",
+              "category_down",
+              "new_merchant",
+              "merchant_concentration",
+            ]),
+            categoryId: uuid.nullable(),
+            categoryName: z.string().nullable(),
+            merchant: z.string().nullable(),
+            currentMinor: minor,
+            baselineMinor: minor.nullable(),
+            changeBp: int.nullable(),
+            explanation: z.string(),
+          }),
+        ),
+        suggestions: z.array(
+          z.strictObject({
+            code: z.enum([
+              "overdraft_ahead",
+              "pay_down_card",
+              "review_budgets",
+              "emergency_fund",
+              "trim_category",
+              "check_unusual",
+              "automate_recurring",
+              "keep_going",
+            ]),
+            priority: z.enum(["high", "medium", "low"]),
+            title: z.string(),
+            text: z.string(),
+            amountMinor: minor.nullable(),
+          }),
+        ),
+        health: z
+          .strictObject({
+            score: int.min(0).max(100).nullable(),
+            band: z.enum(["good", "ok", "watch", "fragile"]).nullable(),
+          })
+          .nullable(),
+        forecast: z
+          .strictObject({ days: int, lowestMinor: minor, lowestOn: date })
+          .nullable()
+          .meta({ description: "Doar pentru luna curentă (prognoza pornește de azi)." }),
+        label: z.string().meta({ description: "Nu e sfat financiar." }),
+      }),
+    ),
+  })
+  .meta({ title: "Advice" });
+
+/** Averea netă și evaluările (modernizare 2026, pasul G; ADR 0046). */
+const netWorthPoint = z.strictObject({
+  asOf: date,
+  assetsMinor: minor,
+  liabilitiesMinor: minor,
+  netMinor: minor,
+});
+const accountKind = z.enum(["asset", "liability"]);
+export const netWorthSchema = z
+  .strictObject({
+    asOf: date,
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        asOf: date,
+        current: netWorthPoint,
+        byType: z.array(
+          z.strictObject({
+            type: z.enum(ACCOUNT_TYPES),
+            kind: accountKind,
+            valueMinor: minor,
+            accounts: z.array(
+              z.strictObject({
+                accountId: uuid,
+                name: z.string(),
+                type: z.enum(ACCOUNT_TYPES),
+                kind: accountKind,
+                valueMinor: minor,
+                basis: z.enum(["balance", "valuation"]),
+                valuedOn: date.nullable(),
+                archived: z.boolean(),
+              }),
+            ),
+          }),
+        ),
+        history: z.array(netWorthPoint),
+      }),
+    ),
+  })
+  .meta({ title: "NetWorth" });
+
+export const valuationSchema = z
+  .strictObject({
+    id: uuid,
+    accountId: uuid,
+    currency,
+    valuedOn: date,
+    valueMinor: minor.meta({ description: "Semnată ca un sold: activ pozitiv, pasiv negativ." }),
+    note: z.string().nullable(),
+    createdByUserId: uuid.nullable(),
+    createdAt: z.string(),
+  })
+  .meta({ title: "AccountValuation" });
+
+/** Planul de economisire și abonamentele (modernizare 2026, pașii H–I; ADR 0047). */
+const planSchema = z.strictObject({
+  remainingMinor: minor,
+  daysLeft: int.nullable(),
+  dailyMinor: minor.nullable(),
+  weeklyMinor: minor.nullable(),
+  monthlyMinor: minor.nullable(),
+  status: z.enum(["done", "no_deadline", "on_track", "overdue"]),
+});
+export const savingsPlanSchema = z
+  .strictObject({
+    today: date,
+    goals: z.array(
+      z.strictObject({
+        goalId: uuid,
+        name: z.string(),
+        currency,
+        targetMinor: minor,
+        savedMinor: minor,
+        deadline: date.nullable(),
+        accountId: uuid.nullable(),
+        plan: planSchema,
+      }),
+    ),
+    emergency: z.array(
+      z.strictObject({
+        currency,
+        averageExpenseMinor: minor.nullable(),
+        liquidMinor: minor,
+        options: z.array(
+          z.strictObject({
+            months: int,
+            targetMinor: minor,
+            gapMinor: minor,
+            monthlyMinor: minor,
+            coveredX100: int,
+            coveredPct: int.min(0).max(100),
+          }),
+        ),
+      }),
+    ),
+  })
+  .meta({ title: "SavingsPlan" });
+
+export const savingsSimulationSchema = z
+  .strictObject({
+    currency,
+    targetMinor: minor,
+    savedMinor: minor,
+    today: date,
+    byDeadline: planSchema.extend({ deadline: date }).nullable(),
+    byMonthly: z
+      .strictObject({ monthlyMinor: minor, months: int.nullable(), finishOn: date.nullable() })
+      .nullable(),
+  })
+  .meta({ title: "SavingsSimulation" });
+
+const subscriptionSchema = z.strictObject({
+  ruleId: uuid,
+  name: z.string(),
+  merchant: z.string().nullable(),
+  categoryId: uuid.nullable(),
+  categoryName: z.string().nullable(),
+  accountId: uuid,
+  currency,
+  amountMinor: minor,
+  frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
+  interval: int,
+  monthlyMinor: minor,
+  annualMinor: minor,
+  nextRenewalOn: date.nullable(),
+  daysToRenewal: int.nullable(),
+  status: z.enum(["active", "paused", "completed"]),
+});
+export const subscriptionsSchema = z
+  .strictObject({
+    today: date,
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        activeCount: int,
+        pausedCount: int,
+        monthlyMinor: minor,
+        annualMinor: minor,
+        byCategory: z.array(
+          z.strictObject({
+            categoryId: uuid.nullable(),
+            categoryName: z.string().nullable(),
+            monthlyMinor: minor,
+            count: int,
+          }),
+        ),
+        upcoming: z.array(subscriptionSchema),
+        subscriptions: z.array(subscriptionSchema),
+      }),
+    ),
+    detected: z.array(
+      z.strictObject({
+        signature: z.string(),
+        description: z.string(),
+        merchant: z.string().nullable(),
+        currency,
+        amountMinor: minor,
+        frequency: z.enum(["weekly", "monthly", "yearly"]),
+        occurrences: int,
+        lastOn: date,
+        nextOn: date,
+        accountId: uuid,
+        accountName: z.string(),
+      }),
+    ),
+  })
+  .meta({ title: "Subscriptions" });
+
+/** Notificările (modernizare 2026, pasul J; ADR 0048). */
+export const notificationSchema = z
+  .strictObject({
+    id: uuid,
+    householdId: uuid,
+    kind: z.enum(NOTIFICATION_KINDS),
+    title: z.string(),
+    body: z.string(),
+    link: z.string().nullable(),
+    createdAt: z.string(),
+    readAt: z.string().nullable(),
+  })
+  .meta({ title: "Notification" });
+
+export const notificationPreferencesSchema = z
+  .strictObject({
+    inApp: z.boolean(),
+    email: z.boolean(),
+    kinds: z.array(z.enum(NOTIFICATION_KINDS)),
+  })
+  .meta({ title: "NotificationPreferences" });
+
+/** Cursurile valutare (modernizare 2026, pasul K; ADR 0049). */
+export const fxRatesSchema = z
+  .strictObject({
+    base: z.literal("EUR"),
+    date: date,
+    rates: z.record(z.string(), int.min(1)).meta({
+      description: "Monedă → curs × 1.000.000 (unități din monedă pentru 1 EUR); EUR = 1.000.000.",
+    }),
+  })
+  .meta({ title: "FxRates" });
 
 export const monthlyReportSchema = z
   .strictObject({

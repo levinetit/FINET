@@ -19,6 +19,8 @@ export const ro = {
     goals: "Obiective",
     shopping: "Liste",
     recurring: "Recurențe",
+    subscriptions: "Abonamente",
+    notifications: "Notificări",
     import: "Import",
     scan: "Scanează",
     receipts: "Bonuri",
@@ -27,6 +29,10 @@ export const ro = {
     reports: "Rapoarte",
     insights: "Rapoarte inteligente",
     ask: "Întreabă FINET",
+    health: "Sănătate",
+    forecast: "Prognoză",
+    advisor: "Consilier",
+    netWorth: "Avere netă",
     profile: "Profil",
     settings: "Setări",
     help: "Ajutor",
@@ -251,6 +257,13 @@ export const ro = {
       bank: "Cont bancar",
       savings: "Economii",
       credit_card: "Card de credit",
+      // Modernizare 2026 (ADR 0046): conturi evaluate periodic.
+      investment: "Investiții",
+      property: "Proprietate",
+      vehicle: "Vehicul",
+      other_asset: "Alt activ",
+      loan: "Credit",
+      other_liability: "Altă datorie",
     } as Record<string, string>,
     types: { income: "Venit", expense: "Cheltuială", transfer: "Transfer" } as Record<
       string,
@@ -1696,6 +1709,9 @@ export const ro = {
     statsTitle: "Statistici",
     statsBody: "Utilizarea aplicației (doar pentru administrator), fără date financiare.",
     statsLink: "Deschide statisticile",
+    notificationsTitle: "Notificări",
+    notificationsBody: "Ce avertizări și memento-uri primești, în aplicație sau pe email.",
+    notificationsLink: "Preferințe de notificare",
   },
   // Faza 9 (F9-B, ADR 0021): exportul GDPR și ștergerea contului.
   privacy: {
@@ -2118,6 +2134,442 @@ export const ro = {
     notUnderstoodTitle: "Nu am înțeles",
     note: "Cifrele sunt calculate în aplicație din tranzacțiile pe care le poți vedea; nu e sfat financiar.",
     noRows: "Nicio tranzacție în această perioadă.",
+  },
+  netWorth: {
+    eyebrow: "Active și pasive",
+    title: "Averea netă",
+    intro:
+      "Averea netă = active − pasive. Conturile tranzacționale (numerar, bancă, economii, card) intră cu soldul din tranzacții; investițiile, proprietățile, vehiculele, creditele și celelalte intră cu evaluarea cea mai recentă pe care o adaugi din pagina contului (fără evaluare, cu soldul inițial). Istoricul se recalculează la sfârșitul fiecărei luni din aceleași date.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi averea netă.",
+    noData:
+      "Nu ai conturi încă. Adaugă conturi (inclusiv proprietăți sau credite) ca să vezi averea netă.",
+    asOf: (date: string) => `La ${date}`,
+    assets: "Active",
+    liabilities: "Pasive",
+    net: "Avere netă",
+    byTypeTitle: "Pe tipuri de cont",
+    kinds: { asset: "Activ", liability: "Pasiv" },
+    basis: { balance: "din sold", valuation: "evaluare" },
+    valuedOn: (date: string) => `evaluat la ${date}`,
+    archived: "arhivat",
+    historyTitle: "Evoluția lunară",
+    chartLabel: (currency: string) => `Averea netă la sfârșitul fiecărei luni, ${currency}`,
+    tableMonth: "Luna",
+    addValuationHint: "Adaugă evaluări din pagina fiecărui cont evaluat.",
+    valuations: {
+      title: "Evaluări",
+      hint: "Valoarea contului la o dată, semnată ca un sold: activele pozitive (ex. 250.000), pasivele negative (ex. −120.000). Cea mai recentă e valoarea curentă.",
+      notValued:
+        "Acest tip de cont are soldul din tranzacții; evaluările sunt pentru investiții, proprietăți, vehicule, credite și alte active sau datorii.",
+      empty: "Nicio evaluare încă: contul intră în averea netă cu soldul inițial.",
+      date: "Data evaluării",
+      value: "Valoarea",
+      valueHint: "Poate fi negativă pentru credite și alte datorii.",
+      note: "Notă",
+      noteOptional: "opțional",
+      add: "Adaugă evaluarea",
+      adding: "Se salvează…",
+      added: "Evaluarea a fost adăugată.",
+      delete: "Șterge",
+      deleteQuestion: "Ștergi această evaluare? Averea netă se recalculează din cele rămase.",
+      deleted: "Evaluarea a fost ștearsă.",
+      invalidValue: "Scrie o valoare, de exemplu 250.000 sau −120.000.",
+      exists: "Există deja o evaluare la această dată. Șterge-o întâi dacă vrei s-o înlocuiești.",
+    },
+  },
+  savings: {
+    planTitle: "Planul de economisire",
+    planHint: "Cât trebuie pus deoparte ca ținta să fie atinsă la termen; rotunjit în sus.",
+    remaining: "De strâns",
+    perDay: "pe zi",
+    perWeek: "pe săptămână",
+    perMonth: "pe lună",
+    daysLeft: (n: number) => (n === 1 ? "o zi rămasă" : `${n} zile rămase`),
+    statuses: {
+      done: "Țintă atinsă",
+      no_deadline: "Fără termen: adaugă un termen ca să vezi rata necesară.",
+      on_track: "La termen",
+      overdue: "Termen depășit: restul e scadent acum.",
+    },
+    emergencyTitle: "Fondul de urgență",
+    emergencyHint:
+      "Ținta = luni de cheltuieli medii (ultimele 3 luni cu cheltuieli), din conturile lichide (numerar, bancă, economii).",
+    emergencyNoData: "Fără cheltuieli în ultimele 3 luni: ținta nu se poate calcula.",
+    emergencyAverage: (avg: string) => `Cheltuiala lunară medie: ${avg}.`,
+    emergencyLiquid: (liquid: string) => `Lichid disponibil: ${liquid}.`,
+    emergencyOption: (months: number, target: string) => `${months} luni de cheltuieli (${target})`,
+    emergencyCovered: (covered: string) => `acoperit ${covered}`,
+    emergencyGap: (gap: string, monthly: string) =>
+      `mai ai de strâns ${gap}; ${monthly} pe lună timp de 12 luni`,
+    emergencyReached: "atins",
+    simulateTitle: "Simulează un plan",
+    simulateHint:
+      "Fără să atingi conturile: spune ținta și fie termenul, fie cât poți pune deoparte pe lună.",
+    target: "Ținta",
+    saved: "Ai deja",
+    deadline: "Termenul",
+    monthly: "Rata lunară",
+    currency: "Moneda",
+    simulate: "Calculează",
+    simulating: "Se calculează…",
+    needOne: "Alege un termen sau o rată lunară.",
+    resultDeadline: (daily: string, weekly: string, monthly: string, days: number) =>
+      `La termen (${days} de zile): ${daily} pe zi, ${weekly} pe săptămână, ${monthly} pe lună.`,
+    resultMonthly: (months: number, finishOn: string) =>
+      months === 1
+        ? `Cu rata aleasă ajungi la țintă într-o lună (${finishOn}).`
+        : `Cu rata aleasă ajungi la țintă în ${months} luni (${finishOn}).`,
+    resultDone: "Ținta e deja atinsă.",
+    resultOverdue: "Termenul a trecut: restul e scadent acum.",
+    invalidTarget: "Scrie o țintă pozitivă.",
+    invalidMonthly: "Scrie o rată lunară pozitivă.",
+  },
+  subscriptions: {
+    eyebrow: "Abonamente și plăți recurente",
+    title: "Abonamente",
+    intro:
+      "Fiecare regulă recurentă de cheltuieli e un abonament: costul e normalizat lunar și anual, iar reînnoirea e următoarea scadență. Adaugă sau modifică abonamentele din Recurențe; plățile detectate din istoric pot deveni reguli cu un clic.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi abonamentele.",
+    empty:
+      "Nu ai reguli recurente de cheltuieli. Adaugă-le din Recurențe (chirie, streaming, telefon, sală).",
+    monthly: "Cost lunar",
+    annual: "Cost anual",
+    counts: (active: number, paused: number) =>
+      `${active} ${active === 1 ? "activ" : "active"} · ${paused} ${paused === 1 ? "pe pauză" : "pe pauză"}`,
+    upcomingTitle: "Reînnoiri în următoarele 30 de zile",
+    upcomingEmpty: "Nicio reînnoire în următoarele 30 de zile.",
+    renewsIn: (days: number) =>
+      days < 0
+        ? `scadent de ${-days} zile`
+        : days === 0
+          ? "azi"
+          : days === 1
+            ? "mâine"
+            : `în ${days} zile`,
+    byCategoryTitle: "Pe categorii (cost lunar)",
+    noCategory: "Fără categorie",
+    listTitle: "Toate abonamentele",
+    paused: "pe pauză",
+    perMonth: "/ lună",
+    perYear: "/ an",
+    open: "Deschide regula",
+    detectedTitle: "Plăți recurente detectate din istoric",
+    detectedHint:
+      "Nu sunt reguli încă: acceptă-le din Recurențe ca să intre în abonamente și în prognoză.",
+    detectedEmpty: "Nicio plată recurentă nouă detectată.",
+    detectedLine: (occurrences: number, lastOn: string) =>
+      `${occurrences} apariții, ultima pe ${lastOn}`,
+    manage: "Gestionează în Recurențe",
+  },
+  notifications: {
+    eyebrow: "Avertizări și memento-uri",
+    title: "Notificări",
+    bell: (n: number) =>
+      n === 0 ? "Notificări" : n === 1 ? "O notificare necitită" : `${n} notificări necitite`,
+    intro:
+      "Generate zilnic în aplicație din datele tale (plăți programate, bugete, cheltuieli neobișnuite, obiective, abonamente, rezumatul lunii, documente eșuate). Alege ce primești din Setări → Notificări.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi notificările.",
+    empty: "Nicio notificare. Evaluarea rulează zilnic dimineața.",
+    unreadOnly: "Doar necitite",
+    all: "Toate",
+    markRead: "Marchează citită",
+    markAllRead: "Marchează toate citite",
+    delete: "Șterge",
+    read: "citită",
+    open: "Deschide",
+    settingsLink: "Preferințe de notificare",
+    error: "Nu am putut actualiza notificarea. Încearcă din nou.",
+    kinds: {
+      payment_due: "Plată programată",
+      budget_warning: "Buget aproape de limită",
+      budget_exceeded: "Buget depășit",
+      unusual_spending: "Cheltuială neobișnuită",
+      goal_reminder: "Obiectiv",
+      subscription_renewal: "Reînnoire abonament",
+      monthly_summary: "Rezumatul lunii",
+      sync_failure: "Document eșuat",
+    },
+    kindHints: {
+      payment_due: "Scadențele regulilor recurente din următoarele 3 zile.",
+      budget_warning: "Un buget a trecut de pragul de avertizare în luna curentă.",
+      budget_exceeded: "Un buget a fost depășit în luna curentă.",
+      unusual_spending: "O cheltuială iese din tiparul ultimelor 6 luni (vezi Consilierul).",
+      goal_reminder: "Un obiectiv are termenul în 7 zile sau depășit.",
+      subscription_renewal: "Un abonament se reînnoiește în următoarele 3 zile.",
+      monthly_summary: "În prima zi a lunii, rezumatul lunii precedente.",
+      sync_failure: "Un bon sau un extras nu a putut fi procesat.",
+    },
+    preferences: {
+      title: "Preferințe de notificare",
+      eyebrow: "Setări",
+      intro:
+        "Notificările se calculează în aplicație, din datele tale, o dată pe zi. Emailul e oprit implicit și cere SMTP configurat de operator; conține aceleași texte ca în aplicație.",
+      inApp: "Notificări în aplicație",
+      inAppHint: "Oprite = nu se generează nimic (nici pe email).",
+      email: "Trimite-mi și pe email (digest zilnic)",
+      emailHint: "Doar notificările noi, într-un singur email pe zi.",
+      kindsTitle: "Tipuri de notificări",
+      save: "Salvează",
+      saving: "Se salvează…",
+      saved: "Preferințele au fost salvate.",
+      error: "Preferințele nu au putut fi salvate. Încearcă din nou.",
+    },
+    texts: {
+      payment_due: {
+        title: "Plată programată: {name}",
+        body: "{name} de {amount} e scadentă pe {date}.",
+      },
+      budget_warning: {
+        title: "Bugetul {name} e aproape de limită",
+        body: "Ai cheltuit {spent} din {amount} luna aceasta.",
+      },
+      budget_exceeded: {
+        title: "Bugetul {name} a fost depășit",
+        body: "Ai cheltuit {spent} din {amount} luna aceasta.",
+      },
+      unusual_spending: { title: "Cheltuială neobișnuită de {amount}" },
+      goal_overdue: {
+        title: "Termenul obiectivului {name} a trecut",
+        body: "Mai ai de strâns {remaining} pentru {name}. Prelungește termenul sau ajustează ținta.",
+      },
+      goal_soon: {
+        title: "Obiectivul {name} are termenul în {days} zile",
+        body: "Mai ai de strâns {remaining} pentru {name}.",
+      },
+      subscription_renewal: {
+        title: "Se reînnoiește: {name}",
+        body: "{name} de {amount} se reînnoiește pe {date}.",
+      },
+      monthly_summary: { title: "Rezumatul lunii {label}" },
+      sync_failure: {
+        title: "Un document nu a putut fi procesat",
+        receipt:
+          "Un bon încărcat a eșuat la procesare. Deschide Bonuri ca să-l verifici sau să-l reîncarci.",
+        statement: "Un extras PDF nu a putut fi citit. Încearcă exportul CSV al băncii.",
+      },
+    },
+    email: {
+      subject: (n: number) => (n === 1 ? "FINET: o notificare nouă" : `FINET: ${n} notificări noi`),
+      greeting: (name: string) => `Salut, ${name}!`,
+      open: "Deschide în FINET",
+      footer:
+        "Poți opri emailurile din Setări → Notificări. FINET nu trimite niciodată linkuri de autentificare în aceste mesaje.",
+    },
+  },
+  fx: {
+    approx: (amount: string, date: string) => `≈ ${amount} în total, la cursul BCE din ${date}`,
+    missing: (currencies: string) => `fără curs pentru ${currencies}`,
+    hint: "Conversie doar pentru afișare, din cursurile zilnice ale Băncii Centrale Europene; sumele rămân în moneda lor.",
+  },
+  advisor: {
+    eyebrow: "Consilier financiar",
+    title: "Consilierul FINET",
+    label:
+      "Analize calculate în aplicație din datele tale, fără AI. Nu este sfat financiar; nimic nu se execută automat.",
+    intro:
+      "Consilierul citește cheltuielile lunii și istoricul ultimelor 6 luni și arată ce iese din tipar, ce se schimbă și ce ai putea face, cu cifrele și regula din spatele fiecărei constatări. Pentru întrebări libere folosește „Întreabă FINET”.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi analiza.",
+    noData: "Nu există cheltuieli în această lună. Adaugă tranzacții sau importă un extras.",
+    healthTitle: "Scorul de sănătate",
+    healthLink: "Vezi componentele",
+    forecastTitle: "Prognoza",
+    forecastLowest: (amount: string, date: string, days: number) =>
+      `Cel mai mic sold proiectat în următoarele ${days} de zile: ${amount}, pe ${date}.`,
+    forecastLink: "Vezi prognoza",
+    suggestionsTitle: "Ce ai putea face",
+    priority: { high: "Prioritate mare", medium: "Prioritate medie", low: "Prioritate mică" },
+    unusualTitle: "Tranzacții neobișnuite",
+    unusualEmpty:
+      "Nicio cheltuială din această lună nu iese din tiparul ultimelor 6 luni (sau nu există încă istoric suficient: minimum 3 cheltuieli la același comerciant sau 5 în aceeași categorie).",
+    unusualOpen: "Deschide tranzacția",
+    patternsTitle: "Tipare",
+    patternsEmpty: "Nicio schimbare notabilă față de lunile anterioare.",
+    rulesTitle: "Regulile folosite",
+    rules: [
+      "Neobișnuit: cheltuiala e de cel puțin 2 ori mediana cheltuielilor anterioare la același comerciant (minimum 3) sau din aceeași categorie (minimum 5), și cel puțin 1 % din cheltuielile lunii; cele generate de reguli recurente nu se numără.",
+      "Tipar de categorie: luna e cu cel puțin 25 % peste sau sub media lunilor anterioare cu cheltuieli (minimum 2), iar categoria are cel puțin 2 % din lună.",
+      "Comerciant nou: cel puțin 2 cheltuieli în lună la un comerciant fără istoric; concentrare: un comerciant are cel puțin 30 % din cheltuielile lunii.",
+      "Sugestiile folosesc scorul de sănătate, prognoza, bugetele și tiparele; sumele sunt calculate din datele tale.",
+    ],
+    unusual: {
+      uncategorized: "fără categorie",
+      byMerchant:
+        "{amount} la {merchant}: de {ratio} mediana de {baseline} a cheltuielilor tale anterioare la același comerciant.",
+      byCategory:
+        "{amount} în categoria {category}: de {ratio} mediana de {baseline} a cheltuielilor tale anterioare din categorie.",
+    },
+    patterns: {
+      uncategorized: "Fără categorie",
+      category_up:
+        "{category}: {current} luna aceasta, cu {change} peste media de {baseline} din ultimele {months} luni cu cheltuieli.",
+      category_down:
+        "{category}: {current} luna aceasta, cu {change} sub media de {baseline} din ultimele {months} luni cu cheltuieli.",
+      new_merchant:
+        "Comerciant nou: {merchant}, {count} cheltuieli ({total}) fără istoric în ultimele 6 luni.",
+      merchant_concentration: "{merchant} adună {share} din cheltuielile lunii ({total}).",
+    },
+    suggestions: {
+      overdraft_ahead: {
+        title: "Soldul proiectat scade sub zero",
+        text: "În următoarele {days} de zile soldul proiectat ajunge la −{amount} pe {date}. Mută bani dintr-un cont de economii sau amână o plată programată.",
+      },
+      pay_down_card: {
+        title: "Reduce datoria pe card",
+        text: "Soldurile negative (card de credit, descoperit) însumează {amount}. Rambursarea lor înaintea dobânzii îmbunătățește și scorul (componenta „Datorii”).",
+      },
+      review_budgets: {
+        title: "Bugete depășite",
+        text: "Bugetele {budgets} sunt depășite luna aceasta. Verifică tranzacțiile din categoriile lor sau ajustează plafoanele.",
+      },
+      emergency_fund: {
+        title: "Construiește fondul de urgență",
+        text: "Ținta de {months} luni de cheltuieli e {target}; ai {liquid} lichid. Pune deoparte {monthly} pe lună și ajungi acolo într-un an. Poți crea un obiectiv cu această sumă.",
+      },
+      trim_category: {
+        title: "Reduce o categorie în creștere",
+        text: "{category} a crescut peste media ta ({current} luna aceasta). O reducere de 10 % înseamnă {trim} pe lună, direct în rata de economisire.",
+      },
+      check_unusual: {
+        title: "Verifică tranzacțiile neobișnuite",
+        text: "{count} cheltuieli ies din tiparul tău (vezi lista). Dacă sunt corecte, nimic de făcut; dacă nu, corectează-le ca rapoartele să rămână exacte.",
+      },
+      automate_recurring: {
+        title: "Adaugă regulile recurente",
+        text: "Nu ai reguli recurente active. Chiria, abonamentele și ratele ca reguli fac prognoza mai precisă și îți arată plățile viitoare.",
+      },
+      keep_going: {
+        title: "Nimic urgent",
+        text: "Cheltuielile sunt în tipar, bugetele în limită și nu există datorii pe termen scurt. Păstrează ritmul.",
+      },
+    },
+  },
+  forecast: {
+    eyebrow: "Cash-flow",
+    title: "Prognoza de cash-flow",
+    label:
+      "Estimare calculată din soldurile, regulile recurente și istoricul tău. Nu este sfat financiar; cifrele reale pot diferi.",
+    intro:
+      "Soldul proiectat pornește de la soldul de azi al conturilor active și adună scadențele regulilor recurente (plățile viitoare) și media zilnică a veniturilor și cheltuielilor nerecurente din ultimele 3 luni complete. Totul se calculează în aplicație, fără AI.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi prognoza.",
+    noData: "Nu există conturi, reguli recurente sau istoric: nu e nimic de prognozat.",
+    horizon: "Orizontul",
+    days: (n: number) => `${n} de zile`,
+    showHorizon: "Arată",
+    today: "Azi",
+    opening: "Soldul de azi",
+    projected: "Sold proiectat",
+    scheduledIncome: "Venituri programate",
+    scheduledExpense: "Plăți programate",
+    baselineExpense: "Cheltuieli estimate (nerecurente)",
+    baselineIncome: "Venituri estimate (nerecurente)",
+    lowest: "Cel mai mic sold",
+    lowestOn: (date: string) => `pe ${date}`,
+    overdraftWarning: "Soldul proiectat scade sub zero în acest orizont.",
+    chartTitle: "Soldul proiectat pe zile",
+    chartLabel: (currency: string) => `Soldul proiectat pe zile, ${currency}`,
+    tableDate: "Data",
+    tableBalance: "Sold proiectat",
+    tableScheduled: "Scadențe",
+    upcomingTitle: "Plăți și venituri viitoare",
+    upcomingEmpty:
+      "Nicio regulă recurentă activă cu scadență în acest orizont. Adaugă reguli în Recurențe ca prognoza să le includă.",
+    upcomingRule: "Regula",
+    upcomingAmount: "Suma",
+    baselineTitle: "Linia de bază",
+    baselineText: (income: string, expense: string, months: number, days: number) =>
+      `În medie, pe zi: ${income} venituri și ${expense} cheltuieli nerecurente, din ${months} luni complete (${days} de zile) de istoric.`,
+    baselineNone:
+      "Fără istoric în ultimele 3 luni complete: linia de bază e zero, iar prognoza conține doar scadențele regulilor.",
+    confidenceTitle: "Încrederea în prognoză",
+    confidence: { high: "Ridicată", medium: "Medie", low: "Scăzută" },
+    confidenceScore: (score: number) => `${score} din 100`,
+    reasons: {
+      history_full: "Istoric complet: ultimele {n} luni au activitate.",
+      history_partial: "Istoric parțial: doar {n} din ultimele 3 luni au activitate.",
+      history_none: "Fără istoric în ultimele 3 luni complete: linia de bază e zero.",
+      stable_spending: "Cheltuielile lunare sunt stabile (variație sub 10 %).",
+      variable_spending: "Cheltuielile lunare variază moderat (10–30 %).",
+      erratic_spending: "Cheltuielile lunare variază mult (peste 30 %).",
+      recurring_covered:
+        "Peste jumătate din cheltuieli vin din reguli recurente, cu scadențe cunoscute.",
+      recurring_partial:
+        "O parte din cheltuieli vin din reguli recurente; restul e estimat din medie.",
+      recurring_none: "Nicio cheltuială din reguli recurente: totul e estimat din medie.",
+      horizon_long: "Orizont de {days} de zile: incertitudinea crește cu distanța.",
+    },
+  },
+  health: {
+    eyebrow: "Sănătate financiară",
+    title: "Scorul de sănătate financiară",
+    nav: "Sănătate",
+    label:
+      "Scor orientativ calculat din datele tale. Nu este un scor de credit și nu este sfat financiar.",
+    intro:
+      "Un scor de la 0 la 100, calculat în aplicație din tranzacțiile, conturile și bugetele pe care le poți vedea. Fiecare componentă arată valoarea măsurată, pragurile folosite și ce ar schimba scorul. Nu se trimite nimic în afara aplicației.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi scorul.",
+    noData: "Nu există încă date pentru această lună. Adaugă tranzacții sau importă un extras.",
+    noScore: "Fără scor: nicio componentă nu are date în această monedă.",
+    scoreOf: "din 100",
+    monthOne: "lună",
+    monthMany: "luni",
+    bands: { good: "Bun", ok: "Rezonabil", watch: "De urmărit", fragile: "Fragil" },
+    bandHints: {
+      good: "Economisești constant și ai rezerve. Păstrează ritmul.",
+      ok: "Situație stabilă, cu loc de îmbunătățire la componentele slabe de mai jos.",
+      watch: "Câteva componente trag scorul în jos; începe cu cea cu ponderea cea mai mare.",
+      fragile:
+        "Cheltuielile depășesc veniturile sau lipsesc rezervele. Vezi explicațiile de mai jos.",
+    },
+    componentsTitle: "Componentele scorului",
+    weight: "Pondere",
+    noScoreComponent: "Fără date",
+    statuses: { good: "Bine", ok: "Acceptabil", weak: "Slab", none: "Fără date" },
+    thresholdsTitle: "Cum se calculează",
+    thresholds: [
+      "Rata de economisire (25 %): (venit − cheltuieli) / venit în luna aleasă; ≥ 20 % dă 100, 0 % dă 40, ≤ −20 % dă 0.",
+      "Flux de numerar (15 %): câte dintre ultimele 6 luni cu activitate au venit ≥ cheltuieli.",
+      "Fond de urgență (20 %): soldul lichid (cash, bancă, economii) împărțit la cheltuiala lunară medie din ultimele 3 luni; 6 luni de acoperire dau 100.",
+      "Stabilitatea cheltuielilor (15 %): abaterea medie a cheltuielilor lunare față de medie, pe ultimele 6 luni; ≤ 10 % dă 100, 50 % dă 20.",
+      "Aderența la bugete (10 %): bugetele lunii, verde = 1, galben = ½, roșu = 0.",
+      "Datorii (15 %): soldurile negative (carduri de credit, descoperiri) față de venitul lunar; 0 dă 100, ≥ 50 % dă 0.",
+      "O componentă fără date nu intră în medie; ponderile celorlalte se redistribuie.",
+    ],
+    components: {
+      savings_rate: {
+        name: "Rata de economisire",
+        noIncome: "Fără venituri înregistrate în această lună, rata nu se poate calcula.",
+        saved: "Ai economisit {net} din {income} venit ({rate}). Peste 20 % înseamnă scor maxim.",
+        overspent:
+          "Ai cheltuit cu {net} mai mult decât venitul de {income} ({rate}). Scorul crește când cheltuielile scad sub venit.",
+      },
+      cash_flow: {
+        name: "Flux de numerar",
+        noData: "Nicio lună cu activitate în ultimele 6 luni.",
+        text: "{positive} din {total} luni cu activitate au avut venituri cel puțin egale cu cheltuielile.",
+      },
+      emergency_fund: {
+        name: "Fond de urgență",
+        noExpenses: "Fără cheltuieli în ultimele luni, acoperirea nu se poate estima.",
+        text: "Soldul lichid de {liquid} acoperă {months} de cheltuieli (media lunară: {avg}). Ținta pentru scor maxim: {target} luni.",
+      },
+      spending_stability: {
+        name: "Stabilitatea cheltuielilor",
+        notEnough: "Sunt necesare cel puțin 3 luni cu cheltuieli.",
+        text: "Pe {count} luni, cheltuielile au variat în medie cu {deviation} față de media de {mean}.",
+      },
+      budget_adherence: {
+        name: "Aderența la bugete",
+        noBudgets: "Nu ai bugete active în această lună; creează unul ca să intre în scor.",
+        text: "{green} bugete în limită, {yellow} aproape de limită, {red} depășite, din {total}.",
+      },
+      debt: {
+        name: "Datorii pe termen scurt",
+        none: "Fără solduri negative pe carduri de credit sau descoperiri de cont.",
+        noIncome:
+          "Ai datorii de {debt}, dar niciun venit înregistrat din care să se calculeze raportul.",
+        text: "Datoria de {debt} reprezintă {ratio} din venitul lunar de {income}. Sub 50 % scorul crește liniar spre 100.",
+      },
+    },
   },
   summary: {
     title: "Rezumatul lunii",

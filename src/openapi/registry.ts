@@ -13,6 +13,9 @@ import { budgetCreateSchema, budgetUpdateSchema } from "@/modules/budgets/budget
 import { MAX_TOP_CATEGORIES } from "@/modules/dashboard/dashboard.schema";
 import { PDF_CONTENT_TYPE, XLSX_CONTENT_TYPE } from "@/lib/export-table";
 import { CSV_DIALECTS } from "@/modules/exports/csv";
+import { savingsSimulateSchema } from "@/modules/goals/plan";
+import { preferencesPutSchema } from "@/modules/notifications/notifications.schema";
+import { valuationCreateSchema } from "@/modules/net-worth/net-worth.schema";
 import {
   goalContributionSchema,
   goalCreateSchema,
@@ -102,12 +105,22 @@ import {
   consentStateSchema,
   dashboardSchema,
   dataOf,
+  adviceSchema,
+  forecastSchema,
+  fxRatesSchema,
   goalSchema,
+  healthScoreSchema,
   householdDetailSchema,
   householdSummarySchema,
   meSchema,
   moneySchema,
   monthlyReportSchema,
+  netWorthSchema,
+  notificationPreferencesSchema,
+  notificationSchema,
+  savingsPlanSchema,
+  savingsSimulationSchema,
+  subscriptionsSchema,
   recurringCountsSchema,
   recurringGenerateResultSchema,
   recurringRuleSchema,
@@ -115,6 +128,7 @@ import {
   tagSchema,
   transactionSchema,
   transferSchema,
+  valuationSchema,
 } from "./schemas";
 
 /**
@@ -382,6 +396,86 @@ export const OPERATIONS: readonly Operation[] = [
       description: "Starea nouă.",
     },
     errors: [...MUTATION_ERRORS],
+  },
+  // --- Notificări (modernizare 2026; ADR 0048) ------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/me/notification-preferences",
+    operationId: "getNotificationPreferences",
+    tag: "me",
+    summary: "Preferințele de notificare (în aplicație, email, tipuri).",
+    success: {
+      status: 200,
+      schema: dataOf(notificationPreferencesSchema),
+      description: "Preferințele.",
+    },
+    errors: [],
+  },
+  {
+    method: "PUT",
+    path: "/api/v1/me/notification-preferences",
+    operationId: "putNotificationPreferences",
+    tag: "me",
+    summary: "Schimbă preferințele de notificare.",
+    body: { schema: preferencesPutSchema },
+    success: {
+      status: 200,
+      schema: dataOf(notificationPreferencesSchema),
+      description: "Preferințele noi.",
+    },
+    errors: [...MUTATION_ERRORS],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/notifications",
+    operationId: "listNotifications",
+    tag: "me",
+    summary: "Notificările utilizatorului în gospodăria curentă, cele mai noi primele.",
+    description:
+      "Generate zilnic de worker din datele existente (plăți programate, bugete, cheltuieli neobișnuite, obiective, abonamente, rezumatul lunii, documente eșuate), cu deduplicare. `unread` = numărul de necitite. Merge și cu abonament expirat.",
+    query: [
+      { name: "unread", schema: z.enum(["true", "false"]), description: "Doar necitite." },
+      { name: "limit", schema: intParam, description: "Cel mult (1–200, implicit 50)." },
+    ],
+    success: {
+      status: 200,
+      schema: z.strictObject({ data: z.array(notificationSchema), unread: z.number().int() }),
+      description: "Notificările.",
+    },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: `/api/v1/notifications/${PATH_ID}/read`,
+    operationId: "readNotification",
+    tag: "me",
+    summary: "Marchează notificarea citită (idempotent).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 204, schema: null, description: "Marcată." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/notifications/read-all",
+    operationId: "readAllNotifications",
+    tag: "me",
+    summary: "Marchează toate notificările citite.",
+    body: { schema: z.strictObject({}), optional: true },
+    success: {
+      status: 200,
+      schema: dataOf(z.strictObject({ updated: z.number().int() })),
+      description: "Câte au fost marcate.",
+    },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "DELETE",
+    path: `/api/v1/notifications/${PATH_ID}`,
+    operationId: "deleteNotification",
+    tag: "me",
+    summary: "Șterge o notificare.",
+    success: { status: 204, schema: null, description: "Ștearsă." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
   },
   // --- GDPR (Faza 9, ADR 0021) ---------------------------------------------------------------
   {
@@ -1452,6 +1546,152 @@ export const OPERATIONS: readonly Operation[] = [
     body: { schema: z.strictObject({}), optional: true },
     success: { status: 200, schema: dataOf(recurringRuleSchema), description: "Regula." },
     errors: [VALIDATION, FORBIDDEN, NOT_FOUND, CONFLICT, MEDIA, TOO_LARGE, REUSED],
+  },
+  // --- Inteligență financiară (modernizare 2026; ADR 0045) ------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/health-score",
+    operationId: "getHealthScore",
+    tag: "reports",
+    summary: "Scorul de sănătate financiară al lunii, separat pe monedă.",
+    description:
+      "Scor 0–100 calculat în aplicație (fără AI) din rata de economisire, fluxul de numerar, fondul de urgență, stabilitatea cheltuielilor, aderența la bugete și datoriile pe termen scurt; fiecare componentă are valoarea, ponderea și explicația. Nu e scor de credit. O componentă fără date e `null` și nu intră în medie.",
+    query: [MONTH_PARAM],
+    success: { status: 200, schema: dataOf(healthScoreSchema), description: "Scorul." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/forecast",
+    operationId: "getForecast",
+    tag: "reports",
+    summary: "Prognoza de cash-flow la 30/60/90 de zile, separat pe monedă.",
+    description:
+      "Soldul proiectat pe zile din soldul de azi al conturilor active, scadențele regulilor recurente active (plățile viitoare) și media zilnică a veniturilor/cheltuielilor nerecurente din ultimele 3 luni complete; rezumate la 30/60/90 de zile (sold proiectat, venituri și cheltuieli programate, minimul și ziua lui) și un indicator de încredere cu motive. Calculat în aplicație, fără AI; `label` spune că e o estimare.",
+    query: [
+      {
+        name: "days",
+        schema: z.enum(["30", "60", "90"]),
+        description: "Orizontul în zile (implicit 90).",
+      },
+    ],
+    success: { status: 200, schema: dataOf(forecastSchema), description: "Prognoza." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/advisor",
+    operationId: "getAdvice",
+    tag: "reports",
+    summary: "Consilierul financiar al lunii, separat pe monedă.",
+    description:
+      "Analize deterministe (fără AI) peste cheltuielile lunii și istoricul ultimelor 6 luni: tranzacții neobișnuite (≥ 2× mediana aceluiași comerciant sau a categoriei), tipare (categorii în creștere/scădere ≥ 25 %, comercianți noi, concentrare), sugestii explicate cu sume calculate (fond de urgență, reducerea unei categorii, cardul de credit, bugete depășite, sold proiectat negativ), plus scorul de sănătate și, pentru luna curentă, minimul prognozei. Nimic nu se execută; `label` spune că nu e sfat financiar.",
+    query: [MONTH_PARAM],
+    success: { status: 200, schema: dataOf(adviceSchema), description: "Analiza." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/net-worth",
+    operationId: "getNetWorth",
+    tag: "reports",
+    summary: "Averea netă curentă și istoricul lunar, separat pe monedă (ADR 0046).",
+    description:
+      "Valoarea fiecărui cont vizibil (inclusiv arhivat): soldul din tranzacții pentru conturile tranzacționale, evaluarea cea mai recentă pentru cele evaluate (investiții, proprietăți, vehicule, credite, altele). Activele = valorile pozitive, pasivele = cele negative; avere netă = active − pasive. Istoricul = aceeași formulă la sfârșitul fiecăreia dintre ultimele `months` luni (implicit 12, cel mult 60), recalculat, fără instantanee.",
+    query: [
+      {
+        name: "months",
+        schema: intParam,
+        description: "Câte luni de istoric (1–60, implicit 12).",
+      },
+    ],
+    success: { status: 200, schema: dataOf(netWorthSchema), description: "Averea netă." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: pathOf("/api/v1/accounts", "/valuations"),
+    operationId: "listAccountValuations",
+    tag: "accounts",
+    summary: "Evaluările contului, cele mai noi primele.",
+    success: { status: 200, schema: dataOf(z.array(valuationSchema)), description: "Evaluările." },
+    errors: [NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: pathOf("/api/v1/accounts", "/valuations"),
+    operationId: "createAccountValuation",
+    tag: "accounts",
+    summary: "O evaluare nouă a unui cont evaluat (`Idempotency-Key` opțional).",
+    description:
+      "Doar pentru tipurile `investment`, `property`, `vehicle`, `other_asset`, `loan`, `other_liability` (altfel 400). Valoarea e semnată ca un sold (activ +, pasiv −), în unități minore (`valueMinor`) sau ca text (`value`). O singură evaluare pe zi și cont (409 `valuation_exists`); data nu poate fi în viitor și nici mai veche de 10 ani.",
+    body: { schema: valuationCreateSchema },
+    success: { status: 201, schema: dataOf(valuationSchema), description: "Evaluarea creată." },
+    errors: [...IDEMPOTENT_ERRORS, NOT_FOUND],
+    idempotent: true,
+  },
+  {
+    method: "DELETE",
+    path: `${pathOf("/api/v1/accounts", "/valuations")}/{valuationId}`,
+    operationId: "deleteAccountValuation",
+    tag: "accounts",
+    summary: "Șterge o evaluare a contului.",
+    success: { status: 204, schema: null, description: "Ștearsă." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/savings-plan",
+    operationId: "getSavingsPlan",
+    tag: "goals",
+    summary:
+      "Planul de economisire: obiectivele active cu rata necesară și fondul de urgență (ADR 0047).",
+    description:
+      "Pentru fiecare obiectiv activ: restul de strâns și suma pe zi / săptămână / lună ca ținta să fie atinsă la termen (rotunjit în sus; `no_deadline` fără termen, `overdue` după termen, `done` atins). Fondul de urgență pe monedă: media cheltuielilor ultimelor 3 luni, lichidul, țintele la 3 și 6 luni cu diferența și rata lunară pe 12 luni.",
+    success: { status: 200, schema: dataOf(savingsPlanSchema), description: "Planul." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/savings-plan/simulate",
+    operationId: "simulateSavings",
+    tag: "goals",
+    summary: "Simulează un plan de economisire (fără scriere; merge și cu abonament expirat).",
+    description:
+      "Ținta (`targetMinor` sau `target`), cât ai deja (`savedMinor`, implicit 0) și, opțional, termenul (`deadline`, ≥ azi) și/sau rata lunară (`monthlyMinor` sau `monthly`). Răspunsul are planul la termen și/sau durata la rata dată.",
+    body: { schema: savingsSimulateSchema },
+    success: { status: 200, schema: dataOf(savingsSimulationSchema), description: "Simularea." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/subscriptions",
+    operationId: "getSubscriptions",
+    tag: "recurring",
+    summary:
+      "Abonamentele: regulile recurente de cheltuieli, normalizate lunar și anual (ADR 0047).",
+    description:
+      "Pe monedă: numărul de abonamente active și pe pauză, costul lunar și anual normalizat (lunar = suma / interval; anual = suma / (12 × interval); săptămânal × 52/12; zilnic × 365/12), gruparea pe categorii, reînnoirile din următoarele 30 de zile și lista completă (fără regulile încheiate). `detected` = plățile recurente propuse din istoric (ADR 0019) care nu sunt încă reguli.",
+    success: { status: 200, schema: dataOf(subscriptionsSchema), description: "Abonamentele." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/fx/rates",
+    operationId: "getFxRates",
+    tag: "reports",
+    summary: "Cursurile BCE cele mai recente (baza EUR), pentru afișare (ADR 0049).",
+    description:
+      "Cursurile zilnice ale Băncii Centrale Europene, descărcate de worker cu `FX_RATES=1`: `rates` = monedă → curs × 1.000.000 (întreg). `?date=` dă cursurile cele mai recente de până la acea zi (rapoarte istorice). 404 dacă nu există niciun curs (worker oprit sau încă nerulat). Conversia e doar pentru afișare; sumele stocate rămân în moneda lor.",
+    query: [
+      {
+        name: "date",
+        schema: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/),
+        description: "Ziua `YYYY-MM-DD` (implicit cea mai recentă).",
+      },
+    ],
+    success: { status: 200, schema: dataOf(fxRatesSchema), description: "Cursurile." },
+    errors: [VALIDATION, NOT_FOUND],
   },
   // --- Dashboard și raportul lunar -----------------------------------------------------------
   {

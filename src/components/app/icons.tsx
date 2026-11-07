@@ -197,6 +197,16 @@ export function SettingsIcon() {
 }
 
 /** Semnul întrebării, pentru „Ajutor” (Faza 9). */
+/** Clopoțelul notificărilor (ADR 0048). */
+export function BellIcon() {
+  return (
+    <Icon>
+      <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z" />
+      <path d="M10 20a2 2 0 0 0 4 0" />
+    </Icon>
+  );
+}
+
 export function HelpIcon() {
   return (
     <Icon>

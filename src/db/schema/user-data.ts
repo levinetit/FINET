@@ -40,7 +40,10 @@ export const userPreferences = finet.table(
   (t) => [
     check("user_preferences_locale_format", sql`${t.locale} ~ '^[a-z]{2}-[A-Z]{2}$'`),
     check("user_preferences_timezone_length", sql`char_length(${t.timezone}) between 1 and 64`),
-    check("user_preferences_currency_valid", sql`${t.defaultCurrency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "user_preferences_currency_valid",
+      sql`${t.defaultCurrency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
     check("user_preferences_theme_valid", sql`${t.theme} in ('system', 'light', 'dark')`),
   ],
 );

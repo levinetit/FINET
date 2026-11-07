@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
+import { log } from "@/lib/log";
 import { type Db, withRlsOn } from "@/db";
 import type { Config } from "@/lib/config";
 import { parseRefCode, redeemReferral } from "@/modules/referrals/referrals.service";
@@ -217,7 +218,7 @@ export async function completeRegistration(
     try {
       await redeemReferral(db, user.id, claims.r);
     } catch {
-      console.error("[register] recomandarea nu a putut fi aplicată");
+      log.error("register", "referral_apply_failed");
     }
   }
   return { ok: true };

@@ -11,6 +11,7 @@ import { useHydrated } from "@/app/_lib/use-hydrated";
 import { ro } from "@/messages/ro";
 
 import {
+  BellIcon,
   CartIcon,
   ChartIcon,
   FolderIcon,
@@ -54,6 +55,8 @@ const ITEMS = [
   // Faza 10: listele de cumpărături (bifare la raft, comparație cu bonul); pe telefon în „Mai mult”.
   { href: "/shopping-lists", label: ro.nav.shopping, icon: CartIcon, mobile: false },
   { href: "/recurring", label: ro.nav.recurring, icon: RepeatIcon, mobile: false },
+  // Modernizare 2026 (ADR 0047): abonamentele = vedere peste regulile recurente de cheltuieli.
+  { href: "/subscriptions", label: ro.nav.subscriptions, icon: RepeatIcon, mobile: false },
   // Faza 8: familia (membri, invitații, solduri, decontări); pe telefon în „Mai mult”.
   { href: "/family", label: ro.nav.family, icon: UsersIcon, mobile: false },
   { href: "/reports", label: ro.nav.reports, icon: ChartIcon, mobile: true },
@@ -61,6 +64,13 @@ const ITEMS = [
   { href: "/insights", label: ro.nav.insights, icon: ChartIcon, mobile: false },
   // Faza 10 (F10-C): întrebări în limbaj natural despre cheltuieli; pe telefon în „Mai mult”.
   { href: "/ask", label: ro.nav.ask, icon: HelpIcon, mobile: false },
+  // Modernizare 2026 (ADR 0045): scorul de sănătate financiară; pe telefon în „Mai mult”.
+  { href: "/health", label: ro.nav.health, icon: TargetIcon, mobile: false },
+  { href: "/forecast", label: ro.nav.forecast, icon: ChartIcon, mobile: false },
+  { href: "/advisor", label: ro.nav.advisor, icon: HelpIcon, mobile: false },
+  { href: "/net-worth", label: ro.nav.netWorth, icon: WalletIcon, mobile: false },
+  // Modernizare 2026 (ADR 0048): notificările; pe telefon în „Mai mult”.
+  { href: "/notifications", label: ro.nav.notifications, icon: BellIcon, mobile: false },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
   // Faza 9: setările aplicației (instalare PWA, aplicația Android) și ghidul.
   { href: "/settings", label: ro.nav.settings, icon: SettingsIcon, mobile: false },

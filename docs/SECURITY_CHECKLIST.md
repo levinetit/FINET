@@ -773,3 +773,17 @@ Revizuire manuală a codului din PR #49–#56 (migrațiile 0023–0026, `entitle
 - [ ] **L4 (mică): plafonul de membri** (invitații) se verifică fără lock: invitații simultane pot depăși plafonul cu câteva locuri; acceptarea reverifică și anulează intrarea. Acceptat.
 - [ ] **L5 (informativ): `household_plan(uuid)`** răspunde pentru orice UUID (deja acceptat în §38); `plans` e vizibil oricărui utilizator autentificat, inclusiv planul intern „founder”.
 - [ ] **Info:** workerul continuă documentele deja puse în coadă după expirarea abonamentului (cost mic pentru operator); `/api/auth/*` nu e blocat de abonament (acțiuni de cont, intenționat).
+
+## 42. Modernizarea 2026: revizuirea modulelor noi și întăririle (2026-11-07; ADR 0045–0051)
+
+Revizuire completă în `docs/audit/FINET_SECURITY_AUDIT.md`. Pe scurt:
+
+- [x] **Toate rutele noi de scriere trec prin `handle`/`handleAlways`** (evaluări, notificări, preferințe, simulare); citirile noi prin `handle` cu `currentHousehold`. Inventariat: `src/app/api/v1/**/route.ts` ↔ registrul OpenAPI (test).
+- [x] **RLS `ENABLE` + `FORCE`** pe `account_valuations`, `notifications`, `notification_preferences`, `fx_rates`; GRANT-uri minime; fără UPDATE pe conținutul notificărilor; fără DELETE pe cursuri (teste în `migrate.test.ts`).
+- [x] **O singură funcție `SECURITY DEFINER` nouă** (`notification_targets`), doar id-uri, `search_path = pg_catalog`.
+- [x] **L8 închis**: bearer ⇒ cookie ignorat (test `me.test.ts`).
+- [x] **LOW-4 închis**: `HOUSEHOLD_CAPS` în serviciile de creare, 409 `household_limit_reached` (test `caps.test.ts`).
+- [x] **Cereri externe noi**: doar BCE, gazdă fixă, HTTPS, fără redirecționări, corp plafonat, doar cu `FX_RATES=1`, doar în worker.
+- [x] **Lanțul CI**: acțiuni pe SHA, `pnpm audit` blocant, CodeQL, gitleaks, Trivy, digest de imagine, hash pnpm.
+- [ ] **L6** (token de resetare în clar) — deschis, dependență Better Auth.
+- [ ] **MFA pentru `saas` public** — deschis (decizie de produs).

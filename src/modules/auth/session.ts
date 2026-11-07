@@ -47,9 +47,14 @@ function isBearer(headers: Headers): boolean {
 }
 
 export async function requireSession(request: Request, deps: SessionDeps): Promise<SessionInfo> {
+  const bearer = isBearer(request.headers);
   const headers = withTrustedClientIp(request.headers, {
     accessVerified: deps.config.access.clientIpTrusted,
   });
+  // L8 (revizuirea Fazei 1, închisă în modernizarea 2026): o cerere cu antet bearer e scutită de
+  // CSRF, deci sesiunea ei trebuie să vină DOAR din token. Cookie-ul se elimină înainte de
+  // verificare: un bearer invalid + cookie valid nu mai dă o sesiune „bearer” fără Origin.
+  if (bearer) headers.delete("cookie");
   let result: Awaited<ReturnType<FinetAuth["api"]["getSession"]>> = null;
   try {
     result = await deps.auth.api.getSession({ headers, query: { disableCookieCache: true } });
@@ -59,7 +64,7 @@ export async function requireSession(request: Request, deps: SessionDeps): Promi
   if (!result) throw new UnauthenticatedError();
   const user = await findUserById(deps.db, result.user.id);
   if (!user || user.status !== "active") throw new UnauthenticatedError();
-  return { userId: user.id, sessionId: result.session.id, viaBearer: isBearer(request.headers) };
+  return { userId: user.id, sessionId: result.session.id, viaBearer: bearer };
 }
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);

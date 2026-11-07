@@ -183,6 +183,27 @@
       "when": 1795800000000,
       "tag": "0026_feedback_reward",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795900000000,
+      "tag": "0027_net_worth",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1796000000000,
+      "tag": "0028_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1796100000000,
+      "tag": "0029_currencies",
+      "breakpoints": true
     }
   ]
 }

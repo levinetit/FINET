@@ -739,3 +739,15 @@ Agentul nu a rulat nimic din această secțiune. ADR 0037, SECURITY_CHECKLIST §
      feedback_max_rewards = <plafon GLOBAL de recompense>;
    ```
    Apoi administratorul apasă „Acordă recompensă” pe un feedback din `/admin`. O dată pe utilizator; un abonament manual/fondator/plătit nu se atinge (`not_applicable`). Oprire: `feedback_days = 0`.
+
+## 4aa. Modernizarea 2026 (branch `feature/finet-modernization-2026`, migrațiile 0027–0029) — pe producție (după merge și revizuiri)
+
+Totul de mai jos e al operatorului; nimic nu a fost rulat pe producție din branch. Ordinea e obligatorie (migrațiile înaintea imaginilor noi: codul nou citește tabelele noi).
+
+1. **Backup:** `sudo sh /srv/finet/src/ops/backup/run-backup.sh` (restic → Drive), ca la orice migrație.
+2. **Imaginile:** `sudo sh /srv/finet/src/ops/deploy/pull-images.sh <sha40 al merge-ului> web|tools|backup` (din rularea `images` a lui `main`, `event=push`, `success`).
+3. **Migrațiile (3, aditive):** `finet-migrate` cu imaginea `tools` nouă; verificare: „aplicate acum 3, deja aplicate 26”. Ce fac: 0027 rescrie `accounts_type_valid` (lista veche inclusă) și creează `account_valuations`; 0028 creează `notifications`, `notification_preferences` și funcția `notification_targets`; 0029 rescrie 18 CHECK-uri de monedă (HUF, GBP) și creează `fx_rates`. Lock-uri scurte; nicio rescriere de date; rollback-ul fiecăreia e în antetul fișierului SQL (manual, cu backup).
+4. **Workerul:** recreare obligatorie (`up -d finet-worker`), ca jobul `notify.evaluate` (07:30) să fie programat. Opțional `FX_RATES=1` în `/srv/finet/env/finet.worker.env` pentru cursurile BCE (o cerere HTTPS pe zi spre `www.ecb.europa.eu`; fără el, linia „≈” nu apare și `/api/v1/fx/rates` dă 404). Emailul de notificări: doar dacă utilizatorul îl pornește din Setări → Notificări ȘI workerul are SMTP (`SMTP_*` în `finet.worker.env`, aceleași ca web-ul); fără SMTP nu se trimite nimic.
+5. **Web:** `up -d finet-web` cu AMBELE fișiere compose (`docker-compose.ask.yml` cât `AI_ASK=1`), ca până acum.
+6. **Verificare:** `/api/health` ok; `/health`, `/forecast`, `/advisor`, `/net-worth`, `/subscriptions`, `/notifications`, `/settings/notifications` se deschid prin Access; `docker logs finet-worker` arată `"event":"started"` și, a doua zi, o linie `"job":"notify.evaluate"` cu contoare.
+7. **Rollback:** imaginile anterioare (`finet:web-<sha vechi>` retaguit `finet:local`, `tools` vechi) merg peste baza migrată (tabelele noi sunt ignorate de codul vechi; tipurile noi de cont nu există încă în date). Dacă s-au creat conturi cu tipuri noi sau evaluări, rollback-ul migrațiilor cere întâi reclasificarea lor (vezi antetul 0027).

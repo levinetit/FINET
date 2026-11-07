@@ -4,6 +4,9 @@ import { errorSchema } from "@/openapi/schemas";
 
 import * as A from "./app-handlers";
 import * as L from "./ledger-handlers";
+import * as I from "./intelligence-handlers";
+import * as N from "./net-worth-handlers";
+import * as NT from "./notifications-handlers";
 import * as M from "./me-handlers";
 import * as P from "./planning-handlers";
 import * as D from "./documents-handlers";
@@ -84,6 +87,23 @@ export async function sessionsFor(
 // ---------------------------------------------------------------------------------------------
 
 const OPERATION_OF = new Map<unknown, string>([
+  [I.healthScoreHandler, "getHealthScore"],
+  [I.forecastHandler, "getForecast"],
+  [I.advisorHandler, "getAdvice"],
+  [I.savingsPlanHandler, "getSavingsPlan"],
+  [I.simulateSavingsHandler, "simulateSavings"],
+  [I.subscriptionsHandler, "getSubscriptions"],
+  [I.fxRatesHandler, "getFxRates"],
+  [N.netWorthHandler, "getNetWorth"],
+  [NT.listNotificationsHandler, "listNotifications"],
+  [NT.readNotificationHandler, "readNotification"],
+  [NT.readAllNotificationsHandler, "readAllNotifications"],
+  [NT.deleteNotificationHandler, "deleteNotification"],
+  [NT.getNotificationPreferencesHandler, "getNotificationPreferences"],
+  [NT.putNotificationPreferencesHandler, "putNotificationPreferences"],
+  [N.listValuationsHandler, "listAccountValuations"],
+  [N.createValuationHandler, "createAccountValuation"],
+  [N.deleteValuationHandler, "deleteAccountValuation"],
   [L.listHouseholdsHandler, "listHouseholds"],
   [L.getHouseholdHandler, "getHousehold"],
   [L.listAccountsHandler, "listAccounts"],

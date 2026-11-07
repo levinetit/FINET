@@ -5,15 +5,21 @@ import { GoalLine } from "@/components/planning/summary";
 import { Alert } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
 import { DB_CURRENCIES } from "@/db/schema";
+import type { Currency } from "@/lib/money";
 import { ro } from "@/messages/ro";
 import { listAccounts } from "@/modules/accounts/accounts.service";
 import { goalToJson } from "@/modules/goals/goals.schema";
 import { getGoal } from "@/modules/goals/goals.service";
+import { planToJson } from "@/modules/goals/plan.schema";
+import { savingsPlan } from "@/modules/goals/plan";
 import { isValidId } from "@/modules/ledger/input";
 
 import { load, requireLedgerPage } from "../../../_lib/ledger-page";
+import { todayIn } from "../../../_lib/ledger-ui";
 import { PageHeader } from "../../page-header";
 import { GoalForm } from "../goal-form";
+
+import { PlanLine } from "../savings-plan";
 
 import { GoalActions } from "./goal-actions";
 
@@ -54,6 +60,22 @@ export default async function GoalPage({ params }: Readonly<{ params: Promise<{ 
       <div className="flex flex-col gap-4">
         <Card aria-label={ro.goals.saved}>
           <GoalLine goal={goal} />
+          {goal.status === "active" ? (
+            <div className="mt-3">
+              <PlanLine
+                plan={planToJson(
+                  savingsPlan({
+                    targetMinor: BigInt(goal.targetMinor),
+                    savedMinor: BigInt(goal.savedMinor),
+                    deadline: goal.deadline,
+                    today: todayIn(),
+                  }),
+                  goal.currency as Currency,
+                )}
+                currency={goal.currency as Currency}
+              />
+            </div>
+          ) : null}
         </Card>
         <GoalActions goal={goal} />
         <GoalForm

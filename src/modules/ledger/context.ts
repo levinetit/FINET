@@ -1,5 +1,7 @@
 import "server-only";
 
+import { sql } from "drizzle-orm";
+
 import { type DbOrTx, type Tx } from "@/db";
 import { pgErrorInfo } from "@/db/pg-errors";
 import { type Actor, type Membership, NotFoundError, withMember } from "@/lib/authz";
@@ -28,6 +30,8 @@ const UNIQUE_REASONS: Readonly<Record<string, string>> = {
   receipts_household_dedup_key: "duplicate_receipt",
   // Faza 10 (0017): o linie de bon propusă/confirmată pentru cel mult UN articol al listei.
   shopping_list_items_line_key: "line_already_matched",
+  // Modernizare 2026 (0027): o singură evaluare pe cont și zi.
+  account_valuations_account_day_key: "valuation_exists",
 };
 
 /**
@@ -97,5 +101,42 @@ export async function inHousehold<T>(
     return await withMember(actor, householdId, "member", fn, { db: deps.db });
   } catch (error) {
     return translateDbError(error);
+  }
+}
+
+/**
+ * Plafoane per gospodărie (LOW-4 din revizuirea Fazei 2, închis în modernizarea 2026, ADR 0051):
+ * limite tehnice, generoase pentru un uz real, care opresc un client compromis sau defect să umple
+ * baza. Independente de planurile `saas` (ADR 0035), care pot fi mai strânse. Depășirea → 409
+ * `household_limit_reached` (nu 400: cererea e validă, starea nu permite).
+ */
+export const HOUSEHOLD_CAPS = Object.freeze({
+  accounts: 100,
+  categories: 300,
+  budgets: 200,
+  goals: 200,
+  tags: 200,
+  valuationsPerAccount: 1000,
+});
+
+/**
+ * Lacăt consultativ per (plafon, gospodărie) pe durata tranzacției: două cereri paralele nu pot
+ * număra amândouă „sub plafon” și depăși limita (TOCTOU). Se ia ÎNAINTE de numărare. Numărarea
+ * rulează sub RLS: rândurile personale ale altor membri (bugete personale) nu sunt vizibile, deci
+ * plafonul se aplică pe mulțimea vizibilă fiecărui membru (cel mult membri × plafon în total,
+ * tot finit; documentat în ADR 0051).
+ */
+export async function lockHouseholdCap(tx: Tx, scope: string, householdId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`finet.cap:${scope}:${householdId}`}))`,
+  );
+}
+
+export function assertUnderCap(current: number, cap: number, what: string): void {
+  if (current >= cap) {
+    throw new ConflictError(
+      "household_limit_reached",
+      `Gospodăria a atins plafonul de ${cap} ${what}.`,
+    );
   }
 }

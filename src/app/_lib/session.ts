@@ -3,6 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 
+import { log } from "@/lib/log";
 import { type AuthRuntime, getAuthRuntime } from "@/modules/auth/auth";
 import { type SessionInfo, UnauthenticatedError, requireSession } from "@/modules/auth/session";
 
@@ -31,7 +32,7 @@ export async function getPageSession(): Promise<PageSession | null> {
     unstable_rethrow(error);
     if (!(error instanceof UnauthenticatedError)) {
       // Fără detalii: mesajul erorii poate cita configurația sau baza.
-      console.error("[ui] sesiunea nu a putut fi verificată");
+      log.error("ui", "session_check_failed");
     }
     return null;
   }

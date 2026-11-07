@@ -1,5 +1,6 @@
 import "server-only";
 
+import { errorCodeOf, log } from "@/lib/log";
 import type { Config } from "@/lib/config";
 
 /**
@@ -83,8 +84,8 @@ export function sendInBackground(
     const message = await build();
     if (message) await mailer.send(message);
   })()
-    .catch(() => {
-      console.error("[auth] trimiterea emailului de autentificare a eșuat");
+    .catch((error: unknown) => {
+      log.error("auth", "mail_send_failed", { code: errorCodeOf(error) });
     })
     .finally(() => {
       pending.delete(task);

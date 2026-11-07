@@ -7,7 +7,13 @@ import { ValidationError } from "@/lib/errors";
 import { add, money, percentOf, sub, zero } from "@/lib/money";
 import { insertAudit } from "@/modules/auth/audit";
 import { selectCategory } from "@/modules/categories/categories.repo";
-import { type LedgerDeps, inHousehold } from "@/modules/ledger/context";
+import {
+  HOUSEHOLD_CAPS,
+  type LedgerDeps,
+  assertUnderCap,
+  inHousehold,
+  lockHouseholdCap,
+} from "@/modules/ledger/context";
 import { isValidId, parseInput, resolvePositiveAmount } from "@/modules/ledger/input";
 
 import {
@@ -186,6 +192,12 @@ export async function createBudget(
   const scope = input.scope ?? "household";
   return inHousehold(deps, actor, householdId, async (tx, m) => {
     await checkCategory(tx, m.householdId, input.categoryId);
+    await lockHouseholdCap(tx, "budgets", m.householdId);
+    assertUnderCap(
+      (await selectBudgets(tx, m.householdId, actor.userId, true)).length,
+      HOUSEHOLD_CAPS.budgets,
+      "bugete",
+    );
     const row = await insertBudget(tx, {
       householdId: m.householdId,
       categoryId: input.categoryId ?? null,

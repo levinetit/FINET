@@ -225,6 +225,52 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 - `POST /ask` `{ question }` (3–300 de caractere) → `{ understood: true, query, queryText, period, notes, answer, text }`: întrebarea devine în cod o interogare dintr-un set închis (metrici `expense_total`, `income_total`, `top_categories`, `top_merchants`; perioadă; filtre opționale pe categorie sau comerciant), cifrele se calculează din baza de date sub RLS (fără conturile personale ale altor membri), iar răspunsul arată MEREU interogarea folosită. O întrebare care nu se poate transforma primește **200** cu `understood: false`, `reason` (`empty|metric|period`) și un mesaj; nu se ghicește. Implicit fără AI. Cu `AI_ASK=1` (ADR 0026), o întrebare neînțeleasă de parser poate fi tradusă de un model extern, DOAR cu consimțământul separat `externalAiAsk` și în bugetul AI (`source: "ai"`; la refuz, `aiHint`: `consent`|`budget`|`error`; `reason: "name"` dacă numele propus de model nu există). Textul întrebării nu se păstrează nicăieri. Limită proprie 30/min per utilizator; `entitlements`: `ask.finet`.
 - `GET /summary/monthly?month=` → `{ month, label, lines: [{ code, currency, text }] }`: propoziții construite în cod din cifrele raportului lunar și ale lunii precedente; `label` e mereu „Rezumat automat, nu sfat financiar.”.
 
+## Inteligență financiară (modernizare 2026, ADR 0045)
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/health-score?month=` | scorul de sănătate financiară al lunii (0–100), separat pe monedă: șase componente (rata de economisire, fluxul de numerar, fondul de urgență, stabilitatea cheltuielilor, aderența la bugete, datoriile) cu valoare, pondere, stare și explicație; o componentă fără date e `null` și nu intră în medie. Calculat în aplicație, fără AI; `label` spune că nu e scor de credit. Aceeași fereastră de 60 de luni ca dashboard-ul. |
+| `GET /api/v1/forecast?days=30|60|90` | prognoza de cash-flow (implicit 90 de zile), separat pe monedă: soldul de azi al conturilor active, soldul proiectat pe zile (scadențele regulilor recurente active + media zilnică a veniturilor/cheltuielilor nerecurente din ultimele 3 luni complete), rezumate la 30/60/90 (sold proiectat, programate, minimul și ziua lui), plățile viitoare (cel mult 30), linia de bază și un indicator de încredere (`high|medium|low`, 0–100, cu motive). Calculat în aplicație, fără AI; `label` spune că e o estimare. |
+| `GET /api/v1/advisor?month=` | consilierul lunii, separat pe monedă: tranzacții neobișnuite (≥ 2× mediana cheltuielilor anterioare la același comerciant, minimum 3, sau din aceeași categorie, minimum 5; ≥ 1 % din lună; fără cele recurente), tipare (categorii ±25 % față de media lunilor anterioare, comercianți noi, concentrare ≥ 30 %), sugestii pe priorități cu sume calculate (`overdraft_ahead`, `pay_down_card`, `review_budgets`, `emergency_fund`, `trim_category`, `check_unusual`, `automate_recurring`, `keep_going`), scorul de sănătate și, pentru luna curentă, minimul prognozei. Determinist, fără AI; nimic nu se execută; `label` spune că nu e sfat financiar. |
+
+## Monede și cursuri valutare (modernizare 2026, ADR 0049)
+
+Monedele acceptate peste tot (conturi, tranzacții, bugete, obiective, reguli, evaluări): `RON`, `EUR`, `USD`, `HUF`, `GBP`. Sumele rămân în moneda lor; conversia e doar pentru afișare.
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/fx/rates?date=` | cursurile BCE cele mai recente (≤ ziua cerută), baza `EUR`: `rates` = monedă → curs × 1.000.000 (întreg; `EUR` = 1.000.000). 404 fără cursuri (workerul cu `FX_RATES=1` nu a rulat). |
+
+## Notificări (modernizare 2026, ADR 0048)
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/notifications?unread=&limit=` | notificările utilizatorului în gospodăria curentă, cele mai noi primele (cel mult 200, implicit 50), cu `unread` = numărul de necitite; generate zilnic de worker (plăți în 3 zile, bugete galben/roșu, cheltuieli neobișnuite, obiective cu termen în 7 zile sau depășit, reînnoiri în 3 zile, rezumatul lunii în ziua 1, documente eșuate) cu deduplicare. Merge și cu abonament expirat. |
+| `POST /api/v1/notifications/{id}/read` | marchează citită (idempotent, 204). |
+| `POST /api/v1/notifications/read-all` | marchează toate citite → `{ updated }`. |
+| `DELETE /api/v1/notifications/{id}` | șterge (204). |
+| `GET /api/v1/me/notification-preferences` | `{ inApp, email, kinds }` (implicit: toate tipurile în aplicație, fără email). |
+| `PUT /api/v1/me/notification-preferences` | schimbă `inApp`, `email`, `kinds` (lista închisă a tipurilor; `inApp = false` oprește și emailul). |
+
+## Planul de economisire și abonamentele (modernizare 2026, ADR 0047)
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/savings-plan` | obiectivele active cu restul de strâns și suma pe zi / săptămână / lună la termen (`status`: `on_track`, `no_deadline`, `overdue`, `done`; rotunjit în sus), plus fondul de urgență pe monedă (media cheltuielilor ultimelor 3 luni, lichidul, țintele la 3 și 6 luni cu diferența, rata lunară pe 12 luni și `coveredPct`). |
+| `POST /api/v1/savings-plan/simulate` | `{ currency, targetMinor|target, savedMinor?, deadline?, monthlyMinor|monthly? }` → planul la termen și/sau lunile până la țintă la rata dată (`finishOn`); fără scriere; merge și cu abonament expirat. |
+| `GET /api/v1/subscriptions` | pe monedă: abonamentele active/pe pauză (regulile recurente de cheltuieli) cu cost lunar și anual normalizat, reînnoirile din 30 de zile, gruparea pe categorii, lista; `detected` = plățile recurente propuse din istoric care nu sunt încă reguli. |
+
+## Averea netă și evaluările conturilor (modernizare 2026, ADR 0046)
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/net-worth?months=` | averea netă curentă (active, pasive, net) pe monedă, defalcarea pe tipuri de cont cu baza fiecărei valori (`balance` sau `valuation` + data), istoricul la sfârșitul ultimelor `months` luni (1–60, implicit 12), recalculat fără instantanee. Conturile tranzacționale intră cu soldul; cele evaluate (`investment`, `property`, `vehicle`, `other_asset`, `loan`, `other_liability`) cu evaluarea cea mai recentă. |
+| `GET /api/v1/accounts/{id}/valuations` | evaluările contului, cele mai noi primele. |
+| `POST /api/v1/accounts/{id}/valuations` | o evaluare: `valuedOn`, `valueMinor` sau `value` (semnată: activ +, pasiv −), `note` opțional; doar pe conturi evaluate (400 altfel), o singură evaluare pe zi (409 `valuation_exists`), data ≤ azi; `Idempotency-Key` opțional → 201. |
+| `DELETE /api/v1/accounts/{id}/valuations/{valuationId}` | șterge evaluarea (204; 404 dacă nu există sau e a altei gospodării). |
+
+Tipurile de cont acceptate de `POST /api/v1/accounts` sunt acum cele zece de mai sus; cele vechi rămân neschimbate.
+
 ## Feedback, anunțuri, erori, administrare (F11-B, ADR 0028; doar `saas`: 404 în `personal`)
 - `POST /feedback` `{ kind: feedback|bug, message (3–2000), page?, appVersion? }` → 201; `GET /announcements` (cele active, cel mult 5); `POST /errors` `{ kind, route, code, digest?, appVersion? }` → 204 (valorile invalide se ignoră; fără mesaje sau stive).
 - `GET /referrals/me` → `{ data: { code, link, invited, rewarded } }` (doar `saas`, 404 în `personal`; prima cerere creează codul `FIN-XXXXXX`; `rewarded` = recomandări care au adus o recompensă, cele configurate de operator). Linkul public `/ref/<cod>` nu face parte din API: pune cookie-ul `finet_ref` și redirecționează la `/register` (303), la fel pentru orice cod.

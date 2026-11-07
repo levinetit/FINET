@@ -242,6 +242,12 @@ export type Config = Readonly<{
   healthToken: string | null;
   auth: AuthConfig;
   ai: AiConfig;
+  /**
+   * Cursurile valutare (modernizare 2026, ADR 0049): `FX_RATES=1` pornește în worker descărcarea
+   * zilnică a cursurilor BCE (`https://www.ecb.europa.eu`, fără cheie); implicit `0` (nu se face
+   * nicio cerere în afara aplicației). Conversia e doar pentru afișare.
+   */
+  fx: Readonly<{ enabled: boolean }>;
   notify: Readonly<{
     telegram: Readonly<{ botToken: string; chatId: string }> | null;
     smtp: Readonly<{
@@ -394,6 +400,7 @@ const envSchema = z.object({
     .optional(),
   AI_RESPONSE_FORMAT: z.enum(["json_schema", "json_object", "none"]).optional(),
   AI_LIST_MATCH: z.enum(["0", "1"]).optional(),
+  FX_RATES: z.enum(["0", "1"]).optional(),
   AI_ASK: z.enum(["0", "1"]).optional(),
   SITE_COMPANY_NAME: z.string().trim().min(2).max(200).optional(),
   SITE_COMPANY_TAX_ID: z
@@ -1016,6 +1023,7 @@ export function parseConfig(
       }),
       pricing: Object.freeze(pricing),
     }),
+    fx: Object.freeze({ enabled: e.FX_RATES === "1" }),
     notify: Object.freeze({
       telegram:
         e.NOTIFY_TELEGRAM_BOT_TOKEN && e.NOTIFY_TELEGRAM_CHAT_ID

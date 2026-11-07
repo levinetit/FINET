@@ -41,6 +41,13 @@ export default async function SettingsPage() {
             ["android", t.androidTitle, t.androidBody, t.androidLink, "/settings/android"],
             ["profil", t.profileTitle, t.profileBody, t.profileLink, "/profile"],
             ["date", t.privacyTitle, t.privacyBody, t.privacyLink, "/settings/privacy"],
+            [
+              "notificari",
+              t.notificationsTitle,
+              t.notificationsBody,
+              t.notificationsLink,
+              "/settings/notifications",
+            ],
             ...(admin
               ? ([
                   ["statistici", t.statsTitle, t.statsBody, t.statsLink, "/settings/statistics"],

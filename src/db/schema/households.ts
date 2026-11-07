@@ -10,7 +10,7 @@ import { createdAt, finet, updatedAt } from "./finet";
  */
 
 /** Monedele permise (5.1); aceeași listă ca `CURRENCIES` din `src/lib/money.ts`. */
-export const DB_CURRENCIES = ["RON", "EUR", "USD"] as const;
+export const DB_CURRENCIES = ["RON", "EUR", "USD", "HUF", "GBP"] as const;
 export const HOUSEHOLD_ROLES = ["member", "owner"] as const;
 
 export const households = finet.table(
@@ -29,7 +29,10 @@ export const households = finet.table(
   (t) => [
     index("households_created_by_idx").on(t.createdBy),
     check("households_name_length", sql`char_length(${t.name}) between 1 and 100`),
-    check("households_currency_valid", sql`${t.defaultCurrency} in ('RON', 'EUR', 'USD')`),
+    check(
+      "households_currency_valid",
+      sql`${t.defaultCurrency} in ('RON', 'EUR', 'USD', 'HUF', 'GBP')`,
+    ),
     check("households_timezone_length", sql`char_length(${t.timezone}) between 1 and 64`),
   ],
 );
