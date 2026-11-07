@@ -66,7 +66,7 @@ Actualizate: better-auth 1.7.18, jose 6.2.15, nodemailer 10.3.1, next 16.4.5, pg
 
 ## 8. Rezultatele build-ului și CI
 
-Pe PR #81 (commit-uri recente): `secret-scan` ✅, `codeql` ✅, `android` ✅, `images` ✅ (web/tools/backup + Trivy). `ci` (lint, typecheck, teste, build, buget JS, audit) și `e2e`: picate la `40e3b10` (buget JS depășit cu 0,5–5 KiB din creșterea bazei comune + `/settings/notifications` cu schema Drizzle în client; link dublu pe `/goals` în Playwright) → corectate în `5d49f13`; rularea pe ultimul commit se verifică înainte de a scoate PR-ul din draft (stare consemnată în descrierea PR-ului).
+Pe commit-ul final al PR #81 (`968e20b`), toate workflow-urile sunt verzi: `ci` (job-urile `pg-version`, `ci` — lint, format, OpenAPI, typecheck, migrații de două ori, teste, build, scanare secrete, buget JS, audit blocant —, `backup-restore`, `e2e` în ambele moduri), `codeql`, `secret-scan`, `images` (web/tools/backup + Trivy), `android`. Eșecurile intermediare (buget JS, link dublu pe `/goals`, exemple cu `GBP`) au fost corectate în `5d49f13`.
 
 ## 9. Migrații
 
