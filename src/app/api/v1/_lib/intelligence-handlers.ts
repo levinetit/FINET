@@ -3,6 +3,8 @@ import "server-only";
 import type { DbOrTx } from "@/db";
 import { type Month, addMonths, isMonth } from "@/lib/calendar";
 import { ValidationError } from "@/lib/errors";
+import { adviceViewToJson } from "@/modules/advisor/advisor.schema";
+import { getAdvice } from "@/modules/advisor/advisor.service";
 import { type PlanningDeps, resolveMonth } from "@/modules/budgets/budgets.service";
 import { forecastViewToJson } from "@/modules/forecast/forecast.schema";
 import { getForecast } from "@/modules/forecast/forecast.service";
@@ -61,5 +63,16 @@ export function forecastHandler(request: Request, d: ApiDeps): Promise<Response>
       ...(query.days === undefined ? {} : { days: query.days }),
     });
     return json({ data: forecastViewToJson(view) });
+  });
+}
+
+/** `GET /api/v1/advisor?month=` — consilierul: tranzacții neobișnuite, tipare, sugestii, pe monedă. */
+export function advisorHandler(request: Request, d: ApiDeps): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const query = readQuery(request, { month: "string" });
+    const hh = await currentHousehold(ctx);
+    const month = await monthOf(ctx, hh, query.month);
+    const view = await getAdvice(planning(d.db, ctx), ctx.actor, hh, { month });
+    return json({ data: adviceViewToJson(view) });
   });
 }

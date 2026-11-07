@@ -29,6 +29,7 @@ export const ro = {
     ask: "Întreabă FINET",
     health: "Sănătate",
     forecast: "Prognoză",
+    advisor: "Consilier",
     profile: "Profil",
     settings: "Setări",
     help: "Ajutor",
@@ -2120,6 +2121,88 @@ export const ro = {
     notUnderstoodTitle: "Nu am înțeles",
     note: "Cifrele sunt calculate în aplicație din tranzacțiile pe care le poți vedea; nu e sfat financiar.",
     noRows: "Nicio tranzacție în această perioadă.",
+  },
+  advisor: {
+    eyebrow: "Consilier financiar",
+    title: "Consilierul FINET",
+    label:
+      "Analize calculate în aplicație din datele tale, fără AI. Nu este sfat financiar; nimic nu se execută automat.",
+    intro:
+      "Consilierul citește cheltuielile lunii și istoricul ultimelor 6 luni și arată ce iese din tipar, ce se schimbă și ce ai putea face, cu cifrele și regula din spatele fiecărei constatări. Pentru întrebări libere folosește „Întreabă FINET”.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi analiza.",
+    noData: "Nu există cheltuieli în această lună. Adaugă tranzacții sau importă un extras.",
+    healthTitle: "Scorul de sănătate",
+    healthLink: "Vezi componentele",
+    forecastTitle: "Prognoza",
+    forecastLowest: (amount: string, date: string, days: number) =>
+      `Cel mai mic sold proiectat în următoarele ${days} de zile: ${amount}, pe ${date}.`,
+    forecastLink: "Vezi prognoza",
+    suggestionsTitle: "Ce ai putea face",
+    priority: { high: "Prioritate mare", medium: "Prioritate medie", low: "Prioritate mică" },
+    unusualTitle: "Tranzacții neobișnuite",
+    unusualEmpty:
+      "Nicio cheltuială din această lună nu iese din tiparul ultimelor 6 luni (sau nu există încă istoric suficient: minimum 3 cheltuieli la același comerciant sau 5 în aceeași categorie).",
+    unusualOpen: "Deschide tranzacția",
+    patternsTitle: "Tipare",
+    patternsEmpty: "Nicio schimbare notabilă față de lunile anterioare.",
+    rulesTitle: "Regulile folosite",
+    rules: [
+      "Neobișnuit: cheltuiala e de cel puțin 2 ori mediana cheltuielilor anterioare la același comerciant (minimum 3) sau din aceeași categorie (minimum 5), și cel puțin 1 % din cheltuielile lunii; cele generate de reguli recurente nu se numără.",
+      "Tipar de categorie: luna e cu cel puțin 25 % peste sau sub media lunilor anterioare cu cheltuieli (minimum 2), iar categoria are cel puțin 2 % din lună.",
+      "Comerciant nou: cel puțin 2 cheltuieli în lună la un comerciant fără istoric; concentrare: un comerciant are cel puțin 30 % din cheltuielile lunii.",
+      "Sugestiile folosesc scorul de sănătate, prognoza, bugetele și tiparele; sumele sunt calculate din datele tale.",
+    ],
+    unusual: {
+      uncategorized: "fără categorie",
+      byMerchant:
+        "{amount} la {merchant}: de {ratio} mediana de {baseline} a cheltuielilor tale anterioare la același comerciant.",
+      byCategory:
+        "{amount} în categoria {category}: de {ratio} mediana de {baseline} a cheltuielilor tale anterioare din categorie.",
+    },
+    patterns: {
+      uncategorized: "Fără categorie",
+      category_up:
+        "{category}: {current} luna aceasta, cu {change} peste media de {baseline} din ultimele {months} luni cu cheltuieli.",
+      category_down:
+        "{category}: {current} luna aceasta, cu {change} sub media de {baseline} din ultimele {months} luni cu cheltuieli.",
+      new_merchant:
+        "Comerciant nou: {merchant}, {count} cheltuieli ({total}) fără istoric în ultimele 6 luni.",
+      merchant_concentration: "{merchant} adună {share} din cheltuielile lunii ({total}).",
+    },
+    suggestions: {
+      overdraft_ahead: {
+        title: "Soldul proiectat scade sub zero",
+        text: "În următoarele {days} de zile soldul proiectat ajunge la −{amount} pe {date}. Mută bani dintr-un cont de economii sau amână o plată programată.",
+      },
+      pay_down_card: {
+        title: "Reduce datoria pe card",
+        text: "Soldurile negative (card de credit, descoperit) însumează {amount}. Rambursarea lor înaintea dobânzii îmbunătățește și scorul (componenta „Datorii”).",
+      },
+      review_budgets: {
+        title: "Bugete depășite",
+        text: "Bugetele {budgets} sunt depășite luna aceasta. Verifică tranzacțiile din categoriile lor sau ajustează plafoanele.",
+      },
+      emergency_fund: {
+        title: "Construiește fondul de urgență",
+        text: "Ținta de {months} luni de cheltuieli e {target}; ai {liquid} lichid. Pune deoparte {monthly} pe lună și ajungi acolo într-un an. Poți crea un obiectiv cu această sumă.",
+      },
+      trim_category: {
+        title: "Reduce o categorie în creștere",
+        text: "{category} a crescut peste media ta ({current} luna aceasta). O reducere de 10 % înseamnă {trim} pe lună, direct în rata de economisire.",
+      },
+      check_unusual: {
+        title: "Verifică tranzacțiile neobișnuite",
+        text: "{count} cheltuieli ies din tiparul tău (vezi lista). Dacă sunt corecte, nimic de făcut; dacă nu, corectează-le ca rapoartele să rămână exacte.",
+      },
+      automate_recurring: {
+        title: "Adaugă regulile recurente",
+        text: "Nu ai reguli recurente active. Chiria, abonamentele și ratele ca reguli fac prognoza mai precisă și îți arată plățile viitoare.",
+      },
+      keep_going: {
+        title: "Nimic urgent",
+        text: "Cheltuielile sunt în tipar, bugetele în limită și nu există datorii pe termen scurt. Păstrează ritmul.",
+      },
+    },
   },
   forecast: {
     eyebrow: "Cash-flow",

@@ -439,6 +439,81 @@ export const forecastSchema = z
   })
   .meta({ title: "Forecast" });
 
+/** Consilierul financiar (modernizare 2026, pasul F; ADR 0045). */
+export const adviceSchema = z
+  .strictObject({
+    month: z.string(),
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        month: z.string(),
+        expenseTotalMinor: minor,
+        unusual: z.array(
+          z.strictObject({
+            transactionId: uuid,
+            occurredOn: date,
+            merchant: z.string().nullable(),
+            description: z.string().nullable(),
+            categoryId: uuid.nullable(),
+            categoryName: z.string().nullable(),
+            amountMinor: minor,
+            baselineMinor: minor,
+            basis: z.enum(["merchant", "category"]),
+            ratioBp: int,
+            explanation: z.string(),
+          }),
+        ),
+        patterns: z.array(
+          z.strictObject({
+            code: z.enum([
+              "category_up",
+              "category_down",
+              "new_merchant",
+              "merchant_concentration",
+            ]),
+            categoryId: uuid.nullable(),
+            categoryName: z.string().nullable(),
+            merchant: z.string().nullable(),
+            currentMinor: minor,
+            baselineMinor: minor.nullable(),
+            changeBp: int.nullable(),
+            explanation: z.string(),
+          }),
+        ),
+        suggestions: z.array(
+          z.strictObject({
+            code: z.enum([
+              "overdraft_ahead",
+              "pay_down_card",
+              "review_budgets",
+              "emergency_fund",
+              "trim_category",
+              "check_unusual",
+              "automate_recurring",
+              "keep_going",
+            ]),
+            priority: z.enum(["high", "medium", "low"]),
+            title: z.string(),
+            text: z.string(),
+            amountMinor: minor.nullable(),
+          }),
+        ),
+        health: z
+          .strictObject({
+            score: int.min(0).max(100).nullable(),
+            band: z.enum(["good", "ok", "watch", "fragile"]).nullable(),
+          })
+          .nullable(),
+        forecast: z
+          .strictObject({ days: int, lowestMinor: minor, lowestOn: date })
+          .nullable()
+          .meta({ description: "Doar pentru luna curentă (prognoza pornește de azi)." }),
+        label: z.string().meta({ description: "Nu e sfat financiar." }),
+      }),
+    ),
+  })
+  .meta({ title: "Advice" });
+
 export const monthlyReportSchema = z
   .strictObject({
     month: z.string(),

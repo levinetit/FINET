@@ -102,6 +102,7 @@ import {
   consentStateSchema,
   dashboardSchema,
   dataOf,
+  adviceSchema,
   forecastSchema,
   goalSchema,
   healthScoreSchema,
@@ -1484,6 +1485,18 @@ export const OPERATIONS: readonly Operation[] = [
       },
     ],
     success: { status: 200, schema: dataOf(forecastSchema), description: "Prognoza." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/advisor",
+    operationId: "getAdvice",
+    tag: "reports",
+    summary: "Consilierul financiar al lunii, separat pe monedă.",
+    description:
+      "Analize deterministe (fără AI) peste cheltuielile lunii și istoricul ultimelor 6 luni: tranzacții neobișnuite (≥ 2× mediana aceluiași comerciant sau a categoriei), tipare (categorii în creștere/scădere ≥ 25 %, comercianți noi, concentrare), sugestii explicate cu sume calculate (fond de urgență, reducerea unei categorii, cardul de credit, bugete depășite, sold proiectat negativ), plus scorul de sănătate și, pentru luna curentă, minimul prognozei. Nimic nu se execută; `label` spune că nu e sfat financiar.",
+    query: [MONTH_PARAM],
+    success: { status: 200, schema: dataOf(adviceSchema), description: "Analiza." },
     errors: [VALIDATION, NOT_FOUND],
   },
   // --- Dashboard și raportul lunar -----------------------------------------------------------

@@ -5,6 +5,7 @@ import { MAX_EVENTS_PER_BATCH } from "@/modules/usage/usage.schema";
 import { type Operation, OPERATIONS } from "./registry";
 import {
   accountSchema,
+  adviceSchema,
   budgetSchema,
   budgetStatusSchema,
   categorySchema,
@@ -45,6 +46,7 @@ function responseSchema(schema: z.ZodType): Json {
 /** Entitățile răspunsurilor, emise o singură dată în `components.schemas` și referite prin `$ref`. */
 const COMPONENTS: ReadonlyArray<readonly [string, z.ZodType]> = [
   ["Account", accountSchema],
+  ["Advice", adviceSchema],
   ["Budget", budgetSchema],
   ["BudgetStatus", budgetStatusSchema],
   ["Category", categorySchema],

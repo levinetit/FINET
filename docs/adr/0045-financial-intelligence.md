@@ -31,6 +31,13 @@ Master prompt-ul de modernizare cere un „consilier financiar” care analizeaz
 10. **Încrederea** e un punctaj 0–100 explicat prin motive cu coduri stabile: istoricul (3 luni complete 40, 2 luni 25, 1 lună 10), stabilitatea cheltuielilor lunare (abaterea absolută medie ≤ 10 % 30, ≤ 30 % 20, altfel 5), acoperirea cheltuielilor de reguli recurente (≥ 50 % 30, > 0 15), minus orizontul (60 de zile −10, 90 −20). ≥ 70 ridicată, ≥ 40 medie, altfel scăzută. Pragurile sunt decizia mea.
 11. **Eticheta** „Estimare … Nu este sfat financiar” însoțește răspunsul și pagina; cifrele programate (din reguli) și cele estimate (din medie) sunt separate în răspuns, ca Android și web să le poată distinge vizual.
 
+## Consilierul (pasul F)
+
+12. **Determinist, fără LLM în această iterație.** Cele trei analize (tranzacții neobișnuite, tipare, sugestii) sunt reguli cu praguri publice (`ro.advisor.rules`, constantele din `advisor.ts`): neobișnuit = ≥ 2× mediana (`percentile_disc`) a cheltuielilor anterioare la același comerciant normalizat (minimum 3) sau din aceeași categorie-părinte (minimum 5), și ≥ 1 % din cheltuielile lunii, fără cele generate de reguli; tipar = categorie cu ±25 % față de media lunilor anterioare cu date (minimum 2) și ≥ 2 % din lună, comerciant nou cu ≥ 2 cheltuieli, concentrare ≥ 30 %; sugestiile derivă din scor, prognoză (doar luna curentă), bugete roșii, tipare și solduri, cu sume calculate (fond de urgență la 3 luni pe 12 rate, 10 % din categoria în creștere, datoria pe card).
+13. **De ce nu LLM:** consimțământul existent `external_ai_ask` (ADR 0026) acoperă doar textul întrebării și numele categoriilor. O reformulare „narativă” ar trimite sume, comercianți și tipare: cere un consimțământ nou (`external_ai_advisor`, migrație pe `consents_kind_valid`) și o decizie a operatorului. Până atunci textul e compus în cod, cu cifrele inserate din date, ca rezumatul lunar (ADR 0025).
+14. **Cost:** cele mai mari 500 de cheltuieli ale lunii (cele mici nu pot fi neobișnuite) + patru agregări pe 6 luni + scorul + prognoza; fără rate limit propriu. Dacă se dovedește lent pe gospodării mari, se adaugă `advisor` la `ApiLimits`.
+15. **Limită cunoscută (documentată în teste):** mediana pe categorie amestecă cumpărături mici și mari (o cumpărătură lunară mare fără comerciant apare „neobișnuită” față de mediana categoriei); comerciantul completat o elimină. O variantă pe decile vine după folosire reală.
+
 ## Consecințe
 
 - Fără date noi: scorul e reproductibil din tranzacții și poate fi recalculat pentru orice lună; nu există „istoric al scorului” decât prin recalculare.

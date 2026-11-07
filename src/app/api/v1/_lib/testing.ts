@@ -87,6 +87,7 @@ export async function sessionsFor(
 const OPERATION_OF = new Map<unknown, string>([
   [I.healthScoreHandler, "getHealthScore"],
   [I.forecastHandler, "getForecast"],
+  [I.advisorHandler, "getAdvice"],
   [L.listHouseholdsHandler, "listHouseholds"],
   [L.getHouseholdHandler, "getHousehold"],
   [L.listAccountsHandler, "listAccounts"],

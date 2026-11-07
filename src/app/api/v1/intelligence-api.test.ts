@@ -253,6 +253,7 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/health-score pe PostgreSQL real", 
         }[];
         upcoming: { date: string; description: string; type: string; amountMinor: number }[];
         baseline: {
+          dailyIncomeMinor: number;
           dailyExpenseMinor: number;
           historyMonths: number;
           recurringCoverageBp: number | null;
@@ -329,6 +330,118 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/health-score pe PostgreSQL real", 
       expect(bad.body.error?.fields).toHaveProperty("days");
       const none = await call(I.forecastHandler, "/api/v1/forecast", {});
       expect(none.status).toBe(401);
+    });
+  });
+
+  describe("consilierul", () => {
+    type AdviceJson = {
+      month: string;
+      currencies: {
+        currency: string;
+        expenseTotalMinor: number;
+        unusual: { transactionId: string; basis: string; ratioBp: number; amountMinor: number }[];
+        patterns: { code: string; categoryName: string | null; changeBp: number | null }[];
+        suggestions: { code: string; priority: string; amountMinor: number | null }[];
+        health: { score: number | null; band: string | null } | null;
+        forecast: { days: number; lowestMinor: number; lowestOn: string } | null;
+        label: string;
+      }[];
+    };
+
+    it("Ana: o cheltuială de 3× mediana e neobișnuită; categoria în creștere; sugestii cu sume", async () => {
+      const accounts = await call(L.listAccountsHandler, "/api/v1/accounts", { bearer: A.bearer });
+      const bank = (accounts.body.data as { id: string; name: string }[]).find(
+        (x) => x.name === "Bancă",
+      )!;
+      // Istoric: 5 cumpărături lunare la Lidl de 300 lei (mai–septembrie, în plus față de cele 3.800).
+      for (let i = 0; i < 5; i++) {
+        const month = `2026-${String(5 + i).padStart(2, "0")}`;
+        await newTx(A, {
+          type: "expense",
+          accountId: bank.id,
+          categoryId: groceries,
+          amount: "300",
+          occurredOn: `${month}-15`,
+          merchant: "Lidl",
+          description: "Cumpărături",
+        });
+      }
+      // Octombrie: o cumpărătură de 900 lei la Lidl (3× mediana) și una normală.
+      const big = await newTx(A, {
+        type: "expense",
+        accountId: bank.id,
+        categoryId: groceries,
+        amount: "900",
+        occurredOn: "2026-10-16",
+        merchant: "Lidl",
+        description: "Cumpărături mari",
+      });
+      await newTx(A, {
+        type: "expense",
+        accountId: bank.id,
+        categoryId: groceries,
+        amount: "310",
+        occurredOn: "2026-10-20",
+        merchant: "Lidl",
+        description: "Cumpărături",
+      });
+
+      const r = await call(I.advisorHandler, "/api/v1/advisor", { bearer: A.bearer });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const data = r.body.data as AdviceJson;
+      expect(data.month).toBe("2026-10");
+      const ron = data.currencies.find((c) => c.currency === "RON")!;
+      // 4.000 + 900 + 310 = 5.210 lei.
+      expect(ron.expenseTotalMinor).toBe(521000);
+      // Două: cumpărătura mare la Lidl (3× mediana comerciantului) și cumpărătura lunară de
+      // 4.000 fără comerciant, față de mediana categoriei (300, din cele 10 cheltuieli
+      // anterioare mixte); ordonate după raport.
+      expect(ron.unusual).toHaveLength(2);
+      const lidl = ron.unusual.find((u) => u.transactionId === big)!;
+      expect(lidl).toMatchObject({ basis: "merchant", ratioBp: 30000, amountMinor: 90000 });
+      expect(ron.unusual[0]).toMatchObject({ basis: "category", amountMinor: 400000 });
+      // Alimente: 5.210 față de media (3.800 + 300) ×5 / 5 = 4.100 → +27 %.
+      expect(ron.patterns.map((p) => [p.code, p.categoryName])).toEqual([
+        ["category_up", "Alimente"],
+      ]);
+      expect(ron.patterns[0]!.changeBp).toBe(2707);
+      expect(ron.health?.score).not.toBeNull();
+      expect(ron.forecast).not.toBeNull();
+      const codes = ron.suggestions.map((s) => s.code);
+      // Cardul (−500), fondul de urgență (lichidul e sub 3 luni), categoria în creștere (rata
+      // de economisire a lunii e sub 10 %: 5.000 − 5.210 < 0), tranzacția neobișnuită.
+      // Bugetul de 4.500 e depășit (5.210) → `review_budgets`.
+      expect(codes).toEqual([
+        "pay_down_card",
+        "review_budgets",
+        "emergency_fund",
+        "trim_category",
+        "check_unusual",
+      ]);
+      expect(ron.suggestions[0]!.amountMinor).toBe(50000);
+      expect(ron.label).toContain("Nu este sfat financiar");
+    });
+
+    it("izolare: Bogdan nu vede nimic din datele Anei; luna fără cheltuieli e goală", async () => {
+      const r = await call(I.advisorHandler, "/api/v1/advisor", { bearer: B.bearer });
+      expect(r.status).toBe(200);
+      const ron = (r.body.data as AdviceJson).currencies[0]!;
+      expect(ron.expenseTotalMinor).toBe(4000);
+      expect(ron.unusual).toEqual([]);
+      expect(ron.patterns).toEqual([]);
+      expect(ron.suggestions.map((s) => s.code)).toEqual(["emergency_fund", "automate_recurring"]);
+
+      const past = await call(I.advisorHandler, "/api/v1/advisor?month=2025-12", {
+        bearer: B.bearer,
+      });
+      expect(past.status).toBe(200);
+      const old = (past.body.data as AdviceJson).currencies[0]!;
+      expect(old.expenseTotalMinor).toBe(0);
+      expect(old.forecast).toBeNull();
+      const bad = await call(I.advisorHandler, "/api/v1/advisor?month=2027-01", {
+        bearer: B.bearer,
+      });
+      expect(bad.status).toBe(400);
     });
   });
 });
