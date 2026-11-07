@@ -3,9 +3,15 @@ import "server-only";
 import { PgBoss } from "pg-boss";
 
 import { type Db, createDb } from "@/db";
+import type { Mailer } from "@/modules/auth/mailer";
 
 import { bossOptions } from "./boss";
 import { HEARTBEAT_INTERVAL_MS, heartbeatBeat, heartbeatStart, heartbeatStop } from "./heartbeat";
+import {
+  JOB_NOTIFY_EVALUATE,
+  NOTIFY_CRON,
+  handleNotifyEvaluate,
+} from "./notifications/notify-jobs";
 import {
   GENERATE_CRON,
   GENERATE_TZ,
@@ -128,6 +134,8 @@ export type WorkerOptions = Readonly<{
   listMatch?: Readonly<{ enabled: boolean; ai: AiRuntime | null }>;
   /** Citirea extraselor PDF (Faza 7); storage-ul doar pentru citire. */
   statements?: Readonly<{ storage: DocumentJobDeps["storage"] }>;
+  /** Notificările zilnice (ADR 0048): `mailer` null = fără email; `appUrl` pentru linkurile din email. */
+  notify?: Readonly<{ mailer: Mailer | null; appUrl: string | null }>;
 }>;
 
 export type RunningWorker = Readonly<{ boss: PgBoss; db: Db; stop: () => Promise<void> }>;
@@ -319,6 +327,25 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
         return r.outcome === "failed"
           ? { outcome: r.outcome, code: r.code }
           : { outcome: r.outcome };
+      }),
+    );
+  }
+
+  // Modernizare 2026 (ADR 0048): notificările, zilnic; email doar cu SMTP și `email = true`.
+  const notify = options.notify;
+  if (notify) {
+    await boss.createQueue(JOB_NOTIFY_EVALUATE, { policy: "singleton", ...QUEUE_OPTIONS });
+    await boss.schedule(JOB_NOTIFY_EVALUATE, NOTIFY_CRON, null, {
+      tz: GENERATE_TZ,
+      singletonKey: JOB_NOTIFY_EVALUATE,
+    });
+    const notifyDeps = { db, log, mailer: notify.mailer, appUrl: notify.appUrl };
+    await boss.work(
+      JOB_NOTIFY_EVALUATE,
+      { localConcurrency: 1 },
+      safeHandler(JOB_NOTIFY_EVALUATE, log, async () => {
+        const s = await handleNotifyEvaluate(notifyDeps);
+        return { targets: s.targets, inserted: s.inserted, emailed: s.emailed, failed: s.failed };
       }),
     );
   }

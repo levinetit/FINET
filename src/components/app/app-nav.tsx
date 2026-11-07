@@ -11,6 +11,7 @@ import { useHydrated } from "@/app/_lib/use-hydrated";
 import { ro } from "@/messages/ro";
 
 import {
+  BellIcon,
   CartIcon,
   ChartIcon,
   FolderIcon,
@@ -68,6 +69,8 @@ const ITEMS = [
   { href: "/forecast", label: ro.nav.forecast, icon: ChartIcon, mobile: false },
   { href: "/advisor", label: ro.nav.advisor, icon: HelpIcon, mobile: false },
   { href: "/net-worth", label: ro.nav.netWorth, icon: WalletIcon, mobile: false },
+  // Modernizare 2026 (ADR 0048): notificările; pe telefon în „Mai mult”.
+  { href: "/notifications", label: ro.nav.notifications, icon: BellIcon, mobile: false },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
   // Faza 9: setările aplicației (instalare PWA, aplicația Android) și ghidul.
   { href: "/settings", label: ro.nav.settings, icon: SettingsIcon, mobile: false },

@@ -14,6 +14,7 @@ import { MAX_TOP_CATEGORIES } from "@/modules/dashboard/dashboard.schema";
 import { PDF_CONTENT_TYPE, XLSX_CONTENT_TYPE } from "@/lib/export-table";
 import { CSV_DIALECTS } from "@/modules/exports/csv";
 import { savingsSimulateSchema } from "@/modules/goals/plan";
+import { preferencesPutSchema } from "@/modules/notifications/notifications.schema";
 import { valuationCreateSchema } from "@/modules/net-worth/net-worth.schema";
 import {
   goalContributionSchema,
@@ -114,6 +115,8 @@ import {
   moneySchema,
   monthlyReportSchema,
   netWorthSchema,
+  notificationPreferencesSchema,
+  notificationSchema,
   savingsPlanSchema,
   savingsSimulationSchema,
   subscriptionsSchema,
@@ -392,6 +395,86 @@ export const OPERATIONS: readonly Operation[] = [
       description: "Starea nouă.",
     },
     errors: [...MUTATION_ERRORS],
+  },
+  // --- Notificări (modernizare 2026; ADR 0048) ------------------------------------------------
+  {
+    method: "GET",
+    path: "/api/v1/me/notification-preferences",
+    operationId: "getNotificationPreferences",
+    tag: "me",
+    summary: "Preferințele de notificare (în aplicație, email, tipuri).",
+    success: {
+      status: 200,
+      schema: dataOf(notificationPreferencesSchema),
+      description: "Preferințele.",
+    },
+    errors: [],
+  },
+  {
+    method: "PUT",
+    path: "/api/v1/me/notification-preferences",
+    operationId: "putNotificationPreferences",
+    tag: "me",
+    summary: "Schimbă preferințele de notificare.",
+    body: { schema: preferencesPutSchema },
+    success: {
+      status: 200,
+      schema: dataOf(notificationPreferencesSchema),
+      description: "Preferințele noi.",
+    },
+    errors: [...MUTATION_ERRORS],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/notifications",
+    operationId: "listNotifications",
+    tag: "me",
+    summary: "Notificările utilizatorului în gospodăria curentă, cele mai noi primele.",
+    description:
+      "Generate zilnic de worker din datele existente (plăți programate, bugete, cheltuieli neobișnuite, obiective, abonamente, rezumatul lunii, documente eșuate), cu deduplicare. `unread` = numărul de necitite. Merge și cu abonament expirat.",
+    query: [
+      { name: "unread", schema: z.enum(["true", "false"]), description: "Doar necitite." },
+      { name: "limit", schema: intParam, description: "Cel mult (1–200, implicit 50)." },
+    ],
+    success: {
+      status: 200,
+      schema: z.strictObject({ data: z.array(notificationSchema), unread: z.number().int() }),
+      description: "Notificările.",
+    },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: `/api/v1/notifications/${PATH_ID}/read`,
+    operationId: "readNotification",
+    tag: "me",
+    summary: "Marchează notificarea citită (idempotent).",
+    body: { schema: z.strictObject({}), optional: true },
+    success: { status: 204, schema: null, description: "Marcată." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "POST",
+    path: "/api/v1/notifications/read-all",
+    operationId: "readAllNotifications",
+    tag: "me",
+    summary: "Marchează toate notificările citite.",
+    body: { schema: z.strictObject({}), optional: true },
+    success: {
+      status: 200,
+      schema: dataOf(z.strictObject({ updated: z.number().int() })),
+      description: "Câte au fost marcate.",
+    },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
+  },
+  {
+    method: "DELETE",
+    path: `/api/v1/notifications/${PATH_ID}`,
+    operationId: "deleteNotification",
+    tag: "me",
+    summary: "Șterge o notificare.",
+    success: { status: 204, schema: null, description: "Ștearsă." },
+    errors: [...MUTATION_ERRORS, NOT_FOUND],
   },
   // --- GDPR (Faza 9, ADR 0021) ---------------------------------------------------------------
   {

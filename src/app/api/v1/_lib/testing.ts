@@ -6,6 +6,7 @@ import * as A from "./app-handlers";
 import * as L from "./ledger-handlers";
 import * as I from "./intelligence-handlers";
 import * as N from "./net-worth-handlers";
+import * as NT from "./notifications-handlers";
 import * as M from "./me-handlers";
 import * as P from "./planning-handlers";
 import * as D from "./documents-handlers";
@@ -93,6 +94,12 @@ const OPERATION_OF = new Map<unknown, string>([
   [I.simulateSavingsHandler, "simulateSavings"],
   [I.subscriptionsHandler, "getSubscriptions"],
   [N.netWorthHandler, "getNetWorth"],
+  [NT.listNotificationsHandler, "listNotifications"],
+  [NT.readNotificationHandler, "readNotification"],
+  [NT.readAllNotificationsHandler, "readAllNotifications"],
+  [NT.deleteNotificationHandler, "deleteNotification"],
+  [NT.getNotificationPreferencesHandler, "getNotificationPreferences"],
+  [NT.putNotificationPreferencesHandler, "putNotificationPreferences"],
   [N.listValuationsHandler, "listAccountValuations"],
   [N.createValuationHandler, "createAccountValuation"],
   [N.deleteValuationHandler, "deleteAccountValuation"],

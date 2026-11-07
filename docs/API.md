@@ -233,6 +233,17 @@ Se calculează doar din bonurile CONFIRMATE și VIZIBILE (liniile bonurilor lega
 | `GET /api/v1/forecast?days=30|60|90` | prognoza de cash-flow (implicit 90 de zile), separat pe monedă: soldul de azi al conturilor active, soldul proiectat pe zile (scadențele regulilor recurente active + media zilnică a veniturilor/cheltuielilor nerecurente din ultimele 3 luni complete), rezumate la 30/60/90 (sold proiectat, programate, minimul și ziua lui), plățile viitoare (cel mult 30), linia de bază și un indicator de încredere (`high|medium|low`, 0–100, cu motive). Calculat în aplicație, fără AI; `label` spune că e o estimare. |
 | `GET /api/v1/advisor?month=` | consilierul lunii, separat pe monedă: tranzacții neobișnuite (≥ 2× mediana cheltuielilor anterioare la același comerciant, minimum 3, sau din aceeași categorie, minimum 5; ≥ 1 % din lună; fără cele recurente), tipare (categorii ±25 % față de media lunilor anterioare, comercianți noi, concentrare ≥ 30 %), sugestii pe priorități cu sume calculate (`overdraft_ahead`, `pay_down_card`, `review_budgets`, `emergency_fund`, `trim_category`, `check_unusual`, `automate_recurring`, `keep_going`), scorul de sănătate și, pentru luna curentă, minimul prognozei. Determinist, fără AI; nimic nu se execută; `label` spune că nu e sfat financiar. |
 
+## Notificări (modernizare 2026, ADR 0048)
+
+| Endpoint | Ce face |
+|---|---|
+| `GET /api/v1/notifications?unread=&limit=` | notificările utilizatorului în gospodăria curentă, cele mai noi primele (cel mult 200, implicit 50), cu `unread` = numărul de necitite; generate zilnic de worker (plăți în 3 zile, bugete galben/roșu, cheltuieli neobișnuite, obiective cu termen în 7 zile sau depășit, reînnoiri în 3 zile, rezumatul lunii în ziua 1, documente eșuate) cu deduplicare. Merge și cu abonament expirat. |
+| `POST /api/v1/notifications/{id}/read` | marchează citită (idempotent, 204). |
+| `POST /api/v1/notifications/read-all` | marchează toate citite → `{ updated }`. |
+| `DELETE /api/v1/notifications/{id}` | șterge (204). |
+| `GET /api/v1/me/notification-preferences` | `{ inApp, email, kinds }` (implicit: toate tipurile în aplicație, fără email). |
+| `PUT /api/v1/me/notification-preferences` | schimbă `inApp`, `email`, `kinds` (lista închisă a tipurilor; `inApp = false` oprește și emailul). |
+
 ## Planul de economisire și abonamentele (modernizare 2026, ADR 0047)
 
 | Endpoint | Ce face |

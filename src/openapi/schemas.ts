@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  NOTIFICATION_KINDS,
   ACCOUNT_TYPES,
   AI_PROVIDERS_USED,
   DOCUMENT_KINDS,
@@ -681,6 +682,28 @@ export const subscriptionsSchema = z
     ),
   })
   .meta({ title: "Subscriptions" });
+
+/** Notificările (modernizare 2026, pasul J; ADR 0048). */
+export const notificationSchema = z
+  .strictObject({
+    id: uuid,
+    householdId: uuid,
+    kind: z.enum(NOTIFICATION_KINDS),
+    title: z.string(),
+    body: z.string(),
+    link: z.string().nullable(),
+    createdAt: z.string(),
+    readAt: z.string().nullable(),
+  })
+  .meta({ title: "Notification" });
+
+export const notificationPreferencesSchema = z
+  .strictObject({
+    inApp: z.boolean(),
+    email: z.boolean(),
+    kinds: z.array(z.enum(NOTIFICATION_KINDS)),
+  })
+  .meta({ title: "NotificationPreferences" });
 
 export const monthlyReportSchema = z
   .strictObject({

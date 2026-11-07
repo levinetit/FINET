@@ -20,6 +20,7 @@ export const ro = {
     shopping: "Liste",
     recurring: "Recurențe",
     subscriptions: "Abonamente",
+    notifications: "Notificări",
     import: "Import",
     scan: "Scanează",
     receipts: "Bonuri",
@@ -1708,6 +1709,9 @@ export const ro = {
     statsTitle: "Statistici",
     statsBody: "Utilizarea aplicației (doar pentru administrator), fără date financiare.",
     statsLink: "Deschide statisticile",
+    notificationsTitle: "Notificări",
+    notificationsBody: "Ce avertizări și memento-uri primești, în aplicație sau pe email.",
+    notificationsLink: "Preferințe de notificare",
   },
   // Faza 9 (F9-B, ADR 0021): exportul GDPR și ștergerea contului.
   privacy: {
@@ -2256,6 +2260,101 @@ export const ro = {
     detectedLine: (occurrences: number, lastOn: string) =>
       `${occurrences} apariții, ultima pe ${lastOn}`,
     manage: "Gestionează în Recurențe",
+  },
+  notifications: {
+    eyebrow: "Avertizări și memento-uri",
+    title: "Notificări",
+    bell: (n: number) =>
+      n === 0 ? "Notificări" : n === 1 ? "O notificare necitită" : `${n} notificări necitite`,
+    intro:
+      "Generate zilnic în aplicație din datele tale (plăți programate, bugete, cheltuieli neobișnuite, obiective, abonamente, rezumatul lunii, documente eșuate). Alege ce primești din Setări → Notificări.",
+    noHousehold: "Alege sau creează o gospodărie ca să vezi notificările.",
+    empty: "Nicio notificare. Evaluarea rulează zilnic dimineața.",
+    unreadOnly: "Doar necitite",
+    all: "Toate",
+    markRead: "Marchează citită",
+    markAllRead: "Marchează toate citite",
+    delete: "Șterge",
+    read: "citită",
+    open: "Deschide",
+    settingsLink: "Preferințe de notificare",
+    error: "Nu am putut actualiza notificarea. Încearcă din nou.",
+    kinds: {
+      payment_due: "Plată programată",
+      budget_warning: "Buget aproape de limită",
+      budget_exceeded: "Buget depășit",
+      unusual_spending: "Cheltuială neobișnuită",
+      goal_reminder: "Obiectiv",
+      subscription_renewal: "Reînnoire abonament",
+      monthly_summary: "Rezumatul lunii",
+      sync_failure: "Document eșuat",
+    },
+    kindHints: {
+      payment_due: "Scadențele regulilor recurente din următoarele 3 zile.",
+      budget_warning: "Un buget a trecut de pragul de avertizare în luna curentă.",
+      budget_exceeded: "Un buget a fost depășit în luna curentă.",
+      unusual_spending: "O cheltuială iese din tiparul ultimelor 6 luni (vezi Consilierul).",
+      goal_reminder: "Un obiectiv are termenul în 7 zile sau depășit.",
+      subscription_renewal: "Un abonament se reînnoiește în următoarele 3 zile.",
+      monthly_summary: "În prima zi a lunii, rezumatul lunii precedente.",
+      sync_failure: "Un bon sau un extras nu a putut fi procesat.",
+    },
+    preferences: {
+      title: "Preferințe de notificare",
+      eyebrow: "Setări",
+      intro:
+        "Notificările se calculează în aplicație, din datele tale, o dată pe zi. Emailul e oprit implicit și cere SMTP configurat de operator; conține aceleași texte ca în aplicație.",
+      inApp: "Notificări în aplicație",
+      inAppHint: "Oprite = nu se generează nimic (nici pe email).",
+      email: "Trimite-mi și pe email (digest zilnic)",
+      emailHint: "Doar notificările noi, într-un singur email pe zi.",
+      kindsTitle: "Tipuri de notificări",
+      save: "Salvează",
+      saving: "Se salvează…",
+      saved: "Preferințele au fost salvate.",
+      error: "Preferințele nu au putut fi salvate. Încearcă din nou.",
+    },
+    texts: {
+      payment_due: {
+        title: "Plată programată: {name}",
+        body: "{name} de {amount} e scadentă pe {date}.",
+      },
+      budget_warning: {
+        title: "Bugetul {name} e aproape de limită",
+        body: "Ai cheltuit {spent} din {amount} luna aceasta.",
+      },
+      budget_exceeded: {
+        title: "Bugetul {name} a fost depășit",
+        body: "Ai cheltuit {spent} din {amount} luna aceasta.",
+      },
+      unusual_spending: { title: "Cheltuială neobișnuită de {amount}" },
+      goal_overdue: {
+        title: "Termenul obiectivului {name} a trecut",
+        body: "Mai ai de strâns {remaining} pentru {name}. Prelungește termenul sau ajustează ținta.",
+      },
+      goal_soon: {
+        title: "Obiectivul {name} are termenul în {days} zile",
+        body: "Mai ai de strâns {remaining} pentru {name}.",
+      },
+      subscription_renewal: {
+        title: "Se reînnoiește: {name}",
+        body: "{name} de {amount} se reînnoiește pe {date}.",
+      },
+      monthly_summary: { title: "Rezumatul lunii {label}" },
+      sync_failure: {
+        title: "Un document nu a putut fi procesat",
+        receipt:
+          "Un bon încărcat a eșuat la procesare. Deschide Bonuri ca să-l verifici sau să-l reîncarci.",
+        statement: "Un extras PDF nu a putut fi citit. Încearcă exportul CSV al băncii.",
+      },
+    },
+    email: {
+      subject: (n: number) => (n === 1 ? "FINET: o notificare nouă" : `FINET: ${n} notificări noi`),
+      greeting: (name: string) => `Salut, ${name}!`,
+      open: "Deschide în FINET",
+      footer:
+        "Poți opri emailurile din Setări → Notificări. FINET nu trimite niciodată linkuri de autentificare în aceste mesaje.",
+    },
   },
   advisor: {
     eyebrow: "Consilier financiar",

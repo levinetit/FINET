@@ -7,6 +7,8 @@ import { LocalStorage } from "@/lib/storage";
 import { PgTlsConfigError } from "./boss";
 import { DEFAULT_PREPROCESS_TIMEOUT_MS } from "./receipts/preprocess";
 import { aiRuntimeFromConfig } from "./receipts/receipt-jobs";
+import { createMailer } from "@/modules/auth/mailer";
+
 import { type RunningWorker, errorCode, startWorker } from "./main";
 
 /**
@@ -65,6 +67,11 @@ export async function main(io: WorkerIo): Promise<{ code: number; worker: Runnin
         config.storage.driver === "local"
           ? { storage: new LocalStorage(config.storage.dir, { readOnly: true }) }
           : undefined,
+      // Notificările (ADR 0048): mereu pornite; emailul doar cu SMTP configurat.
+      notify: {
+        mailer: createMailer(config.notify.smtp, { production: config.nodeEnv === "production" }),
+        appUrl: config.appUrl,
+      },
     });
     log({
       event: "receipts",

@@ -15,6 +15,7 @@ export * from "./finet";
 export * from "./households";
 export * from "./ledger";
 export * from "./net-worth";
+export * from "./notifications";
 export * from "./planning";
 export * from "./recurring";
 export * from "./shopping";

@@ -4,11 +4,13 @@ import { AppNav } from "@/components/app/app-nav";
 import { LiveUpdates } from "@/components/app/live-updates";
 import { InstallPrompt, OfflineSync } from "@/components/app/pwa-app";
 import { HouseholdSwitcher, type SwitcherHousehold } from "@/components/family/household-switcher";
+import { NotificationsBadge } from "@/components/app/notifications-badge";
 import { Announcements, FeedbackLink } from "@/components/site/announcements";
 import { getConfig } from "@/lib/config";
 import { ro } from "@/messages/ro";
 import { listActiveAnnouncements } from "@/modules/admin/admin.service";
 import { listMyHouseholds } from "@/modules/households/households.service";
+import { unreadCount } from "@/modules/notifications/notifications.service";
 
 import { getPageSession } from "../_lib/session";
 
@@ -55,6 +57,19 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   }
   // Faza 9: coada scanărilor offline, legată de utilizator și de gospodăria activă (ADR 0020).
   const currentHousehold = households.find((h) => h.current)?.id ?? null;
+  // Modernizare 2026 (ADR 0048): numărul de notificări necitite (o eroare nu blochează pagina).
+  let unread = 0;
+  if (session && currentHousehold) {
+    try {
+      unread = await unreadCount(
+        { db: session.runtime.db },
+        { userId: session.userId },
+        currentHousehold,
+      );
+    } catch {
+      unread = 0;
+    }
+  }
   return (
     <div className="min-h-dvh px-4 md:grid md:grid-cols-[228px_minmax(0,1fr)] md:gap-8">
       <a href="#continut" className="skip-link">
@@ -71,6 +86,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
             <HouseholdSwitcher households={households} />
           </div>
         ) : null}
+        {unread > 0 ? <NotificationsBadge unread={unread} /> : null}
         {session ? <LiveUpdates /> : null}
         {saas ? <Announcements items={notices} /> : null}
         {session ? <InstallPrompt /> : null}
