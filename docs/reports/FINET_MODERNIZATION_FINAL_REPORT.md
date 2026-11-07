@@ -60,7 +60,7 @@ Actualizate: better-auth 1.7.18, jose 6.2.15, nodemailer 10.3.1, next 16.4.5, pg
 ## 7. Rezultatele testelor
 
 - Local (container Node 24, PostgreSQL 17 efemer): `pnpm typecheck` OK, `pnpm lint` OK, `pnpm format:check` OK, `pnpm test:ops` OK, `pnpm openapi:check` OK (regenerat).
-- Vitest local după pasul K: **2.008 trecute, 0 picate** (173 de fișiere; cele două picări de atunci erau exemple cu `GBP`, corectate în `5d49f13`). După pasul O: suita completă rulată din nou (vezi secțiunea 8 pentru CI).
+- Vitest local, suita completă pe ultimul cod (după pasul O): **2.024 de teste trecute, 0 picate, 13 sărite** (175 de fișiere, 2 sărite; ~5 minute).
 - Teste noi: ~75 unitare (scor, prognoză, consilier, avere, plan, abonamente, reguli de notificare, conversie, parser BCE, banking, logger, texte) + ~25 de integrare pe PostgreSQL real (fiecare modul: cifre din date, izolare între gospodării, validări, 401/400/404/409, deduplicare, preferințe, digest cu expeditor fals, jobul workerului, migrații 0027–0029 de două ori + restaurare).
 - E2E: proiectele existente rulează în CI; **nu au fost adăugate proiecte E2E noi** pentru paginile noi (acoperite prin testele de integrare API și regulile statice UI/a11y). Limitare declarată.
 
