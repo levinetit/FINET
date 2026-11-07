@@ -63,6 +63,7 @@ const ITEMS = [
   { href: "/ask", label: ro.nav.ask, icon: HelpIcon, mobile: false },
   // Modernizare 2026 (ADR 0045): scorul de sănătate financiară; pe telefon în „Mai mult”.
   { href: "/health", label: ro.nav.health, icon: TargetIcon, mobile: false },
+  { href: "/forecast", label: ro.nav.forecast, icon: ChartIcon, mobile: false },
   { href: "/profile", label: ro.nav.profile, icon: UserIcon, mobile: false },
   // Faza 9: setările aplicației (instalare PWA, aplicația Android) și ghidul.
   { href: "/settings", label: ro.nav.settings, icon: SettingsIcon, mobile: false },

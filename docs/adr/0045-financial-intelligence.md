@@ -24,6 +24,13 @@ Master prompt-ul de modernizare cere un „consilier financiar” care analizeaz
 6. **Vizibilitatea** urmează RLS-ul existent (ADR 0016): conturile personale ale altor membri și bugetele lor personale nu intră în scorul cititorului; un membru vede scorul „său” din perspectiva datelor pe care le poate vedea.
 7. **API:** `GET /api/v1/health-score?month=` (fereastra de 60 de luni ca restul planificării), în registrul OpenAPI (`HealthScore`), cu testul de contract. Fără rate limit propriu (o singură interogare agregată + soldurile; cost similar dashboard-ului).
 
+## Prognoza de cash-flow (pasul E)
+
+8. **Model aditiv, în întregi:** soldul proiectat pe zile = soldul de azi al conturilor active vizibile (toate tipurile, inclusiv cardurile de credit, ca poziție netă în monedă) + scadențele regulilor recurente active (aceeași grilă `calendar.ts` ca workerul: `occurrenceOnOrAfter` de la `max(next_run_on, mâine)`, cu `end_on` și scadențele rămase) + media zilnică a veniturilor și cheltuielilor **nerecurente** din ultimele 3 luni complete cu activitate (`source <> 'recurring'`, ca să nu se numere de două ori ce generează regulile). Azi nu intră în prognoză (ziua curentă e în sold sau o generează workerul); scadențele restante le generează workerul ca tranzacții trecute.
+9. **Orizonturi fixe** 30/60/90 (`?days=`, implicit 90), cu rezumat pe fiecare: sold proiectat, venituri și plăți programate, estimările liniei de bază, cel mai mic sold și ziua lui (semnal de descoperire). Punctele pe zile (cel mult 91) sunt în răspuns pentru grafic.
+10. **Încrederea** e un punctaj 0–100 explicat prin motive cu coduri stabile: istoricul (3 luni complete 40, 2 luni 25, 1 lună 10), stabilitatea cheltuielilor lunare (abaterea absolută medie ≤ 10 % 30, ≤ 30 % 20, altfel 5), acoperirea cheltuielilor de reguli recurente (≥ 50 % 30, > 0 15), minus orizontul (60 de zile −10, 90 −20). ≥ 70 ridicată, ≥ 40 medie, altfel scăzută. Pragurile sunt decizia mea.
+11. **Eticheta** „Estimare … Nu este sfat financiar” însoțește răspunsul și pagina; cifrele programate (din reguli) și cele estimate (din medie) sunt separate în răspuns, ca Android și web să le poată distinge vizual.
+
 ## Consecințe
 
 - Fără date noi: scorul e reproductibil din tranzacții și poate fi recalculat pentru orice lună; nu există „istoric al scorului” decât prin recalculare.

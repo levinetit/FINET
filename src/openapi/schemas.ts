@@ -378,6 +378,67 @@ export const healthScoreSchema = z
   })
   .meta({ title: "HealthScore" });
 
+/** Prognoza de cash-flow (modernizare 2026, pasul E; ADR 0045). */
+const forecastHorizon = z.union([z.literal(30), z.literal(60), z.literal(90)]);
+export const forecastSchema = z
+  .strictObject({
+    today: date,
+    days: forecastHorizon,
+    currencies: z.array(
+      z.strictObject({
+        currency,
+        today: date,
+        days: forecastHorizon,
+        openingMinor: minor,
+        points: z.array(
+          z.strictObject({
+            date,
+            balanceMinor: minor,
+            scheduledMinor: minor,
+            baselineMinor: minor,
+          }),
+        ),
+        horizons: z.array(
+          z.strictObject({
+            days: forecastHorizon,
+            endOn: date,
+            projectedMinor: minor,
+            scheduledIncomeMinor: minor,
+            scheduledExpenseMinor: minor,
+            baselineIncomeMinor: minor,
+            baselineExpenseMinor: minor,
+            lowestMinor: minor,
+            lowestOn: date,
+          }),
+        ),
+        upcoming: z.array(
+          z.strictObject({
+            date,
+            ruleId: uuid,
+            description: z.string(),
+            type: z.enum(["income", "expense"]),
+            amountMinor: minor,
+          }),
+        ),
+        baseline: z.strictObject({
+          dailyIncomeMinor: minor,
+          dailyExpenseMinor: minor,
+          historyMonths: int,
+          historyDays: int,
+          recurringCoverageBp: int.nullable(),
+          spendingVariationBp: int.nullable(),
+        }),
+        confidence: z.strictObject({
+          level: z.enum(["high", "medium", "low"]),
+          score: int.min(0).max(100),
+          reasons: z.array(z.strictObject({ code: z.string(), text: z.string() })),
+        }),
+        label: z.string().meta({ description: "Estimare, nu sfat financiar." }),
+      }),
+    ),
+  })
+  .meta({ title: "Forecast" });
+
 export const monthlyReportSchema = z
   .strictObject({
     month: z.string(),

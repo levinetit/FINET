@@ -9,6 +9,7 @@ import type { ApiDeps } from "./_lib/http";
 import * as I from "./_lib/intelligence-handlers";
 import * as L from "./_lib/ledger-handlers";
 import * as P from "./_lib/planning-handlers";
+import * as RC from "./_lib/recurring-handlers";
 import {
   type ApiInit,
   type Sessions,
@@ -234,5 +235,100 @@ describe.skipIf(!TEST_ADMIN_URL)("API /api/v1/health-score pe PostgreSQL real", 
   it("cu cookie: GET merge fără Origin (nu e mutație)", async () => {
     const r = await call(I.healthScoreHandler, "/api/v1/health-score", { cookie: A.cookie });
     expect(r.status).toBe(200);
+  });
+
+  describe("prognoza de cash-flow", () => {
+    type ForecastJson = {
+      today: string;
+      days: number;
+      currencies: {
+        currency: string;
+        openingMinor: number;
+        points: { date: string; balanceMinor: number; scheduledMinor: number }[];
+        horizons: {
+          days: number;
+          projectedMinor: number;
+          scheduledExpenseMinor: number;
+          lowestMinor: number;
+        }[];
+        upcoming: { date: string; description: string; type: string; amountMinor: number }[];
+        baseline: {
+          dailyExpenseMinor: number;
+          historyMonths: number;
+          recurringCoverageBp: number | null;
+        };
+        confidence: { level: string; score: number; reasons: { code: string }[] };
+        label: string;
+      }[];
+    };
+
+    it("Ana: soldul de azi, regula recurentă ca plată viitoare, linia de bază din 3 luni", async () => {
+      const accounts = await call(L.listAccountsHandler, "/api/v1/accounts", { bearer: A.bearer });
+      const bank = (accounts.body.data as { id: string; name: string }[]).find(
+        (x) => x.name === "Bancă",
+      )!;
+      const rule = await call(RC.createRecurringHandler, "/api/v1/recurring", {
+        bearer: A.bearer,
+        headers: { "idempotency-key": newKey() },
+        body: {
+          accountId: bank.id,
+          type: "expense",
+          amount: "1500",
+          description: "Chirie",
+          frequency: "monthly",
+          dayOfMonth: 5,
+          startOn: "2026-11-05",
+        },
+      });
+      expect(rule.status, JSON.stringify(rule.body)).toBe(201);
+
+      const r = await call(I.forecastHandler, "/api/v1/forecast", { bearer: A.bearer });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const data = r.body.data as ForecastJson;
+      expect(data.today).toBe("2026-10-28");
+      expect(data.days).toBe(90);
+      const ron = data.currencies.find((c) => c.currency === "RON")!;
+      // Sold: bancă 10.000 + card −500 = 9.500.
+      expect(ron.openingMinor).toBe(950000);
+      expect(ron.points).toHaveLength(91);
+      expect(ron.points[0]!.balanceMinor).toBe(950000);
+      // Istoric: iulie–septembrie (3.800 ×3 cheltuieli nerecurente / 92 zile = 12.391 bani/zi).
+      expect(ron.baseline.historyMonths).toBe(3);
+      expect(ron.baseline.dailyExpenseMinor).toBe(12391);
+      expect(ron.baseline.recurringCoverageBp).toBe(0);
+      // Chiria: 5 nov, 5 dec, 5 ian.
+      expect(ron.upcoming.map((e) => e.date)).toEqual(["2026-11-05", "2026-12-05", "2027-01-05"]);
+      expect(ron.upcoming[0]).toMatchObject({
+        description: "Chirie",
+        type: "expense",
+        amountMinor: 150000,
+      });
+      const h30 = ron.horizons.find((h) => h.days === 30)!;
+      expect(h30.scheduledExpenseMinor).toBe(150000);
+      // Venitul (salariul manual) e nerecurent: 5.000 ×3 / 92 zile = 16.304 bani/zi.
+      expect(ron.baseline.dailyIncomeMinor).toBe(16304);
+      expect(h30.projectedMinor).toBe(950000 - 150000 + 30 * (16304 - 12391));
+      expect(ron.confidence.reasons.map((x) => x.code)).toContain("history_full");
+      expect(ron.label).toContain("Estimare");
+    });
+
+    it("izolare: Bogdan nu vede regula Anei; orizont de 30 de zile; 400 la orizont nepermis", async () => {
+      const r = await call(I.forecastHandler, "/api/v1/forecast?days=30", { bearer: B.bearer });
+      expect(r.status).toBe(200);
+      const data = r.body.data as ForecastJson;
+      expect(data.days).toBe(30);
+      const ron = data.currencies[0]!;
+      expect(ron.upcoming).toEqual([]);
+      expect(ron.points).toHaveLength(31);
+      expect(ron.horizons.map((h) => h.days)).toEqual([30]);
+      expect(ron.openingMinor).toBe(6000);
+      expect(ron.confidence.level).toBe("low");
+
+      const bad = await call(I.forecastHandler, "/api/v1/forecast?days=45", { bearer: A.bearer });
+      expect(bad.status).toBe(400);
+      expect(bad.body.error?.fields).toHaveProperty("days");
+      const none = await call(I.forecastHandler, "/api/v1/forecast", {});
+      expect(none.status).toBe(401);
+    });
   });
 });

@@ -4,6 +4,8 @@ import type { DbOrTx } from "@/db";
 import { type Month, addMonths, isMonth } from "@/lib/calendar";
 import { ValidationError } from "@/lib/errors";
 import { type PlanningDeps, resolveMonth } from "@/modules/budgets/budgets.service";
+import { forecastViewToJson } from "@/modules/forecast/forecast.schema";
+import { getForecast } from "@/modules/forecast/forecast.service";
 import { healthViewToJson } from "@/modules/health/health.schema";
 import { getHealthScore } from "@/modules/health/health.service";
 import { inHousehold } from "@/modules/ledger/context";
@@ -47,5 +49,17 @@ export function healthScoreHandler(request: Request, d: ApiDeps): Promise<Respon
     const month = await monthOf(ctx, hh, query.month);
     const view = await getHealthScore(planning(d.db, ctx), ctx.actor, hh, { month });
     return json({ data: healthViewToJson(view) });
+  });
+}
+
+/** `GET /api/v1/forecast?days=30|60|90` — prognoza de cash-flow, pe monedă (implicit 90 de zile). */
+export function forecastHandler(request: Request, d: ApiDeps): Promise<Response> {
+  return handle(request, d, async (ctx) => {
+    const query = readQuery(request, { days: "int" });
+    const hh = await currentHousehold(ctx);
+    const view = await getForecast(planning(d.db, ctx), ctx.actor, hh, {
+      ...(query.days === undefined ? {} : { days: query.days }),
+    });
+    return json({ data: forecastViewToJson(view) });
   });
 }

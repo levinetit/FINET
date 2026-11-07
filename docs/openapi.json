@@ -9069,6 +9069,71 @@
         }
       }
     },
+    "/api/v1/forecast": {
+      "get": {
+        "operationId": "getForecast",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Prognoza de cash-flow la 30/60/90 de zile, separat pe monedă.",
+        "description": "Soldul proiectat pe zile din soldul de azi al conturilor active, scadențele regulilor recurente active (plățile viitoare) și media zilnică a veniturilor/cheltuielilor nerecurente din ultimele 3 luni complete; rezumate la 30/60/90 de zile (sold proiectat, venituri și cheltuieli programate, minimul și ziua lui) și un indicator de încredere cu motive. Calculat în aplicație, fără AI; `label` spune că e o estimare.",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Orizontul în zile (implicit 90).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "30",
+                "60",
+                "90"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FinetClient"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prognoza.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Forecast"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/E400"
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "404": {
+            "$ref": "#/components/responses/E404"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          },
+          "500": {
+            "$ref": "#/components/responses/E500"
+          }
+        }
+      }
+    },
     "/api/v1/goals": {
       "get": {
         "operationId": "listGoals",
@@ -31719,6 +31784,370 @@
         ],
         "additionalProperties": false,
         "title": "Error"
+      },
+      "Forecast": {
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Dată calendaristică `YYYY-MM-DD`."
+          },
+          "days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 30
+              },
+              {
+                "type": "number",
+                "const": 60
+              },
+              {
+                "type": "number",
+                "const": 90
+              }
+            ]
+          },
+          "currencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "currency": {
+                  "type": "string",
+                  "enum": [
+                    "RON",
+                    "EUR",
+                    "USD"
+                  ]
+                },
+                "today": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                  "description": "Dată calendaristică `YYYY-MM-DD`."
+                },
+                "days": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 30
+                    },
+                    {
+                      "type": "number",
+                      "const": 60
+                    },
+                    {
+                      "type": "number",
+                      "const": 90
+                    }
+                  ]
+                },
+                "openingMinor": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "description": "Dată calendaristică `YYYY-MM-DD`."
+                      },
+                      "balanceMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "scheduledMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "baselineMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      }
+                    },
+                    "required": [
+                      "date",
+                      "balanceMinor",
+                      "scheduledMinor",
+                      "baselineMinor"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "horizons": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "days": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "const": 30
+                          },
+                          {
+                            "type": "number",
+                            "const": 60
+                          },
+                          {
+                            "type": "number",
+                            "const": 90
+                          }
+                        ]
+                      },
+                      "endOn": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "description": "Dată calendaristică `YYYY-MM-DD`."
+                      },
+                      "projectedMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "scheduledIncomeMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "scheduledExpenseMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "baselineIncomeMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "baselineExpenseMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "lowestMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      },
+                      "lowestOn": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "description": "Dată calendaristică `YYYY-MM-DD`."
+                      }
+                    },
+                    "required": [
+                      "days",
+                      "endOn",
+                      "projectedMinor",
+                      "scheduledIncomeMinor",
+                      "scheduledExpenseMinor",
+                      "baselineIncomeMinor",
+                      "baselineExpenseMinor",
+                      "lowestMinor",
+                      "lowestOn"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "upcoming": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "description": "Dată calendaristică `YYYY-MM-DD`."
+                      },
+                      "ruleId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "income",
+                          "expense"
+                        ]
+                      },
+                      "amountMinor": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                      }
+                    },
+                    "required": [
+                      "date",
+                      "ruleId",
+                      "description",
+                      "type",
+                      "amountMinor"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "baseline": {
+                  "type": "object",
+                  "properties": {
+                    "dailyIncomeMinor": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                    },
+                    "dailyExpenseMinor": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Sumă în unități minore (întreg, sub 2^53); niciodată zecimale."
+                    },
+                    "historyMonths": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "historyDays": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recurringCoverageBp": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "spendingVariationBp": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "dailyIncomeMinor",
+                    "dailyExpenseMinor",
+                    "historyMonths",
+                    "historyDays",
+                    "recurringCoverageBp",
+                    "spendingVariationBp"
+                  ],
+                  "additionalProperties": false
+                },
+                "confidence": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "high",
+                        "medium",
+                        "low"
+                      ]
+                    },
+                    "score": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "level",
+                    "score",
+                    "reasons"
+                  ],
+                  "additionalProperties": false
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Estimare, nu sfat financiar."
+                }
+              },
+              "required": [
+                "currency",
+                "today",
+                "days",
+                "openingMinor",
+                "points",
+                "horizons",
+                "upcoming",
+                "baseline",
+                "confidence",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "today",
+          "days",
+          "currencies"
+        ],
+        "additionalProperties": false,
+        "title": "Forecast"
       },
       "Goal": {
         "type": "object",

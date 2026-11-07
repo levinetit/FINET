@@ -102,6 +102,7 @@ import {
   consentStateSchema,
   dashboardSchema,
   dataOf,
+  forecastSchema,
   goalSchema,
   healthScoreSchema,
   householdDetailSchema,
@@ -1465,6 +1466,24 @@ export const OPERATIONS: readonly Operation[] = [
       "Scor 0–100 calculat în aplicație (fără AI) din rata de economisire, fluxul de numerar, fondul de urgență, stabilitatea cheltuielilor, aderența la bugete și datoriile pe termen scurt; fiecare componentă are valoarea, ponderea și explicația. Nu e scor de credit. O componentă fără date e `null` și nu intră în medie.",
     query: [MONTH_PARAM],
     success: { status: 200, schema: dataOf(healthScoreSchema), description: "Scorul." },
+    errors: [VALIDATION, NOT_FOUND],
+  },
+  {
+    method: "GET",
+    path: "/api/v1/forecast",
+    operationId: "getForecast",
+    tag: "reports",
+    summary: "Prognoza de cash-flow la 30/60/90 de zile, separat pe monedă.",
+    description:
+      "Soldul proiectat pe zile din soldul de azi al conturilor active, scadențele regulilor recurente active (plățile viitoare) și media zilnică a veniturilor/cheltuielilor nerecurente din ultimele 3 luni complete; rezumate la 30/60/90 de zile (sold proiectat, venituri și cheltuieli programate, minimul și ziua lui) și un indicator de încredere cu motive. Calculat în aplicație, fără AI; `label` spune că e o estimare.",
+    query: [
+      {
+        name: "days",
+        schema: z.enum(["30", "60", "90"]),
+        description: "Orizontul în zile (implicit 90).",
+      },
+    ],
+    success: { status: 200, schema: dataOf(forecastSchema), description: "Prognoza." },
     errors: [VALIDATION, NOT_FOUND],
   },
   // --- Dashboard și raportul lunar -----------------------------------------------------------
