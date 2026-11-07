@@ -117,7 +117,7 @@ describe.skipIf(!TEST_ADMIN_URL)("bugete (Postgres real, finet_app)", () => {
     for (const bad of [
       { amountMinor: 0, currency: "RON" },
       { amountMinor: 10_000_000_000_001, currency: "RON" },
-      { amountMinor: 100, currency: "GBP" },
+      { amountMinor: 100, currency: "CHF" },
       { amountMinor: 100, currency: "RON", warnPct: 0 },
       { amountMinor: 100, currency: "RON", warnPct: 101 },
       { amountMinor: 100, amount: "1,00", currency: "RON" },

@@ -6,7 +6,7 @@ import { type FormEvent, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { NOTIFICATION_KINDS } from "@/db/schema";
+import { NOTIFICATION_KINDS } from "@/modules/notifications/kinds";
 import { ro } from "@/messages/ro";
 import type { PreferencesJson } from "@/modules/notifications/notifications.schema";
 

@@ -12,7 +12,7 @@ Creat în Faza 4 (ADR 0010). Două măsurători: mărimea JavaScript-ului trimis
 
 ```json bundle-budget
 {
-  "defaultKiB": 200,
+  "defaultKiB": 210,
   "routes": {
     "/login": 190,
     "/register": 190
@@ -78,3 +78,4 @@ O bază nouă (migrațiile reale, rolurile `finet_migrator`/`finet_app`), 50.000
 
 **Recalibrare în Faza 11-C2 (2026-10-31):** `/login` primește butonul „Continuă cu Google” (apel `fetch` + redirecționare) și mesajul de eroare; pragul trece de la 180 la 190 KiB (aceeași marjă ca `/register`). Cifra măsurată în CI se completează aici după prima rulare.
 
+**Recalibrare în modernizarea 2026 (2026-11-07):** pașii D–K adaugă opt pagini, șapte intrări de navigare și ≈ 400 de linii în `src/messages/ro.ts` (importat de componentele client), deci baza comună crește cu ≈ 2–5 KiB: rutele autentificate măsoară în CI 198,5–205,4 KiB (`/import` 205,4, `/receipts/[id]` 204,7, `/insights` 204,4). Pragul implicit trece la 210 KiB (≈ + 2 % peste maximul măsurat); `/login` și `/register` rămân la 190. Cauza concretă a fost analizată: `/settings/notifications` măsura 229,3 KiB pentru că formularul client importa `NOTIFICATION_KINDS` din `@/db/schema` (schema Drizzle intra în bundle); lista a fost mutată în `src/modules/notifications/kinds.ts` (fără dependențe). Următoarea reducere reală, nu ridicare de prag: împărțirea `ro.ts` pe pagini (pasul N din planul de modernizare), ca textele unei pagini să nu intre în bundle-ul alteia.

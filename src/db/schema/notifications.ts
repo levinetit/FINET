@@ -19,17 +19,8 @@ import { households } from "./households";
  * plus partea scrisă de mână: RLS, drepturile, funcția `finet.notification_targets`).
  */
 
-export const NOTIFICATION_KINDS = [
-  "payment_due",
-  "budget_warning",
-  "budget_exceeded",
-  "unusual_spending",
-  "goal_reminder",
-  "subscription_renewal",
-  "monthly_summary",
-  "sync_failure",
-] as const;
-export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+export { NOTIFICATION_KINDS, type NotificationKind } from "@/modules/notifications/kinds";
+import { NOTIFICATION_KINDS } from "@/modules/notifications/kinds";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 

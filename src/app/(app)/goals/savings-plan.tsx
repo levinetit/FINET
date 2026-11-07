@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { Bar } from "@/components/planning/charts";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Currency } from "@/lib/money";
@@ -64,9 +62,8 @@ export function GoalPlans({ goals }: Readonly<{ goals: readonly GoalPlanJson[] }
             data-testid="goal-plan"
             data-goal-id={g.goalId}
           >
-            <Link href={`/goals/${g.goalId}`} className="font-medium hover:text-primary">
-              {g.name}
-            </Link>
+            {/* Fără link cu același nume ca în listele de mai jos (un singur link pe obiectiv). */}
+            <span className="font-medium">{g.name}</span>
             <PlanLine plan={g.plan} currency={g.currency as Currency} />
           </li>
         ))}

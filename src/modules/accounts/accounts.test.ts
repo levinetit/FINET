@@ -210,7 +210,7 @@ describe.skipIf(!TEST_ADMIN_URL)("conturi și solduri (Postgres real, finet_app)
     for (const bad of [
       { name: "", type: "cash", currency: "RON" },
       { name: "X", type: "crypto", currency: "RON" },
-      { name: "X", type: "cash", currency: "GBP" },
+      { name: "X", type: "cash", currency: "CHF" },
       { name: "X", type: "cash", currency: "RON", householdId: f.HB },
       { name: "X", type: "cash", currency: "RON", openingBalanceMinor: 1.5 },
       { name: "X", type: "cash", currency: "RON", bankCode: "BT; drop" },
