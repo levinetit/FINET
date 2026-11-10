@@ -78,7 +78,7 @@ jobs:
       # apar în Security → Code scanning (SARIF) și în jurnalul pasului (tabel CRITICAL/HIGH).
       # Modernizare 2026, pasul A.
       - name: Scanează imaginea (Trivy, tabel CRITICAL/HIGH)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           image-ref: finet:${{ matrix.name }}-${{ github.sha }}
           format: table
@@ -88,7 +88,7 @@ jobs:
 
       - name: Scanează imaginea (Trivy, SARIF)
         id: trivy-sarif
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           image-ref: finet:${{ matrix.name }}-${{ github.sha }}
           format: sarif
