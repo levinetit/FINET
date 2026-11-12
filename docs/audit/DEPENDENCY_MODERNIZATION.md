@@ -58,3 +58,26 @@ Impact: `pdf-child.mjs` consumă `extractImages` (canalele, dimensiunile) pentru
 - `pnpm audit --prod --audit-level high` e blocant în CI; o vulnerabilitate tranzitivă fără remediere se tratează prin `pnpm.overrides` + notă aici, nu prin `continue-on-error`.
 - Acțiunile GitHub se actualizează pe SHA (Dependabot păstrează comentariul de versiune).
 - Imaginea de bază: la fiecare schimbare de tag se actualizează și digestul (`docker buildx imagetools inspect`).
+
+## 4. Runda 2026-11-12 (ramura `deps/update-2026-11`)
+
+Metoda: aceeași (`pnpm outdated`, `pnpm audit --prod` → 0 vulnerabilități, note de lansare, `pnpm lint`, `pnpm typecheck`, `pnpm test`: 2.023 trecute; singurul eșec, `src/modules/auth/timing.test.ts` (prag 20 ms), e instabil și pe `main` (3 eșecuri din 5 rulări pe host încărcat), deci nu e o regresie).
+
+| Pachet / componentă | De la → la | Notă |
+|---|---|---|
+| `next`, `eslint-config-next` | 16.4.5 → 16.4.6 | patch. |
+| `better-auth` | 1.7.18 → 1.7.20 | citite notele 1.7.19 și 1.7.20: doar corecții (admin create-user, metoda HTTP la client, OAuth în ora DST, `oauth-provider`, adaptorul Prisma); API-ul folosit de FINET neschimbat. |
+| `jose` | 6.2.15 → 6.2.17 | patch. |
+| `pg-boss` | 12.38.1 → 12.38.2 | patch. |
+| `nodemailer` | 10.3.1 → 10.5.0 | minor. |
+| `tailwindcss`, `@tailwindcss/postcss`, `vite` | 4.3.4 → 4.3.5, 8.3.6 → 8.3.8 | patch (închide PR #84). |
+| `eslint` | 9.39.5 → **10.14.0** | `eslint-config-next` 16.4.6 declară `eslint >=9`. `eslint-plugin-import`/`jsx-a11y`/`react` declară încă `^9` (avertisment de peer, nu eroare); o probă cu încălcări intenționate a fost detectată corect (`react/jsx-key`, `jsx-a11y/alt-text`, `@next/next/no-img-element`). |
+| `node` (imagine) | 24.22.1 → **24.22.3** | release de securitate (2026-11-10); digest `sha256:dc26ae92…`. |
+| Acțiuni | `setup-java` 6.2.0, `trivy-action` 0.36.0, `gitleaks-action` 3.0.0 | gitleaks v3 = doar runtime Node 24, fără schimbări de intrări (închide #82, #83, #85). `checkout` v7 și `upload-artifact` v7 erau deja pe `main` (ramurile Dependabot sunt vechi). |
+| `axllent/mailpit` (devcontainer) | v1.32 → v1.33 | închide #64. |
+
+Rămase neschimbate, cu motiv verificat azi:
+- **`typescript` 7.0.2:** `typecheck` trece, dar `pnpm lint` cade: „typescript-eslint does not support TS 7.0” (urmărit în typescript-eslint#10940). Se reia când typescript-eslint suportă TS ≥ 7.1.
+- **`@types/node` 26:** runtime-ul rămâne Node 24; 24.19.2 e deja ultima 24.x.
+- **`postgres:18-alpine` în devcontainer:** Supabase rulează 17 (`ops/postgres/VERSION`).
+- **`postgres` 4.1.0** și **`unpdf` 2.1.0:** în PR-uri separate (`deps/postgres-4`, `deps/unpdf-2`), conform planului din §2.
