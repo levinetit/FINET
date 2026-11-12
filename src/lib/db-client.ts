@@ -53,6 +53,12 @@ export function postgresOptions(url: string, options: DbClientOptions): Postgres
     max: options.max ?? 1,
     // Necesar cu pooler-ul Supabase în modul tranzacție (6543).
     prepare: false,
+    // postgres.js 4: `infer: true` păstrează tipizarea parametrilor din v3 (Date → timestamptz,
+    // boolean, bigint, Buffer, tablouri). Fără ea serverul decide tipul fiecărui parametru, iar
+    // interogările brute cu `${date}` fără cast își pot schimba semantica. Trecerea la
+    // `infer: false` cere întâi inventarul parametrilor Date din SQL brut
+    // (docs/audit/DEPENDENCY_MODERNIZATION.md).
+    infer: true,
     idle_timeout: options.idleTimeoutSeconds ?? 30,
     connect_timeout: options.connectTimeoutSeconds ?? 3,
     onnotice: () => {},

@@ -52,6 +52,8 @@ describe("sslOptionFor / postgresOptions", () => {
     expect(o).toMatchObject({
       max: 1,
       prepare: false,
+      // postgres.js 4: tipizarea parametrilor ca în v3 (vezi db-client.ts).
+      infer: true,
       idle_timeout: 30,
       connect_timeout: 3,
       connection: { application_name: "finet-test" },

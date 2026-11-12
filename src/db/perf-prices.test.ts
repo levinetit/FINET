@@ -182,6 +182,7 @@ describe.skipIf(!ENABLED)("performanța prețurilor și rapoartelor (FINET_PERF=
     const client = postgres(f.fx.scratch.appUrl, {
       max: 1,
       prepare: false,
+      infer: true,
       onnotice: (n) => notices.push(String(n.message)),
     });
     try {

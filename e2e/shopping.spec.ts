@@ -61,7 +61,7 @@ async function ids(page: Page, baseURL: string): Promise<Seed> {
 async function seedReceipt(seed: Seed, lines: { name: string; total: number }[]): Promise<string> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL lipsește (baza de test a E2E)");
-  const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
+  const sql = postgres(url, { max: 1, prepare: false, infer: true, onnotice: () => {} });
   try {
     const on = new Date().toISOString().slice(0, 10);
     const total = lines.reduce((s, l) => s + l.total, 0);

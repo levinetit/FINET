@@ -197,6 +197,7 @@ describe.skipIf(!ENABLED)("performanța pe 50.000 de tranzacții (FINET_PERF=1)"
     const client = postgres(f.fx.scratch.appUrl, {
       max: 1,
       prepare: false,
+      infer: true,
       onnotice: (n) => notices.push(String(n.message)),
     });
     try {
