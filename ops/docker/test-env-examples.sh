@@ -234,9 +234,10 @@ service_block finet-admin | grep -q 'target: /data/storage' && fail "finet-admin
 WB=$(service_block finet-worker)
 echo "$WB" | grep -Eq '^[[:space:]]+image:[[:space:]]*\$\{FINET_TOOLS_IMAGE' && ok "finet-worker din imaginea de unelte" || fail "finet-worker nu folosește FINET_TOOLS_IMAGE"
 echo "$WB" | grep -Eq 'dist/tools/worker\.mjs' && ok "finet-worker rulează dist/tools/worker.mjs" || fail "finet-worker nu rulează dist/tools/worker.mjs"
-# Faza 6 (ADR 0013): plafonul urcă la ≤ 384m (sharp + pdf.js); storage montat DOAR citire.
-echo "$WB" | grep -Eq '^[[:space:]]+mem_limit:[[:space:]]*(3[0-7][0-9]|38[0-4]|[12][0-9]{2}|[0-9]{2})m[[:space:]]*$' && ok "finet-worker: mem_limit ≤ 384m" || fail "finet-worker: mem_limit lipsește sau e prea mare"
-echo "$WB" | grep -Eq '^[[:space:]]+memswap_limit:[[:space:]]*(3[0-7][0-9]|38[0-4]|[12][0-9]{2}|[0-9]{2})m[[:space:]]*$' && ok "finet-worker: memswap_limit ≤ 384m" || fail "finet-worker: memswap_limit lipsește sau e prea mare"
+# Faza 6 (ADR 0013): plafonul urcă la ≤ 384m (sharp + pdf.js); ≤ 448m din 2026-11-12 (unpdf 2,
+# RGBA); storage montat DOAR citire.
+echo "$WB" | grep -Eq '^[[:space:]]+mem_limit:[[:space:]]*(4[0-3][0-9]|44[0-8]|[1-3][0-9]{2}|[0-9]{2})m[[:space:]]*$' && ok "finet-worker: mem_limit ≤ 448m" || fail "finet-worker: mem_limit lipsește sau e prea mare"
+echo "$WB" | grep -Eq '^[[:space:]]+memswap_limit:[[:space:]]*(4[0-3][0-9]|44[0-8]|[1-3][0-9]{2}|[0-9]{2})m[[:space:]]*$' && ok "finet-worker: memswap_limit ≤ 448m" || fail "finet-worker: memswap_limit lipsește sau e prea mare"
 if echo "$WB" | grep -q 'target: /data/storage'; then
   echo "$WB" | awk '/target: \/data\/storage/ { getline; print }' | grep -q 'read_only: true' &&
     ok "finet-worker: storage montat doar citire" || fail "finet-worker: storage nu e read_only"

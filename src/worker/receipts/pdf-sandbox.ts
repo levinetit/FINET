@@ -54,8 +54,11 @@ export class PdfChildError extends Error {
 /** Limitele copilului și bugetul ieșirii (decizia mea, ADR 0013; pragurile măsurate în node:24). */
 export const PDF_CHILD_LIMITS = Object.freeze({
   // Node 24 + unpdf + sharp rezervă ~1,6 GB de adrese virtuale la pornire (măsurat: sharp nu se
-  // încarcă la 1500 MB, se încarcă la 1600 MB); 1800 MB lasă ~200 MB pentru pdf.js și pixeli.
-  addressSpaceBytes: 1800 * 1000 * 1000,
+  // încarcă la 1500 MB, se încarcă la 1600 MB). unpdf 2 decodează în RGBA (4 octeți/pixel) și
+  // încarcă decodoarele de imagini: măsurat 2026-11-12, o pagină scanată de 12–24 MP reușea doar
+  // 1 din 3 ori la 1800 MB și 3 din 3 de la 2000 MB; 2200 MB lasă rezervă. RSS-ul real al
+  // copilului la 24 MP: 271 MB (unpdf 1: 223 MB), de aceea `mem_limit` al workerului e 448m.
+  addressSpaceBytes: 2200 * 1000 * 1000,
   cpuSeconds: 30,
   maxOldSpaceMb: 64,
   maxImagesPerPage: 16,
