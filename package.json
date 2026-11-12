@@ -68,7 +68,7 @@
     "axe-core": "4.14.0",
     "drizzle-kit": "0.31.11",
     "esbuild": "0.28.2",
-    "eslint": "9.39.5",
+    "eslint": "10.14.0",
     "eslint-config-next": "16.4.6",
     "eslint-config-prettier": "10.1.8",
     "prettier": "3.9.10",
