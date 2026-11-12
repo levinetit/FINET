@@ -10,7 +10,7 @@ Installer-ul `ops/install/finet-install.sh` automatizează procedura manuală di
 |---|---|
 | OS | Linux, testat Debian/Ubuntu |
 | Docker Engine + Compose v2 | Engine ≥ 24; Compose ≥ 2.24 (`env_file` cu `required:` din `docker-compose.yml`) |
-| RAM / disc | ≥ 1 GB RAM (`finet-web` 512 MB, worker 448 MB); ≥ 8 GB liberi la `/srv/finet` |
+| RAM / disc | ≥ 1 GB RAM (`finet-web` 512 MB, worker 768 MB); ≥ 8 GB liberi la `/srv/finet` |
 | Comenzi | `curl`, `git`, `openssl`, `python3`, `tar`, `sha256sum`, `awk`, `sed`, `find`; `rsync` și `ssh` la mutare |
 | Acces de ieșire | `github.com`, `api.github.com`, gazda și porturile Supabase (6543 și 5432), `AI_BASE_URL` dacă AI e activ |
 | Supabase | proiect creat, `roles.sql` rulat, Network Restrictions pe IP-ul serverului (vezi mai jos), CA-ul descărcat |

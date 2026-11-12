@@ -82,4 +82,4 @@ Rămase neschimbate, cu motiv verificat azi:
 - **`postgres:18-alpine` în devcontainer:** Supabase rulează 17 (`ops/postgres/VERSION`).
 - **`postgres` 4.1.0** și **`unpdf` 2.1.0:** în PR-uri separate (`deps/postgres-4`, `deps/unpdf-2`), conform planului din §2.
 
-`unpdf` 2.1.0 (ramura `deps/unpdf-2`): `pdf-child.mjs` adaptat la RGBA fără `channels` (fail closed la altă mărime), `flatten` alb, imaginile inline mici (`key === null`) scoase din plafonul de număr dar păstrate în cel de pixeli. Limitele re-măsurate (ADR 0013, addendum 2026-11-12): `--as` 1800 → 2200 MB, `mem_limit` worker 384m → 448m. `eval:receipts` (sintetic): acuratețe totală 0,875, identică cu `main`.
+`unpdf` 2.1.0 (ramura `deps/unpdf-2`): `pdf-child.mjs` adaptat la RGBA fără `channels` (fail closed la altă mărime), `flatten` alb, imaginile inline mici (`key === null`) scoase din plafonul de număr dar păstrate în cel de pixeli. Limitele re-măsurate (ADR 0013, addendum 2026-11-12): `--as` 1800 → 2000 MB, `mem_limit` worker 384m → 768m (invariantul copil + părinte < plafonul containerului). `eval:receipts` (sintetic): acuratețe totală 0,875, identică cu `main`.
