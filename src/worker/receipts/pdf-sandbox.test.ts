@@ -1,14 +1,16 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDeflate } from "node:zlib";
 
+import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildPdf, scannedPdf, textPdf } from "@/modules/documents/testing";
 
 import { PdfScanError, scanPdfImages } from "./pdf-scan";
-import { PdfChildError, activePdfChildren, readPdfInChild } from "./pdf-sandbox";
+import { PDF_CHILD_LIMITS, PdfChildError, activePdfChildren, readPdfInChild } from "./pdf-sandbox";
 
 /**
  * Teste de adversar pentru citirea PDF-urilor (revizuirile de securitate F6-A): inventarul pe
@@ -336,6 +338,78 @@ describe("procesul copil sub prlimit: controlul real", () => {
     // Părintele nu a alocat pixelii (sub 100 MB în plus față de început).
     expect(process.memoryUsage().rss - before).toBeLessThan(100 * 1024 * 1024);
   }, 120_000);
+
+  it("PDF ostil la plafonul --as (4 × 25 MP pe o pagină, acceptat de inventar): doar copilul cade", async () => {
+    // Patru JPEG-uri de 5000 × 5000: exact plafonul pe imagine și cel însumat din producție
+    // (MAX_PDF_IMAGE_PIXELS, 2 × MAX_IMAGE_PIXELS). Decodate RGBA ar cere ~400 MB, peste ce lasă
+    // `--as`: copilul trebuie refuzat, fără proces rămas (ADR 0013, addendum 2026-11-12).
+    const side = 5000;
+    const jpgs = await Promise.all(
+      [0, 1, 2, 3].map((i) =>
+        sharp({
+          create: {
+            width: side,
+            height: side,
+            channels: 3,
+            background: { r: 200 + i, g: 200, b: 200 },
+          },
+        })
+          .jpeg()
+          .toBuffer(),
+      ),
+    );
+    const xobjects = jpgs.map((_, i) => `/Im${i} ${5 + i} 0 R`).join(" ");
+    const paint = jpgs.map((_, i) => `q ${side} 0 0 ${side} 0 0 cm /Im${i} Do Q`).join("\n");
+    const pdf = buildPdf([
+      latin1("<< /Type /Catalog /Pages 2 0 R >>"),
+      latin1("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+      latin1(
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${side} ${side}] /Resources << /XObject << ${xobjects} >> >> /Contents 4 0 R >>`,
+      ),
+      Buffer.concat([
+        latin1(`<< /Length ${paint.length} >>\nstream\n`),
+        latin1(paint),
+        latin1("\nendstream"),
+      ]),
+      ...jpgs.map((jpg) =>
+        Buffer.concat([
+          latin1(
+            `<< /Type /XObject /Subtype /Image /Width ${side} /Height ${side} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`,
+          ),
+          jpg,
+          latin1("\nendstream"),
+        ]),
+      ),
+    ]);
+    // Inventarul îl lasă să treacă (plafoanele lui sunt pe pixeli declarați, nu pe memorie).
+    expect(() =>
+      scanPdfImages(pdf, {
+        maxImagePixels: 25_000_000,
+        maxTotalPixels: 100_000_000,
+        maxImages: 96,
+      }),
+    ).not.toThrow();
+    const error = await readPdfInChild(pdf, {
+      maxPages: 6,
+      minTextChars: 20,
+      deadline: Date.now() + 60_000,
+      maxImagePixels: 25_000_000,
+      maxTotalPixels: 100_000_000,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PdfChildError);
+    expect(activePdfChildren()).toBe(0);
+  }, 120_000);
+
+  it("invariantul de memorie: copilul la plafonul --as + părintele încap în mem_limit al workerului", () => {
+    // Măsurat (ADR 0013, addendum 2026-11-12): RSS-ul maxim al copilului ≈ --as − 1440 MB;
+    // părintele ≤ ~180 MB. Dacă --as crește fără mem_limit, o alocare la plafon ar omorî containerul.
+    const compose = readFileSync(join(process.cwd(), "ops/docker/docker-compose.yml"), "utf8");
+    const worker = compose.slice(compose.indexOf("container_name: finet-worker"));
+    const memMb = Number(/\n\s+mem_limit:\s*(\d+)m/.exec(worker)?.[1]);
+    expect(memMb).toBeGreaterThan(0);
+    const childMb = PDF_CHILD_LIMITS.addressSpaceBytes / 1_000_000 - 1440;
+    expect(childMb + 180).toBeLessThan(memMb * 1.048576);
+  });
 
   describe("copil ostil (simulat): părintele nu alocă peste bugetul fix", () => {
     let dir: string;

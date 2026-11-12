@@ -80,18 +80,26 @@ try {
       let decodedPixels = 0;
       let tooMany = false;
       for (let page = 1; page <= pages && !tooMany; page++) {
-        const found = await extractImages(pdf, page);
-        if (found.length > maxImagesPerPage) {
+        // unpdf 2: întoarce TOATE imaginile pictate (XObject, inline, măști de imagine), mereu
+        // RGBA (4 octeți/pixel, fără `channels`). Imaginile inline mici (`key === null`: logo-uri,
+        // puncte) nu intră în plafonul de număr, dar pixelii lor se adună la plafonul total.
+        const all = await extractImages(pdf, page);
+        decodedPixels += all.reduce((sum, i) => sum + i.width * i.height, 0);
+        const found = all.filter((i) => i.key !== null);
+        if (found.length > maxImagesPerPage || decodedPixels > maxTotalPixels) {
           tooMany = true;
           break;
         }
         found.sort((a, b) => b.width * b.height - a.width * a.height);
         const largest = found[0];
         if (!largest) continue;
-        decodedPixels += found.reduce((sum, i) => sum + i.width * i.height, 0);
-        if (largest.width * largest.height > maxImagePixels || decodedPixels > maxTotalPixels) {
+        if (largest.width * largest.height > maxImagePixels) {
           tooMany = true;
           break;
+        }
+        // Formatul promis de unpdf 2; orice altceva e refuzat (fail closed), nu ghicit.
+        if (largest.data.byteLength !== largest.width * largest.height * 4) {
+          throw new Error("format de imagine neașteptat");
         }
         const raw = Buffer.from(
           largest.data.buffer,
@@ -99,9 +107,11 @@ try {
           largest.data.byteLength,
         );
         const { data: jpeg, info } = await sharp(raw, {
-          raw: { width: largest.width, height: largest.height, channels: largest.channels },
+          raw: { width: largest.width, height: largest.height, channels: 4 },
           limitInputPixels: maxImagePixels,
         })
+          // JPEG nu are alfa: zonele transparente devin albe (fundalul unui bon), nu negre.
+          .flatten({ background: "#ffffff" })
           .resize({ width: maxSidePx, height: maxSidePx, fit: "inside", withoutEnlargement: true })
           .jpeg({ quality: 90 })
           .toBuffer({ resolveWithObject: true });

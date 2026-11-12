@@ -234,11 +234,14 @@ services:
           create_host_path: false
     tmpfs:
       - /tmp:size=32m,mode=1777
-    # Faza 6: 384 MB (sharp + pdf.js; F6-COMUN). Preprocesarea are plafoane de pixeli, pagini și
-    # timp; un document care tot depășește memoria omoară doar containerul (repornit), iar
-    # contorul `attempts` (incrementat ÎNAINTE de lucru) îl scoate din coadă după 10 încercări.
-    mem_limit: 384m
-    memswap_limit: 384m
+    # Faza 6: 384 MB (sharp + pdf.js; F6-COMUN); 768 MB din 2026-11-12 (unpdf 2): copilul PDF e
+    # limitat de `prlimit --as` 2000 MB la ≤ ~561 MB RSS (măsurat cu un PDF ostil), plus părintele
+    # ≤ ~180 MB; plafonul containerului trebuie să le cuprindă pe amândouă (pdf-sandbox.ts).
+    # Preprocesarea are plafoane de pixeli, pagini și timp; un document care tot depășește memoria
+    # omoară doar containerul (repornit), iar contorul `attempts` (incrementat ÎNAINTE de lucru)
+    # îl scoate din coadă după 10 încercări.
+    mem_limit: 768m
+    memswap_limit: 768m
     cpus: 0.5
     pids_limit: 128
     # Fără HTTP: starea lui se vede în /api/health (`queue`, semnalul din
