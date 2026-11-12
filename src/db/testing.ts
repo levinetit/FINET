@@ -40,7 +40,8 @@ function withCredentials(base: string, database: string, user?: keyof typeof TES
   return url.toString();
 }
 
-const quiet = { onnotice: () => {}, max: 1, prepare: false } as const;
+// `infer: true`: aceeași tipizare a parametrilor ca în producție (src/lib/db-client.ts).
+const quiet = { onnotice: () => {}, max: 1, prepare: false, infer: true } as const;
 
 /** Creează o bază nouă, cu schema `finet` și rolurile de test. */
 export async function createScratchDatabase(prefix: string): Promise<ScratchDatabase> {

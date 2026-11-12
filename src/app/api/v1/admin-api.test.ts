@@ -88,7 +88,7 @@ describe.skipIf(!TEST_ADMIN_URL)("11-B: feedback, anunțuri, erori, administrare
     ADMIN = await sessionsFor(saas, "admin@exemplu.ro", PASS);
     USER = await sessionsFor(saas, "ana@exemplu.ro", PASS);
     OTHER = await sessionsFor(saas, "bogdan@exemplu.ro", PASS);
-    appSql = postgres(fx.scratch.appUrl, { max: 1, prepare: false, onnotice: () => {} });
+    appSql = postgres(fx.scratch.appUrl, { max: 1, prepare: false, infer: true, onnotice: () => {} });
     await fx.scratch.admin`delete from finet.audit_events`;
   });
 

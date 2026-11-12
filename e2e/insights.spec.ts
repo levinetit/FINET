@@ -55,7 +55,7 @@ async function ids(page: Page, baseURL: string) {
 async function resetReceipts(seed: { userId: string; householdId: string }): Promise<void> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL lipsește (baza de test a E2E)");
-  const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
+  const sql = postgres(url, { max: 1, prepare: false, infer: true, onnotice: () => {} });
   try {
     await sql.begin(async (tx) => {
       await tx`select set_config('app.user_id', ${seed.userId}, true),
@@ -79,7 +79,7 @@ async function seedReceipt(
 ): Promise<void> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL lipsește (baza de test a E2E)");
-  const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
+  const sql = postgres(url, { max: 1, prepare: false, infer: true, onnotice: () => {} });
   try {
     const on = new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10);
     const total = lines.reduce((s, l) => s + (l.kind === "discount" ? -l.total : l.total), 0);
