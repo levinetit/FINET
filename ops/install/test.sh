@@ -179,6 +179,7 @@ if head -n 1 "$INSTALL" | grep -q '^#!/bin/sh'; then ok "shebang #!/bin/sh"; els
   ERRLOG=$LOGFINAL
   DRY=0
   LOG_SAVED=0
+  LOG_OK=1
   SECRET_VARS=" UNIT_SEC"
   UNIT_SEC=SECRETMARKERUNITLOG
   printf 'pas 1\nEROARE: ceva\n' >"$LOG"
@@ -202,6 +203,14 @@ if head -n 1 "$INSTALL" | grep -q '^#!/bin/sh'; then ok "shebang #!/bin/sh"; els
   ERRLOG=$TMP/nu-trebuie.log
   persist_error_log 2>/dev/null
   t "persist_error_log: în --check fără --log nu scrie" 1 "$([ -e "$ERRLOG" ] && echo 0 || echo 1)"
+  LOG_OK=0
+  DRY=0
+  LOGFINAL=$TMP/inainte-de-mod.log
+  ERRLOG=$LOGFINAL
+  persist_error_log 2>/dev/null
+  t "persist_error_log: înainte ca modul să fie cunoscut nu scrie" 1 "$([ -e "$LOGFINAL" ] && echo 0 || echo 1)"
+  LOG_OK=1
+  LOGFINAL=""
   DRY=0
   PREFIX=$TMP/inexistent
   ERRLOG=$PREFIX/install-x-eroare.log
@@ -376,6 +385,14 @@ fi
 # erori clare
 grep -v '^ADMIN_EMAIL=' "$TMP/answers" >"$TMP/answers.lipsa"
 chmod 600 "$TMP/answers.lipsa"
+# --mode check cu eșec timpuriu (fișier 644 cu secrete): nu scrie nimic în prefix, nici ca root
+if [ "$(id -u)" -eq 0 ]; then
+  cp "$TMP/answers" "$TMP/answers.644m"
+  chmod 644 "$TMP/answers.644m"
+  run_install "$TMP/out/o3m" "$TMP/out/e3m" --mode check --answers "$TMP/answers.644m"
+  expect "--mode check cu fișier de răspunsuri 644: cod 1" 1 $?
+  if [ -z "$(find "$TMP/root" -mindepth 2 2>/dev/null)" ]; then ok "--mode check: eșecul timpuriu nu scrie log în prefix"; else fail "--mode check a scris în prefix: $(find "$TMP/root" -mindepth 2 | head -3)"; fi
+fi
 run_install "$TMP/out/o3" "$TMP/out/e3" --check --answers "$TMP/answers.lipsa"
 expect "răspuns lipsă: cod 1" 1 $?
 contains "răspuns lipsă: mesaj clar" "$TMP/out/e3" "Lipsește răspunsul «ADMIN_EMAIL»"

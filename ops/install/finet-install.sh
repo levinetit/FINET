@@ -53,6 +53,7 @@ NO_TUI=0
 LOGFINAL=""
 ERRLOG=""
 LOG_SAVED=0
+LOG_OK=0
 TUI=""
 QN=0
 FAILS=0
@@ -133,9 +134,11 @@ cleanup() {
 
 # Salvează logul și la ieșirea cu eroare (altfel «vezi log» ar trimite spre un fișier șters odată cu
 # $TMP). Rulează din cleanup, deci NU are voie să cheme die (capcanele sunt deja scoase, iar un
-# exit aici ar sări peste rm -rf $TMP). Nu face nimic în --check fără --log, fără root sau fără
-# directorul prefixului; nu salvează un log în care s-a găsit o valoare secretă.
+# exit aici ar sări peste rm -rf $TMP). Nu face nimic înainte ca modul să fie cunoscut (LOG_OK=1:
+# --mode check / MODE=check din răspunsuri setează DRY abia atunci), în --check fără --log, fără
+# root sau fără directorul prefixului; nu salvează un log în care s-a găsit o valoare secretă.
 persist_error_log() {
+  [ "$LOG_OK" = 1 ] || return 0
   [ "$LOG_SAVED" = 0 ] || return 0
   [ -n "$ERRLOG" ] && [ -s "$LOG" ] || return 0
   if [ -z "$LOGFINAL" ]; then
@@ -1072,7 +1075,7 @@ read_old_sha() {
   if [ -n "$OLD_SHA" ]; then
     note "SHA-ul rulat pe serverul vechi ($MOVE_PREFIX/src): $OLD_SHA"
   else
-    note "Nu am putut citi SHA-ul de pe serverul vechi ($MOVE_PREFIX/src; checkout lipsă sau fără drept de citire/sudo)."
+    note "Nu am putut citi SHA-ul de pe serverul vechi ($MOVE_PREFIX/src): conexiune SSH eșuată (cheia gazdei neacceptată? în --answers se folosește BatchMode), checkout lipsă sau fără drept de citire/sudo -n."
   fi
 }
 
@@ -1960,6 +1963,7 @@ main() {
     DRY=1
     MODE=new
   fi
+  LOG_OK=1
   if [ "$DRY" = 1 ]; then say "  Mod verificare: nu se scrie nimic pe disc (doar un log temporar, șters la ieșire)."; fi
   if [ "$DRY" = 0 ] && [ "$(id -u)" -ne 0 ]; then die "Instalarea cere root: sudo sh ops/install/finet-install.sh"; fi
   SRC=$PREFIX/src
