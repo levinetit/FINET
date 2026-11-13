@@ -11,7 +11,7 @@
 #    nu scrie nimic în prefix/cron/systemd, nu apelează comenzi care modifică, docker doar cu
 #    comenzi de citire, niciun secret din fișierul de răspunsuri în stdout, stderr, log sau argv;
 #  - erori clare: răspuns lipsă, cheie necunoscută, fișier cu secrete citibil de alții, URL invalid.
-# shellcheck disable=SC2034,SC2154,SC2016,SC2030,SC2031,SC2015,SC2317,SC2012
+# shellcheck disable=SC2034,SC2154,SC2016,SC2030,SC2031,SC2015,SC2317,SC2329,SC2012
 # (variabile folosite de funcțiile încărcate din finet-install.sh; stub-uri scrise din șiruri)
 set -u
 
