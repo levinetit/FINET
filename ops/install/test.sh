@@ -171,6 +171,44 @@ if head -n 1 "$INSTALL" | grep -q '^#!/bin/sh'; then ok "shebang #!/bin/sh"; els
   DUP_AGG=1 DUP_BACKUP=1
   OUT=$(gen_cron)
   t "cron: joburile duplicate sunt sărite" 2 "$(printf '%s\n' "$OUT" | grep -c '^[0-9]')"
+
+  # persist_error_log: logul se salvează la eroare, dar nu dacă conține un secret
+  TMP=$(mktemp -d)
+  LOG=$TMP/install.log
+  LOGFINAL=$TMP/salvat.log
+  ERRLOG=$LOGFINAL
+  DRY=0
+  LOG_SAVED=0
+  SECRET_VARS=" UNIT_SEC"
+  UNIT_SEC=SECRETMARKERUNITLOG
+  printf 'pas 1\nEROARE: ceva\n' >"$LOG"
+  persist_error_log 2>"$TMP/pe.err"
+  t "persist_error_log: logul curat se salvează" 0 "$(grep -c '^EROARE: ceva$' "$LOGFINAL" | sed 's/^1$/0/')"
+  t "persist_error_log: modul 600" "600" "$(stat -c %a "$LOGFINAL")"
+  t "persist_error_log: calea apare pe stderr" 0 "$(grep -c "$LOGFINAL" "$TMP/pe.err" | sed 's/^1$/0/')"
+  rm -f "$LOGFINAL"
+  printf 'pas 1\nparola=SECRETMARKERUNITLOG\n' >"$LOG"
+  persist_error_log 2>"$TMP/pe.err"
+  t "persist_error_log: logul cu secret NU se salvează" 1 "$([ -e "$LOGFINAL" ] && echo 0 || echo 1)"
+  t "persist_error_log: logul cu secret e golit" 0 "$([ -s "$LOG" ] && echo 1 || echo 0)"
+  t "persist_error_log: avertismentul nu conține secretul" 0 "$(grep -c 'SECRETMARKER' "$TMP/pe.err")"
+  printf 'pas 1\n' >"$LOG"
+  LOG_SAVED=1
+  persist_error_log 2>/dev/null
+  t "persist_error_log: nu salvează dublu după finish" 1 "$([ -e "$LOGFINAL" ] && echo 0 || echo 1)"
+  LOG_SAVED=0
+  LOGFINAL=""
+  DRY=1
+  ERRLOG=$TMP/nu-trebuie.log
+  persist_error_log 2>/dev/null
+  t "persist_error_log: în --check fără --log nu scrie" 1 "$([ -e "$ERRLOG" ] && echo 0 || echo 1)"
+  DRY=0
+  PREFIX=$TMP/inexistent
+  ERRLOG=$PREFIX/install-x-eroare.log
+  persist_error_log 2>/dev/null
+  t "persist_error_log: prefix inexistent, fără eroare și fără fișier" 1 "$([ -e "$ERRLOG" ] && echo 0 || echo 1)"
+  rm -rf "$TMP"
+  TMP=""
   exit "$U"
 ) || FAILS=$((FAILS + 1))
 
@@ -512,6 +550,8 @@ esac'
 
   # --- mutare de pe un server existent (rsync/ssh simulate: "serverul vechi" = prefixul de mai sus) ---
   MV=$A/move
+  OLDSHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  OTHERSHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   mkdir -p "$MV/root" "$MV/bin"
   cp -a "$P" "$A/old"
   rm -f "$A"/old/install-*.log
@@ -533,6 +573,7 @@ printf 'ssh' >> "$ACALLS"; for a in "\$@"; do printf ' %s' "\$a" >> "$ACALLS"; d
 for last; do :; done
 case \$last in
   true) exit 0 ;;
+  *rev-parse*) [ -f "$A/nooldsha" ] && exit 1; echo "$OLDSHA" ;;
   *sha256sum*) f=\${last##* }; h=\$(sha256sum "$A/old/\${f#/srv/finet/}" | sed 's# .*##'); [ -f "$A/mismatch" ] && h=deadbeef; echo "\$h  \$f" ;;
 esac
 STUB
@@ -566,7 +607,7 @@ ANS
     env -i PATH="$MV/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$A" FINET_TTY=/nonexistent \
       FINET_PREFIX="$MV/root/prefix" FINET_CRON_DIR="$MV/root/cron" FINET_LOG_DIR="$MV/root/varlog" \
       FINET_SYSTEMD_DIR="$MV/root/systemd" FINET_LOGROTATE_DIR="$MV/root/logrotate" FINET_BIN_DIR="$MV/root/bin" \
-      timeout 300 sh "$INSTALL" --answers "$MV/answers" "$@" </dev/null >"$_mo" 2>"$_me"
+      timeout 300 sh "$INSTALL" --answers "${MVANS:-$MV/answers}" "$@" </dev/null >"$_mo" 2>"$_me"
   }
   run_move "$MV/o0" "$MV/e0" --check
   expect "mutare --check: cod 0" 0 $?
@@ -580,6 +621,9 @@ ANS
   [ "$RC" = 0 ] || sed 's/^/    /' "$MV/o1" "$MV/e1" | tail -30
   contains "mutare: Better Auth identic" "$MV/o1" "finet_better_auth_secret identic"
   contains "mutare: migrații aplicate acum 0" "$MV/o1" "mutare: migrațiile raportează «aplicate acum 0»"
+  contains "mutare: SHA-ul de pe serverul vechi e citit prin ssh" "$MV/o1" "SHA-ul rulat pe serverul vechi (/srv/finet/src): $OLDSHA"
+  if grep '^ssh' "$ACALLS" | grep -q 'rev-parse'; then ok "mutare: SHA-ul vechi citit cu git rev-parse peste ssh"; else fail "mutare: lipsește citirea SHA-ului prin ssh"; fi
+  if grep '^git ' "$ACALLS" | grep -q -- "checkout --quiet --detach $OLDSHA"; then ok "mutare: «auto» = SHA-ul serverului vechi (checkout la $OLDSHA)"; else fail "mutare: imaginile NU sunt la SHA-ul serverului vechi"; fi
   if grep '^rsync' "$ACALLS" | grep -q -- '--numeric-ids' && grep '^rsync' "$ACALLS" | grep -q -- '--rsync-path=sudo rsync'; then ok "rsync cu --numeric-ids și --rsync-path=sudo rsync"; else fail "rsync fără --numeric-ids/--rsync-path"; fi
   if grep '^rsync' "$ACALLS" | grep -q -- '-aHAX'; then ok "rsync -aHAX"; else fail "rsync fără -aHAX"; fi
   [ "$(stat -c '%u:%g:%a' "$MV/root/prefix/secrets/finet_database_url")" = "1000:1000:400" ] && ok "mutare: permisiunile secretelor păstrate" || fail "mutare: permisiuni secrete"
@@ -594,6 +638,86 @@ ANS
   RC=$?
   expect "mutare cu Better Auth diferit: cod 1" 1 $RC
   contains "mutare cu Better Auth diferit: mesaj clar" "$MV/e2" "finet_better_auth_secret diferă"
+  rm -f "$A/mismatch"
+
+  # SHA diferit de cel de pe serverul vechi: oprire ÎNAINTE de migrații, fără confirmare
+  mig_calls() { grep -c 'finet-migrate' "$ACALLS"; }
+  sed "s/^IMAGES_SHA=auto$/IMAGES_SHA=$OTHERSHA/" "$MV/answers" >"$MV/answers.altsha"
+  chmod 600 "$MV/answers.altsha"
+  rm -rf "$MV/root/prefix"
+  : >"$ACALLS"
+  MVANS=$MV/answers.altsha run_move "$MV/o3" "$MV/e3"
+  RC=$?
+  expect "mutare cu SHA diferit, neconfirmat: cod 1" 1 $RC
+  contains "mutare cu SHA diferit: mesaj clar" "$MV/e3" "nu e confirmat"
+  expect "mutare cu SHA diferit: finet-migrate NU a fost apelat" 0 "$(mig_calls)"
+  if grep -q '^rsync' "$ACALLS"; then fail "mutare cu SHA diferit: s-a copiat ceva înainte de refuz"; else ok "mutare cu SHA diferit: refuz înainte de rsync"; fi
+  # --check cu SHA diferit: eșec raportat, nimic scris
+  rm -rf "$MV/root/prefix"
+  find "$MV/root" | sort >"$MV/before"
+  MVANS=$MV/answers.altsha run_move "$MV/o3c" "$MV/e3c" --check
+  expect "mutare --check cu SHA diferit: cod 1" 1 $?
+  contains "mutare --check cu SHA diferit: eșec raportat" "$MV/o3c" "nu e confirmat"
+  if [ "$(find "$MV/root" | sort | cmp - "$MV/before" && echo same)" = same ]; then ok "mutare --check cu SHA diferit: nu scrie nimic"; else fail "mutare --check cu SHA diferit a scris fișiere"; fi
+  # cu confirmare explicită: merge, cu SHA-ul ales
+  { cat "$MV/answers.altsha"; echo "MOVE_SHA_DIFERIT=da"; } >"$MV/answers.altsha-da"
+  chmod 600 "$MV/answers.altsha-da"
+  rm -rf "$MV/root/prefix"
+  : >"$ACALLS"
+  MVANS=$MV/answers.altsha-da run_move "$MV/o4" "$MV/e4"
+  expect "mutare cu SHA diferit + MOVE_SHA_DIFERIT=da: cod 0" 0 $?
+  if grep '^git ' "$ACALLS" | grep -q -- "checkout --quiet --detach $OTHERSHA"; then ok "mutare confirmată: imaginile la SHA-ul ales"; else fail "mutare confirmată: SHA-ul ales nu a fost folosit"; fi
+  # SHA-ul vechi ilizibil + «auto»: refuz, nu se ghicește «ultimul de pe main»
+  touch "$A/nooldsha"
+  rm -rf "$MV/root/prefix"
+  : >"$ACALLS"
+  run_move "$MV/o5" "$MV/e5"
+  expect "mutare cu SHA-ul vechi ilizibil și auto: cod 1" 1 $?
+  contains "mutare cu SHA-ul vechi ilizibil: mesaj clar" "$MV/e5" "nu pot citi SHA-ul de pe serverul vechi"
+  expect "mutare cu SHA-ul vechi ilizibil: finet-migrate NU a fost apelat" 0 "$(mig_calls)"
+  rm -f "$A/nooldsha"
+
+  # --- logul se păstrează la eroare (nu rămâne doar în $TMP, șters la ieșire) ---
+  # dbtest eșuează într-un prefix proaspăt (există după step_dirs); parolele din răspunsuri nu au voie în log
+  F=$A/fail
+  mkdir -p "$F"
+  mkdir -p "$F/bin"
+  cp -a "$A/bin/." "$F/bin/"
+  sed 's#echo "conexiune ok"#echo "eroare: ECONNREFUSED"; exit 1#' "$A/bin/docker" >"$F/bin/docker"
+  chmod +x "$F/bin/docker"
+  cp "$A/answers" "$F/answers"
+  chmod 600 "$F/answers"
+  for d in cron varlog systemd logrotate bin; do mkdir -p "$F/root/$d"; done
+  run_fail() { # ieșire, eroare, prefix
+    env -i PATH="$F/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$A" FINET_TTY=/nonexistent \
+      FINET_PREFIX="$3" FINET_CRON_DIR="$F/root/cron" FINET_LOG_DIR="$F/root/varlog" \
+      FINET_SYSTEMD_DIR="$F/root/systemd" FINET_LOGROTATE_DIR="$F/root/logrotate" FINET_BIN_DIR="$F/root/bin" \
+      timeout 300 sh "$INSTALL" --answers "$F/answers" </dev/null >"$1" 2>"$2"
+  }
+  run_fail "$F/o1" "$F/e1" "$F/root/prefix"
+  expect "eșec forțat (dbtest): cod 1" 1 $?
+  ELOG=$(find "$F/root/prefix" -maxdepth 1 -name 'install-*-eroare.log' | head -n 1)
+  if [ -n "$ELOG" ]; then ok "eșec: logul de eroare a fost salvat în prefix"; else fail "eșec: nu există install-*-eroare.log în prefix"; fi
+  if [ -n "$ELOG" ] && [ "$(stat -c '%u:%a' "$ELOG")" = "0:600" ]; then ok "eșec: logul de eroare e root, mod 600"; else fail "eșec: permisiunile logului de eroare"; fi
+  if [ -n "$ELOG" ]; then
+    contains "eșec: logul păstrează cauza" "$ELOG" "Conexiunea la bază"
+    contains "eșec: stderr indică calea logului" "$F/e1" "$ELOG"
+    contains "eșec: stderr anunță logul de diagnostic" "$F/e1" "Log de diagnostic salvat"
+  fi
+  if grep -q 'SECRETMARKER' "$F/o1" "$F/e1" ${ELOG:+"$ELOG"}; then fail "eșec: secret în stdout/stderr/log de eroare"; else ok "eșec: fără secrete în stdout, stderr și logul de eroare"; fi
+  if [ -z "$(find "$F" -name 'install-*.log' ! -name '*-eroare.log')" ]; then ok "eșec: logul de succes nu se scrie"; else fail "eșec: s-a scris și un log de succes"; fi
+  # eroare înainte să existe prefixul: fără log, fără crash, prefixul nu apare
+  grep -v '^APP_HOST=' "$A/answers" >"$F/answers.fara-host"
+  chmod 600 "$F/answers.fara-host"
+  env -i PATH="$F/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$A" FINET_TTY=/nonexistent \
+    FINET_PREFIX="$F/root/inexistent" FINET_CRON_DIR="$F/root/cron" FINET_LOG_DIR="$F/root/varlog" \
+    FINET_SYSTEMD_DIR="$F/root/systemd" FINET_LOGROTATE_DIR="$F/root/logrotate" FINET_BIN_DIR="$F/root/bin" \
+    timeout 120 sh "$INSTALL" --answers "$F/answers.fara-host" </dev/null >"$F/o2" 2>"$F/e2"
+  expect "eroare înainte de prefix: cod 1" 1 $?
+  contains "eroare înainte de prefix: mesaj clar" "$F/e2" "Lipsește răspunsul «APP_HOST»"
+  if [ ! -e "$F/root/inexistent" ]; then ok "eroare înainte de prefix: nu se creează prefixul pentru log"; else fail "eroare înainte de prefix: s-a creat $F/root/inexistent"; fi
+  # a doua instalare reușită (cea de bază) nu lasă log de eroare
+  if [ -z "$(find "$A/root/prefix" -name '*-eroare.log')" ]; then ok "instalarea reușită nu produce log de eroare"; else fail "instalarea reușită a produs log de eroare"; fi
 else
   echo "skip: instalarea reală (stub-uri) cere root și openssl"
 fi
