@@ -1135,12 +1135,20 @@ gh_get() { # URL → stdout
 # expirate, se păstrează 7 zile); 2 = n-am putut întreba GitHub (inconcludent).
 artifacts_complete() {
   gh_get "$GH_API/repos/$GITHUB_REPO/actions/workflows/images.yml/runs?head_sha=$1&event=push&status=success&per_page=10" >"$TMP/runs-sha.json" 2>/dev/null || return 2
+  # Aceeași regulă de proveniență ca trusted_run_id din ops/deploy/pull-images.sh: workflow-ul images,
+  # push reușit pe exact SHA-ul cerut, din ACELAȘI repository (head și base; un fork nu e acceptat),
+  # pe `main` sau `phase/*` (un build de pe o ramură de fază poate rula pe serverul vechi).
   python3 -I -c '
-import json, sys
-for r in json.load(open(sys.argv[1])).get("workflow_runs", []):
-    if r.get("event") == "push" and r.get("conclusion") == "success" and r.get("head_branch") == "main" and r.get("head_sha") == sys.argv[2]:
+import json, re, sys
+runs, sha, repo = sys.argv[1], sys.argv[2], sys.argv[3]
+for r in json.load(open(runs)).get("workflow_runs", []):
+    if (r.get("head_sha") == sha and r.get("event") == "push" and r.get("conclusion") == "success"
+            and r.get("path") == ".github/workflows/images.yml"
+            and (r.get("head_repository") or {}).get("full_name") == repo
+            and (r.get("repository") or {}).get("full_name") == repo
+            and re.fullmatch(r"(main|phase/[A-Za-z0-9._/-]+)", r.get("head_branch") or "")):
         print(r["id"])
-' "$TMP/runs-sha.json" "$1" >"$TMP/runs-sha.txt" || return 2
+' "$TMP/runs-sha.json" "$1" "$GITHUB_REPO" >"$TMP/runs-sha.txt" || return 2
   _aerr=0
   while read -r _rid; do
     if gh_get "$GH_API/repos/$GITHUB_REPO/actions/runs/$_rid/artifacts?per_page=100" >"$TMP/art-sha.json" 2>/dev/null; then

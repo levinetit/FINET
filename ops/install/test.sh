@@ -282,6 +282,9 @@ SHA=0123456789abcdef0123456789abcdef01234567
 OLDSHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 OTHERSHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EXPSHA=cccccccccccccccccccccccccccccccccccccccc
+PHASESHA=dddddddddddddddddddddddddddddddddddddddd
+FORKSHA=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+NOGHSHA=ffffffffffffffffffffffffffffffffffffffff
 
 # Stub generic: înregistrează argv-ul (fără stdin), apoi ieșire 0 sau comportamentul specific.
 stub() { # nume, corp-case-opțional
@@ -305,6 +308,7 @@ stub curl 'u=""; for a in "$@"; do case "$a" in http*|telnet*) u=$a ;; esac; don
 case "$*" in *"-K -"*) cat > /dev/null ;; esac
 case "$u" in
   *ifconfig.me*|*ipify*) echo 203.0.113.7 ;;
+  */workflows/images.yml/runs*head_sha='"$NOGHSHA"'*) exit 22 ;;
   */workflows/images.yml/runs*) cat "'"$FX"'/runs.json" ;;
   */artifacts*) cat "'"$FX"'/art.json" ;;
   *) exit 0 ;;
@@ -320,16 +324,26 @@ chmod +x "$BIN/python3"
 for n in git openssl rclone crontab ssh rsync systemctl install chown chmod mkdir whiptail dialog cloudflared stty tee; do stub "$n" 'exit 0'; done
 stub crontab 'case "$1 $2 $3" in "-l -u root") exit 0 ;; *) exit 97 ;; esac'
 
-cat >"$FX/runs.json" <<EOF
-{"workflow_runs":[{"id":111,"event":"push","conclusion":"success","head_branch":"main","head_sha":"$SHA"},
-{"id":112,"event":"push","conclusion":"success","head_branch":"main","head_sha":"$OLDSHA"},
-{"id":113,"event":"push","conclusion":"success","head_branch":"main","head_sha":"$OTHERSHA"},
-{"id":114,"event":"push","conclusion":"success","head_branch":"main","head_sha":"$EXPSHA"}]}
-EOF
-# fixtura de artefacte comună tuturor rulărilor: SHA, OLDSHA, OTHERSHA complete; EXPSHA expirat
+# fiecare rulare poartă path + head_repository/repository, ca în API-ul real (cerute de artifacts_complete)
+_run() { # id branch sha [repo-head] [repo-base]
+  printf '{"id":%s,"event":"push","conclusion":"success","path":".github/workflows/images.yml","head_branch":"%s","head_sha":"%s","head_repository":{"full_name":"%s"},"repository":{"full_name":"%s"}}' \
+    "$1" "$2" "$3" "${4:-levinetit/FINET}" "${5:-levinetit/FINET}"
+}
+{
+  printf '{"workflow_runs":['
+  _run 111 main "$SHA"; printf ',\n'
+  _run 112 main "$OLDSHA"; printf ',\n'
+  _run 113 main "$OTHERSHA"; printf ',\n'
+  _run 114 main "$EXPSHA"; printf ',\n'
+  _run 115 phase/x "$PHASESHA"; printf ',\n'
+  _run 116 main "$FORKSHA" evil/FINET levinetit/FINET; printf ',\n'
+  _run 117 main "$FORKSHA" levinetit/FINET evil/FINET
+  printf ']}\n'
+} >"$FX/runs.json"
+# fixtura de artefacte comună tuturor rulărilor: SHA, OLDSHA, OTHERSHA, PHASESHA, FORKSHA, NOGHSHA complete; EXPSHA expirat
 {
   printf '{"artifacts":['
-  for _s in $SHA $OLDSHA $OTHERSHA; do
+  for _s in $SHA $OLDSHA $OTHERSHA $PHASESHA $FORKSHA $NOGHSHA; do
     printf '{"name":"finet-web-%s","expired":false},{"name":"finet-tools-%s","expired":false},{"name":"finet-backup-%s","expired":false},' "$_s" "$_s" "$_s"
   done
   printf '{"name":"finet-web-%s","expired":true},{"name":"finet-tools-%s","expired":true},{"name":"finet-backup-%s","expired":true}]}\n' "$EXPSHA" "$EXPSHA" "$EXPSHA"
@@ -851,6 +865,40 @@ ANS
   expect "SHA vechi cu artefacte expirate pe «auto»: cod 1" 1 $?
   contains "SHA vechi expirat pe «auto»: mesaj clar" "$MV/e11" "lipsesc sau au expirat"
   if grep -q '^rsync' "$ACALLS"; then fail "SHA vechi expirat: rsync înainte de refuz"; else ok "SHA vechi expirat: refuz înainte de rsync"; fi
+  rset "$OLDSHA" "$OLDSHA"
+  # proveniența artefactelor: aceeași regulă ca pull-images.sh (main sau phase/*, același repository)
+  # 1) serverul vechi rulează un build de pe phase/x: «auto» trebuie acceptat, fără confirmare de SHA diferit
+  rset "$PHASESHA" "$PHASESHA"
+  rm -rf "$MV/root/prefix"
+  : >"$ACALLS"
+  run_move "$MV/o13" "$MV/e13" --check
+  expect "run pe phase/x, --check: cod 0" 0 $?
+  contains "run pe phase/x: artefacte acceptate" "$MV/o13" "artefactele CI (web, tools, backup) pentru $PHASESHA există"
+  run_move "$MV/o13b" "$MV/e13b"
+  expect "run pe phase/x, mutare reală: cod 0" 0 $?
+  if grep -q 'lipsesc sau au expirat' "$MV/o13b" "$MV/e13b"; then fail "run pe phase/x: mutare blocată pe nedrept"; else ok "run pe phase/x: mutarea nu e blocată"; fi
+  # 2) run dintr-un repo străin (head sau base): respins devreme, înainte de rsync, în --check și real
+  rset "$FORKSHA" "$FORKSHA"
+  rm -rf "$MV/root/prefix"
+  : >"$ACALLS"
+  run_move "$MV/o14" "$MV/e14" --check
+  expect "run din repo străin, --check: cod 1" 1 $?
+  contains "run din repo străin: respins" "$MV/o14" "lipsesc sau au expirat"
+  run_move "$MV/o14b" "$MV/e14b"
+  expect "run din repo străin, mutare reală: cod 1" 1 $?
+  contains "run din repo străin: mesaj clar" "$MV/e14b" "lipsesc sau au expirat"
+  if grep -q '^rsync' "$ACALLS"; then fail "run din repo străin: rsync înainte de refuz"; else ok "run din repo străin: refuz înainte de rsync"; fi
+  # 3) GitHub inaccesibil (artifacts_complete = 2): doar avertisment, nu blochează
+  rset "$NOGHSHA" "$NOGHSHA"
+  rm -rf "$MV/root/prefix"
+  : >"$ACALLS"
+  run_move "$MV/o15" "$MV/e15" --check
+  expect "GitHub inaccesibil, --check: cod 0" 0 $?
+  contains "GitHub inaccesibil: avertisment" "$MV/o15" "GitHub inaccesibil"
+  run_move "$MV/o15b" "$MV/e15b"
+  expect "GitHub inaccesibil, mutare reală: cod 0" 0 $?
+  contains "GitHub inaccesibil, mutare reală: avertisment" "$MV/o15b" "GitHub inaccesibil"
+  if grep -q 'lipsesc sau au expirat' "$MV/o15b" "$MV/e15b"; then fail "GitHub inaccesibil: tratat ca artefacte lipsă"; else ok "GitHub inaccesibil: nu blochează mutarea"; fi
   rset "$OLDSHA" "$OLDSHA"
   # MOVE_SRC_PREFIX cu injecție: respins de validator
   sed 's#^MOVE_SRC_PREFIX=.*#MOVE_SRC_PREFIX=/srv/finet;id#' "$MV/answers" >"$MV/answers.inj"
