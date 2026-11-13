@@ -107,8 +107,8 @@ section() {
   say "== $* =="
 }
 die() {
-  printf 'EROARE: %s\n' "$*" >&2
-  printf 'EROARE: %s\n' "$*" >>"$LOG"
+  printf 'EROARE: %s\n' "$*" >&2 || : # stderr închis sau plin nu trebuie să schimbe codul de ieșire
+  printf 'EROARE: %s\n' "$*" >>"$LOG" || :
   exit 1
 }
 chk_ok() { say "  [ OK ] $*"; }
@@ -124,10 +124,11 @@ chk_fail() {
 cleanup() {
   _rc=$?
   trap - EXIT INT TERM HUP
+  set +e # capcana nu are voie să se oprească înainte de rm -rf $TMP (stderr închis, disc plin etc.)
   if [ "$HIDDEN" = 1 ]; then
     if [ -n "$TTYSTATE" ]; then stty "$TTYSTATE" <"$TTY" 2>/dev/null || stty echo <"$TTY" 2>/dev/null || :; else stty echo <"$TTY" 2>/dev/null || :; fi
   fi
-  if [ "$_rc" -ne 0 ]; then persist_error_log; fi
+  if [ "$_rc" -ne 0 ]; then persist_error_log || :; fi
   if [ -n "$TMP" ] && [ -d "$TMP" ]; then rm -rf "$TMP"; fi
   exit "$_rc"
 }
@@ -135,31 +136,30 @@ cleanup() {
 # Salvează logul și la ieșirea cu eroare (altfel «vezi log» ar trimite spre un fișier șters odată cu
 # $TMP). Rulează din cleanup, deci NU are voie să cheme die (capcanele sunt deja scoase, iar un
 # exit aici ar sări peste rm -rf $TMP). Nu face nimic înainte ca modul să fie cunoscut (LOG_OK=1:
-# --mode check / MODE=check din răspunsuri setează DRY abia atunci), în --check fără --log, fără
-# root sau fără directorul prefixului; nu salvează un log în care s-a găsit o valoare secretă.
+# --mode check / MODE=check din răspunsuri setează DRY abia atunci), în --check (nici cu --log),
+# fără root (nici cu --log) sau, pentru calea implicită, fără directorul prefixului; nu salvează un
+# log în care s-a găsit o valoare secretă.
 persist_error_log() {
   [ "$LOG_OK" = 1 ] || return 0
   [ "$LOG_SAVED" = 0 ] || return 0
   [ -n "$ERRLOG" ] && [ -s "$LOG" ] || return 0
-  if [ -z "$LOGFINAL" ]; then
-    [ "$DRY" = 0 ] || return 0
-    [ "$(id -u)" -eq 0 ] || return 0
-    [ -d "$PREFIX" ] || return 0
-  fi
+  [ "$DRY" = 0 ] || return 0
+  [ "$(id -u)" -eq 0 ] || return 0
+  if [ -z "$LOGFINAL" ]; then [ -d "$PREFIX" ] || return 0; fi
   if ! scrub_ok; then
-    printf 'Logul de instalare conținea o valoare secretă și NU a fost salvat.\n' >&2
+    printf 'Logul de instalare conținea o valoare secretă și NU a fost salvat.\n' >&2 || :
     return 0
   fi
   if ! (
     umask 077
     cat "$LOG" >"$ERRLOG"
   ) 2>/dev/null; then
-    printf 'Nu am putut salva logul de instalare în %s.\n' "$ERRLOG" >&2
+    printf 'Nu am putut salva logul de instalare în %s.\n' "$ERRLOG" >&2 || :
     return 0
   fi
   chmod 600 "$ERRLOG" 2>/dev/null || :
   chown root:root "$ERRLOG" 2>/dev/null || :
-  printf 'Log de diagnostic salvat: %s (root, 600, fără secrete)\n' "$ERRLOG" >&2
+  printf 'Log de diagnostic salvat: %s (root, 600, fără secrete)\n' "$ERRLOG" >&2 || :
 }
 
 # act "descriere" comandă... : în --check doar anunță; altfel rulează (ieșirea în log; eșec = oprire).
@@ -171,7 +171,7 @@ act() {
     return 0
   fi
   say "  [fac] $_d"
-  "$@" >>"$LOG" 2>&1 || die "A eșuat: $_d (detalii în ${ERRLOG:-logul de instalare})."
+  "$@" >>"$LOG" 2>&1 || die "A eșuat: $_d (vezi logul de eroare, dacă a putut fi salvat: ${ERRLOG:-indisponibil})."
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -445,6 +445,26 @@ v_abspath() {
     return 1
     ;;
   esac
+}
+# Cale folosită pe serverul VECHI (ajunge în comenzi ssh/rsync): doar caractere sigure, fără spații,
+# newline, ;, $, ` etc.
+v_remotepath() {
+  case $_val in
+    /*) ;;
+    *)
+      _err="cale absolută necesară"
+      return 1
+      ;;
+  esac
+  case $_val in *[!A-Za-z0-9._/-]*)
+    _err="doar litere, cifre și . _ / - în cale"
+    return 1
+    ;;
+  esac
+}
+v_remotepath_or_empty() {
+  [ -z "$_val" ] && return 0
+  v_remotepath
 }
 v_abspath_or_empty() {
   [ -z "$_val" ] && return 0
@@ -1059,32 +1079,114 @@ keep_or_ask_ba() { # secretele generate: se păstrează dacă există
   if existing_secret finet_health_token; then HT_EXISTS=da; fi
 }
 
-# Citește (doar citire, peste SSH) SHA-ul checkout-ului FINET de pe serverul vechi → $OLD_SHA
-# (gol dacă nu se poate). Întâi fără sudo, apoi cu `sudo -n` (checkout-ul e root-owned);
-# safe.directory vine prin -c, fiindcă proprietarul directorului diferă de utilizatorul SSH.
+# Determină SHA-ul rulat pe serverul vechi → $OLD_SHA (gol = necunoscut). Sursa principală e eticheta
+# imaginii REALE a containerului finet-web (finet:web-<sha>, pusă de pull-images.sh), nu checkout-ul:
+# un `git pull` în /srv/finet/src ar muta HEAD fără ca imaginile să se schimbe. Checkout-ul
+# (<prefix>/src, HEAD) servește doar la confirmare: dacă lipsește eticheta sau diferă de HEAD,
+# SHA-ul rămâne necunoscut și mutarea cere confirmare explicită. Doar citire peste SSH; fiecare
+# comandă întâi fără sudo, apoi `sudo -n`; safe.directory prin -c (proprietarul diferă de utilizatorul SSH).
 read_old_sha() {
   OLD_SHA=""
   _ssh=$(ssh_cmd_str)
-  _rd="git -c safe.directory=$MOVE_PREFIX/src -C $MOVE_PREFIX/src rev-parse HEAD"
+  _hd="git -c safe.directory=$MOVE_PREFIX/src -C $MOVE_PREFIX/src rev-parse HEAD"
+  _tg="i=\$(docker inspect finet-web --format '{{.Image}}' 2>/dev/null || sudo -n docker inspect finet-web --format '{{.Image}}' 2>/dev/null); [ -n \"\$i\" ] || i=finet:local; docker image inspect \"\$i\" --format '{{range .RepoTags}}{{println .}}{{end}}' 2>/dev/null || sudo -n docker image inspect \"\$i\" --format '{{range .RepoTags}}{{println .}}{{end}}' 2>/dev/null"
   # shellcheck disable=SC2086
-  _o=$($_ssh "$MOVE_SRC_V" "$_rd 2>/dev/null || sudo -n $_rd 2>/dev/null" 2>/dev/null | head -n 1 | tr -d '\r ') || _o=""
-  case $_o in
-    auto | "" | *[!0-9a-f]*) ;;
-    *) if [ "${#_o}" -eq 40 ]; then OLD_SHA=$_o; fi ;;
+  _head=$($_ssh "$MOVE_SRC_V" "$_hd 2>/dev/null || sudo -n $_hd 2>/dev/null" 2>/dev/null | head -n 1 | tr -d '\r ') || _head=""
+  case $_head in
+    auto | "" | *[!0-9a-f]*) _head="" ;;
+    *) if [ "${#_head}" -ne 40 ]; then _head=""; fi ;;
   esac
-  if [ -n "$OLD_SHA" ]; then
-    note "SHA-ul rulat pe serverul vechi ($MOVE_PREFIX/src): $OLD_SHA"
+  # shellcheck disable=SC2086
+  _tags=$($_ssh "$MOVE_SRC_V" "$_tg" 2>/dev/null | tr -d '\r' | sed -n 's/^finet:web-\([0-9a-f]\{40\}\)$/\1/p' | sort -u) || _tags=""
+  _tagn=$(printf '%s\n' "$_tags" | grep -c .) || _tagn=0
+  if [ "$_tagn" -eq 1 ]; then _tag=$_tags; else _tag=""; fi
+  if [ -n "$_tag" ] && { [ -z "$_head" ] || [ "$_tag" = "$_head" ]; }; then
+    OLD_SHA=$_tag
+    note "SHA-ul imaginii rulate pe serverul vechi (finet-web): $OLD_SHA${_head:+, identic cu HEAD din $MOVE_PREFIX/src}"
+    return 0
+  fi
+  if [ -n "$_tag" ]; then
+    note "ATENȚIE: imaginea rulată pe serverul vechi e la $_tag, dar checkout-ul $MOVE_PREFIX/src e la $_head (un git pull după deploy?)."
+  elif [ "$_tagn" -gt 1 ]; then
+    note "ATENȚIE: imaginea finet-web de pe serverul vechi are mai multe etichete finet:web-<sha>; nu pot alege."
   else
-    note "Nu am putut citi SHA-ul de pe serverul vechi ($MOVE_PREFIX/src): conexiune SSH eșuată (cheia gazdei neacceptată? în --answers se folosește BatchMode), checkout lipsă sau fără drept de citire/sudo -n."
+    note "Nu am putut citi SHA-ul rulat pe serverul vechi: lipsește eticheta finet:web-<sha> a imaginii finet-web, conexiune SSH eșuată (cheia gazdei neacceptată? în --answers se folosește BatchMode) sau fără drept docker/sudo -n."
+  fi
+  note "SHA-ul serverului vechi rămâne NECUNOSCUT (imagine: ${_tag:-?}; checkout: ${_head:-?}); mutarea cere SHA explicit și confirmare."
+}
+
+# Autentificat doar dacă există token (fișierul pas-cu-pas sau valoarea colectată); antetul trece pe
+# stdin prin printf (builtin), nu în argumentele curl.
+gh_get() { # URL → stdout
+  _gt=""
+  if [ -n "$GH_TOKEN_FILE" ] && [ -s "$GH_TOKEN_FILE" ]; then
+    _gt=$(tr -d '\r\n ' <"$GH_TOKEN_FILE")
+  elif [ -n "${GH_TOKEN_V:-}" ]; then
+    _gt=$(printf '%s' "$GH_TOKEN_V" | tr -d '\r\n ')
+  fi
+  if [ -n "$_gt" ]; then
+    printf 'header = "Authorization: Bearer %s"\n' "$_gt" | curl -fsS -m 60 -K - -H 'Accept: application/vnd.github+json' "$1"
+  else
+    curl -fsS -m 60 -H 'Accept: application/vnd.github+json' "$1"
   fi
 }
 
-# Decide SHA-ul imaginilor la mutare. Implicit = SHA-ul de pe serverul vechi. Un alt SHA (sau unul
-# care nu poate fi comparat) poate aduce migrații pe care baza comună nu le are: finet-migrate le-ar
-# aplica pe baza de producție cât serverul vechi încă rulează, deci cere confirmare explicită
-# (MOVE_SHA_DIFERIT=da în fișierul de răspunsuri). În --check eșecul e raportat, nu fatal.
+# Artefactele web, tools și backup ale SHA-ului $1 există și nu au expirat? 0 = da; 1 = nu (lipsă sau
+# expirate, se păstrează 7 zile); 2 = n-am putut întreba GitHub (inconcludent).
+artifacts_complete() {
+  gh_get "$GH_API/repos/$GITHUB_REPO/actions/workflows/images.yml/runs?head_sha=$1&event=push&status=success&per_page=10" >"$TMP/runs-sha.json" 2>/dev/null || return 2
+  python3 -I -c '
+import json, sys
+for r in json.load(open(sys.argv[1])).get("workflow_runs", []):
+    if r.get("event") == "push" and r.get("conclusion") == "success" and r.get("head_branch") == "main" and r.get("head_sha") == sys.argv[2]:
+        print(r["id"])
+' "$TMP/runs-sha.json" "$1" >"$TMP/runs-sha.txt" || return 2
+  _aerr=0
+  while read -r _rid; do
+    if gh_get "$GH_API/repos/$GITHUB_REPO/actions/runs/$_rid/artifacts?per_page=100" >"$TMP/art-sha.json" 2>/dev/null; then
+      if python3 -I -c '
+import json, sys
+sha = sys.argv[2]
+ok = {a["name"] for a in json.load(open(sys.argv[1])).get("artifacts", []) if not a.get("expired")}
+sys.exit(0 if all("finet-%s-%s" % (n, sha) in ok for n in ("web", "tools", "backup")) else 1)
+' "$TMP/art-sha.json" "$1"; then
+        return 0
+      fi
+    else
+      _aerr=1
+    fi
+  done <"$TMP/runs-sha.txt"
+  if [ "$_aerr" = 1 ]; then return 2; fi
+  return 1
+}
+
+# Decide SHA-ul imaginilor la mutare. Implicit = SHA-ul imaginii rulate pe serverul vechi. Un alt SHA
+# (sau unul care nu poate fi comparat) poate aduce migrații pe care baza comună nu le are:
+# finet-migrate le-ar aplica pe baza de producție cât serverul vechi încă rulează, deci cere
+# confirmare explicită (MOVE_SHA_DIFERIT=da în răspunsuri). Apoi verifică devreme artefactele CI ale
+# SHA-ului ales (expiră în 7 zile), ca eșecul să nu vină abia la pull-images.sh, după rsync.
+# În --check eșecurile sunt raportate (chk_fail), nu fatale.
 move_check_sha() {
   MOVE_SHA_OK=nu
+  move_decide_sha
+  [ -n "$IMAGES_SHA_V" ] || return 0
+  _ar=0
+  artifacts_complete "$IMAGES_SHA_V" || _ar=$?
+  case $_ar in
+    0) chk_ok "artefactele CI (web, tools, backup) pentru $IMAGES_SHA_V există și nu au expirat" ;;
+    2) chk_warn "nu am putut verifica artefactele CI ale $IMAGES_SHA_V (GitHub inaccesibil); pull-images.sh le va cere" ;;
+    *)
+      _msg="Mutare: artefactele CI (web, tools, backup) pentru $IMAGES_SHA_V lipsesc sau au expirat (se păstrează 7 zile). Variante: (1) re-rulează workflow-ul images pentru acel commit în GitHub (Re-run jobs), apoi reia; (2) dă un IMAGES_SHA recent cu artefacte, după ce ai verificat că nu are migrații noi față de serverul vechi (git diff --name-only <SHA-vechi> <SHA-nou> -- src/db/migrations), cu MOVE_SHA_DIFERIT=da; (3) oprește întâi serverul vechi. Nu s-a atins nimic."
+      if [ "$DRY" = 1 ]; then
+        chk_fail "$_msg"
+      else
+        die "$_msg"
+      fi
+      ;;
+  esac
+}
+
+move_decide_sha() {
   if [ "$IMAGES_SHA_V" = auto ]; then
     if [ -n "$OLD_SHA" ]; then
       IMAGES_SHA_V=$OLD_SHA
@@ -1092,7 +1194,7 @@ move_check_sha() {
       return 0
     fi
     IMAGES_SHA_V=""
-    _msg="Mutare: nu pot citi SHA-ul de pe serverul vechi, deci «auto» nu are ce alege. Dă IMAGES_SHA explicit (SHA-ul rulat pe serverul vechi) și confirmă cu MOVE_SHA_DIFERIT=da. Nu s-a atins baza."
+    _msg="Mutare: SHA-ul rulat pe serverul vechi e necunoscut, deci «auto» nu are ce alege. Dă IMAGES_SHA explicit (SHA-ul rulat pe serverul vechi) și confirmă cu MOVE_SHA_DIFERIT=da. Nu s-a atins baza."
     if [ "$DRY" = 1 ]; then
       chk_fail "$_msg"
       return 0
@@ -1100,15 +1202,15 @@ move_check_sha() {
     die "$_msg"
   fi
   if [ -n "$OLD_SHA" ] && [ "$IMAGES_SHA_V" = "$OLD_SHA" ]; then return 0; fi
-  say "  ATENȚIE: SHA-ul ales ($IMAGES_SHA_V) nu e cel de pe serverul vechi (${OLD_SHA:-necunoscut})."
+  say "  ATENȚIE: SHA-ul ales ($IMAGES_SHA_V) nu e cel rulat pe serverul vechi (${OLD_SHA:-necunoscut})."
   say "  Dacă are migrații noi, finet-migrate le aplică pe baza de producție COMUNĂ cât serverul vechi încă rulează."
   askyn MOVE_SHA_OK MOVE_SHA_DIFERIT "Confirm că ținta poate avea migrații noi față de serverul vechi?" nu
   if [ "$MOVE_SHA_OK" = da ]; then return 0; fi
   if [ "$DRY" = 1 ]; then
-    chk_fail "mutare: SHA-ul imaginilor diferă de cel de pe serverul vechi și nu e confirmat (MOVE_SHA_DIFERIT=da)"
+    chk_fail "mutare: SHA-ul imaginilor diferă de cel rulat pe serverul vechi (sau acesta e necunoscut) și nu e confirmat (MOVE_SHA_DIFERIT=da)"
     return 0
   fi
-  die "Mutare: SHA-ul imaginilor diferă de cel de pe serverul vechi (${OLD_SHA:-necunoscut}) și nu e confirmat. Nu s-a atins baza. Folosește «auto» sau confirmă explicit (MOVE_SHA_DIFERIT=da)."
+  die "Mutare: SHA-ul imaginilor diferă de cel rulat pe serverul vechi (${OLD_SHA:-necunoscut}) și nu e confirmat. Nu s-a atins baza. Folosește «auto» sau confirmă explicit (MOVE_SHA_DIFERIT=da)."
 }
 
 collect_move() {
@@ -1118,8 +1220,8 @@ collect_move() {
   say "  Installer-ul îl copiază cu rsync și NU îl regenerează; verifică la final că sumele coincid."
   say "  Pe serverul vechi: utilizatorul trebuie să poată rula \`sudo rsync\` fără parolă (fișierele sunt root 600)."
   ask MOVE_SRC_V MOVE_SRC "Serverul sursă (utilizator@gazdă)" "" v_userhost
-  ask MOVE_KEY MOVE_SSH_KEY "Calea cheii SSH (gol = agentul/configul SSH al root-ului; sub sudo agentul cere --preserve-env=SSH_AUTH_SOCK)" "" v_abspath_or_empty
-  ask MOVE_PREFIX MOVE_SRC_PREFIX "Directorul FINET pe serverul vechi" /srv/finet v_abspath
+  ask MOVE_KEY MOVE_SSH_KEY "Calea cheii SSH (gol = agentul/configul SSH al root-ului; sub sudo agentul cere --preserve-env=SSH_AUTH_SOCK)" "" v_remotepath_or_empty
+  ask MOVE_PREFIX MOVE_SRC_PREFIX "Directorul FINET pe serverul vechi" /srv/finet v_remotepath
   collect_network
   collect_common_entry
   read_old_sha
@@ -1197,14 +1299,7 @@ find_images_sha() {
     note "SHA ales de operator: $SHA"
     return 0
   fi
-  _gh() { # URL → stdout; antetul de autorizare vine pe stdin (curl -K -), nu în argumente
-    if [ -n "$GH_TOKEN_FILE" ] && [ -s "$GH_TOKEN_FILE" ]; then
-      printf 'header = "Authorization: Bearer %s"\n' "$(tr -d '\r\n ' <"$GH_TOKEN_FILE")" | curl -fsS -m 60 -K - -H 'Accept: application/vnd.github+json' "$1"
-    else
-      curl -fsS -m 60 -H 'Accept: application/vnd.github+json' "$1"
-    fi
-  }
-  _gh "$GH_API/repos/$GITHUB_REPO/actions/workflows/images.yml/runs?branch=main&event=push&status=success&per_page=10" >"$TMP/runs.json" ||
+  gh_get "$GH_API/repos/$GITHUB_REPO/actions/workflows/images.yml/runs?branch=main&event=push&status=success&per_page=10" >"$TMP/runs.json" ||
     die "Nu am putut citi rulările workflow-ului images din GitHub."
   python3 -I -c '
 import json, sys
@@ -1214,7 +1309,7 @@ for r in json.load(open(sys.argv[1])).get("workflow_runs", []):
 ' "$TMP/runs.json" >"$TMP/runs.txt"
   SHA=""
   while read -r _rid _rsha; do
-    _gh "$GH_API/repos/$GITHUB_REPO/actions/runs/$_rid/artifacts?per_page=100" >"$TMP/art.json" || continue
+    gh_get "$GH_API/repos/$GITHUB_REPO/actions/runs/$_rid/artifacts?per_page=100" >"$TMP/art.json" || continue
     if python3 -I -c '
 import json, sys
 sha = sys.argv[2]
@@ -1963,9 +2058,9 @@ main() {
     DRY=1
     MODE=new
   fi
-  LOG_OK=1
   if [ "$DRY" = 1 ]; then say "  Mod verificare: nu se scrie nimic pe disc (doar un log temporar, șters la ieșire)."; fi
   if [ "$DRY" = 0 ] && [ "$(id -u)" -ne 0 ]; then die "Instalarea cere root: sudo sh ops/install/finet-install.sh"; fi
+  LOG_OK=1
   SRC=$PREFIX/src
   preflight_system
   if [ "$FAILS" -gt 0 ] && [ "$DRY" = 0 ]; then die "Precondiții neîndeplinite ($FAILS). Corectează și rulează din nou."; fi
