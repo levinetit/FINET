@@ -10,7 +10,7 @@ import { createRecurringRule } from "@/modules/recurring/recurring.service";
 
 import { bossOptions } from "./boss";
 import { GENERATE_CRON, JOB_GENERATE } from "./jobs";
-import { enqueueGenerateNow, safeHandler, startWorker } from "./main";
+import { POLLING_SECONDS, enqueueGenerateNow, safeHandler, startWorker } from "./main";
 import {
   JOB_RECEIPT_PROCESS,
   JOB_RECEIPT_SWEEP,
@@ -93,6 +93,30 @@ describe.skipIf(!TEST_ADMIN_URL)("pg-boss ca finet_app (Postgres real)", () => {
     await boss.offWork("test.q");
   });
 
+  it("sondaj rar + trezire: sweep-ul trezește lucrătorul `process` fără să aștepte 30 s (ADR 0053)", async () => {
+    await boss.createQueue("test.wake.process", { retryLimit: 0 });
+    const seen: unknown[] = [];
+    const workerId = await boss.work(
+      "test.wake.process",
+      { localConcurrency: 1, pollingIntervalSeconds: POLLING_SECONDS.process },
+      async ([job]: { data?: unknown }[]) => {
+        seen.push(job?.data);
+      },
+    );
+    // Prima interogare e imediată (coada goală); apoi lucrătorul doarme `process` secunde.
+    await new Promise((r) => setTimeout(r, 1500));
+    const started = Date.now();
+    await boss.send("test.wake.process", { n: 1 });
+    boss.notifyWorker(workerId);
+    const deadline = started + 8_000;
+    while (seen.length === 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(seen).toEqual([{ n: 1 }]);
+    expect(Date.now() - started).toBeLessThan(POLLING_SECONDS.process * 1000 - 5_000);
+    await boss.offWork("test.wake.process");
+  });
+
   it("supravegherea (mentenanța) rulează fără erori de drepturi", async () => {
     await boss.supervise();
     expect(errors.map((e) => String((e as { code?: string }).code ?? e))).toEqual([]);
@@ -143,6 +167,8 @@ describe.skipIf(!TEST_ADMIN_URL)("startWorker (pg-boss real, finet_app)", () => 
       databaseCa: null,
       allowInsecure: true,
       log: (e) => logs.push({ ...e }),
+      // Testul nu așteaptă un sondaj întreg (în producție 30 s, ADR 0053).
+      polling: { process: 1 },
     });
     try {
       const schedules = await w.boss.getSchedules(JOB_GENERATE);

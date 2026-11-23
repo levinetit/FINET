@@ -5,15 +5,59 @@ import { createAccount } from "@/modules/accounts/accounts.service";
 import { type LedgerFixture, createLedgerFixture } from "@/modules/ledger/testing";
 import { createRecurringRule } from "@/modules/recurring/recurring.service";
 
-import { PgTlsConfigError, bossOptions, pgConnectionOptions } from "./boss";
+import {
+  DB_IDLE_TIMEOUT_SECONDS,
+  PgTlsConfigError,
+  bossOptions,
+  pgConnectionOptions,
+} from "./boss";
 import { main } from "./cli";
 import { HEARTBEAT_STALE_SECONDS, queueStateOf } from "./heartbeat";
 import { handleGenerate, handleGenerateNow } from "./jobs";
-import { errorCode } from "./main";
+import { POLLING_SECONDS, errorCode } from "./main";
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 const CA = "-----BEGIN CERTIFICATE-----\nfictiv\n-----END CERTIFICATE-----\n";
+
+/**
+ * Egress Supabase (ADR 0053): cu implicitele pg-boss (sondaj la 2 s pe coadă, rezolvitor de flow-uri
+ * la 5 s, conexiuni închise după 10 s) workerul trăgea ~8 GB/lună dintr-o bază aproape goală.
+ * Testele fixează valorile ca o „îmbunătățire” ulterioară să nu le readucă pe cele implicite.
+ */
+describe("opțiunile pg-boss (fără rețea): egress Supabase", () => {
+  const opts = bossOptions(
+    "postgres://u:p@db.exemplu.invalid:5432/postgres?sslmode=disable",
+    null,
+    {
+      allowInsecure: true,
+    },
+  );
+
+  it("rezolvitorul de flow-uri și lucrătorul cron nu mai sondează la implicit (5 s)", () => {
+    expect(opts.flowIntervalSeconds).toBeGreaterThanOrEqual(600);
+    expect(opts.cronWorkerIntervalSeconds).toBeGreaterThanOrEqual(10);
+    // Limita pg-boss pentru lucrătorul cron e 45 s; sweep-urile sunt la minut.
+    expect(opts.cronWorkerIntervalSeconds).toBeLessThanOrEqual(30);
+  });
+
+  it("conexiunile rămân deschise peste cel mai lung ciclu repetitiv (60 s), ca să nu se reînnoiască", () => {
+    expect(DB_IDLE_TIMEOUT_SECONDS).toBeGreaterThan(60);
+    expect((opts as { idleTimeoutMillis?: number }).idleTimeoutMillis).toBe(
+      DB_IDLE_TIMEOUT_SECONDS * 1000,
+    );
+  });
+
+  it("intervalele de sondaj: mai dese pentru sweep, rare pentru process (trezit de sweep) și cron", () => {
+    expect(POLLING_SECONDS.sweep).toBeGreaterThan(2);
+    // Sweep-urile pornesc la minut: un sondaj mai rar de 30 s ar adăuga o jumătate de ciclu.
+    expect(POLLING_SECONDS.sweep).toBeLessThanOrEqual(30);
+    expect(POLLING_SECONDS.process).toBeGreaterThanOrEqual(POLLING_SECONDS.sweep);
+    expect(POLLING_SECONDS.scheduled).toBeGreaterThanOrEqual(POLLING_SECONDS.process);
+    // Plasa de siguranță a joburilor `process` (reîncercări la 60-120 s) rămâne sub un minut.
+    expect(POLLING_SECONDS.process).toBeLessThanOrEqual(60);
+  });
+});
 
 describe("opțiunile pg-boss (fără rețea): TLS fail-closed", () => {
   const BASE = "postgres://u:p@db.exemplu.invalid:5432/postgres";

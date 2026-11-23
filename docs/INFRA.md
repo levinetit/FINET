@@ -368,7 +368,7 @@ Agentul nu a rulat nimic din această secțiune și nu a atins LiteLLM-ul real.
    - Cu `json_object`, schema exactă (cheile, tipurile, un exemplu) e în promptul sistem; un răspuns cu alte chei e respins de validarea strictă și bonul ajunge „De verificat” (`extraction_failed`).
    - Rezultatul pe bonuri sintetice NU e o evaluare reală: evaluează apoi pe 20–30 de bonuri reale proprii, cu `ground-truth` scris de mână, și notează modelul ales într-un ADR (3.6).
 7. **Bugetul:** `AI_MONTHLY_BUDGET` (de exemplu `5.00`) + `AI_MONTHLY_BUDGET_CURRENCY=USD`, apoi recrearea `finet-worker`. Ce s-a consumat luna aceasta: `select month, currency, reserved_minor, calls from finet.ai_budget_usage` (ca `finet_migrator`). Rezervarea e pesimistă, deci consumul raportat e peste costul real.
-8. **Verificare:** logul workerului are `{"event":"receipts","enabled":true,"ai":true}` la pornire. Un bon încărcat cu consimțământ trece în ≤ 1 minut în `needs_review` (`select status, confidence, issues from finet.receipts order by created_at desc limit 5`).
+8. **Verificare:** logul workerului are `{"event":"receipts","enabled":true,"ai":true}` la pornire. Un bon încărcat cu consimțământ trece în ~1-2 minute în `needs_review` (`select status, confidence, issues from finet.receipts order by created_at desc limit 5`).
 
 ## 4i. Faza 6 pe producție (ordinea completă, după revizuiri; F6-C)
 
@@ -579,6 +579,7 @@ Agentul nu a rulat nimic din această secțiune și nu a atins producția. ADR 0
 | Limita de conexiuni a planului (pooler, directe) | **TODO operator** (din panou, după alegerea planului) |
 | Pool-uri FINET | `/api/health`: 1 conexiune (`max: 1`); clientul Drizzle (`src/db/index.ts`): implicit 5 pe proces (`DEFAULT_POOL_MAX`, decizia mea, de ajustat sub limita planului); `finet-migrate`: 1; `finet-worker` (Faza 5, modul sesiune 5432): 3 (`pg`, pg-boss) + 2 (postgres.js, serviciile) |
 | Plan | **TODO operator** (ADR separat; planul gratuit suspendă proiectul și nu are backup-uri descărcabile) |
+| Egress (cota planului Free: 5,5 GB / perioadă de facturare, organizație întreagă) | Măsurat la 2026-11-23: `finet-worker` ~3,2 KB/s primiți = ~8 GB/lună (ADR 0053), aproape tot sondaje pg-boss pe o bază goală; backup-ul zilnic ~0,65 MiB/zi, serverul web ~5 MB/zi. După ADR 0053: ~1-1,6 GB/lună estimat. Cum se verifică (fără acces la panou), pe host: `sudo docker stats --no-stream --format '{{.Name}} {{.NetIO}}' finet-worker finet-web` (primit/trimis de la pornirea containerului, deci se împarte la zile) sau, pe o fereastră de 5 minute, diferența coloanei `rx bytes` din `sudo nsenter -t $(sudo docker inspect -f '{{.State.Pid}}' finet-worker) -n cat /proc/net/dev` (linia `eth0`; include antetele TCP/IP, ~15% peste ce numără Supabase). Adevărul rămâne panoul Supabase: Organization → Usage → Egress, pe proiect |
 
 ## 6. Acceptarea Fazei 0 (master prompt, Faza 0)
 
@@ -751,3 +752,12 @@ Totul de mai jos e al operatorului; nimic nu a fost rulat pe producție din bran
 5. **Web:** `up -d finet-web` cu AMBELE fișiere compose (`docker-compose.ask.yml` cât `AI_ASK=1`), ca până acum.
 6. **Verificare:** `/api/health` ok; `/health`, `/forecast`, `/advisor`, `/net-worth`, `/subscriptions`, `/notifications`, `/settings/notifications` se deschid prin Access; `docker logs finet-worker` arată `"event":"started"` și, a doua zi, o linie `"job":"notify.evaluate"` cu contoare.
 7. **Rollback:** imaginile anterioare (`finet:web-<sha vechi>` retaguit `finet:local`, `tools` vechi) merg peste baza migrată (tabelele noi sunt ignorate de codul vechi; tipurile noi de cont nu există încă în date). Dacă s-au creat conturi cu tipuri noi sau evaluări, rollback-ul migrațiilor cere întâi reclasificarea lor (vezi antetul 0027).
+
+## 4ab. Egress Supabase: worker cu sondaje rare (ADR 0053) — pe producție (după merge)
+
+Fără migrație și fără schimbare la `finet-web`: contează doar imaginea `tools` și recrearea workerului. Totul e al operatorului.
+
+1. **Imaginea:** `sudo sh /srv/finet/src/ops/deploy/pull-images.sh <sha40 al merge-ului> tools` (din rularea `images` a lui `main`, `event=push`, `success`). Rollback: retaguiești `finet:tools-<sha vechi>` ca `finet:tools`.
+2. **Recreare:** `sudo docker compose -f ops/docker/docker-compose.yml --env-file /srv/finet/compose/compose.env --profile worker up -d finet-worker`; `sudo docker logs --tail 20 finet-worker` arată `"event":"started"` și nimic cu `start_failed`/`boss_error`; `/api/health` → `"queue":"ok"` în cel mult 3 minute.
+3. **Verificare de egress** (secțiunea 5, rândul „Egress”): citește `rx bytes` pe `eth0` al workerului, așteaptă 5 minute, citește din nou. Înainte de ADR 0053: ~3,2 KB/s (≈ 950 KB în 5 minute); așteptat după: ≲ 0,7 KB/s (≈ 200 KB în 5 minute). Pe 24 de ore: sub ~60 MB, față de ~270 MB.
+4. **Comportament de urmărit:** un bon încărcat cu consimțământ ajunge în `needs_review` în 1-2 minute (la fel ca înainte, cu până la ~20 s mai târziu la pornire).

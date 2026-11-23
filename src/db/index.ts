@@ -30,6 +30,8 @@ export type CreateDbOptions = Readonly<{
   applicationName: string;
   /** Conexiuni maxime în pool (implicit `DEFAULT_POOL_MAX`). */
   max?: number;
+  /** Secunde de inactivitate până la închiderea unei conexiuni (implicit cel din `db-client`). */
+  idleTimeoutSeconds?: number;
 }>;
 
 /** Un client Drizzle nou (folosit de `getDb()` și de teste). */
@@ -38,6 +40,9 @@ export function createDb(url: string, options: CreateDbOptions): { db: Db; clien
     ca: options.ca,
     applicationName: options.applicationName,
     max: options.max ?? DEFAULT_POOL_MAX,
+    ...(options.idleTimeoutSeconds === undefined
+      ? {}
+      : { idleTimeoutSeconds: options.idleTimeoutSeconds }),
   });
   return { db: drizzle({ client, schema }), client };
 }

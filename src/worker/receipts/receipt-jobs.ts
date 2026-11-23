@@ -19,7 +19,9 @@ import {
  * - `receipt.sweep` (cron la fiecare minut): documentele în așteptare (funcția SECURITY DEFINER
  *   `queued_documents`, doar identificatori) → câte un `receipt.process` pe document, cu
  *   `singletonKey` = documentul (coada `exclusive`: cel mult un job în așteptare sau activ per
- *   document). Serverul web nu e legat de pg-boss: o încărcare ajunge la procesare în ≤ 1 minut.
+ *   document). Serverul web nu e legat de pg-boss: o încărcare ajunge la procesare în
+ *   ~1 minut (cel mult ~80 s: cron-ul, sondajul cron-ului de 10 s și al sweep-ului de 15 s, ADR 0053;
+ *   `receipt.process` e trezit de sweep, nu așteaptă propriul sondaj).
  * - `receipt.process`: datele jobului (`documentId`, `householdId`) sunt validate cu Zod strict,
  *   apoi documentul e RE-CITIT prin `queued_document` (gospodăria trebuie să coincidă; membrul în
  *   numele căruia se lucrează vine din bază). Un job străin sau vechi se termină fără efect.

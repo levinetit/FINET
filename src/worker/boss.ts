@@ -21,6 +21,22 @@ import { isTlsUrlParam } from "@/lib/db-url";
 
 export const PGBOSS_SCHEMA = "pgboss";
 
+/**
+ * Cât stă inactivă o conexiune (pg-boss și postgres.js) înainte să fie închisă. Fiecare conexiune
+ * nouă la Supabase costă ~4,5 KB de egress (handshake TLS + pornire), iar ciclurile workerului sunt
+ * de 15-60 s: cu implicitele (10 s la `pg`, 30 s la postgres.js) conexiunile se reînnoiau la
+ * fiecare ciclu. 120 s > cel mai lung ciclu repetitiv (60 s: sweep-uri, semnal de viață).
+ */
+export const DB_IDLE_TIMEOUT_SECONDS = 120;
+
+/**
+ * pg-boss dă tot `ConstructorOptions` direct lui `new pg.Pool(...)`, dar tipurile lui nu includ
+ * `idleTimeoutMillis`; o variabilă separată evită verificarea proprietăților în plus.
+ */
+const POOL_PASSTHROUGH: { idleTimeoutMillis: number } = {
+  idleTimeoutMillis: DB_IDLE_TIMEOUT_SECONDS * 1000,
+};
+
 /** Configurația TLS a workerului e invalidă. Mesajul nu conține URL-ul sau valorile lui. */
 export class PgTlsConfigError extends Error {
   constructor(readonly problem: string) {
@@ -108,5 +124,14 @@ export function bossOptions(
     persistWarnings: false,
     supervise: true,
     schedule: true,
+    // Egress Supabase (ADR 0053). Rezolvitorul de „flow-uri” (dependențe între joburi) interoghează
+    // la 5 s, iar fiecare trecere citește toate cozile (~3,6 KB); FINET nu folosește flow-uri
+    // (`dependsOn`), deci trecerea e doar zgomot. 3600 s lasă o singură trecere pe oră.
+    flowIntervalSeconds: 3600,
+    // Lucrătorul intern al cron-ului (`__pgboss__send-it`) sondează la 5 s implicit; sweep-urile
+    // FINET sunt la minut, deci 10 s adaugă cel mult 5 s (maximul permis de pg-boss e 45).
+    cronWorkerIntervalSeconds: 10,
+    // Conexiunile rămân deschise între cicluri (vezi DB_IDLE_TIMEOUT_SECONDS).
+    ...POOL_PASSTHROUGH,
   };
 }

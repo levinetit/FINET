@@ -5,7 +5,7 @@ import { PgBoss } from "pg-boss";
 import { type Db, createDb } from "@/db";
 import type { Mailer } from "@/modules/auth/mailer";
 
-import { bossOptions } from "./boss";
+import { DB_IDLE_TIMEOUT_SECONDS, bossOptions } from "./boss";
 import { FX_CRON, JOB_FX_REFRESH, handleFxRefresh } from "./fx/fx-jobs";
 import { HEARTBEAT_INTERVAL_MS, heartbeatBeat, heartbeatStart, heartbeatStop } from "./heartbeat";
 import {
@@ -71,6 +71,19 @@ import {
  * - oprire grațioasă la SIGTERM/SIGINT: pg-boss termină jobul curent (cel mult 25 s), apoi
  *   semnalul `stopped_at`, apoi închiderea conexiunilor.
  */
+
+/**
+ * Cât de des interoghează baza fiecare lucrător pg-boss (secunde). Implicitul pg-boss, 2 s pe
+ * coadă, făcea ~4,5 interogări/s degeaba și a produs ~8 GB/lună de egress Supabase (cota Free
+ * e 5,5 GB; ADR 0053). Valorile țin cont de cum ajung joburile în cozi:
+ * - `sweep`: cozile `*.sweep` primesc câte un job pe minut din cron, deci 15 s sunt de ajuns;
+ * - `process`: joburile `*.process` sunt trimise de sweep-ul din ACELAȘI proces, care apoi
+ *   trezește lucrătorul cu `boss.notifyWorker` (fără întârziere); sondajul rămâne doar plasă
+ *   de siguranță (reîncercări cu pauză de 60-120 s, joburi rămase după o repornire);
+ * - `scheduled`: joburi cron orare/zilnice, fără urgență. `recurring.generate-now` (la cerere,
+ *   din unelte) folosește pragul `process`.
+ */
+export const POLLING_SECONDS = { sweep: 15, process: 30, scheduled: 60 } as const;
 
 export const QUEUE_OPTIONS = {
   retryLimit: 2,
@@ -139,6 +152,8 @@ export type WorkerOptions = Readonly<{
   notify?: Readonly<{ mailer: Mailer | null; appUrl: string | null }>;
   /** Cursurile BCE (ADR 0049), doar cu `FX_RATES=1`. */
   fx?: Readonly<{ enabled: boolean }>;
+  /** Doar pentru teste: înlocuiește intervalele de sondaj (`POLLING_SECONDS`), ca testele să nu aștepte. */
+  polling?: Readonly<Partial<Record<keyof typeof POLLING_SECONDS, number>>>;
 }>;
 
 export type RunningWorker = Readonly<{ boss: PgBoss; db: Db; stop: () => Promise<void> }>;
@@ -179,6 +194,7 @@ export function safeHandler<A extends unknown[], R>(
 
 export async function startWorker(options: WorkerOptions): Promise<RunningWorker> {
   const { log } = options;
+  const poll = { ...POLLING_SECONDS, ...options.polling };
   // Întâi validarea TLS (aruncă `PgTlsConfigError`), înainte de a deschide vreo conexiune.
   const bossConfig = bossOptions(options.databaseUrl, options.databaseCa, {
     allowInsecure: options.allowInsecure,
@@ -187,6 +203,9 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
     ca: options.databaseCa,
     applicationName: "finet-worker",
     max: 2,
+    // Sweep-urile și semnalul de viață rulează la 60 s: cu implicitul de 30 s conexiunea se
+    // închidea și se redeschidea în fiecare minut (handshake TLS ~4,5 KB egress de fiecare dată).
+    idleTimeoutSeconds: DB_IDLE_TIMEOUT_SECONDS,
   });
   const boss = new PgBoss(bossConfig);
   boss.on("error", (error) => log({ event: "boss_error", code: errorCode(error) }));
@@ -202,7 +221,7 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
   const deps = { db, log };
   await boss.work(
     JOB_GENERATE,
-    { localConcurrency: 1 },
+    { localConcurrency: 1, pollingIntervalSeconds: poll.scheduled },
     safeHandler(JOB_GENERATE, log, async () => {
       const s = await handleGenerate(deps);
       return { rules: s.rules, generated: s.generated, failed: s.failed };
@@ -210,7 +229,7 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
   );
   await boss.work(
     JOB_GENERATE_NOW,
-    { localConcurrency: 1 },
+    { localConcurrency: 1, pollingIntervalSeconds: poll.process },
     safeHandler(JOB_GENERATE_NOW, log, async ([job]: { data?: unknown }[]) => {
       const r = await handleGenerateNow(deps, job?.data);
       return "rejected" in r ? r : { rules: r.rules, generated: r.generated, failed: r.failed };
@@ -232,9 +251,18 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       limits: receipts.limits,
       ai: receipts.ai,
     };
+    // Lucrătorul `process` se înregistrează primul: sweep-ul îl trezește după fiecare trimitere.
+    const processWorkerId = await boss.work(
+      JOB_RECEIPT_PROCESS,
+      { localConcurrency: 1, pollingIntervalSeconds: poll.process },
+      safeHandler(JOB_RECEIPT_PROCESS, log, async ([job]: { data?: unknown }[]) => {
+        const r = await handleReceiptProcess(receiptDeps, job?.data);
+        return "rejected" in r ? r : { outcome: r.outcome };
+      }),
+    );
     await boss.work(
       JOB_RECEIPT_SWEEP,
-      { localConcurrency: 1 },
+      { localConcurrency: 1, pollingIntervalSeconds: poll.sweep },
       safeHandler(JOB_RECEIPT_SWEEP, log, async () => {
         const enqueued = await handleReceiptSweep(receiptDeps, (documentId, householdId) =>
           boss.send(
@@ -243,15 +271,8 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
             { singletonKey: documentId.toLowerCase() },
           ),
         );
+        if (enqueued > 0) boss.notifyWorker(processWorkerId);
         return { enqueued };
-      }),
-    );
-    await boss.work(
-      JOB_RECEIPT_PROCESS,
-      { localConcurrency: 1 },
-      safeHandler(JOB_RECEIPT_PROCESS, log, async ([job]: { data?: unknown }[]) => {
-        const r = await handleReceiptProcess(receiptDeps, job?.data);
-        return "rejected" in r ? r : { outcome: r.outcome };
       }),
     );
   }
@@ -268,9 +289,20 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       singletonKey: JOB_STATEMENT_SWEEP,
     });
     const statementDeps = { db, log, storage: statements.storage };
+    const parseWorkerId = await boss.work(
+      JOB_STATEMENT_PARSE,
+      { localConcurrency: 1, pollingIntervalSeconds: poll.process },
+      safeHandler(JOB_STATEMENT_PARSE, log, async ([job]: { data?: unknown }[]) => {
+        const r = await handleStatementParse(statementDeps, job?.data);
+        if ("rejected" in r) return r;
+        return r.outcome === "failed"
+          ? { outcome: r.outcome, code: r.code }
+          : { outcome: r.outcome };
+      }),
+    );
     await boss.work(
       JOB_STATEMENT_SWEEP,
-      { localConcurrency: 1 },
+      { localConcurrency: 1, pollingIntervalSeconds: poll.sweep },
       safeHandler(JOB_STATEMENT_SWEEP, log, async () => {
         const enqueued = await handleStatementSweep(statementDeps, (uploadId, householdId) =>
           boss.send(
@@ -279,18 +311,8 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
             { singletonKey: uploadId.toLowerCase() },
           ),
         );
+        if (enqueued > 0) boss.notifyWorker(parseWorkerId);
         return { enqueued };
-      }),
-    );
-    await boss.work(
-      JOB_STATEMENT_PARSE,
-      { localConcurrency: 1 },
-      safeHandler(JOB_STATEMENT_PARSE, log, async ([job]: { data?: unknown }[]) => {
-        const r = await handleStatementParse(statementDeps, job?.data);
-        if ("rejected" in r) return r;
-        return r.outcome === "failed"
-          ? { outcome: r.outcome, code: r.code }
-          : { outcome: r.outcome };
       }),
     );
   }
@@ -307,9 +329,20 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       singletonKey: JOB_LIST_MATCH_SWEEP,
     });
     const listMatchDeps = { db, log, enabled: listMatch.enabled, ai: listMatch.ai };
+    const listMatchWorkerId = await boss.work(
+      JOB_LIST_MATCH_PROCESS,
+      { localConcurrency: 1, pollingIntervalSeconds: poll.process },
+      safeHandler(JOB_LIST_MATCH_PROCESS, log, async ([job]: { data?: unknown }[]) => {
+        const r = await handleListMatchProcess(listMatchDeps, job?.data);
+        if ("rejected" in r) return r;
+        return r.outcome === "failed"
+          ? { outcome: r.outcome, code: r.code }
+          : { outcome: r.outcome };
+      }),
+    );
     await boss.work(
       JOB_LIST_MATCH_SWEEP,
-      { localConcurrency: 1 },
+      { localConcurrency: 1, pollingIntervalSeconds: poll.sweep },
       safeHandler(JOB_LIST_MATCH_SWEEP, log, async () => {
         const enqueued = await handleListMatchSweep(listMatchDeps, (requestId, householdId) =>
           boss.send(
@@ -318,18 +351,8 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
             { singletonKey: requestId.toLowerCase() },
           ),
         );
+        if (enqueued > 0) boss.notifyWorker(listMatchWorkerId);
         return { enqueued };
-      }),
-    );
-    await boss.work(
-      JOB_LIST_MATCH_PROCESS,
-      { localConcurrency: 1 },
-      safeHandler(JOB_LIST_MATCH_PROCESS, log, async ([job]: { data?: unknown }[]) => {
-        const r = await handleListMatchProcess(listMatchDeps, job?.data);
-        if ("rejected" in r) return r;
-        return r.outcome === "failed"
-          ? { outcome: r.outcome, code: r.code }
-          : { outcome: r.outcome };
       }),
     );
   }
@@ -345,7 +368,7 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
     const notifyDeps = { db, log, mailer: notify.mailer, appUrl: notify.appUrl };
     await boss.work(
       JOB_NOTIFY_EVALUATE,
-      { localConcurrency: 1 },
+      { localConcurrency: 1, pollingIntervalSeconds: poll.scheduled },
       safeHandler(JOB_NOTIFY_EVALUATE, log, async () => {
         const s = await handleNotifyEvaluate(notifyDeps);
         return { targets: s.targets, inserted: s.inserted, emailed: s.emailed, failed: s.failed };
@@ -363,7 +386,7 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
     const fxDeps = { db, log };
     await boss.work(
       JOB_FX_REFRESH,
-      { localConcurrency: 1 },
+      { localConcurrency: 1, pollingIntervalSeconds: poll.scheduled },
       safeHandler(JOB_FX_REFRESH, log, async () => handleFxRefresh(fxDeps)),
     );
     await boss.send(JOB_FX_REFRESH, null, { singletonKey: `${JOB_FX_REFRESH}:start` });
