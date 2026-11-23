@@ -112,7 +112,10 @@ describe.skipIf(!TEST_ADMIN_URL)("API extrase + potrivire + propuneri (F7-B)", (
   beforeAll(async () => {
     fx = await createAuthFixture("finet_it_statements_api");
     root = await realpath(await mkdtemp(join(tmpdir(), "finet-stmt-api-")));
-    auth = authEnv(fx.db, { now: () => Date.parse("2026-11-20T10:00:00Z") });
+    // Ceasul real, înghețat o dată: `expires_at` (= `now` + retenția) trebuie să rămână după
+    // `created_at` din `now()` al bazei (CHECK `statement_uploads_expires_after_created`).
+    const frozenNow = Date.now();
+    auth = authEnv(fx.db, { now: () => frozenNow });
     env = {
       ...auth,
       storage: new LocalStorage(root),
