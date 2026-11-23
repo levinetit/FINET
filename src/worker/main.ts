@@ -79,7 +79,10 @@ import {
  * - `sweep`: cozile `*.sweep` primesc câte un job pe minut din cron, deci 15 s sunt de ajuns;
  * - `process`: joburile `*.process` sunt trimise de sweep-ul din ACELAȘI proces, care apoi
  *   trezește lucrătorul cu `boss.notifyWorker` (fără întârziere); sondajul rămâne doar plasă
- *   de siguranță (reîncercări cu pauză de 60-120 s, joburi rămase după o repornire);
+ *   de siguranță (reîncercări cu pauză de 60-120 s, joburi rămase după o repornire). În plus,
+ *   la finalul fiecărui handler `*.process` (succes sau eșec), lucrătorul se trezește singur
+ *   (`drainOnDone`): cu `batchSize` 1 pg-boss ar aștepta altfel 30 s ÎNTRE joburi, iar un backlog
+ *   de N joburi ar dura N × 30 s. Un fetch gol readuce sondajul rar;
  * - `scheduled`: joburi cron orare/zilnice, fără urgență. `recurring.generate-now` (la cerere,
  *   din unelte) folosește pragul `process`.
  */
@@ -192,6 +195,30 @@ export function safeHandler<A extends unknown[], R>(
   };
 }
 
+/**
+ * Golirea backlog-ului (ADR 0053): cu `batchSize` 1 pg-boss așteaptă intervalul ÎNTREG de sondaj
+ * (30 s) între două joburi, deci N joburi în coadă ar dura N × 30 s. Handlerul `*.process`
+ * își trezește la final PROPRIUL lucrător (`boss.notifyWorker`), ca să ia imediat jobul următor;
+ * primul fetch gol readuce sondajul rar. Trezirea se face și la eșec (`finally`): un job picat
+ * nu trebuie să blocheze restul cozii. `idRef` se completează după `boss.work` (id-ul lucrătorului
+ * nu există la crearea handlerului); înainte de asta (sau după oprire) trezirea e un no-op.
+ */
+export type WorkerIdRef = { id: string | null };
+
+export function drainOnDone<A extends unknown[], R>(
+  boss: Pick<PgBoss, "notifyWorker">,
+  idRef: WorkerIdRef,
+  fn: (...args: A) => Promise<R>,
+): (...args: A) => Promise<R> {
+  return async (...args: A) => {
+    try {
+      return await fn(...args);
+    } finally {
+      if (idRef.id) boss.notifyWorker(idRef.id);
+    }
+  };
+}
+
 export async function startWorker(options: WorkerOptions): Promise<RunningWorker> {
   const { log } = options;
   const poll = { ...POLLING_SECONDS, ...options.polling };
@@ -227,13 +254,18 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       return { rules: s.rules, generated: s.generated, failed: s.failed };
     }),
   );
-  await boss.work(
+  const generateNowRef: WorkerIdRef = { id: null };
+  generateNowRef.id = await boss.work(
     JOB_GENERATE_NOW,
     { localConcurrency: 1, pollingIntervalSeconds: poll.process },
-    safeHandler(JOB_GENERATE_NOW, log, async ([job]: { data?: unknown }[]) => {
-      const r = await handleGenerateNow(deps, job?.data);
-      return "rejected" in r ? r : { rules: r.rules, generated: r.generated, failed: r.failed };
-    }),
+    drainOnDone(
+      boss,
+      generateNowRef,
+      safeHandler(JOB_GENERATE_NOW, log, async ([job]: { data?: unknown }[]) => {
+        const r = await handleGenerateNow(deps, job?.data);
+        return "rejected" in r ? r : { rules: r.rules, generated: r.generated, failed: r.failed };
+      }),
+    ),
   );
 
   const receipts = options.receipts;
@@ -252,13 +284,18 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       ai: receipts.ai,
     };
     // Lucrătorul `process` se înregistrează primul: sweep-ul îl trezește după fiecare trimitere.
-    const processWorkerId = await boss.work(
+    const processRef: WorkerIdRef = { id: null };
+    processRef.id = await boss.work(
       JOB_RECEIPT_PROCESS,
       { localConcurrency: 1, pollingIntervalSeconds: poll.process },
-      safeHandler(JOB_RECEIPT_PROCESS, log, async ([job]: { data?: unknown }[]) => {
-        const r = await handleReceiptProcess(receiptDeps, job?.data);
-        return "rejected" in r ? r : { outcome: r.outcome };
-      }),
+      drainOnDone(
+        boss,
+        processRef,
+        safeHandler(JOB_RECEIPT_PROCESS, log, async ([job]: { data?: unknown }[]) => {
+          const r = await handleReceiptProcess(receiptDeps, job?.data);
+          return "rejected" in r ? r : { outcome: r.outcome };
+        }),
+      ),
     );
     await boss.work(
       JOB_RECEIPT_SWEEP,
@@ -271,7 +308,7 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
             { singletonKey: documentId.toLowerCase() },
           ),
         );
-        if (enqueued > 0) boss.notifyWorker(processWorkerId);
+        if (enqueued > 0 && processRef.id) boss.notifyWorker(processRef.id);
         return { enqueued };
       }),
     );
@@ -289,16 +326,21 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       singletonKey: JOB_STATEMENT_SWEEP,
     });
     const statementDeps = { db, log, storage: statements.storage };
-    const parseWorkerId = await boss.work(
+    const parseRef: WorkerIdRef = { id: null };
+    parseRef.id = await boss.work(
       JOB_STATEMENT_PARSE,
       { localConcurrency: 1, pollingIntervalSeconds: poll.process },
-      safeHandler(JOB_STATEMENT_PARSE, log, async ([job]: { data?: unknown }[]) => {
-        const r = await handleStatementParse(statementDeps, job?.data);
-        if ("rejected" in r) return r;
-        return r.outcome === "failed"
-          ? { outcome: r.outcome, code: r.code }
-          : { outcome: r.outcome };
-      }),
+      drainOnDone(
+        boss,
+        parseRef,
+        safeHandler(JOB_STATEMENT_PARSE, log, async ([job]: { data?: unknown }[]) => {
+          const r = await handleStatementParse(statementDeps, job?.data);
+          if ("rejected" in r) return r;
+          return r.outcome === "failed"
+            ? { outcome: r.outcome, code: r.code }
+            : { outcome: r.outcome };
+        }),
+      ),
     );
     await boss.work(
       JOB_STATEMENT_SWEEP,
@@ -311,7 +353,7 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
             { singletonKey: uploadId.toLowerCase() },
           ),
         );
-        if (enqueued > 0) boss.notifyWorker(parseWorkerId);
+        if (enqueued > 0 && parseRef.id) boss.notifyWorker(parseRef.id);
         return { enqueued };
       }),
     );
@@ -329,16 +371,21 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
       singletonKey: JOB_LIST_MATCH_SWEEP,
     });
     const listMatchDeps = { db, log, enabled: listMatch.enabled, ai: listMatch.ai };
-    const listMatchWorkerId = await boss.work(
+    const listMatchRef: WorkerIdRef = { id: null };
+    listMatchRef.id = await boss.work(
       JOB_LIST_MATCH_PROCESS,
       { localConcurrency: 1, pollingIntervalSeconds: poll.process },
-      safeHandler(JOB_LIST_MATCH_PROCESS, log, async ([job]: { data?: unknown }[]) => {
-        const r = await handleListMatchProcess(listMatchDeps, job?.data);
-        if ("rejected" in r) return r;
-        return r.outcome === "failed"
-          ? { outcome: r.outcome, code: r.code }
-          : { outcome: r.outcome };
-      }),
+      drainOnDone(
+        boss,
+        listMatchRef,
+        safeHandler(JOB_LIST_MATCH_PROCESS, log, async ([job]: { data?: unknown }[]) => {
+          const r = await handleListMatchProcess(listMatchDeps, job?.data);
+          if ("rejected" in r) return r;
+          return r.outcome === "failed"
+            ? { outcome: r.outcome, code: r.code }
+            : { outcome: r.outcome };
+        }),
+      ),
     );
     await boss.work(
       JOB_LIST_MATCH_SWEEP,
@@ -351,7 +398,7 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
             { singletonKey: requestId.toLowerCase() },
           ),
         );
-        if (enqueued > 0) boss.notifyWorker(listMatchWorkerId);
+        if (enqueued > 0 && listMatchRef.id) boss.notifyWorker(listMatchRef.id);
         return { enqueued };
       }),
     );

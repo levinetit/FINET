@@ -15,6 +15,7 @@ Supabase a anunțat (email către operator, 2026-11) că organizația depășeș
 
 1. **Sondaje pe categorii** (`POLLING_SECONDS`): `sweep` 15 s (cozile `*.sweep` primesc un job pe minut din cron), `process` 30 s, `scheduled` 60 s (joburi orare/zilnice). `recurring.generate-now` (nefolosit de serverul web, ADR 0012) folosește `process`.
 2. **Trezirea lucrătorului `process`:** sweep-ul care a trimis joburi apelează `boss.notifyWorker(<id lucrător process>)` (același proces), deci procesarea unui bon/extras/comparație pornește imediat, nu după sondajul de 30 s. Sondajul rămâne plasă de siguranță (reîncercări cu pauză de 60-120 s, joburi rămase după o repornire).
+   **Golirea backlog-ului (corecție, 2026-11-23):** cu `batchSize` 1 pg-boss 12.38.2 așteaptă intervalul ÎNTREG între două joburi, deci un backlog de N joburi s-ar fi golit cu un job la 30 s (N × 30 s). Fiecare handler `*.process` (`receipt.process`, `statement.parse`, `list-match.process`, `recurring.generate-now`) își trezește acum la final PROPRIUL lucrător (`drainOnDone` în `src/worker/main.ts`: `boss.notifyWorker(<id propriu>)` într-un `finally`, deci și la eșec). Un fetch gol readuce sondajul de 30 s. Verificat local: 5 joburi în coadă se golesc în câteva secunde (un singur sondaj), față de ~5 × interval înainte. Alternativa `burstWhenReadyExceeds` a fost respinsă: depinde de statisticile cozii, reîmprospătate la 60 s (`queueCacheIntervalSeconds`), deci ar lăsa un decalaj; `burstWhenBatchFull` e ignorată la `batchSize` 1.
 3. **`flowIntervalSeconds: 3600`** (implicit 5): FINET nu folosește `dependsOn`; rămâne o trecere pe oră, fără să dezactiveze supravegherea (expirări, retenție).
 4. **`cronWorkerIntervalSeconds: 10`** (implicit 5; maximul pg-boss e 45): sweep-urile sunt la minut.
 5. **Conexiuni păstrate 120 s** (`DB_IDLE_TIMEOUT_SECONDS`, `idleTimeoutMillis` la pg-boss și `idle_timeout` la postgres.js): peste cel mai lung ciclu repetitiv (60 s). Local: 26 de conexiuni noi / 5 minute → 0.
@@ -34,6 +35,6 @@ Pe producție se adaugă TLS, sweep-urile și semnalul de viață (mici): estima
 ## Consecințe
 
 - Latența unui bon încărcat crește cu cel mult ~15-20 s (sondajul cron-ului de 10 s și al sweep-ului de 15 s), de la ≤ ~65 s la ≤ ~85 s; apoi procesarea începe imediat. E2E-urile așteaptă 200 s.
-- Joburile `process` rămase în coadă fără sweep (de exemplu după o repornire) pornesc în cel mult 30 s.
-- Un dezvoltator care adaugă o coadă nouă trebuie să-i aleagă categoria din `POLLING_SECONDS` (implicitul pg-boss, 2 s, reapare altfel); `worker.test.ts` păzește valorile și `pgboss.test.ts` trezirea.
+- Joburile `process` rămase în coadă fără sweep (de exemplu după o repornire) pornesc în cel mult 30 s; apoi restul backlog-ului se golește pe loc, fără 30 s între joburi.
+- Un dezvoltator care adaugă o coadă nouă trebuie să-i aleagă categoria din `POLLING_SECONDS` (implicitul pg-boss, 2 s, reapare altfel); `worker.test.ts` păzește valorile și `pgboss.test.ts` trezirea și golirea backlog-ului (un backlog de 5 joburi se golește în mai puțin de 2 × interval).
 - Efectul apare doar după ce operatorul trage imaginea `tools` nouă și recreează `finet-worker` (docs/INFRA.md); `finet-web` nu se schimbă.

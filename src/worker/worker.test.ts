@@ -14,7 +14,7 @@ import {
 import { main } from "./cli";
 import { HEARTBEAT_STALE_SECONDS, queueStateOf } from "./heartbeat";
 import { handleGenerate, handleGenerateNow } from "./jobs";
-import { POLLING_SECONDS, errorCode } from "./main";
+import { POLLING_SECONDS, drainOnDone, errorCode } from "./main";
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
@@ -56,6 +56,37 @@ describe("opțiunile pg-boss (fără rețea): egress Supabase", () => {
     expect(POLLING_SECONDS.scheduled).toBeGreaterThanOrEqual(POLLING_SECONDS.process);
     // Plasa de siguranță a joburilor `process` (reîncercări la 60-120 s) rămâne sub un minut.
     expect(POLLING_SECONDS.process).toBeLessThanOrEqual(60);
+  });
+});
+
+/** Golirea backlog-ului (ADR 0053): handlerul își trezește propriul lucrător, și la eșec. */
+describe("drainOnDone (fără bază)", () => {
+  it("trezește lucrătorul propriu după succes și întoarce rezultatul", async () => {
+    const boss = { notifyWorker: vi.fn() };
+    const handler = drainOnDone(boss, { id: "w-1" }, async (x: number) => x * 2);
+    expect(await handler(21)).toBe(42);
+    expect(boss.notifyWorker).toHaveBeenCalledExactlyOnceWith("w-1");
+  });
+
+  it("trezește lucrătorul și după eșec, iar eroarea ajunge neschimbată la pg-boss", async () => {
+    const boss = { notifyWorker: vi.fn() };
+    const boom = new Error("job_failed:22021");
+    const handler = drainOnDone(boss, { id: "w-2" }, async () => {
+      throw boom;
+    });
+    await expect(handler()).rejects.toBe(boom);
+    expect(boss.notifyWorker).toHaveBeenCalledExactlyOnceWith("w-2");
+  });
+
+  it("fără id (lucrătorul nu e înregistrat încă) nu face nimic", async () => {
+    const boss = { notifyWorker: vi.fn() };
+    const ref: { id: string | null } = { id: null };
+    const handler = drainOnDone(boss, ref, async () => "ok");
+    expect(await handler()).toBe("ok");
+    expect(boss.notifyWorker).not.toHaveBeenCalled();
+    ref.id = "w-3"; // id-ul se completează după `boss.work`; handlerul îl citește la apelare
+    await handler();
+    expect(boss.notifyWorker).toHaveBeenCalledExactlyOnceWith("w-3");
   });
 });
 

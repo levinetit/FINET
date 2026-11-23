@@ -11,6 +11,8 @@ import { createRecurringRule } from "@/modules/recurring/recurring.service";
 import { bossOptions } from "./boss";
 import { GENERATE_CRON, JOB_GENERATE } from "./jobs";
 import { POLLING_SECONDS, enqueueGenerateNow, safeHandler, startWorker } from "./main";
+import { JOB_LIST_MATCH_PROCESS } from "./shopping/list-match-jobs";
+import { JOB_STATEMENT_PARSE } from "./statements/statement-jobs";
 import {
   JOB_RECEIPT_PROCESS,
   JOB_RECEIPT_SWEEP,
@@ -238,6 +240,70 @@ describe.skipIf(!TEST_ADMIN_URL)("startWorker cu bonurile (pg-boss real)", () =>
       const data = { documentId: key, householdId: key };
       expect(await w.boss.send(JOB_RECEIPT_PROCESS, data, { singletonKey: key })).not.toBeNull();
       expect(await w.boss.send(JOB_RECEIPT_PROCESS, data, { singletonKey: key })).toBeNull();
+    } finally {
+      await w.stop();
+    }
+  });
+});
+
+/**
+ * Golirea backlog-ului (ADR 0053): cu sondajul de 30 s și `batchSize` 1, pg-boss așteaptă
+ * intervalul ÎNTREG între două joburi. Fiecare handler `*.process` își trezește deci propriul
+ * lucrător la final, iar un backlog de N joburi se golește fără N × interval.
+ */
+describe.skipIf(!TEST_ADMIN_URL)("startWorker: golirea backlog-ului (pg-boss real)", () => {
+  let fx: AuthFixture;
+  beforeAll(async () => {
+    fx = await createAuthFixture("finet_it_worker_drain");
+  });
+  afterAll(async () => {
+    await fx?.close();
+  });
+
+  const N = 5;
+  const POLL = 5;
+  const uuid = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+
+  it.each([
+    [JOB_LIST_MATCH_PROCESS, "requestId"],
+    [JOB_STATEMENT_PARSE, "uploadId"],
+  ])("%s: backlogul se golește cu un singur sondaj, nu cu N × interval", async (queue, key) => {
+    const w = await startWorker({
+      databaseUrl: fx.scratch.appUrl,
+      databaseCa: null,
+      allowInsecure: true,
+      log: () => {},
+      polling: { process: POLL },
+      listMatch: { enabled: false, ai: null },
+      statements: { storage: new LocalStorage("/tmp/finet-nu-exista", { readOnly: true }) },
+    });
+    try {
+      // Prima interogare a lucrătorului (coadă goală) e imediată; apoi doarme `POLL` secunde.
+      await new Promise((r) => setTimeout(r, 1500));
+      const started = Date.now();
+      for (let i = 1; i <= N; i++) {
+        await w.boss.send(
+          queue,
+          { [key]: uuid(i), householdId: uuid(100) },
+          {
+            singletonKey: uuid(i),
+          },
+        );
+      }
+      const count = async () => {
+        const rows = await fx.scratch.admin<{ n: number }[]>`
+          select count(*)::int as n from pgboss.job where name = ${queue} and state = 'completed'`;
+        return rows[0]!.n;
+      };
+      const deadline = started + (N + 2) * POLL * 1000;
+      while ((await count()) < N && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      const elapsed = Date.now() - started;
+      expect(await count()).toBe(N);
+      // Cel mult 2 sondaje (≤ 2 × POLL, dacă primul pică în timpul trimiterii) + procesare rapidă;
+      // fără trezire ar fi ~N × POLL (≈ 25 s). Marjă largă pentru CI încărcat.
+      expect(elapsed).toBeLessThan(3 * POLL * 1000);
     } finally {
       await w.stop();
     }
