@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { CURRENCIES } from "@/lib/money";
 import { type AuthFixture, createAuthFixture } from "@/modules/auth/testing";
 
 import { withRlsOn } from "./index";
@@ -566,5 +567,22 @@ describe.skipIf(!TEST_ADMIN_URL)(
       expect(results.filter(Boolean)).toHaveLength(5);
       expect(await spent()).toBe(150n);
     });
+
+    // 0030: lista din funcție trebuie să fie `CURRENCIES` (0009 o limita la RON/EUR/USD, deși
+    // `AI_MONTHLY_BUDGET_CURRENCY` și CHECK-ul tabelei, din 0029, acceptă și HUF și GBP).
+    it.each(CURRENCIES)(
+      "ai_budget_reserve: acceptă moneda %s din CURRENCIES (0030)",
+      async (cur) => {
+        const call = async (fn: "ai_budget_reserve" | "ai_budget_spent", args: string) =>
+          (await fx.db.execute(sql.raw(`select finet.${fn}(${args}) as v`))) as unknown as {
+            v: unknown;
+          }[];
+        const before = BigInt((await call("ai_budget_spent", `'${cur}'`))[0]!.v as string);
+        const [r] = await call("ai_budget_reserve", `7::bigint, 1000::bigint, '${cur}'`);
+        expect(r!.v).toBe(true);
+        const after = BigInt((await call("ai_budget_spent", `'${cur}'`))[0]!.v as string);
+        expect(after - before).toBe(7n);
+      },
+    );
   },
 );

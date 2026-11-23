@@ -71,7 +71,11 @@ describe.skipIf(!TEST_ADMIN_URL)("încărcarea extraselor (Postgres real, finet_
   let storage: LocalStorage;
   let ron: string;
   let personalC: string;
-  let now = new Date("2026-11-20T10:00:00Z");
+  // Ceasul real, înghețat o dată pe suită: `created_at` vine din `now()` al bazei, iar CHECK-ul
+  // `statement_uploads_expires_after_created` cere `expires_at` (= `now` + retenția) > `created_at`;
+  // o dată fixă din trecut (2026-11-20) pica din ziua în care realul o depășea + retenția.
+  const BASE = new Date();
+  let now = BASE;
   const deps = (over: Record<string, unknown> = {}) => ({
     db: f.db,
     storage,
@@ -307,6 +311,6 @@ describe.skipIf(!TEST_ADMIN_URL)("încărcarea extraselor (Postgres real, finet_
       failed: 0,
       previews: 0,
     });
-    now = new Date("2026-11-20T10:00:00Z");
+    now = BASE;
   });
 });

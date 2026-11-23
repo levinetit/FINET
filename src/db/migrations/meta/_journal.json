@@ -204,6 +204,13 @@
       "when": 1796100000000,
       "tag": "0029_currencies",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1796200000000,
+      "tag": "0030_ai_budget_currencies",
+      "breakpoints": true
     }
   ]
 }
