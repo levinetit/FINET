@@ -740,6 +740,10 @@ Agentul nu a rulat nimic din această secțiune. ADR 0037, SECURITY_CHECKLIST §
    ```
    Apoi administratorul apasă „Acordă recompensă” pe un feedback din `/admin`. O dată pe utilizator; un abonament manual/fondator/plătit nu se atinge (`not_applicable`). Oprire: `feedback_days = 0`.
 
+## 4z.1. Corecția `0030_ai_budget_currencies` (buget AI în HUF/GBP) — pe producție (după merge)
+
+Aditivă și mică: rescrie funcția `finet.ai_budget_reserve` (aceeași semnătură, drepturi păstrate), care din `0009` respingea cu 22023 orice monedă în afară de RON, EUR și USD, deși `AI_MONTHLY_BUDGET_CURRENCY` și CHECK-ul tabelei (0029) acceptă și HUF și GBP. Fără ea, un buget AI în HUF/GBP ar bloca orice apel extern. Dacă bugetul rămâne în RON/EUR/USD nu e urgentă, dar trebuie aplicată înainte ca bugetul să treacă în HUF/GBP. Totul e al operatorului: `finet-migrate` cu imaginea `tools` nouă după merge („aplicate acum 1”, apoi „aplicate acum 0”); fără recreare de `finet-web`/`finet-worker`. Rollback: reaplici corpul din `0009` (antetul fișierului 0030).
+
 ## 4aa. Modernizarea 2026 (branch `feature/finet-modernization-2026`, migrațiile 0027–0029) — pe producție (după merge și revizuiri)
 
 Totul de mai jos e al operatorului; nimic nu a fost rulat pe producție din branch. Ordinea e obligatorie (migrațiile înaintea imaginilor noi: codul nou citește tabelele noi).

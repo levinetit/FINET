@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { CURRENCIES } from "@/lib/money";
+
 import { describeError, main } from "./migrate-cli";
 import { MigrationError, readMigrations, runMigrations } from "./migrate";
 import {
@@ -59,7 +61,7 @@ function copyMigrations(): string {
 }
 
 describe("readMigrations (fără bază)", () => {
-  it("citește jurnalul repo-ului: 0000_core … 0012_family, 0016_gdpr_stats, 0013_statements, 0014_statement_uploads, 0017_shopping_lists, 0018_report_definitions, 0019_ask_finet_task, 0020_admin_feedback, 0021_purge_unverified, 0022_admin_guard, 0023_plans_subscriptions, 0024_queue_priority, 0025_referrals, 0026_feedback_reward, 0027_net_worth, 0028_notifications, 0029_currencies, fără CREATE SCHEMA", () => {
+  it("citește jurnalul repo-ului: 0000_core … 0012_family, 0016_gdpr_stats, 0013_statements, 0014_statement_uploads, 0017_shopping_lists, 0018_report_definitions, 0019_ask_finet_task, 0020_admin_feedback, 0021_purge_unverified, 0022_admin_guard, 0023_plans_subscriptions, 0024_queue_priority, 0025_referrals, 0026_feedback_reward, 0027_net_worth, 0028_notifications, 0029_currencies, 0030_ai_budget_currencies, fără CREATE SCHEMA", () => {
     const migrations = readMigrations(MIGRATIONS_DIR);
     expect(migrations.map((m) => m.tag)).toEqual([
       "0000_core",
@@ -93,6 +95,7 @@ describe("readMigrations (fără bază)", () => {
       "0027_net_worth",
       "0028_notifications",
       "0029_currencies",
+      "0030_ai_budget_currencies",
     ]);
     for (const m of migrations) {
       expect(m.hash).toMatch(/^[0-9a-f]{64}$/);
@@ -765,6 +768,26 @@ describe("readMigrations (fără bază)", () => {
     expect(code).not.toMatch(/security\s+definer/i);
   });
 
+  it("0030_ai_budget_currencies: ai_budget_reserve rescrisă cu lista din CURRENCIES, definer cu search_path fix, drepturi doar finet_app", () => {
+    const m = readMigrations(MIGRATIONS_DIR).find((x) => x.tag === "0030_ai_budget_currencies")!;
+    const code = m.statements.join("\n").replace(/--.*$/gm, "");
+    // Lista din SQL = CURRENCIES (aceeași ordine ca în `src/lib/money.ts`): nu mai poate diverge.
+    const quoted = CURRENCIES.map((c) => `'${c}'`).join(", ");
+    expect(code).toContain(`p_currency not in (${quoted})`);
+    expect(code).toContain("create or replace function finet.ai_budget_reserve(");
+    expect(code).toMatch(/security\s+definer/i);
+    expect(code).toContain("set search_path = pg_catalog");
+    expect(code).toContain(
+      "revoke all on function finet.ai_budget_reserve(bigint, bigint, text) from public",
+    );
+    expect(code).toContain(
+      "grant execute on function finet.ai_budget_reserve(bigint, bigint, text) to finet_app",
+    );
+    // Fără schimbări de schemă și fără date.
+    expect(code).not.toMatch(/\b(create|alter|drop)\s+table\b/i);
+    expect(code).not.toMatch(/\binsert\s+into\s+finet\.ai_budget_usage\b[^;]*values\s*\(\s*'/i);
+  });
+
   it("0028_notifications: RLS ENABLE + FORCE pe ambele tabele, politici doar pe rândurile proprii, UPDATE doar pe marcaje, funcție definer doar cu id-uri", () => {
     const m = readMigrations(MIGRATIONS_DIR).find((x) => x.tag === "0028_notifications")!;
     const code = m.statements.join("\n").replace(/--.*$/gm, "");
@@ -1139,6 +1162,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 0,
       });
@@ -1172,9 +1196,10 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
         "aplicată: 0027_net_worth",
         "aplicată: 0028_notifications",
         "aplicată: 0029_currencies",
+        "aplicată: 0030_ai_budget_currencies",
       ]);
       const second = await runMigrations(sql, { folder: MIGRATIONS_DIR });
-      expect(second).toEqual({ applied: [], alreadyApplied: 29 });
+      expect(second).toEqual({ applied: [], alreadyApplied: 30 });
     } finally {
       await sql.end({ timeout: 5 });
     }
@@ -1220,12 +1245,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 4,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 29,
+        alreadyApplied: 30,
       });
     } finally {
       await sql.end({ timeout: 5 });
@@ -1273,6 +1299,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 5,
       });
@@ -1330,12 +1357,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 6,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 29,
+        alreadyApplied: 30,
       });
       const [fk] = await fresh.admin<{ convalidated: boolean }[]>`
         select convalidated from pg_constraint where conname = 'transactions_recurring_rule_fk'`;
@@ -1389,12 +1417,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 8,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 29,
+        alreadyApplied: 30,
       });
       const [fk] = await fresh.admin<{ convalidated: boolean }[]>`
         select convalidated from pg_constraint where conname = 'transactions_document_fk'`;
@@ -1449,12 +1478,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 9,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 29,
+        alreadyApplied: 30,
       });
       const [r] = await fresh.admin<{ issues: unknown; fallback_reason: string }[]>`
         select issues, fallback_reason from finet.receipts`;
@@ -1512,12 +1542,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 11,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 29,
+        alreadyApplied: 30,
       });
       const app = testClient(fresh.appUrl, 1);
       try {
@@ -1589,12 +1620,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 12,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 29,
+        alreadyApplied: 30,
       });
       // Datele existente rămân neatinse; preferința nouă e NULL.
       const [pref] = await fresh.admin<{ active_household_id: string | null }[]>`
@@ -1663,12 +1695,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 14,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 29,
+        alreadyApplied: 30,
       });
       const after =
         await fresh.admin`select md5(string_agg(t::text, '|' order by t::text)) as h from finet.transactions t`;
@@ -1731,12 +1764,13 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
           "0027_net_worth",
           "0028_notifications",
           "0029_currencies",
+          "0030_ai_budget_currencies",
         ],
         alreadyApplied: 16,
       });
       expect(await runMigrations(sql, { folder: dir })).toEqual({
         applied: [],
-        alreadyApplied: 29,
+        alreadyApplied: 30,
       });
       const after =
         await fresh.admin`select md5(string_agg(t::text, '|' order by t::text)) as h from finet.households t`;
