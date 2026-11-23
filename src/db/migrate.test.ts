@@ -1832,7 +1832,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     ]);
     const [counted] = await db.admin<{ n: number }[]>`
       select count(*)::int as n from finet.__drizzle_migrations`;
-    expect(counted?.n).toBe(29);
+    expect(counted?.n).toBe(30);
     const schemas = await db.admin<{ nspname: string }[]>`
       select nspname from pg_namespace where nspname = 'drizzle'`;
     expect(schemas).toEqual([]);
@@ -1966,7 +1966,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
       expect(rows.length).toBe(0);
       const [counted] = await db.admin<{ n: number }[]>`
         select count(*)::int as n from finet.__drizzle_migrations`;
-      expect(counted?.n).toBe(29);
+      expect(counted?.n).toBe(30);
     } finally {
       await sql.end({ timeout: 5 });
       rmSync(dir, { recursive: true, force: true });
@@ -1984,7 +1984,7 @@ describe.skipIf(!TEST_ADMIN_URL)("runner pe PostgreSQL real (finet_migrator)", (
     });
     expect(err).toEqual([]);
     expect(code).toBe(0);
-    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 29"]);
+    expect(out).toEqual(["finet-migrate: gata; aplicate acum 0, deja aplicate 30"]);
     expect(out.join("\n")).not.toContain("finet_migrator_ci");
   });
 });
